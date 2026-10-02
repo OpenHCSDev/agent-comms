@@ -125,6 +125,10 @@ class SelectedSource(DeclaredFamily, affix="Source"):
     def original_has_started(self, inputs: InputDocument) -> bool:
         return False
 
+    @abstractmethod
+    def summary_outcome(self, result, journal):
+        """Bind the native result through this original source's admission contract."""
+
     @property
     @abstractmethod
     def pending_input_key(self) -> str | None: ...
@@ -137,6 +141,11 @@ class SelectedSource(DeclaredFamily, affix="Source"):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ManualSource(SelectedSource):
+    """Owner compaction with no reserved prompt, explicit or before private input."""
+
+    def summary_outcome(self, result, journal):
+        return result.manual_summary(journal)
+
     @property
     def pending_input_key(self) -> None:
         return None
@@ -158,6 +167,13 @@ class SelectedAdmissionSource(SelectedSource):
     def __post_init__(self):
         if not self.ingress_key or self.admission_generation <= 0 or not self.correction_witness:
             raise ValueError("Selected source requires its exact reserved input")
+
+    def summary_outcome(self, result, journal):
+        from .selected_summary_admission import SelectedAdmissionIdentity
+
+        return result.adaptive_summary(
+            journal, SelectedAdmissionIdentity(self, self.reserved_revision)
+        )
 
     @property
     def pending_input_key(self) -> str:

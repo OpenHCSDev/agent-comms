@@ -157,7 +157,7 @@ class SelectedAttempt:
             input_id,
         )
 
-    async def prepare(self, session, action, write_authority):
+    async def prepare(self, package, session, action, write_authority):
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(
@@ -172,7 +172,9 @@ class SelectedAttempt:
             prompt = await SelectedPrompt(participant).full(
                 self.stage.assignments, self.obligations, action
             )
-            request = SelectedRequest.reserve(participant, session, self.stage, self.token, prompt)
+            request = await SelectedRequest.reserve(
+                participant, session, self.stage, self.token, prompt, package=package
+            )
         except NativePiUnavailable:
             # The attempt exists even if preparation fails before a request can
             # own a reserved ID. Preserve the old dead-attempt UNKNOWN boundary;
@@ -187,7 +189,7 @@ class SelectedAttempt:
 
     async def run(self, package: Path, session: SelectedSession, action, write_authority):
         participant = self.participant
-        request, action = await self.prepare(session, action, write_authority)
+        request, action = await self.prepare(package, session, action, write_authority)
         self.stage.progress.input_id = request.admission.input_id
         with request.native_failures():
             tools = self.tool_owner(session, request.admission.input_id, action)
@@ -248,12 +250,13 @@ class SelectedConsideration:
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
         )
         stage = TriageNativeSend(participant.batch.assignments)
-        request = SelectedRequest.reserve(
+        request = await SelectedRequest.reserve(
             participant,
             session,
             stage,
             prepare_fence_token(),
             SelectedPrompt(participant).triage(),
+            package=execution.native_package,
         )
         with request.native_failures():
             participant.transition(PromptAcceptancePhase())

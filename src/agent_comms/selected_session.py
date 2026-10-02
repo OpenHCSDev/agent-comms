@@ -47,6 +47,9 @@ class SelectedSession:
 
         return PendingAttestation()
 
+    async def prepare_context(self, participant: SelectedParticipant, package: Path) -> None:
+        """A new unbound native source has no saved context to compact."""
+
     def startup_admission(self, launch, root, boundary, *,
                           measurements: PublicationMeasurements | None = None):
         from .native_startup import NativeStartupAdmission
@@ -178,6 +181,54 @@ class SavedSelectedSession(SelectedSession):
 
         return PendingAttestation(self.identity)
 
+    async def prepare_context(self, participant: SelectedParticipant, package: Path) -> None:
+        """Prepare the captured saved owner before reserving any private prompt."""
+        from .backend import PersistentPiSession
+        from .native_pi import NativePiRpcLaunch
+        from .native_session_prepare import NativeSessionPreparation
+        from .owner_compaction_commit import OwnerCompactionCommit
+        from .selected_pi_route import read_selected_compaction_decision
+        from .selected_source import ManualSource, SessionRevision
+        from .thread_identity import TurnId
+
+        persistent = PersistentPiSession()
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.tracked, package,
+                worktree=Path(participant.owner.thread.worktree).absolute(),
+                session=self, provider=participant.provider, model=participant.model,
+            )
+            prepared = await NativeSessionPreparation.open_launch(persistent, launch)
+            selected = prepared.model.for_compaction(
+                f"{participant.provider}/{participant.model}"
+            )
+            settings = await read_selected_compaction_decision(
+                persistent, session_file=self.session_file,
+                expected_package=package, selected=selected,
+            )
+            if not settings.trigger:
+                return
+            participant.require_current()
+            owner = participant.owner.thread
+            self.identity.require_session(owner.require_saved_session())
+            snapshot = participant.comms.registry.snapshot()
+            generation = snapshot.owner_generations[owner.name]
+            bridge = await asyncio.to_thread(
+                OwnerCompactionCommit, participant.comms.registry.store.path, package
+            )
+            source = ManualSource(
+                incarnation=owner.incarnation, owner=owner.process_identity,
+                turn=TurnId(participant.owner.require_active_turn().id),
+                reserved_revision=SessionRevision.observe(self.session_file).require_available(),
+            )
+            result = await bridge.compact_selected(
+                owner, generation, persistent, source, selected, settings,
+                on_event=participant.dispatch,
+            )
+            result.require_prepared()
+        finally:
+            await persistent.close_idle()
+
     def require_launch_header(self) -> None:
         FreshPrivateSession.require_launch_header(self.path, None)
 
@@ -196,6 +247,11 @@ class SavedSelectedSession(SelectedSession):
 @dataclass(frozen=True)
 class FirstSelectedSession(SavedSelectedSession):
     creation: FreshPrivateSession = field(kw_only=True)
+
+    async def prepare_context(self, participant: SelectedParticipant, package: Path) -> None:
+        # The existing mint/startup capability attests its pristine header.
+        # It cannot be opened as an ordinary owner or consume its first-start grant.
+        self.creation.verify_selected_startup()
 
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()

@@ -98,8 +98,6 @@ class TurnRunner:
         *,
         agent_bin: str | None,
         agent_args: list[str] | None,
-        adaptive_compaction_enabled: bool,
-        adaptive_summary_strategy: Any,
         reply_window: float | None,
         no_reply_window: float | None,
         reply_quiet: float | None,
@@ -107,8 +105,6 @@ class TurnRunner:
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.adaptive_compaction_enabled = adaptive_compaction_enabled
-        self.adaptive_summary_strategy = adaptive_summary_strategy
         self.agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
         arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
         self.agent_args = NativeArguments.parse(

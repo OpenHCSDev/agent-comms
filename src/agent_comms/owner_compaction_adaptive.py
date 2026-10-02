@@ -9,41 +9,32 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 
 from .agent_events import AgentEvent
 from .backend import PersistentPiSession
-from .compaction_records import SelectedSummarySource
 from .input_disposition import FutureInputQueue
 from .native_input_owner import RegistryOwner
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_prepare import NativePreparation
-from .owner_compaction_provider import OwnerSummaryOutcome
-from .owner_compaction_runtime import compact_owner_once
-from .compaction_source import CompactionSource
-from .owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
+from .owner_compaction_settings import PiSettingsEvidenceError
 from .pi_payloads import StateData
 from .registration import Registration
 from .selected_pi_route import read_selected_compaction_decision
-from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_source import SelectedAdmissionSource, SessionRevision, SessionRevisionUnavailable
-from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .selected_summary_admission import SelectedSummaryAdmission
 from .text_digest import TextDigest
 from .thread_identity import TurnId
 
 
 async def maybe_compact_owner_turn(
     registry: Registration,
-    launcher: str,
     thread_name: str,
     turn_id: str,
     prepared: StateData,
     original_input_key: str,
     persistent: PersistentPiSession,
     *,
-    summary_strategy: Callable[[NativePreparation, CompactionSource], Awaitable[OwnerSummaryOutcome]] | None = None,
-    input_text: str | None = None,
-    on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
+    input_text: str,
+    on_admission: Callable[[SelectedSummaryAdmission], None],
     future_queue: FutureInputQueue | None = None,
     on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
 ) -> bool:
@@ -65,114 +56,43 @@ async def maybe_compact_owner_turn(
     except ValueError as error:
         raise PiSettingsEvidenceError("Selected native context must be prepared before input") from error
     owner_generation = snapshot.owner_generations[owner.name]
-    context_window = selected.context_window
     if not persistent.available:
         raise PiSettingsEvidenceError("Selected native session must be prepared before input")
-    if summary_strategy is None and (input_text is None or on_admission is None):
-        raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
 
-    # Preserve source-file invalidation across the later native reopen. These
-    # paths come from the original prepared child's launch, not display metadata
-    # or a detached settings decision. Effective values are still read from Pi.
-    launch = persistent.custody.idle().child.key[0]
-    package = launch.package
-    environment = launch.env
-    global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path(environment["HOME"]) / ".pi" / "agent")
-    if global_dir.parts and global_dir.parts[0] == "~":
-        global_dir = Path(environment["HOME"]).joinpath(*global_dir.parts[1:])
-    native_config = Path(environment["AGENT_COMMS_NATIVE_CONFIG_DIR"])
-    if not global_dir.is_absolute() or not native_config.is_absolute():
-        raise PiSettingsEvidenceError("Prepared native configuration directories must be absolute")
-    project_settings = launch.cwd / ".pi" / "settings.json"
-    settings_paths = tuple(dict.fromkeys(map(str, (
-        global_dir / "settings.json", project_settings,
-        global_dir / "models.json", native_config / "models.json",
-        project_settings.with_name("models.json"),
-    ))))
-
-    async def decision() -> PiCompactionDecision:
-        # Native preparation owns model identity; the same retained child owns
-        # effective settings and context use, including injected summary workers.
-        return await read_selected_compaction_decision(
-            persistent,
-            session_file=session_file,
-            expected_package=package,
-            selected=selected,
-        )
-
-    settings = await decision()
-    if not settings.enabled or not settings.trigger:
+    package = persistent.custody.idle().child.key[0].package
+    settings = await read_selected_compaction_decision(
+        persistent, session_file=session_file,
+        expected_package=package, selected=selected,
+    )
+    # Native source budget owns mandatory readiness even when autonomous Pi
+    # compaction is disabled. Do not reinterpret its decision in Python.
+    if not settings.trigger:
         return False
     bridge = await asyncio.to_thread(
         OwnerCompactionCommit, registry.store.path, package, future_queue=future_queue
     )
-    if summary_strategy is None:
-        assert input_text is not None and on_admission is not None
-        try:
-            revision = SessionRevision.observe(session_file).require_available()
-        except SessionRevisionUnavailable as error:
-            raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
-        original = bridge.inputs.read().rows.get(original_input_key)
-        if original is None:
-            raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
-        digest = TextDigest.of(input_text)
-        identity = SelectedAdmissionIdentity(
-            source=SelectedAdmissionSource(
-                incarnation=owner.incarnation,
-                owner=owner.process_identity,
-                turn=TurnId(turn_id),
-                ingress_key=original_input_key,
-                admission_generation=turn.admission_generation,
-                correction_witness=f"{turn.admission_generation}:{digest.value}",
-                input_digest=digest,
-                original_digest=original.digest,
-                reserved_revision=revision,
-            ),
-            session_revision=revision,
-        )
-
-        async def selected_summary(prepared: NativePreparation, captured: CompactionSource) -> OwnerSummaryOutcome:
-            slot = SelectedSummarySlot(owner.name, prepared.witness.session_id)
-            result = await slot.run_selected_summary(
-                persistent,
-                bridge.journal,
-                prepared.witness,
-                SelectedSummarySource(
-                    source=identity.source, selected=selected,
-                    settings=settings.summary_settings(), retained=captured.retained,
-                ),
-                owner=owner,
-                expected_package=package,
-                tokens_before=prepared.tokens_before,
-                future_queue=future_queue,
-                on_event=on_event,
-            )
-            return result.adaptive_summary(bridge.journal, identity)
-
-        summary_strategy = selected_summary
-
-    async def summarize(prepared: NativePreparation, captured: CompactionSource) -> OwnerSummaryOutcome:
-        # Recheck immediately before paid provider work, then after it. The
-        # owner source and ingress remain independently fenced by the bridge.
-        attestation = owner.compaction_attestation(owner_generation, prepared.witness)
-        attestation.require_registry(registry, owner)
-        settings.require_current(await decision())
-        outcome = await summary_strategy(prepared, captured)
-        attestation.require_registry(registry, owner)
-        settings.require_current(await decision())
-        return outcome
-
-    result = await compact_owner_once(
-        bridge,
-        owner,
-        owner_generation,
-        persistent,
-        summarize,
-        settings=settings,
-        context_window=context_window,
-        pending_input_key=original_input_key,
-        settings_paths=settings_paths,
-        on_admission=on_admission,
+    try:
+        revision = SessionRevision.observe(session_file).require_available()
+    except SessionRevisionUnavailable as error:
+        raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
+    original = bridge.inputs.read().lookup(original_input_key)
+    if not original.exists:
+        raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
+    digest = TextDigest.of(input_text)
+    source = SelectedAdmissionSource(
+        incarnation=owner.incarnation,
+        owner=owner.process_identity,
+        turn=TurnId(turn_id),
+        ingress_key=original_input_key,
+        admission_generation=turn.admission_generation,
+        correction_witness=f"{turn.admission_generation}:{digest.value}",
+        input_digest=digest,
+        original_digest=original.digest,
+        reserved_revision=revision,
+    )
+    result = await bridge.compact_selected(
+        owner, owner_generation, persistent, source, selected, settings,
+        pending_input_key=original_input_key, on_admission=on_admission,
         on_event=on_event,
     )
     return result.adaptive_result()
