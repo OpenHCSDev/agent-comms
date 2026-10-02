@@ -631,6 +631,46 @@ class NativeSchemaCarryPlan:
     target: NativeSchemaDeclaration
     stores: tuple[CarriedNativeStore, ...]
 
+    @classmethod
+    def prepare(cls, root, candidate, original, source_python):
+        target = NativeSchemaDeclaration.observe()
+        original.require_carry_target(target)
+        if not source_python.is_absolute() or not source_python.is_file():
+            raise ValueError('Authentic original installed interpreter is required')
+        root, candidate = root.absolute(), candidate.absolute()
+        if candidate == root or candidate.is_relative_to(root):
+            raise ValueError('Candidate must be separate persistent owned storage')
+        candidate.mkdir(mode=0o700)
+        stores = []
+        with RuntimeNativeFiles(root).acquire() as acquired:
+            if not any(item.path.name == 'coordination.sqlite3' for item in acquired.originals):
+                raise ValueError('No original native coordinator to carry')
+            for item in acquired.originals:
+                retain_file(item.path, candidate / item.path.name)
+            compaction = candidate / CompactionNativeStore.name
+            requests = target.capture_requests(compaction, source_python, original) if compaction.exists() else []
+            owners = {store.name:store for store in CarriedNativeStore.members_with(NativeReleaseStore)}
+            for item in acquired.originals:
+                path = candidate / item.path.name
+                with closing(sqlite3.connect(path, isolation_level=None)) as db:
+                    db.execute('PRAGMA foreign_keys=OFF')
+                    db.execute('PRAGMA synchronous=FULL')
+                    db.execute('BEGIN IMMEDIATE')
+                    try:
+                        evidence = owners[item.path.name].carry(db, original, target, requests)
+                        db.execute('COMMIT')
+                    except BaseException:
+                        db.execute('ROLLBACK')
+                        raise
+                with path.open('rb') as saved:
+                    os.fsync(saved.fileno())
+                stores.append(owners[item.path.name](item.sha256, digest(path), evidence))
+            acquired.require_original()
+        fsync_directory(candidate)
+        plan = cls(root, candidate, original, target, tuple(stores))
+        plan.require_candidate()
+        return plan
+
     def require_candidate(self):
         self.original.require_carry_target(self.target)
         if NativeSchemaDeclaration.observe() != self.target:
@@ -707,45 +747,6 @@ class NativeSchemaCarryPlan:
         return result
 
 
-def prepare(root, candidate, original, source_python):
-    target = NativeSchemaDeclaration.observe()
-    original.require_carry_target(target)
-    if not source_python.is_absolute() or not source_python.is_file():
-        raise ValueError('Authentic original installed interpreter is required')
-    root, candidate = root.absolute(), candidate.absolute()
-    if candidate == root or candidate.is_relative_to(root):
-        raise ValueError('Candidate must be separate persistent owned storage')
-    candidate.mkdir(mode=0o700)
-    stores = []
-    with RuntimeNativeFiles(root).acquire() as acquired:
-        if not any(item.path.name == 'coordination.sqlite3' for item in acquired.originals):
-            raise ValueError('No original native coordinator to carry')
-        for item in acquired.originals:
-            retain_file(item.path, candidate / item.path.name)
-        compaction = candidate / CompactionNativeStore.name
-        requests = target.capture_requests(compaction, source_python, original) if compaction.exists() else []
-        owners = {store.name:store for store in CarriedNativeStore.members_with(NativeReleaseStore)}
-        for item in acquired.originals:
-            path = candidate / item.path.name
-            with closing(sqlite3.connect(path, isolation_level=None)) as db:
-                db.execute('PRAGMA foreign_keys=OFF')
-                db.execute('PRAGMA synchronous=FULL')
-                db.execute('BEGIN IMMEDIATE')
-                try:
-                    evidence = owners[item.path.name].carry(db, original, target, requests)
-                    db.execute('COMMIT')
-                except BaseException:
-                    db.execute('ROLLBACK')
-                    raise
-            with path.open('rb') as saved:
-                os.fsync(saved.fileno())
-            stores.append(owners[item.path.name](item.sha256, digest(path), evidence))
-        acquired.require_original()
-    fsync_directory(candidate)
-    plan = NativeSchemaCarryPlan(root, candidate, original, target, tuple(stores))
-    plan.require_candidate()
-    return plan
-
 
 if __name__ == '__main__':
     import argparse
@@ -753,11 +754,6 @@ if __name__ == '__main__':
     parser.add_argument('--declaration', action='store_true')
     parser.add_argument('--compaction-requests', type=Path)
     parser.add_argument('--goal-declaration', action='store_true')
-    parser.add_argument('--root', type=Path)
-    parser.add_argument('--candidate', type=Path)
-    parser.add_argument('--original-declaration', type=Path)
-    parser.add_argument('--original-python', type=Path)
-    parser.add_argument('--plan', type=Path)
     args = parser.parse_args()
     if args.goal_declaration:
         print(json.dumps(NativeSchemaDeclaration.observe_goal()))
@@ -766,9 +762,4 @@ if __name__ == '__main__':
     elif args.compaction_requests:
         print(json.dumps(original_compaction_requests(args.compaction_requests), allow_nan=False))
     else:
-        if not all((args.root,args.candidate,args.original_declaration,args.original_python,args.plan)):
-            parser.error('Preparation requires stopped root, candidate, original declaration/interpreter and fresh plan')
-        original = FieldCodec.decode(NativeSchemaDeclaration,json.loads(args.original_declaration.read_text()))
-        plan = prepare(args.root,args.candidate,original,args.original_python)
-        write_original(args.plan,(json.dumps(FieldCodec.encode(plan),indent=2)+'\n').encode())
-        print(json.dumps({'plan':str(args.plan),'stores':len(plan.stores),'source_unchanged':True}))
+        parser.error('Only declaration or original-request observation is supported; carry is owned by stopped RuntimeInstallation')
