@@ -1,0 +1,72 @@
+[
+  {
+    "label": "authentic-Native5-Core-before",
+    "repo": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
+    "revision": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+    "roots": [
+      "src",
+      "tools",
+      "tests",
+      "scripts",
+      "stack",
+      "extensions",
+      "experiments",
+      "benchmarks",
+      "docs",
+      ".pi"
+    ]
+  },
+  {
+    "label": "determining-Native6-Core-after",
+    "repo": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
+    "revision": "479a5222a6dffcea2b51d1cada36aa33d600e6f1",
+    "roots": [
+      "src",
+      "tools",
+      "tests",
+      "scripts",
+      "stack",
+      "extensions",
+      "experiments",
+      "benchmarks",
+      "docs",
+      ".pi"
+    ]
+  },
+  {
+    "label": "outside-operator-before",
+    "repo": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
+    "revision": "4cc620fbd9c06f3928cf9079ebd351694068a2e7",
+    "roots": [
+      "tools"
+    ]
+  },
+  {
+    "label": "outside-operator-after",
+    "repo": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
+    "revision": "f3f8b9a7dd25309d809ed0ba60fc986dadf66f28",
+    "roots": [
+      "tools"
+    ]
+  },
+  {
+    "label": "Toad-dependency-consumers",
+    "repo": "/home/ts/wt/toad-command-source-closure-20261002",
+    "revision": "f701c34f13bbe619fc0dd6271c772691ff899b9e",
+    "roots": [
+      "src",
+      "tests",
+      "tools",
+      "docs"
+    ]
+  },
+  {
+    "label": "actual-installed-registry-dependency",
+    "revision": "installed-metaclass-registry-0.2.1-wheel-content-hashes-in-output",
+    "installed_directory": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/metaclass_registry",
+    "roots": [
+      "metaclass_registry"
+    ],
+    "local_git_checkout_mismatch": "2d99d9ab79c06b1fb3c3583aae7360663e1cadff: six of six Python files differ; not substituted"
+  }
+]

@@ -138,8 +138,8 @@ Four existing outside-src files now close the producer/resource/consumer path:
   than filename dispatch spread across acquisition/prepare/install.
 - Original decoding runs in the actual installed Native5 interpreter. Its
   original classes read and round-trip frozen source bytes. Required refs
-  derive from certified retained `InputTaskFact` objects, including the only
-  nested input-provenance task consumer, `NativeInputConstraintPin.subject`.
+  derive from certified retained `InputTaskFact` objects. Their durable
+  key/origin encoding and all frozen task/message encodings remain unchanged.
   Missing or ambiguous original evidence refuses conversion. No mutable input
   ledger/registry join, generic JSON walker, FieldCodec subclass or old product
   reader is introduced. Goal/GoalMentionSource own different identities and
@@ -161,7 +161,7 @@ Four existing outside-src files now close the producer/resource/consumer path:
   use the same existing carry implementation; neither launches a native owner,
   prompts a provider, fabricates a fresh enrollment or grants input admission.
 
-Measured code-only diff across these four tools: **411 lines deleted / 446
+Measured code-only diff across these four tools: **411 lines deleted / 430
 added**. Obsolete Native4-to5 column removal, TRIAGE singleton construction,
 route construction and fixture proof writing are deleted. New-case check: one
 store member owns its file/carry/publication; acquisition/prepare/install derive
@@ -205,3 +205,113 @@ stopped-custody acceptance. Exact results: `operator-bounded-ratchet.json`.
 Arendt normally integrated #506 `62719ea9` into #489 at `479a5222`; final
 Native6 source/resource closure and receiving installation are still his named
 prerequisite. No second target builder or source-overlay acceptance was started.
+
+## Mandatory AST mapping and observed durable-source dependency
+
+Applied the owner's PR60 method from OpenHCS commit
+`5e8812ee83d0dc8714392445bad3e32fc47a1755`,
+`tests/unit/test_cellprofiler_static_deletion_gates.py`. The evidence query uses
+the existing refactor-audit `Package` parser, imports and parsed modules. It does
+not copy the PR60 helpers or introduce a migration/audit framework. Whole
+declared Python roots, annotations, members, lexical imports/aliases, reads,
+writes, calls, decisions, literal boundaries and syntactic inheritance are
+retained in `authority-before-after.json.gz`; exact revisions and roots are in
+`authority-pins.json`. The first operator-after snapshot is `f3f8b9a7`; a
+separate after-correction snapshot covers the deletion described below.
+
+| Fact | Existing owner and whole consumer relation |
+| --- | --- |
+| Original source bytes | `SelectedSummaryAttempt.source_json` remains opaque. `SelectedSummaries.reserve` writes the original `journal_json`; `OwnerCompactionCommit.commit` hashes those exact bytes; `SelectedCommitReference.require_source` and `CompactionOperation.require_summary_link` validate them. The carry preserves rowid, bytes and state instead of recomputing the native reference. |
+| Current semantic request | Target `SelectedSummaryAttempt.request: SelectedSummarySource` replaces its `source()`/`envelope()` readers and `SelectedSummarySource.read`. `SelectedSummaries.reserve` writes it. `original_has_started`, `SelectedCompactionOutcome.source_revision`, `CompactionOutcomeSnapshot.read`, commit/reconciliation and `SelectedSummaryAdmission._from_returned_ack` consume it. No runtime old decoder remains in that family. |
+| Original input content | `StoredInput.context_provenance` is the sole production constructor of `InputProvenance`; the target adds mandatory `digest`. `InputDocument.original_provenances`, selected admission/reservation, `InputTaskFact.original_sources`, turn-context contributions, pin CLI/publication and native-input pin wording all use the original producer/lookup. This global declaration also crosses durable wire boundaries below. |
+| Store membership and publication | The existing `CarriedNativeStore` composes `DeclaredFamily`; coordination, binding and compaction members own carry/publication. `RuntimeNativeFiles.paths/acquire`, `prepare`, `NativeSchemaCarryPlan.require_candidate/install`, and the existing runtime installation carry operation derive membership and keep the same acquired resources. `AcquiredRuntimeFiles.unchanged_by` projects descriptors still held by that owner. |
+| UNKNOWN/enrollment/coverage | `PrivateRawInput`, `EnrolledPrivateSession`, operation/publication states and `PrivateInputs.require_source_coverage/admission` retain their original owners. Copying their rows neither creates a returned enrollment nor reconstructs a process-local post-fsync admission receipt. |
+
+Source context: authentic installed Core `74877f2d` versus determining Core
+`479a5222` (now superseded global-digest proposal); operator `4cc620fb`
+versus `f3f8b9a7` plus the correction; Toad dependency source
+`f701c34f`. The installed `metaclass-registry==0.2.1` Python dependency was
+parsed separately: all six installed files differ from local checkout
+`2d99d9ab`, so that checkout was not substituted. Declaration/consumer output
+and module hashes are preserved, with a compact summary alongside them.
+
+Limits: this is lexical source evidence, not resolved native MRO or dynamic
+call proof. Same short names in separate modules/nested classes are retained
+as ambiguous leads, including two different Core `SelectedSource` declarations.
+Generic `request`, `source`, `digest`, `prepare` and `install` matches include
+unrelated owners and are not counted as compaction consumers without semantic
+inspection. Native JavaScript/MJS and generated string bodies are not parsed
+by the Python AST tool; no available existing JavaScript AST parser was found,
+and none was installed. Thus no zero-omission claim is made across languages.
+Toad has no direct production journal/source/provenance-type import in this
+snapshot; its generic ACP/transcript event consumers are not a second journal
+authority. Installed Native6 qualification still remains outstanding.
+
+### Actual original wire observation
+
+An actual **installed Native5** `WireLog.certified_read(blocking=False)` and
+`WireScan` traversed the complete certified public prefix through sequence
+345: **410 wire records, 345 messages, 65 context manifests**, 3,341,248 bytes,
+in **0.619752 seconds**. No `NativeInputConstraintPin` appeared in those
+messages. **23 actual `InputProvenance` values occur in
+`SegmentManifest.provenance` (including contributors), all without `digest`.**
+This is observed presence of the global old encoding, not inference from a
+possible pin API. Absence of pins applies only to that recorded prefix.
+
+The bus, index and marker revisions were unchanged while the original
+certificate was held. Prefix SHA256:
+`697b5a2dd121875a2feea46f0217de8869f6c436f5b292196ef570aba08b778a`.
+The process's SQLite authorizer and filesystem audit guard refused repair/
+mutation authority; denied writes were zero. No registry constructor, input,
+provider call, owner signal or replay occurred. No raw wire, prompt, author
+credentials or context content was copied into evidence.
+
+`actual-certified-wire-presence03.json` is the completed observation. The two
+earlier probe-setup refusals are preserved as incomplete observations, not
+absence proofs or product failures. The SQLite guard attachment moved after
+connection initialization and before certificate verification. This is bounded
+evidence instrumentation, not a new runtime reader or guard framework.
+
+**#510 remains NOT Ready.** The new mandatory global digest changes actual
+historical `ContextManifest -> SegmentManifest -> InputProvenance` decoding,
+in addition to `Message.task -> NativeInputConstraintPin.subject`. Arendt owns
+the one durable-provenance versus native-content-witness contract correction,
+coordinated with Einstein #506. Neither rewriting certified original wire
+bytes nor a default digest/old reader/subcodec is permitted. The journal-only
+carry cannot qualify that global source relation. Once that owner publishes
+the final contract, #510 adapts its existing one-use carry to it and deletes
+any superseded transformation in place; the final installed/stopped control
+follows the coherent receiving prefix and parent's custody grant.
+
+No product source changed for this inventory. Patterns: IDEN-1, IDEN-5, BOUND-2, MEMB-1,
+IMPL-4 and TIME-9. The real durable record observation supplies the concrete
+reproducer for the determining owner's family correction.
+
+### Agreed owner correction applied to the existing carry
+
+Einstein received the owner's explicit decision: `InputProvenance` keeps its
+historical key/origin encoding. Existing retained `InputTaskFact.source` /
+`StoredInput.digest` owns exact content proof. Einstein is changing the complete
+request/reservation/recovery/coverage/admission family with Arendt; no new
+record type or decoder is needed. `SelectedSummaryAttempt.request` and opaque
+original `source_json` remain separate facts.
+
+#510 immediately deletes the added `reference(ref)` digest injector and the
+entire `NativeInputConstraintPin`-specific retained-task rewrite/import. The old
+selected scalar digest still verifies the same frozen original `StoredInput`.
+Its ordered reference is encoded by that original row's existing
+`context_provenance()`. All other request fields and frozen messages/retained
+facts are left byte-for-byte in their authentic encoding. No whole-wire carry,
+second index, compatibility reader, default digest or new class is introduced.
+This correction removes **20 lines / adds 4**; the working four-tools batch is
+**411 deleted / 430 added** against the authentic-declaration checkpoint.
+
+The changed original producer ran through the actual installed Native5 entry
+point on the protected private journal inventory. All four actual requests
+retain their original source hashes and exact retained encoding; no durable
+reference gains a digest. See `corrected-original-producer-control.json`.
+Raw transfer remains private 0600 beside the original private backup. This is
+the proportionate affected producer check, not a Native6/cutover qualification.
+The final installed Native6/control requires the coherent corrected source
+checkpoint and parent's stopped-custody grant. No provider call, owner restart,
+public source rewrite or input replay occurred.

@@ -1,0 +1,48 @@
+{
+  "certificate": {
+    "digest": "7735cb6513bacb40d9080832813f1f5226da317bd2f949b1759f3119c94f60a9",
+    "latest_source_seq": 0,
+    "revision": [
+      2083,
+      4606680,
+      3341248,
+      1790918817180008295,
+      1790918817180008295
+    ],
+    "root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "tail": "f86b1eb70b2eabb573d8fa470789289a43dcca807c378197f235cf6627c65efc",
+    "through_seq": 345
+  },
+  "classification": "running-certified-source-inventory-not-stopped-carry",
+  "complete_at_recorded_prefix": true,
+  "counts": {
+    "context_input_provenances": 23,
+    "context_input_provenances_with_digest": 0,
+    "context_manifests": 65,
+    "messages": 345,
+    "native_input_constraint_pins": 0,
+    "wire_records": 410
+  },
+  "denied_writes": [],
+  "duration_seconds": 0.619752,
+  "final_sequence": 345,
+  "input_replays": 0,
+  "installed_core": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "commit_id": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+      "requested_revision": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+      "vcs": "git"
+    }
+  },
+  "native_prompts": 0,
+  "observed_at": "2026-10-02T05:36:32.082242+00:00",
+  "owner_signals": 0,
+  "pins": [],
+  "prefix_sha256": "697b5a2dd121875a2feea46f0217de8869f6c436f5b292196ef570aba08b778a",
+  "query_sha256": "c755ffbbd050e74e160eeb1218c817395fc6874bd6cda39f9f828cb14ecf97c7",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "scope": "Complete recorded certified prefix through_seq345; later appends unobserved. Typed pin and ContextManifest provenance observations, no body/credential output.",
+  "source_resources_unchanged_under_certificate": true,
+  "sqlite_authorizers_attached": 1
+}

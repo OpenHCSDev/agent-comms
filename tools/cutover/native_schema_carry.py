@@ -268,7 +268,6 @@ def original_compaction_requests(path):
     from agent_comms.compaction_records import SelectedSummaryAttempt
     from agent_comms.input_origin import InputProvenance
     from agent_comms.selected_source import SelectedAdmissionSource
-    from agent_comms.task_sources import NativeInputConstraintPin
 
     declared = NativeSchemaDeclaration.observe()
     if declared.release_versions != (9, 3, 3, 5):
@@ -293,14 +292,6 @@ def original_compaction_requests(path):
                                 raise ValueError('Frozen original input evidence is ambiguous')
                             originals[ref.key] = row
 
-                def reference(ref):
-                    row = originals.get(ref.key)
-                    if row is None or row.context_provenance() != ref:
-                        raise ValueError('Reference lacks certified frozen original input')
-                    # Original content owns the digest; mutable registry and
-                    # current input disposition are never consulted.
-                    return dict(FieldCodec.encode(ref), digest=FieldCodec.encode(row.digest))
-
                 request = FieldCodec.encode(envelope)
                 source = envelope.source
                 if isinstance(source, SelectedAdmissionSource):
@@ -309,17 +300,10 @@ def original_compaction_requests(path):
                         raise ValueError('Selected original lacks its frozen content witness')
                     data = request['source']
                     del data['ingress_key'], data['original_digest']
-                    data['originals'] = [reference(row.context_provenance())]
-                # The only retained task declaration containing input
-                # provenance is the existing NativeInputConstraintPin.subject.
-                # Goal/GoalMentionSource contain different identities. No
-                # generic JSON walk or replacement codec guesses these paths.
-                for fact, encoded in zip(envelope.retained.facts, request['retained']['facts']):
-                    for message in fact.wire_sources():
-                        if isinstance(message.task, NativeInputConstraintPin):
-                            if fact.wire_sources() != (message,):
-                                raise ValueError('Pin fact must own one certified original message')
-                            encoded['source']['task']['subject'] = reference(message.task.subject)
+                    # Keep the original durable key/origin reference. The
+                    # existing retained InputTaskFact/StoredInput owns its
+                    # content digest; never copy it into durable provenance.
+                    data['originals'] = [FieldCodec.encode(row.context_provenance())]
                 result.append({'operation_id':attempt.operation_id,
                                'session_file':attempt.session_file,
                                'source_json_sha256':hashlib.sha256(attempt.source_json.encode()).hexdigest(),

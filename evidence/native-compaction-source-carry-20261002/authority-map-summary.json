@@ -1,0 +1,495 @@
+{
+  "classification": "source-AST-inventory-not-native-or-stopped-acceptance",
+  "compressed_output_bytes": 1719033,
+  "expanded_output_bytes": 27444352,
+  "non_python_omission": "JavaScript/MJS/native installed distribution not parsed by Python AST; no JS AST parser available in existing owned/host tooling, no install performed. No dynamic reference-resolution claim.",
+  "output_sha256": "3e1724b447dbef5e27f436766c098403ff8b5c9ea142d276cb2f2fd73947b9e3",
+  "pins_sha256": "0cc689906ddcb2361f0da9b84c710538fbe571feb80ddb07aa099265f7515b92",
+  "query_sha256": "09fdd774b5970f0c90ae156802f42b1cdcc02ff7b0f24ffb2e865333408f103c",
+  "snapshots": [
+    {
+      "all_root_nonunique_definitions": {
+        "AttemptRecord": [
+          {
+            "line": 49,
+            "path": "src/agent_comms/coordination_tables/attempts.py"
+          },
+          {
+            "line": 214,
+            "path": "src/agent_comms/goal_attempts.py"
+          }
+        ],
+        "CompactionEnd": [
+          {
+            "line": 199,
+            "path": "src/agent_comms/agent_events.py"
+          },
+          {
+            "line": 207,
+            "path": "src/agent_comms/pi_events.py"
+          }
+        ],
+        "CompactionProgress": [
+          {
+            "line": 251,
+            "path": "src/agent_comms/agent_events.py"
+          },
+          {
+            "line": 254,
+            "path": "src/agent_comms/pi_events.py"
+          }
+        ],
+        "CompactionStart": [
+          {
+            "line": 179,
+            "path": "src/agent_comms/agent_events.py"
+          },
+          {
+            "line": 280,
+            "path": "src/agent_comms/pi_events.py"
+          }
+        ],
+        "OpenCodePart": [
+          {
+            "line": 31,
+            "path": "src/agent_comms/import_records.py"
+          },
+          {
+            "line": 51,
+            "path": "src/agent_comms/importing.py"
+          }
+        ],
+        "SelectedSource": [
+          {
+            "line": 115,
+            "path": "src/agent_comms/selected_source.py"
+          },
+          {
+            "line": 22,
+            "path": "src/agent_comms/selected_source_batch.py"
+          }
+        ],
+        "SucceededAttempt": [
+          {
+            "line": 259,
+            "path": "src/agent_comms/attempt_states.py"
+          },
+          {
+            "line": 51,
+            "path": "src/agent_comms/goal_attempt_phase.py"
+          }
+        ]
+      },
+      "event_counts": {
+        ".pi": {},
+        "benchmarks": {
+          "Load": 4,
+          "call": 3,
+          "literal-boundary-or-documentation": 4
+        },
+        "docs": {
+          "literal-boundary-or-documentation": 4
+        },
+        "experiments": {},
+        "extensions": {},
+        "scripts": {
+          "literal-boundary-or-documentation": 2
+        },
+        "src": {
+          "Load": 5142,
+          "Store": 131,
+          "call": 1796,
+          "decision-or-check": 420,
+          "keyword-write-or-forward": 41,
+          "literal-boundary-or-documentation": 752
+        },
+        "stack": {
+          "Load": 7,
+          "Store": 2,
+          "decision-or-check": 5,
+          "literal-boundary-or-documentation": 54
+        },
+        "tests": {
+          "Load": 1727,
+          "Store": 161,
+          "call": 1019,
+          "decision-or-check": 381,
+          "keyword-write-or-forward": 49,
+          "literal-boundary-or-documentation": 1032
+        },
+        "tools": {
+          "Load": 289,
+          "Store": 24,
+          "call": 158,
+          "decision-or-check": 57,
+          "literal-boundary-or-documentation": 337
+        }
+      },
+      "label": "authentic-Native5-Core-before",
+      "parsed_modules": 737,
+      "revision": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+      "unparsed": []
+    },
+    {
+      "all_root_nonunique_definitions": {
+        "AttemptRecord": [
+          {
+            "line": 49,
+            "path": "src/agent_comms/coordination_tables/attempts.py"
+          },
+          {
+            "line": 214,
+            "path": "src/agent_comms/goal_attempts.py"
+          }
+        ],
+        "CompactionEnd": [
+          {
+            "line": 200,
+            "path": "src/agent_comms/agent_events.py"
+          },
+          {
+            "line": 221,
+            "path": "src/agent_comms/pi_events.py"
+          }
+        ],
+        "CompactionProgress": [
+          {
+            "line": 252,
+            "path": "src/agent_comms/agent_events.py"
+          },
+          {
+            "line": 268,
+            "path": "src/agent_comms/pi_events.py"
+          }
+        ],
+        "CompactionStart": [
+          {
+            "line": 180,
+            "path": "src/agent_comms/agent_events.py"
+          },
+          {
+            "line": 294,
+            "path": "src/agent_comms/pi_events.py"
+          }
+        ],
+        "OpenCodePart": [
+          {
+            "line": 31,
+            "path": "src/agent_comms/import_records.py"
+          },
+          {
+            "line": 51,
+            "path": "src/agent_comms/importing.py"
+          }
+        ],
+        "SelectedSource": [
+          {
+            "line": 110,
+            "path": "src/agent_comms/selected_source.py"
+          },
+          {
+            "line": 22,
+            "path": "src/agent_comms/selected_source_batch.py"
+          }
+        ],
+        "SucceededAttempt": [
+          {
+            "line": 259,
+            "path": "src/agent_comms/attempt_states.py"
+          },
+          {
+            "line": 51,
+            "path": "src/agent_comms/goal_attempt_phase.py"
+          }
+        ]
+      },
+      "event_counts": {
+        ".pi": {},
+        "benchmarks": {
+          "Load": 4,
+          "call": 3,
+          "literal-boundary-or-documentation": 4
+        },
+        "docs": {
+          "literal-boundary-or-documentation": 4
+        },
+        "experiments": {},
+        "extensions": {},
+        "scripts": {
+          "literal-boundary-or-documentation": 2
+        },
+        "src": {
+          "Load": 5139,
+          "Store": 128,
+          "call": 1794,
+          "decision-or-check": 401,
+          "keyword-write-or-forward": 28,
+          "literal-boundary-or-documentation": 789
+        },
+        "stack": {
+          "Load": 7,
+          "Store": 2,
+          "decision-or-check": 5,
+          "literal-boundary-or-documentation": 54
+        },
+        "tests": {
+          "Load": 1735,
+          "Store": 162,
+          "call": 1016,
+          "decision-or-check": 386,
+          "keyword-write-or-forward": 46,
+          "literal-boundary-or-documentation": 1016
+        },
+        "tools": {
+          "Load": 289,
+          "Store": 24,
+          "call": 158,
+          "decision-or-check": 57,
+          "literal-boundary-or-documentation": 337
+        }
+      },
+      "label": "determining-Native6-Core-after",
+      "parsed_modules": 735,
+      "revision": "479a5222a6dffcea2b51d1cada36aa33d600e6f1",
+      "unparsed": []
+    },
+    {
+      "all_root_nonunique_definitions": {},
+      "event_counts": {
+        "tools": {
+          "Load": 289,
+          "Store": 24,
+          "call": 158,
+          "decision-or-check": 57,
+          "literal-boundary-or-documentation": 337
+        }
+      },
+      "label": "outside-operator-before",
+      "parsed_modules": 52,
+      "revision": "4cc620fbd9c06f3928cf9079ebd351694068a2e7",
+      "unparsed": []
+    },
+    {
+      "all_root_nonunique_definitions": {},
+      "event_counts": {
+        "tools": {
+          "Load": 366,
+          "Store": 29,
+          "call": 180,
+          "decision-or-check": 83,
+          "keyword-write-or-forward": 1,
+          "literal-boundary-or-documentation": 361
+        }
+      },
+      "label": "outside-operator-after",
+      "parsed_modules": 52,
+      "revision": "f3f8b9a7dd25309d809ed0ba60fc986dadf66f28",
+      "unparsed": []
+    },
+    {
+      "all_root_nonunique_definitions": {
+        "Activated": [
+          {
+            "line": 26,
+            "path": "src/toad/widgets/goal_bar.py"
+          },
+          {
+            "line": 51,
+            "path": "src/toad/widgets/input_delivery.py"
+          }
+        ],
+        "Answer": [
+          {
+            "line": 12,
+            "path": "src/toad/answer.py"
+          },
+          {
+            "line": 158,
+            "path": "src/toad/widgets/question.py"
+          }
+        ],
+        "Changed": [
+          {
+            "line": 21,
+            "path": "src/toad/widgets/observed_thread_activity.py"
+          },
+          {
+            "line": 370,
+            "path": "src/toad/widgets/side_bar.py"
+          }
+        ],
+        "ChannelTarget": [
+          {
+            "line": 123,
+            "path": "src/toad/navigation_target.py"
+          },
+          {
+            "line": 57,
+            "path": "tools/performance/click_history.py"
+          }
+        ],
+        "Dismiss": [
+          {
+            "line": 52,
+            "path": "src/toad/messages.py"
+          },
+          {
+            "line": 624,
+            "path": "src/toad/widgets/side_bar.py"
+          }
+        ],
+        "Flash": [
+          {
+            "line": 80,
+            "path": "src/toad/messages.py"
+          },
+          {
+            "line": 13,
+            "path": "src/toad/widgets/flash.py"
+          }
+        ],
+        "GoalControl": [
+          {
+            "line": 156,
+            "path": "src/toad/slash_command.py"
+          },
+          {
+            "line": 19,
+            "path": "src/toad/widgets/goal_bar.py"
+          }
+        ],
+        "HistoryTarget": [
+          {
+            "line": 99,
+            "path": "src/toad/navigation_target.py"
+          },
+          {
+            "line": 31,
+            "path": "tools/performance/click_history.py"
+          }
+        ],
+        "Plan": [
+          {
+            "line": 92,
+            "path": "src/toad/acp/messages.py"
+          },
+          {
+            "line": 17,
+            "path": "src/toad/widgets/plan.py"
+          }
+        ],
+        "Pressed": [
+          {
+            "line": 22,
+            "path": "src/toad/widgets/comms_menu.py"
+          },
+          {
+            "line": 160,
+            "path": "src/toad/widgets/side_bar.py"
+          },
+          {
+            "line": 287,
+            "path": "src/toad/widgets/side_bar.py"
+          },
+          {
+            "line": 477,
+            "path": "src/toad/widgets/side_bar.py"
+          }
+        ],
+        "Requested": [
+          {
+            "line": 36,
+            "path": "src/toad/widgets/project_panel.py"
+          },
+          {
+            "line": 145,
+            "path": "src/toad/widgets/transcript_history.py"
+          },
+          {
+            "line": 161,
+            "path": "src/toad/widgets/transcript_history.py"
+          },
+          {
+            "line": 10,
+            "path": "src/toad/widgets/wire_message_handling.py"
+          }
+        ],
+        "Selected": [
+          {
+            "line": 27,
+            "path": "src/toad/widgets/grid_select.py"
+          },
+          {
+            "line": 82,
+            "path": "src/toad/widgets/question.py"
+          }
+        ],
+        "ThreadTarget": [
+          {
+            "line": 85,
+            "path": "src/toad/navigation_target.py"
+          },
+          {
+            "line": 49,
+            "path": "tools/performance/click_history.py"
+          }
+        ],
+        "ToolCall": [
+          {
+            "line": 97,
+            "path": "src/toad/acp/messages.py"
+          },
+          {
+            "line": 49,
+            "path": "src/toad/widgets/tool_call.py"
+          }
+        ]
+      },
+      "event_counts": {
+        "docs": {},
+        "src": {
+          "Load": 2198,
+          "Store": 43,
+          "call": 642,
+          "decision-or-check": 100,
+          "keyword-write-or-forward": 3,
+          "literal-boundary-or-documentation": 171
+        },
+        "tests": {
+          "Load": 523,
+          "Store": 50,
+          "call": 202,
+          "decision-or-check": 89,
+          "keyword-write-or-forward": 5,
+          "literal-boundary-or-documentation": 608
+        },
+        "tools": {
+          "Load": 23,
+          "Store": 1,
+          "call": 5,
+          "decision-or-check": 1,
+          "literal-boundary-or-documentation": 29
+        }
+      },
+      "label": "Toad-dependency-consumers",
+      "parsed_modules": 705,
+      "revision": "f701c34f13bbe619fc0dd6271c772691ff899b9e",
+      "unparsed": []
+    },
+    {
+      "all_root_nonunique_definitions": {},
+      "event_counts": {
+        "metaclass_registry": {
+          "Load": 13,
+          "call": 1,
+          "decision-or-check": 4,
+          "literal-boundary-or-documentation": 15
+        }
+      },
+      "label": "actual-installed-registry-dependency",
+      "parsed_modules": 6,
+      "revision": "installed-metaclass-registry-0.2.1-wheel-content-hashes-in-output",
+      "unparsed": []
+    }
+  ]
+}
