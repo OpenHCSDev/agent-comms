@@ -36,7 +36,8 @@ async def compact_context(
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
         assert task is not None
-        turn_lease = runner.comms.agents.begin_turn(thread_name, turn_id, "Compacting context")
+        owner = runner.comms.agents.begin_turn(thread_name, turn_id, "Compacting context")
+        thread, turn_lease = owner.thread, owner.turn_lease
         runner.turn_tasks[session_id] = task
         started = False
         terminal_attempted = False

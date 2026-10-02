@@ -74,7 +74,7 @@ def _thread(comms, name, worktree):
 
 
 def _begin(comms, name, turn_id):
-    lease = comms.agents.begin_turn(name, turn_id)
+    lease = comms.agents.begin_turn(name, turn_id).turn_lease
     comms._test_leases[name] = lease
     return lease
 
@@ -498,7 +498,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     wakes = []
     monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda check: wakes.append(check.session_id))
     try:
-        lease = comms.agents.begin_turn(child, "child-turn")
+        lease = comms.agents.begin_turn(child, "child-turn").turn_lease
         comms.goals.update_goal(
             owner, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
         )
@@ -544,7 +544,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(
     try:
         await asyncio.wait_for(old_settled.wait(), 20)
         assert comms.registry.require(child).active_turn is None
-        new_claim = comms.agents.begin_turn(child, "new-child-turn")
+        new_claim = comms.agents.begin_turn(child, "new-child-turn").turn_lease
         new_fence = comms.agents.finish_turn(new_claim)
         release_old.set()
         await asyncio.wait_for(old_task, 5)

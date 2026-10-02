@@ -28,6 +28,7 @@ from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .registration import Registration
+    from .turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,6 +36,11 @@ class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck
     thread: Thread
     admission_generation: int
+
+    @property
+    def turn_lease(self) -> TurnLeaseFence:
+        """The admitted owner declaration determines its exact original lease."""
+        return self.thread.require_turn_lease()
 
     @classmethod
     def capture_local(cls, snapshot: RegistrySnapshot, name: str) -> RegistryOwner:

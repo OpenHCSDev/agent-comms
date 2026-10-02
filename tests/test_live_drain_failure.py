@@ -68,7 +68,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         # Age and an unrelated turn may not turn this persistent failure into Ready.
         comms.agents.activity.emit(replace(failed.activity, timestamp=time.time() - 1000))
         assert owner_view(comms).presentation.attention
-        lease = comms.agents.begin_turn("beta", "ordinary-unrelated-turn")
+        lease = comms.agents.begin_turn("beta", "ordinary-unrelated-turn").turn_lease
         comms.agents.finish_turn(lease)
         assert owner_view(comms).presentation.attention
         # An explicit operator restores the actual current schema; readers do no repair.

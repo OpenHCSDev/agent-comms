@@ -44,7 +44,7 @@ def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # no
     from agent_comms.activity import ActivityState
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    lease = comms.agents.begin_turn('beta', 'test-active-turn')
+    lease = comms.agents.begin_turn('beta', 'test-active-turn').turn_lease
     comms.agents.set_activity('beta', ActivityState.IDLE)
     view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
     assert view.presentation.busy
@@ -72,7 +72,7 @@ def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path): 
             notifications=comms.views.recent_notifications(name),
             read_identity=comms.transcripts.capture_page_read(view.thread.name).identity,
         )
-    lease = comms.agents.begin_turn('renamed', 'individual-active-turn')
+    lease = comms.agents.begin_turn('renamed', 'individual-active-turn').turn_lease
     comms.agents.set_activity('renamed', ActivityState.IDLE)
     assert comms.views.thread_presentation('beta').busy
     state = comms.registry.require('renamed').turn_state

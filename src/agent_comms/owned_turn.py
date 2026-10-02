@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -19,6 +20,8 @@ from .goal_attempts import LaunchPermit
 from .messages import Message
 from .input_origin import WireInputOrigin
 from .owned_send_admission import OwnedSendAdmission
+from .native_input_owner import RegistryOwner
+from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
 from .selected_summary_admission import SelectedSummaryAdmission
@@ -47,6 +50,21 @@ if TYPE_CHECKING:
 
 class OwnedTurn:
     """One admitted owner turn; stable source facts and native callbacks live here."""
+
+    @property
+    def thread(self):
+        return self.registry_owner.thread
+
+    @property
+    def turn_lease(self):
+        return self.registry_owner.turn_lease
+
+    async def attach_native_session(self, session_file):
+        """Publish through the owner returned by this original begin operation."""
+        self.registry_owner = await Coordination.run_worker(partial(
+            self.runner.comms.registry.attach_native_session,
+            self.registry_owner, str(session_file),
+        ))
 
     def __init__(
         self,
@@ -87,7 +105,9 @@ class OwnedTurn:
         )
         self.owner_task = asyncio.current_task()
         assert self.owner_task is not None
-        self.thread = self.runner.comms.registry.require(self.thread_name)
+        self.registry_owner = RegistryOwner.capture_local(
+            self.runner.comms.registry.snapshot(), self.thread_name
+        )
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
         active_goal = self.thread.active_goal
@@ -133,7 +153,7 @@ class OwnedTurn:
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
-        self.turn_lease = self.runner.comms.agents.begin_turn(
+        self.registry_owner = self.runner.comms.agents.begin_turn(
             self.thread_name, self.turn_id, self.task[:80], self.routing
         )
         self.lease_custody = AsyncExitStack()
@@ -286,11 +306,7 @@ class OwnedTurn:
             runtime=self.runner.runtime,
             emitted_errors=self.runner.emitted_errors,
             session_id=self.session_id,
-            thread=self.thread,
-            turn_lease=self.turn_lease,
-            routing=self.routing,
-            original=self.original,
-            checkpoint=self.checkpoint,
+            turn=self,
             finish_event=self.finish_event,
             goals=TurnGoalAccount(
                 comms=self.runner.comms,

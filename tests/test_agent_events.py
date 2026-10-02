@@ -189,7 +189,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
         )
     )
     owner = CommsAgent(comms, agent_bin="unused")
-    lease = comms.agents.begin_turn("bot", "turn")
+    lease = comms.agents.begin_turn("bot", "turn").turn_lease
     owner.turns.active_turns["session"] = "turn"
     effects = []
 
@@ -227,7 +227,7 @@ async def test_stream_settlement_defers_waiters_and_preserves_replacement_turn(
         )
     )
     owner = CommsAgent(comms, agent_bin="unused")
-    lease = comms.agents.begin_turn("bot", "turn")
+    lease = comms.agents.begin_turn("bot", "turn").turn_lease
     owner.turns.active_turns["session"] = "turn"
     released = []
     monkeypatch.setattr(comms.goals, "release_waits_after_terminal_turn", released.append)

@@ -27,7 +27,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     register(comms, "owner")
     peer = register(comms, "peer")
-    lease = comms.agents.begin_turn("peer", "original-work")
+    lease = comms.agents.begin_turn("peer", "original-work").turn_lease
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for original peer"))
     comms.goals.update_goal(
         "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
@@ -107,7 +107,7 @@ async def test_native(retained_native_acp_owner):
     retained = native.session.read_bytes()
     assert native.provider.posts == 1
     register(comms, "peer")
-    peer_lease = comms.agents.begin_turn("peer", "peer-work")
+    peer_lease = comms.agents.begin_turn("peer", "peer-work").turn_lease
     goal = comms.goals.update_goal(sid, SetGoalAction(text="Process the original peer reply"))
     old_key = "acp:historical-unknown"
     owner = comms.registry.require(sid)

@@ -92,11 +92,11 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    first = comms.agents.begin_turn("owner", "reused")
+    first = comms.agents.begin_turn("owner", "reused").turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
     assert comms.agents.finish_turn(first) is not None
-    second = comms.agents.begin_turn("renamed", "reused")
+    second = comms.agents.begin_turn("renamed", "reused").turn_lease
     assert second.identity.generation == first.identity.generation + 1
     assert comms.agents.finish_turn(first) is None
     assert comms.agents.finish_turn(second) is not None

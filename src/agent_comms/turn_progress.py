@@ -23,7 +23,6 @@ from .diagnostics import PublicationMeasurements, record_terminal_failure, recor
 from .messages import MessageType
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
-from .native_input_owner import RegistryOwner
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_lease import TurnState
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
-    from .turn_input_source import OriginalTurnInput
+    from .owned_turn import OwnedTurn
 
 
 @dataclass(kw_only=True)
@@ -61,11 +60,7 @@ class TurnProgress(events.AgentEventConsumer):
         runtime,
         emitted_errors,
         session_id,
-        thread,
-        turn_lease,
-        routing,
-        original: OriginalTurnInput,
-        checkpoint,
+        turn: OwnedTurn,
         finish_event,
         goals: TurnGoalAccount,
         sync_goals,
@@ -73,10 +68,7 @@ class TurnProgress(events.AgentEventConsumer):
         self._comms = comms
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
         self.runtime, self.emitted_errors = runtime, emitted_errors
-        self.session_id, self.thread = session_id, thread
-        self.turn_lease = turn_lease
-        self.routing, self.checkpoint = routing, checkpoint
-        self.original = original
+        self.session_id, self.turn = session_id, turn
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
@@ -88,6 +80,26 @@ class TurnProgress(events.AgentEventConsumer):
             sync_goal_execution=sync_goals,
             session_id=session_id,
         )
+
+    @property
+    def thread(self):
+        return self.turn.thread
+
+    @property
+    def turn_lease(self):
+        return self.turn.turn_lease
+
+    @property
+    def routing(self):
+        return self.turn.routing
+
+    @property
+    def original(self):
+        return self.turn.original
+
+    @property
+    def checkpoint(self):
+        return self.turn.checkpoint
 
     @property
     def origins(self):
@@ -214,13 +226,7 @@ class TurnProgress(events.AgentEventConsumer):
     async def before_agent_info(self, event: events.AgentInfo) -> None:
         session_file = event.session_file
         if session_file:
-            owner = await Coordination.run_worker(partial(
-                self.comms.registry.attach_native_session,
-                RegistryOwner(thread=self.thread,
-                              admission_generation=self.turn_lease.admission_generation),
-                str(session_file),
-            ))
-            self.thread = owner.thread
+            await self.turn.attach_native_session(session_file)
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)

@@ -69,7 +69,7 @@ async def retained_summary(native_backend):
             model=model.display_name,
         )
     )
-    lease = comms.agents.begin_turn("owner", "native-summary-negative")
+    lease = comms.agents.begin_turn("owner", "native-summary-negative").turn_lease
     owner = comms.registry.require("owner")
     envelope = dict(
         source=FieldCodec.encode(
@@ -508,7 +508,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
             model=model.display_name,
         )
     )
-    lease = comms.agents.begin_turn("summary-owner", "native-summary-exchange")
+    lease = comms.agents.begin_turn("summary-owner", "native-summary-exchange").turn_lease
     owner = comms.registry.require("summary-owner")
     source = ManualSource(
         owner=owner.require_process(),
