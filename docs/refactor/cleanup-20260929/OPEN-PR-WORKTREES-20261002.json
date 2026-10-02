@@ -1,114 +1,118 @@
 {
-  "as_of": "2026-10-02T08:29:58.233999+00:00",
-  "scope": "All open PRs in OpenHCSDev agent-comms/toad/textual/textual-diff-view; source/receiving ownership for this goal.",
-  "default_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002",
+  "as_of": "2026-10-02T10:04:27.793737+00:00",
+  "default_prefix": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-joined-owner-failure518-20261002",
   "prs": [
     {
-      "createdAt": "2026-10-02T08:09:17Z",
-      "headRefName": "feat/task-aware-compaction-timing-20261002",
-      "headRefOid": "c4c9287bc644f34ce1e6f828a1a2e0002c9a42d4",
+      "createdAt": "2026-10-02T09:50:41Z",
+      "headRefName": "fix/native-stage-transcript-display-20261002",
+      "headRefOid": "2da989b27c7c79572c4f8571c2bed62e89de290b",
       "isDraft": true,
-      "number": 520,
-      "title": "Implement task-aware compaction timing through existing source and policy owners",
-      "updatedAt": "2026-10-02T08:09:18Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/520",
+      "number": 525,
+      "title": "Derive transcript display from original native execution stage",
+      "updatedAt": "2026-10-02T09:59:43Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/525",
       "repo": "agent-comms",
-      "owner": "Einstein",
-      "scope": "S1 task-aware compaction timing through existing authored task/source and native policy owners.",
+      "owner": "Singer",
+      "scope": "Native execution stage owns saved/live transcript projection",
       "worktrees": [
         {
-          "path": "/home/ts/wt/comms-retained-human-main-20261001",
-          "exists": true,
-          "head": "64ec20d709c6f5069a4e4b68fcbb6b7afd45688b",
-          "branch": "feat/task-aware-compaction-timing-20261002",
-          "status": [
-            " M evidence/selected-owner-preparation-20261002/ast-owner-map/map_sources.py",
-            "?? .artifacts/",
-            "?? evidence/task-aware-timing-20261002/"
-          ]
+          "path": "/home/ts/wt/comms-context-manifest-resource-20261002",
+          "head": "2da989b27c7c79572c4f8571c2bed62e89de290b",
+          "exists": true
         }
       ]
     },
     {
-      "createdAt": "2026-10-02T07:32:50Z",
-      "headRefName": "fix/stopped-cutover-failure-custody-20261002",
-      "headRefOid": "65a28ad2eff9285e3812953a7366af44c63c3a25",
+      "createdAt": "2026-10-02T08:37:46Z",
+      "headRefName": "fix/retained-context-inspection-closure-20261002",
+      "headRefOid": "3d005e239cfe4157d03836c48ccd2806857e4f25",
       "isDraft": true,
-      "number": 518,
-      "title": "Retain stopped cutover failure custody for explicit recovery",
-      "updatedAt": "2026-10-02T08:13:27Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/518",
+      "number": 521,
+      "title": "Close retained-source inspection through existing determining owners",
+      "updatedAt": "2026-10-02T09:39:53Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/521",
       "repo": "agent-comms",
-      "owner": "Schrodinger",
-      "scope": "Retain stopped failure custody and operation-owned disposition; no input replay",
+      "owner": "Singer",
+      "scope": "S2/S5 retained-source inspection; frozen branch joined to520",
+      "worktrees": []
+    },
+    {
+      "createdAt": "2026-10-02T08:09:17Z",
+      "headRefName": "feat/task-aware-compaction-timing-20261002",
+      "headRefOid": "f4d90b5d60872e5b7e826f01e36243e542a4563d",
+      "isDraft": true,
+      "number": 520,
+      "title": "Implement task-aware compaction timing through existing source and policy owners",
+      "updatedAt": "2026-10-02T10:00:13Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/520",
+      "repo": "agent-comms",
+      "owner": "Einstein",
+      "scope": "S1 task-aware timing; configured saved-fork qualification",
       "worktrees": [
         {
-          "path": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002",
-          "head": "65a28ad2eff9285e3812953a7366af44c63c3a25",
-          "branch": "fix/stopped-cutover-failure-custody-20261002",
-          "registered": true,
-          "exists": true,
-          "status": [
-            " M tests/test_owner_release_restart.py",
-            "?? .artifacts/",
-            "?? evidence/stopped-cutover-failure-custody-20261002/after-owner-consumers.json"
-          ]
+          "path": "/home/ts/wt/comms-retained-human-main-20261001",
+          "head": "f4d90b5d60872e5b7e826f01e36243e542a4563d",
+          "exists": true
         }
       ]
     },
     {
       "createdAt": "2026-09-30T00:21:49Z",
       "headRefName": "refactor/cleanup-live-integration-20260929",
-      "headRefOid": "b4a39c93ebd3cec555e123fba8644a022386907f",
+      "headRefOid": "f6331caadddf6a0cd802900f8a331644e498896e",
       "isDraft": true,
       "number": 432,
       "title": "Track live checkpoint and remaining nominal integration scope",
-      "updatedAt": "2026-10-02T07:54:24Z",
+      "updatedAt": "2026-10-02T09:44:30Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/432",
       "repo": "agent-comms",
       "owner": "Parent",
-      "scope": "Integration checklist, operator artifacts and standing instructions. Do not merge this broad draft wholesale.",
+      "scope": "Integration tracking; never merge wholesale",
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-          "head": "b4a39c93ebd3cec555e123fba8644a022386907f",
-          "branch": "refactor/cleanup-live-integration-20260929",
-          "registered": true,
-          "exists": true,
-          "status": [
-            " M docs/refactor/cleanup-20260929/15-GOAL-CHECKLIST.md",
-            " M docs/refactor/cleanup-20260929/OPENHCS-HISTORY.md",
-            "?? .artifacts/",
-            "?? .release-private/",
-            "?? evidence/performance275-feedback-edges-20261001/pr275-body.md",
-            "?? evidence/performance275-feedback-edges-20261001/pr277-body.md",
-            "?? evidence/performance275-feedback-edges-20261001/pr278-ready-body.md"
-          ]
+          "head": "f6331caadddf6a0cd802900f8a331644e498896e",
+          "exists": true
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T09:47:13Z",
+      "headRefName": "deploy/task-aware-timing-candidate-20261002",
+      "headRefOid": "c324daca0c3032792088dace020d87a639acf6a1",
+      "isDraft": true,
+      "number": 317,
+      "title": "Pair task-aware compaction timing with current native owners",
+      "updatedAt": "2026-10-02T10:00:59Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/317",
+      "repo": "toad",
+      "owner": "Einstein / Schrodinger",
+      "scope": "Paired metadata for520 configured qualification",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/toad-native6-wire-source-pin-20261002",
+          "head": "c324daca0c3032792088dace020d87a639acf6a1",
+          "exists": true
         }
       ]
     },
     {
       "createdAt": "2026-10-02T06:20:27Z",
       "headRefName": "perf/sidebar-style-after308-20261002",
-      "headRefOid": "658e5ac411f21c976ed0d9e9573954338c20adb7",
+      "headRefOid": "32cca305b531842008a56fb7a3b5db81d0b8d812",
       "isDraft": true,
       "number": 311,
       "title": "Continue sidebar and native style performance after308",
-      "updatedAt": "2026-10-02T08:22:35Z",
+      "updatedAt": "2026-10-02T10:03:15Z",
       "url": "https://github.com/OpenHCSDev/toad/pull/311",
       "repo": "toad",
       "owner": "Heisenberg",
-      "scope": "Full performance continuation after merged308; shared Styles invalidation is pushed in paired Textual22.",
+      "scope": "Retained history pixels and idle feedback; motion/profile gate",
       "worktrees": [
         {
           "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001",
-          "head": "658e5ac411f21c976ed0d9e9573954338c20adb7",
-          "branch": "perf/sidebar-style-after308-20261002",
-          "registered": true,
-          "exists": true,
-          "status": [
-            "?? .artifacts/"
-          ]
+          "head": "32cca305b531842008a56fb7a3b5db81d0b8d812",
+          "exists": true
         }
       ]
     },
@@ -122,30 +126,27 @@
       "updatedAt": "2026-10-02T05:46:32Z",
       "url": "https://github.com/OpenHCSDev/toad/pull/309",
       "repo": "toad",
-      "owner": "compaction499-live-architecture-memory; plan only",
-      "scope": "User requested planning-only context Tree/detail pane. No implementation now; temporary worktree intentionally deleted.",
+      "owner": "compaction499-live-architecture-memory",
+      "scope": "Planning only; no implementation authorization",
       "worktrees": []
     },
     {
       "createdAt": "2026-10-02T07:08:56Z",
       "headRefName": "feat/native-subtree-strips-20261002",
-      "headRefOid": "0b09964dab647fd644ea6a0639a83c04b3c9eaec",
+      "headRefOid": "fc9be9e8720f334c8ac88c9d926d3817eec07e2f",
       "isDraft": true,
       "number": 23,
       "title": "Render complete intrinsic subtree strips through native compositor",
-      "updatedAt": "2026-10-02T07:37:58Z",
+      "updatedAt": "2026-10-02T09:56:43Z",
       "url": "https://github.com/OpenHCSDev/textual/pull/23",
       "repo": "textual",
       "owner": "Kepler; Heisenberg integration",
-      "scope": "Complete body strip rendering and original input preparation hook",
+      "scope": "Canonical subtree raster capture",
       "worktrees": [
         {
           "path": "/home/ts/wt/textual-native-subtree-strips-20261002",
-          "head": "0b09964dab647fd644ea6a0639a83c04b3c9eaec",
-          "branch": "feat/native-subtree-strips-20261002",
-          "registered": true,
-          "exists": true,
-          "status": []
+          "head": "fc9be9e8720f334c8ac88c9d926d3817eec07e2f",
+          "exists": true
         }
       ]
     },
@@ -160,30 +161,18 @@
       "url": "https://github.com/OpenHCSDev/textual/pull/22",
       "repo": "textual",
       "owner": "Heisenberg",
-      "scope": "Native layout/scene/raster continuation paired with Toad308.",
+      "scope": "Native scene/layout continuation",
       "worktrees": [
         {
           "path": "/home/ts/wt/textual-intrinsic-placement-after18-20261001",
           "head": "d5edf64fe09d4e9fb8543955d3d544d49ead6675",
-          "branch": "perf/native-scene-after21-20261002",
-          "registered": true,
-          "exists": true,
-          "status": [
-            "?? .artifacts/"
-          ]
+          "exists": true
         }
       ]
     }
   ],
-  "draft_count": 6,
-  "reconciled_since_previous": [
-    "Core513 merged57aeb5e; Core514 mergeda8a3ba05; complete src/tools equal installed9ccc.",
-    "Goal ledger carry preserved492 factrows and row identities; sourcecontrol only, installedjourney Sch in progress.",
-    "Toad312 packaged Native5 goal cohort; parent publication follows affected journey.",
-    "Visual assessment was deferred in latestperformance run. Existing recorder must supply appframe delivery timeline and concurrent motion review.",
-    "Toad312 merged; goal publication failed EXDEV before replacement;19 original owners restored normally with39 protected files unchanged.",
-    "Core489/506/517/519 and Toad314 merged;313 superseded. Goal/async/sidebar installed and default physical read verified. No original input replay; aa78 remains without generation, lifecycle Blockedrev2.",
-    "Core516 mergedf5f0ec22; Core510 merged3b193ab1; pairedToad315 mergedd8a7752. Qualified Native6/configuration prefix is staged, not default. Einstein520 S1 active; Singer515 and Sch518 share installed callback/failure journey; Heisenberg E live motion/profile capture underway.",
-    "Core515 mergeda0ad64e2 after original installed callback/cancellation/CLI journey. It is absent from qualified516prefix; next518pairedcandidate includes it."
-  ]
+  "critical_merged_not_live": {
+    "523": "9de3b7b096b45601233b97fca90c0a344fdf9fe7",
+    "524": "155b00076312626e025861efc3ed14549adca5c0"
+  }
 }
