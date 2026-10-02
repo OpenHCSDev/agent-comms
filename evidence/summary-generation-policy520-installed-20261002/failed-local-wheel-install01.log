@@ -1,0 +1,5 @@
+Using Python 3.14.2 environment at: .artifacts/runtime-summary-generation-policy520-installed-20261002
+error: Failed to resolve dependencies for package `batrachian-toad==0.6.20`
+  cause: Requirements contain conflicting URLs for package `agent-comms`:
+         - file:///home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/summary-generation-policy520-installed-20261002/wheels/agent_comms-0.1.0-py3-none-any.whl
+         - git+https://github.com/OpenHCSDev/agent-comms.git@f4d90b5d60872e5b7e826f01e36243e542a4563d
