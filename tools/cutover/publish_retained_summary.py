@@ -30,6 +30,8 @@ from agent_comms.threads import Thread
 from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
 from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
 from runtime_installation import RuntimeInstallation
+from cutover_child import run_cutover_child
+import agent_comms.owner_restart
 
 
 @dataclass(frozen=True)
@@ -272,7 +274,8 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
             fsync_directory(directory)
             fsync_directory(directory.parent)
             self.note('all-original-owners-stopped-originals-audited',
-                      protected_original_sha256=protected, protected_preimages=original_files)
+                      protected_original_sha256=protected, protected_preimages=original_files,
+                      registry_original_sha256=digest(directory / 'registry.json'))
             goal_installation = self.runtime_installation.synchronize_goal(
                 goals, directory / 'goal-ledger')
             installed_goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
@@ -290,6 +293,44 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                       goal_installation=goal_installation, byte_invariant_originals=invariant)
         self.cohort.publish(self.route_directory)
         self.note('target-route-and-defaults-published-before-retained-launch')
+
+    def failed(self, failure):
+        # Disposition completes INSIDE this operation, before its caller closes
+        # the route-directory resource or exits. Installation is never retried.
+        self.restore_unchanged(failure)
+
+    def recover(self, stopped):
+        """Only byte-identical originals may return to their original runtime.
+
+        These physical proofs precede ANY original registry decoder. A committed
+        #514 ledger or changed route therefore cannot be read/reverted by #508.
+        The same RAM handoff and original wire OFD cross the existing child.
+        """
+        self.cohort.require_publication_originals()
+        proof = json.loads(self.receipt.read_text())
+        protected = FieldCodec.decode(dict[str, str], proof['protected_original_sha256'])
+        if {str(path) for path in self.protected_files()} != set(protected):
+            raise RuntimeError('Protected original membership changed; no source recovery')
+        for name, expected in protected.items():
+            ReviewedArtifact(Path(name), expected).require_original()
+        expected_registry = FieldCodec.decode(str, proof['registry_original_sha256'])
+        ReviewedArtifact(self.receipt.with_suffix('.originals') / 'registry.json',
+                         expected_registry).require_original()
+        ReviewedArtifact(ROOT / 'registry.json', expected_registry).require_original()
+
+        source = stopped.handoff.owners[0].launch
+        result = run_cutover_child([
+            str(self.cohort.source_interpreter),
+            str(Path(__file__).with_name('restore_stopped_owners.py')),
+            str(Path(agent_comms.owner_restart.__file__).parent), str(stopped.wire.descriptor),
+        ], environment=source.environment, packet=json.dumps(FieldCodec.encode(stopped.handoff)),
+            descriptors=(stopped.wire.descriptor,))
+        from agent_comms.owner_lifecycle import OwnerRestartResult
+
+        restored = FieldCodec.decode(tuple[OwnerRestartResult, ...], json.loads(result.stdout))
+        self.note('failed-install-original-runtime-restored',
+                  restored=FieldCodec.encode(restored), finished=time.time())
+        return restored
 
     def complete(self, stopped):
         self.after_stopped(stopped.lifecycle)
