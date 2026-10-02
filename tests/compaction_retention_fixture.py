@@ -1,7 +1,8 @@
 """Synthetic repeated-compaction recall oracle.
 
-Run directly to export public history/questions, or use --answers FILE to score
-one condition's recorded answers. Oracle metadata is omitted from exported questions.
+Run directly to export public history/questions. --answers scores supplied JSON;
+--native-probes reads original input/context/answer/checkpoint references.
+Oracle metadata is omitted from exported questions.
 Exact-match scoring deliberately measures identifiers/state, not prose quality.
 """
 
@@ -17,11 +18,18 @@ import json
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_rpc import unique_fields
+from retained_native_fixture import RecordedNativeProbe
 
 
 @dataclass(frozen=True)
 class RecordedAnswers:
     rounds: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True)
+class RecordedNativeProbes:
+    rounds: dict[str, RecordedNativeProbe]
 
 
 class Condition(str, Enum):
@@ -150,6 +158,24 @@ class RecallRound:
             "questions": [question.public() for question in self.questions],
         }
 
+    def probe_text(self) -> str:
+        """Held-out questions, without expected, stale or evidence metadata."""
+        return (
+            "Answer these recall questions using the supplied history. Return only JSON "
+            "mapping the round ID to an object of question IDs and exact answer strings.\n"
+            + json.dumps({"round": self.identity,
+                          "questions": [question.public() for question in self.questions]})
+        )
+
+    def score_native(self, probe: RecordedNativeProbe):
+        original = probe.observe()
+        if original["prompt"] != self.probe_text():
+            raise ValueError("Recorded native probe differs from the frozen held-out questions")
+        answers = decode_answers(original["answer_text"])
+        if answers.rounds.keys() != {self.identity}:
+            raise ValueError("Recorded native reply must answer exactly its original round")
+        return self.score(answers.rounds[self.identity]), original
+
     def score(self, answers: dict[str, str]) -> ScoredRound:
         unexpected = answers.keys() - {question.identity for question in self.questions}
         if unexpected:
@@ -180,6 +206,24 @@ class RecallScenario:
             condition,
             tuple(item.score(answers.rounds.get(item.identity, {})) for item in self.rounds),
         )
+
+    def score_native(self, condition: Condition, probes: RecordedNativeProbes) -> dict:
+        unexpected = probes.rounds.keys() - {item.identity for item in self.rounds}
+        if unexpected:
+            raise ValueError(f"Unknown native rounds: {sorted(unexpected)}")
+        scored, evidence = [], {}
+        for item in self.rounds:
+            if item.identity in probes.rounds:
+                score, original = item.score_native(probes.rounds[item.identity])
+                evidence[item.identity] = original
+            else:
+                score = item.score({})
+            scored.append(score)
+        result = ScoredScenario(self, condition, tuple(scored)).public()
+        return dict(result, native_probes=evidence,
+                    scope="recorded original native probes; condition label is not construction proof",
+                    canonical_availability="original retained facts reported; not independently scored",
+                    provider_prompt_presence="not measured; native user/context proof reported")
 
 
 def coding_scenario() -> RecallScenario:
@@ -299,30 +343,32 @@ def coding_scenario() -> RecallScenario:
 
 
 def decode_answers(text: str) -> RecordedAnswers:
-    def unique_object(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"Duplicate answer key: {key}")
-            result[key] = value
-        return result
-
     return FieldCodec.decode(
-        RecordedAnswers, {"rounds": json.loads(text, object_pairs_hook=unique_object)}
+        RecordedAnswers, {"rounds": json.loads(text, object_pairs_hook=unique_fields)}
     )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--answers", type=Path)
+    recorded = parser.add_mutually_exclusive_group()
+    recorded.add_argument("--answers", type=Path)
+    recorded.add_argument("--native-probes", type=Path)
+    recorded.add_argument("--probe-prompts", action="store_true")
     parser.add_argument(
         "--condition", type=Condition, choices=tuple(Condition), default=Condition.BOUNDED
     )
     args = parser.parse_args()
     scenario = coding_scenario()
     result = scenario.public()
+    if args.probe_prompts:
+        result = {item.identity: item.probe_text() for item in scenario.rounds}
     if args.answers is not None:
         result = scenario.score(args.condition, decode_answers(args.answers.read_text())).public()
+    if args.native_probes is not None:
+        probes = FieldCodec.decode(RecordedNativeProbes, {
+            "rounds": json.loads(args.native_probes.read_text(), object_pairs_hook=unique_fields)
+        })
+        result = scenario.score_native(args.condition, probes)
     print(json.dumps(result, indent=2))
 
 
