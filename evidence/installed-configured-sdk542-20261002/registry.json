@@ -1,0 +1,76 @@
+{
+  "threads": {
+    "configured-source": {
+      "name": "configured-source",
+      "tags": [],
+      "worktree": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/project",
+      "created_at": 1790967635.90901,
+      "session_file": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl",
+      "title": null,
+      "parent": null,
+      "task": "Bounded acceptance only. Do not resume inherited work or use tools.",
+      "process_identity": {
+        "pid": 480541,
+        "start_time": 44326373
+      },
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "964c186df01e48bb82833c459f648b2e"
+    },
+    "user": {
+      "name": "user",
+      "tags": [],
+      "worktree": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/project",
+      "created_at": 1790967646.7102346,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "user",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "configured-source": {
+      "kind": "stopped"
+    },
+    "user": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "configured-source": 1790967670.85477,
+    "user": 1790967646.7121592
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 3,
+    "generations": {
+      "configured-source": 3,
+      "user": 2
+    }
+  },
+  "admissions": {
+    "counter": 3,
+    "generations": {
+      "configured-source": 3,
+      "user": 2
+    }
+  }
+}
