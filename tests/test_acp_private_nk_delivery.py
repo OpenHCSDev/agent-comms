@@ -183,7 +183,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     if seal_old:
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
+            await _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"})
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
@@ -226,7 +226,8 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
     assert comms.bus.log.latest_sequence() == 0
 
 
-def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
+@pytest.mark.asyncio
+async def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
     tmp_path, monkeypatch
 ):
     comms, _, root_id = _session(tmp_path)
@@ -252,7 +253,7 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
         Coordination(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),
     ):
-        _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
+        await _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
     assert comms.bus.log.latest_sequence() == 0
 
 

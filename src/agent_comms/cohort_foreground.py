@@ -69,7 +69,7 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     return cli
 
 
-def _accept_visible_deliveries(
+async def _accept_visible_deliveries(
     bus: MessageBus,
     root_id: str,
     store: Coordination,
@@ -85,35 +85,38 @@ def _accept_visible_deliveries(
     before the SQL transaction. All N identities must already be registered.
     Never infer a cohort from an ordinary public message or its body.
     """
-    sealed = sealed_cohort_sequences(store, root_id)
-    with bus.log.certified_read() as source:
-        _require_no_private_owner_rename(bus.log.path.parent)
-        marker = bus.log._private_marker_unlocked()
-        if marker.root_id != root_id:
-            raise IdentityConflict("private initial wire root changed")
-        after_seq = max(after_seq, marker.admission_after_seq)
-    initials = tuple(
-        initial
-        for initial in bus.log.addressed_sources(lookup, after_seq)
-        if initial.message.seq not in sealed
-        and any(
-            r.recipient_lookup == lookup and r.canonical_thread == owner_name
-            for r in initial.audience.recipients
+    def accept(resource: Coordination) -> int:
+        sealed = sealed_cohort_sequences(resource, root_id)
+        with bus.log.certified_read() as source:
+            _require_no_private_owner_rename(bus.log.path.parent)
+            marker = bus.log._private_marker_unlocked()
+            if marker.root_id != root_id:
+                raise IdentityConflict("private initial wire root changed")
+            admitted_after = max(after_seq, marker.admission_after_seq)
+        initials = tuple(
+            initial
+            for initial in bus.log.addressed_sources(lookup, admitted_after)
+            if initial.message.seq not in sealed
+            and any(
+                r.recipient_lookup == lookup and r.canonical_thread == owner_name
+                for r in initial.audience.recipients
+            )
         )
-    )
-    unaccepted = initials
-    if len(unaccepted) > 100:
-        raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
-    if unaccepted and native_package is not None:
-        # An ACP observation with new originals must still validate the package
-        # before SQL acceptance. Sealed receipts require no repeated preflight.
-        _preflight(bus.log.path.parent, root_id, native_package, True)
-    for initial in unaccepted:
-        # A prior canonical name is historical after a private owner rename.
-        # Never create a NEW generation's selected attempt from that old
-        # frozen recipient, or infer it was consumed.
-        accept_delivery_cohort(bus, root_id, initial.message.seq, store)
-    return initials[-1].message.seq if initials else after_seq
+        unaccepted = initials
+        if len(unaccepted) > 100:
+            raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
+        if unaccepted and native_package is not None:
+            # An ACP observation with new originals must still validate the package
+            # before SQL acceptance. Sealed receipts require no repeated preflight.
+            _preflight(bus.log.path.parent, root_id, native_package, True)
+        for initial in unaccepted:
+            # A prior canonical name is historical after a private owner rename.
+            # Never create a NEW generation's selected attempt from that old
+            # frozen recipient, or infer it was consumed.
+            accept_delivery_cohort(bus, root_id, initial.message.seq, resource)
+        return initials[-1].message.seq if initials else admitted_after
+
+    return await Coordination.run_async(store.session.path, accept)
 
 
 async def run_foreground_once(
@@ -181,7 +184,7 @@ async def run_foreground_once(
         cursor = 0
         with Coordination(str(root / "coordination.sqlite3")) as store:
             while True:
-                cursor = _accept_visible_deliveries(
+                cursor = await _accept_visible_deliveries(
                     bus, wire_root_id, store, lookup, cursor, owner_name=thread.name
                 )
                 # Even an empty scan checks this PID against the live registry.
