@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .compaction_errors import CompactionJournalError, CompactionJournalUnknownError
+from .coordination_database import CoordinationStore
 from .compaction_operations import NativeOperations
 from .compaction_private_inputs import PrivateInputs
 from .compaction_publications import CompactionPublications
@@ -68,22 +69,13 @@ class CompactionJournal:
             info.st_dev, info.st_ino
         ) != (initial.st_dev, initial.st_ino):
             raise CompactionJournalError("Journal replaced before read")
-        db = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True,
-                             isolation_level=None, timeout=0.25)
-        try:
-            db.execute("PRAGMA query_only=ON")
+        with CoordinationStore.observing(path, lock_timeout=0.25) as db:
             if JournalMode.read(db.execute("PRAGMA journal_mode")) != [JournalMode("delete")]:
                 raise CompactionJournalError("Read-only journal requires current rollback mode")
-            db.execute("BEGIN")
-            try:
-                result = observe(db)
-                if JournalCustody.capture(path) != custody:
-                    raise CompactionJournalError("Journal replaced during read")
-                return result
-            finally:
-                db.execute("ROLLBACK")
-        finally:
-            db.close()
+            result = observe(db)
+            if JournalCustody.capture(path) != custody:
+                raise CompactionJournalError("Journal replaced during read")
+            return result
 
     @classmethod
     def retained_history(cls, path: Path, session_file: str) -> dict[str, object]:
