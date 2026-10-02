@@ -286,7 +286,7 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "mismatch", [None, "owner", "admission", "turn", "sent", "original"]
+    "mismatch", [None, "owner", "admission", "turn", "sent", "original", "original_key"]
 )
 def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
     from agent_comms.text_digest import TextDigest
@@ -320,6 +320,8 @@ def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
         proof["sent_digest"] = TextDigest.of("different wrapper")
     elif mismatch == "original":
         proof["original"] = replace(reserved, source_text="different original")
+    elif mismatch == "original_key":
+        proof["original"] = replace(reserved, key="acp:foreign")
     assert started.proves_started(**proof) is (mismatch is None)
 
 

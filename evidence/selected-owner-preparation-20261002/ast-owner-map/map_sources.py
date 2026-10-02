@@ -25,13 +25,16 @@ SEEDS = {
     "SelectedRequest", "PrivateSendAdmission", "NativePreparationResult", "CompactionResult",
     "TurnSession", "TrackedTurnSession", "PersistentPiSession", "NativeContextProof",
     "TurnContext", "ContextManifest", "InputTaskFact", "NativeInputConstraintPin",
-    "RetainedTaskFacts", "NativeIntent", "InputAttempt", "ReservationCheck",
+    "RetainedTaskFacts", "ExactTaskFact", "InputOrigin", "Provenance", "ContextSegment",
+    "RenderedInput", "InputContributionCoordinates", "NativeContextManifestData",
+    "NativeIntent", "InputAttempt", "ReservationCheck",
 }
 ATTRS = {"source_json", "originals", "pending_inputs", "ingress_key", "pending_input_key",
          "original_digest", "require_source", "prepare_context", "resume_prepared",
          "compact_selected", "reservation_check", "interrupted_check", "context_provenance",
          "require_source_coverage", "original_has_started", "consume_bound_original",
-         "bind_originals", "journal_json", "adaptive_compaction_enabled"}
+         "bind_originals", "journal_json", "adaptive_compaction_enabled",
+         "input_sources", "original_inputs", "matches_original_source", "require_retained"}
 RETIRED = {"read_compaction_decision", "read_compaction_settings", "adaptive_compaction_enabled"}
 
 for label, revision in [("before", "a87a7065"), ("after", sys.argv[1] if len(sys.argv) > 1 else "62719ea96dc646d6dff0d717ae747d9bc6ceacb3")]:

@@ -78,7 +78,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
         from .selected_result import CoordinatedTurn
 
         participant.consume_reply_wait()
-        return CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
+        return await CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         from .coordination_tables.executions import ExecutionOrigin
         from .selected_turn import SelectedAttempt
 
-        participant.require_current()
+        participant.require_current(participant.store)
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name, 1,
@@ -152,7 +152,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn
 
-        return CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
+        return await CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
 
 
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):
