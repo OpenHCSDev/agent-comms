@@ -185,16 +185,11 @@ export class CompactionPolicy {
         return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(inputTokens * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
     }
-    requireSummaryOutput(usage, maxTokens) {
-        // Pi's Usage contract includes reasoning in output. Only the remaining
-        // tokens become retained summary text; preserve the full usage for cost.
-        const reasoning = usage.reasoning ?? 0;
-        if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 ||
-            !Number.isSafeInteger(usage.output) || usage.output < 0 ||
-            !Number.isSafeInteger(reasoning) || reasoning < 0 || reasoning > usage.output)
-            throw new Error('Summary provider returned invalid output accounting');
-        const retained = usage.output - reasoning;
-        if (retained > maxTokens)
-            throw new Error(`Summary provider exceeded the native plan output token budget (retained ${retained}, reasoning ${reasoning}, total ${usage.output}, budget ${maxTokens})`);
+    summaryInstructions(instructions, maxTokens) {
+        // This is generation intent, shared with the SDK request options. A
+        // route may omit an output cap; provider usage is cost accounting, not
+        // the size of the retained context. packSummary owns that admission.
+        return [instructions, `Keep the generated summary within ${maxTokens} tokens.`]
+            .filter(Boolean).join('\n\n');
     }
 }

@@ -1421,6 +1421,13 @@
  /**
   * Context compaction for long sessions.
   *
+@@ -41,4 +41,4 @@
+-        ...(first.reasoning !== undefined || second.reasoning !== undefined
++        ...(first.reasoning !== undefined && second.reasoning !== undefined
+-            ? { reasoning: (first.reasoning ?? 0) + (second.reasoning ?? 0) }
++            ? { reasoning: first.reasoning + second.reasoning }
+             : {}),
+         totalTokens: first.totalTokens + second.totalTokens,
 @@ -5,37 +7,14 @@
   * and after compaction the session is reloaded.
   */
@@ -1603,7 +1610,7 @@
  // ============================================================================
  // Summarization
  // ============================================================================
-@@ -459,10 +352,20 @@
+@@ -459,10 +352,19 @@
          cacheRetention: "none",
          sessionId: options.sessionId ?? uuidv7(),
      };
@@ -1621,14 +1628,13 @@
 +        return stream.result();
 +    };
 +    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
-+    if (response.stopReason === 'stop') CompactionPolicy.fromEnvironment().requireSummaryOutput(response.usage, requestOptions.maxTokens);
 +    callbacks?.onSummaryResponse?.(response.usage, response.stopReason === 'stop' && contentText(response.content).trim() ? callbacks?.sourceProgress : undefined);
 +    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
 +    return response;
  }
  /**
   * Generate a summary of the conversation using the LLM.
-@@ -485,8 +388,80 @@
+@@ -485,8 +388,81 @@
      };
  }
  /** Generate or update a conversation summary and return its provider usage. */
@@ -1708,6 +1714,7 @@
 +    }
 +    if(!boundedChunk)callbacks=sourceCallbacks(callbacks);
 +    const maxTokens = policy.summaryTokens(model, inputTokens, reserveTokens);
++    customInstructions = policy.summaryInstructions(customInstructions, maxTokens);
      // Use update prompt if we have a previous summary, otherwise initial prompt
      let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
      if (customInstructions) {
@@ -1870,7 +1877,7 @@
  }
  // ============================================================================
  // Main compaction function
-@@ -608,31 +569,57 @@
+@@ -608,31 +569,53 @@
   */
  export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
 -    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
@@ -1902,12 +1909,8 @@
 +    const annotations = formatFileOperations(readFiles, modifiedFiles);
 +    contextPolicy.packSummary(retainedText, "", annotations, tokensBefore, preparation.retainedMessages,
 +        model, settings.reserveTokens, createCompactionSummaryMessage);
-+    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
-+    const summaryTokens=contextPolicy.inputTokens(model,settings.reserveTokens)-
-+        contextPolicy.contextTokens([required,...preparation.retainedMessages],model);
-+    const pieces=isSplitTurn ? 2 : 1;
 +    customInstructions=[customInstructions,
-+        `Keep the generated summary within ${Math.floor(summaryTokens/pieces)} tokens. File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.`]
++        'File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.']
 +        .filter(Boolean).join('\n\n');
 +    const history = new HistorySummarySource(messagesToSummarize, previousSummary);
 +    const prefix = new TurnPrefixSummarySource(turnPrefixMessages);
