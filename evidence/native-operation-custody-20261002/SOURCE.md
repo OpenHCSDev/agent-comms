@@ -8,6 +8,14 @@ PR547, base732e8670; Mendel owns Core integration. The309 context consumer is co
 
 Production delta:8 lines deleted,6 added across native_custody.py and turn_runner.py. This fixes observation acquiring a writer; it is not measured attribution of the reported terminal tail.
 
+## Empty coding-resource retirement
+
+`CodingToolMode.finish` delegates to `CodingToolOwner.finish`, whose original `claims` collection contains only acquired file resources. It always invoked `release_selected_resources`, including answer-only, read and bash turns with no claims. The release entered `_selected_claim_boundary` (wire, bus and registry locks; original delivery search; selected SQL qualification), then `_claim_projection_unlocked` scanned original claims. Only after all that work did its `if claims` omit publication.
+
+The existing release owner now returns for an empty resource collection before entering that lifetime. The late branch is deleted. For actual claims the complete original boundary, exact projected generation comparison and publication remain identical. This does not grant input/turn acceptance: `PrivateSendAdmission.verify`, commit, attempt finish and current response-owner publication still follow with their own fences. No resource, state or source is cached. This removes provably unnecessary work inside `TrackedTurnSession.result`, though historical seconds cannot be attributed without544 spans.
+
+There is one production release caller: `CodingToolOwner.finish`; `CodingToolMode.finish` consumes that same owner through the existing `NativeToolMode` contract. `ClaimEnvelope` already rejects an empty transition as meaningless. `claim-retirement-before-ast.json` enumerates the owning declarations and consumers with the existing NRA parser:311 production modules, zero parse omissions. Sch and Arendt were notified of the exact file claims; Arendt confirmed no overlap.
+
 ## Terminal-tail source findings
 
 Original418 spans8.450274s and15.819279s end after `TrackedTurnSession.complete` exits its original `AsyncExitStack`. `PrivateSendAdmission.execute` records that return before success verification and reply publication. Thus later publication cannot explain those particular spans. Model-request completion is not native `AgentSettled`.
