@@ -69,8 +69,20 @@ reservation, silent observations, corrupt original prefix and changed source
 witness; the newly merged #505 resource control passes on the rebuilt matched
 wheel. The intervening stale-wheel failure is retained, not counted as a pass.
 
-Actual normal receiving Toad channel-read qualification remains pending; the
-initial Core797 candidate is protected and will not be used to claim this final
-checkpoint. Native5 and original UNKNOWN inputs remain unchanged. Full async bus
-admission and bounded snapshot lifetime closure are further scope, not fixed by
-this sequence checkpoint. No public mutation or restart is performed by this worker.
+Actual normal receiving qualification passes on Core74877 / Toad8b24 / Text68 /
+unchanged Native5184: 31.554 seconds, real isolated st/Xvfb saved-owner startup,
+Ctrl+G, Ctrl+B, native channel-bar click on `#openhcs`, original channel history
+paint, native history click and End. The final physical frame was reviewed;
+original replies and cohort rows are visible and the history follows its tail.
+Cleanup has zero remaining owned processes and zero errors. The initial Core797
+candidate is not used for qualification. The two preceding driver failures
+(invalid finalize argument and copied collapsed sidebar) remain recorded.
+
+Original Thread settings/process identity, native session hash, bus bytes and
+input/execution/wake counts are unchanged. Canonical observational view-ledger
+writes from the real clicks were authorized; the before/after ledger is actually
+byte-identical. No message, provider call, owner restart or default publication
+was submitted. Sanitized evidence is `installed-channel-receipt.json`; private
+physical artifacts remain at the exact path recorded there. Native5 and UNKNOWN
+inputs remain unchanged. Full async bus admission and bounded snapshot lifetime
+closure remain further scope; this checkpoint does not claim that whole fix.
