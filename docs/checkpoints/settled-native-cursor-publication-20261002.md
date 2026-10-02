@@ -107,5 +107,40 @@ Original coordinator, prompt-binding sidecar, registry, bus and the read native
 journal remain hash-identical. The absent owner2 cursor stays absent. No model,
 claim, native input, store or response was created or replayed. This is a source
 relation check, not an installed package or live journey claim. The same operator
-is reusable under Kepler's qualified receiving package; paired installed/live
-qualification belongs to the lifecycle integration owner and is still pending.
+is reusable under Kepler's qualified receiving package. Paired installed/live
+qualification was pending at this original source checkpoint and is recorded below.
+
+## Qualified installed receiving checkpoint
+
+Kepler normally integrated unchanged cursor production
+`777a27c588f1bae7bc1dcf77e7a16e2635b9f7bd` into Core
+`ad7bf20bc5a30ee7728d4b6f22794ae1cbf49a94`, paired with Toad
+`758882bebe4c9aa552543e0b9c0412a856d0e4f3`, Textual68a, SDK0.12.1 and
+native5184. Ready integration503 is
+`1f6b1725c752b9b0069128d1ed01f06579cbae84`; Ready receiving303 is
+`12b5aa16889128e3681d413e7c0f3a899a5e56e0`. Normal69 packages and all four
+source inventories/assets/directURLs/native trust passed in the receiving owner's
+receipt. Independent readback confirms all four cursor files equal their frozen
+source blobs; the installed read-only original-admission operator passed separately.
+
+The one authorized fresh configured gate at `/home/ts/wt/b503507c01` passed
+25.911seconds. Each of three live owners published an actual verified ACP cursor
+for its original FULL input, current admission/PID and injected source3. All nine
+primary claims, original three-source membership/history/sealed receipts and
+three canonical channel replies passed;35ACP facts were captured. Later SQL
+cursors advanced legitimate TRIAGE inputs. Original settings remained unchanged,
+all owned workers retired, and no old gate01 UNKNOWN input was replayed.
+
+**Scoped Ready:** the observed503 missing-primary-cursor path is qualified in the
+installed configured stack. All primary cursor publications were immediate with
+selected_status=proven. Deferred refusal/idle-refresh invocation was not individually
+observed and is not claimed. Source semantic closure and the installed original
+admission/empty-refresh controls support that continuation separately. No synthetic
+race, repeated provider journey, default activation, whole lifecycle or performance
+claim is added. Parent retains merge/default ownership; Arendt retains lifecycle
+and509 shared snapshot/async resources.
+
+Frozen original receipt paths and hashes, exact installed cursor-file hashes,
+observed scopes and the installed relation control are persisted in
+`evidence/settled-native-cursor-publication-20261002/qualified-installed-receiving-receipt.json`.
+This checkpoint changes documentation/evidence only;507 production remains777a27.
