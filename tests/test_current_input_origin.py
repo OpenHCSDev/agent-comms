@@ -91,7 +91,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         terminal = InputDispositions(inputs.path).read().lookup(key)
         assert terminal.origin == origin
         assert terminal.has_started and terminal.source_text == command.user_text
-        facts = inputs.read().compaction_material(comms.registry.require("beta"), None, None)[1]
+        facts = inputs.read().compaction_material(comms.registry.require("beta"), (), None)[1]
         assert facts[0].for_owner(comms.registry.require("beta"), comms.registry.snapshot()) == CurrentHumanInputTaskFact(terminal)
     finally:
         await agent.shutdown()

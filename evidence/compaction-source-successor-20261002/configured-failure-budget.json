@@ -1,0 +1,26 @@
+{
+  "private_original_journal": "/home/ts/wt/s52901/wire/compaction-commits.sqlite3",
+  "attempts": [
+    {
+      "operation_id": "5cbb208ef97b4fcaa081cbd0a6f31d75",
+      "state": {
+        "kind": "unknown"
+      },
+      "selected": {
+        "provider": "openai-codex",
+        "modelId": "gpt-6.1-sol",
+        "contextWindow": 272000
+      },
+      "settings": {
+        "reserveTokens": 16384,
+        "keepRecentTokens": 20000
+      },
+      "retained_payload_utf8_bytes": 54,
+      "source_json_sha256": "5ee0ec88f72466ba0aece783e10b614e2eec39ff318e60c7938a1e05ecd389ea"
+    }
+  ],
+  "native_commit_operations": 0,
+  "failure_units": "Native requireSummaryOutput: total=usage.output; reasoning=usage.reasoning ?? 0; retained=total-reasoning. Plan maxTokens=4096. Not characters or Python byte bound; original provider usage object not retained in this receipt.",
+  "provider_calls_repeated": 0,
+  "input_replays": 0
+}
