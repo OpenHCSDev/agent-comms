@@ -1,0 +1,113 @@
+{
+  "installed_python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/native_entries.py",
+  "module_sha256": "c51feb67cc8e8f4f0eb06e455dfe254f97c2b2482a146c8a0234415a7d80a7fe",
+  "private_root": "/home/ts/wt/p530/wire",
+  "elapsed_seconds": 0.787411265,
+  "coverage": {
+    "wire_root_id": "51c892edcaf7499587d06ef83e4a9bee",
+    "recipient_lookup": "e55ca7a900386a9d1220392835c339a3",
+    "covered_seq": 2,
+    "injected_source_seqs": [
+      1
+    ],
+    "no_wake_seqs": [],
+    "blocked_seq": null,
+    "more_sources": false,
+    "source_witness": {
+      "root_id": "51c892edcaf7499587d06ef83e4a9bee",
+      "revision": [
+        2084,
+        18236382,
+        26089,
+        1790944496238052878,
+        1790944496238052878
+      ],
+      "through_seq": 2,
+      "digest": "0f633080b0c55fdbd7676d33facf2088c7084b0c0882d7e75df551782fbeef11",
+      "tail": "a54e05ae8806ddd6bc12cb9fbde74fae15b0ead574aa020ff25a338627630db8",
+      "latest_source_seq": 2
+    }
+  },
+  "proofs": [
+    {
+      "input_id": "5b32cb68396699ee9f45262209e4e2e2",
+      "context": {
+        "input_id": "5b32cb68396699ee9f45262209e4e2e2",
+        "session_id": "01a0ee8c-8c10-77cc-a306-2f47d15ba7d0",
+        "session_entry_id": "85c0ba4d",
+        "request_generation": 106,
+        "llm_context_digest": "12d5defde22427412d9d47d88512a8eb23613171b88fbd25374f3168362d23d3",
+        "session_file": "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl"
+      },
+      "stage": "TriageNativeExecution",
+      "expected_prompt_equality_established": true
+    },
+    {
+      "input_id": "c80a96d81a86c845fcc0645b12022373",
+      "context": {
+        "input_id": "c80a96d81a86c845fcc0645b12022373",
+        "session_id": "01a0ee8c-8c10-77cc-a306-2f47d15ba7d0",
+        "session_entry_id": "1c9dc7c2",
+        "request_generation": 107,
+        "llm_context_digest": "e3f3513d4f96e89d5001087355cc8c4ab924022df73f817ae4d300ee205d19a7",
+        "session_file": "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl"
+      },
+      "stage": "FullNativeExecution",
+      "expected_prompt_equality_established": true
+    }
+  ],
+  "last_input_id": "c80a96d81a86c845fcc0645b12022373",
+  "observed": [
+    {
+      "reader": "NativeInputEvidenceRead",
+      "entries": 205,
+      "source_bytes": 42932701,
+      "path": "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl"
+    }
+  ],
+  "resources_closed": true,
+  "protected_sha256_before": {
+    "/home/ts/wt/p530/wire/native_prompt_bindings.sqlite3": "a24c349e40a0d64bb4fb0df1621f0c13c225d82f144eb1e92dbba11757d257b0",
+    "/home/ts/wt/p530/wire/wake_candidates.sqlite3-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    "/home/ts/wt/p530/wire/catalog.json": "af85a36d7220c7e7d31cdf2c469ad115523258d4d6e7c3dbbc106cc59b81e05e",
+    "/home/ts/wt/p530/wire/compaction-commits.sqlite3": "73a6dbb2a8687323a67b62a53191ae912a66c4ff5e683309718e1d5e7cb7f16c",
+    "/home/ts/wt/p530/wire/coordination.sqlite3": "fc6a8c6fceac576166f0680ae66876d1da835f7aecbd1899b74e7c6952ffe42a",
+    "/home/ts/wt/p530/wire/bus_meta.json": "846ae898753e25cb5e77a3f2656490497a6a6a37ed3966c71bfdf1ab187aee88",
+    "/home/ts/wt/p530/wire/bus.jsonl": "558a1de3677893251c3f2bb064d31c9ffeace73c0b27b80def43ea3f3a54bc16",
+    "/home/ts/wt/p530/wire/activity.jsonl": "490f3d4b18ba5e922e165408edecf4a20d29b8f07e4e5f0af9d8ef3e182605f8",
+    "/home/ts/wt/p530/wire/wake_candidates.sqlite3": "647aeec1fe8e81778013c7c0895ceee3c36f2fbce40b571d2852c4132d0ad5c1",
+    "/home/ts/wt/p530/wire/wake_candidates.sqlite3-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/p530/wire/registry.json": "9bb066f7dad64b68636c18a0a058050fff7e69f61e49bce631920af2f1c18be3",
+    "/home/ts/wt/p530/wire/private_bus_checkpoint.sqlite3": "17d86866f4763450776b10c7986fb46df3d75dafa6316ca4ca670d26554b6b37",
+    "/home/ts/wt/p530/wire/.registry-owner-guard": "9a3295cd0a0d93930bfc6639a5202985c24049de295fe5a11a29d5efadf4d30f",
+    "/home/ts/wt/p530/wire/diagnostics/cba5ac665a89ce4bb577f3df325e29bd.requests.jsonl": "c57568b29271ad2da024080404ea18bdf84f8942008c20baf7a28b3eec6a433e",
+    "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl.input-proof": "3f8aac34a90c6c638661a752dffe0b94cc970a8128895c1cc3dec1d33d90fdbf",
+    "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl": "cebfdbab98f3e5270fa23fb9d90983364abccf5ba4834f74544d3c43feb2cb0b",
+    "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/.native-pi-agent/settings.json": "b25410bb9ae164c9c5736066f70923cfb3233893afdeefd3b17c00e181531307"
+  },
+  "protected_sha256_after": {
+    "/home/ts/wt/p530/wire/native_prompt_bindings.sqlite3": "a24c349e40a0d64bb4fb0df1621f0c13c225d82f144eb1e92dbba11757d257b0",
+    "/home/ts/wt/p530/wire/wake_candidates.sqlite3-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    "/home/ts/wt/p530/wire/catalog.json": "af85a36d7220c7e7d31cdf2c469ad115523258d4d6e7c3dbbc106cc59b81e05e",
+    "/home/ts/wt/p530/wire/compaction-commits.sqlite3": "73a6dbb2a8687323a67b62a53191ae912a66c4ff5e683309718e1d5e7cb7f16c",
+    "/home/ts/wt/p530/wire/coordination.sqlite3": "fc6a8c6fceac576166f0680ae66876d1da835f7aecbd1899b74e7c6952ffe42a",
+    "/home/ts/wt/p530/wire/bus_meta.json": "846ae898753e25cb5e77a3f2656490497a6a6a37ed3966c71bfdf1ab187aee88",
+    "/home/ts/wt/p530/wire/bus.jsonl": "558a1de3677893251c3f2bb064d31c9ffeace73c0b27b80def43ea3f3a54bc16",
+    "/home/ts/wt/p530/wire/activity.jsonl": "490f3d4b18ba5e922e165408edecf4a20d29b8f07e4e5f0af9d8ef3e182605f8",
+    "/home/ts/wt/p530/wire/wake_candidates.sqlite3": "647aeec1fe8e81778013c7c0895ceee3c36f2fbce40b571d2852c4132d0ad5c1",
+    "/home/ts/wt/p530/wire/wake_candidates.sqlite3-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/p530/wire/registry.json": "9bb066f7dad64b68636c18a0a058050fff7e69f61e49bce631920af2f1c18be3",
+    "/home/ts/wt/p530/wire/private_bus_checkpoint.sqlite3": "17d86866f4763450776b10c7986fb46df3d75dafa6316ca4ca670d26554b6b37",
+    "/home/ts/wt/p530/wire/.registry-owner-guard": "9a3295cd0a0d93930bfc6639a5202985c24049de295fe5a11a29d5efadf4d30f",
+    "/home/ts/wt/p530/wire/diagnostics/cba5ac665a89ce4bb577f3df325e29bd.requests.jsonl": "c57568b29271ad2da024080404ea18bdf84f8942008c20baf7a28b3eec6a433e",
+    "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl.input-proof": "3f8aac34a90c6c638661a752dffe0b94cc970a8128895c1cc3dec1d33d90fdbf",
+    "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/session.jsonl": "cebfdbab98f3e5270fa23fb9d90983364abccf5ba4834f74544d3c43feb2cb0b",
+    "/home/ts/wt/p530/wire/native-sessions/e55ca7a900386a9d1220392835c339a3/.native-pi-agent/settings.json": "b25410bb9ae164c9c5736066f70923cfb3233893afdeefd3b17c00e181531307"
+  },
+  "original_bytes_unchanged": true,
+  "provider_calls": 0,
+  "native_prompts": 0,
+  "public_changes": 0,
+  "limits": "Existing real42MB native/ACP fixture read; no new native exchange or UI/provider/channel latency acceptance."
+}
