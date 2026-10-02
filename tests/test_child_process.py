@@ -66,15 +66,28 @@ async def test_bounded_run_retires_real_child_and_defiant_grandchild(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_attached_stop_retires_real_child_and_defiant_grandchild(tmp_path: Path) -> None:
+async def test_attached_stop_retires_real_child_and_defiant_grandchild(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import threading
+
     receipt = tmp_path / "tree.json"
     child = await AttachedChild.start((sys.executable, "-c", TREE, str(receipt)))
+    original = child.platform.group_members
+    scan_threads = []
+
+    def observed_members(identity):
+        scan_threads.append(threading.get_ident())
+        return original(identity)
+
+    monkeypatch.setattr(child.platform, "group_members", observed_members)
     try:
         await ready(receipt)
     finally:
         await child.stop()
     assert all(not member.alive() for member in identities(receipt))
     assert child.returncode is not None
+    assert scan_threads and threading.get_ident() not in scan_threads
 
 
 @pytest.mark.asyncio

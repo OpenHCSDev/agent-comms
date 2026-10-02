@@ -1,0 +1,60 @@
+usage: agent-comms [-h] [--root ROOT]
+                   {tools,repair-input-routing,import-thread,invoke,send,pin-constraint,pin-input-constraint,supersede-constraint,drop-constraint,export-retained,retained-context,inbox,ack,who,status,history,export-wire,channels,threads,thread,register,heartbeat,attach-session,activity,stop,restart,release,archive,rename-self,fork,ledger,poll,compaction-status,context} ...
+
+OpenHCS agent communications — JSON CLI. Every subcommand is one operation on
+the Comms wire, prints exactly one JSON document on stdout, and exits 0 on
+success or 1 with ``{"error": ...}`` on failure. This is the adapter surface
+for the pi extension and other process-based clients: they shell out and parse
+JSON, they do not own orchestration semantics.
+
+positional arguments:
+  {tools,repair-input-routing,import-thread,invoke,send,pin-constraint,pin-input-constraint,supersede-constraint,drop-constraint,export-retained,retained-context,inbox,ack,who,status,history,export-wire,channels,threads,thread,register,heartbeat,attach-session,activity,stop,restart,release,archive,rename-self,fork,ledger,poll,compaction-status,context}
+    tools               Emit the shared adapter tool catalog
+    repair-input-routing
+                        Preview historical native-input attribution repair
+    import-thread       Import an OpenCode/Codex context snapshot
+    invoke              Invoke one declared adapter tool
+    send                Send to a thread (DM), #channel, or #all
+    pin-constraint      Pin a certified original human message for its
+                        recipient
+    pin-input-constraint
+                        Pin an original human input for its recipient
+    supersede-constraint
+                        Publish a human's exact replacement for an authored
+                        constraint
+    drop-constraint     Retire a constraint by original reference, preserving
+                        its evidence
+    export-retained     Export current authored context from original
+                        certified sources
+    retained-context    Inspect retained context and original provenance
+                        without native input
+    inbox               Undelivered messages for a thread
+    ack                 Mark inbox delivered
+    who                 Presence: who is in the chat
+    status              Live activity: what each thread is doing right now
+    history             Full history of a DM, channel, or everything
+    export-wire         Export durable IRC/wire message history
+    channels            Derived channel list
+    threads             List threads
+    thread              Detail for one thread
+    register            Register a thread
+    heartbeat           Mark thread running
+    attach-session      Attach a live Pi session to a registered thread
+    activity            Publish current thread activity
+    stop                Mark thread stopped
+    restart             Restart idle running owners to reload backend code
+    release             Voluntarily mark the calling thread stopped
+    archive             Archive a stopped thread
+    rename-self         Rename your own running thread
+    fork                Fork a child pi thread
+    ledger              Read or merge ledger state
+    poll                Status snapshot: thread, inbox, ledger, peers
+    compaction-status   Inspect durable native compaction outcomes without
+                        replaying work
+    context             Inspect original context contributors without sending
+                        an input
+
+options:
+  -h, --help            show this help message and exit
+  --root ROOT           Comms root directory (default $AGENT_COMMS_ROOT,
+                        active route, or ~/.agent-comms)
