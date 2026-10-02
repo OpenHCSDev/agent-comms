@@ -278,6 +278,10 @@ class SentInput(StoredInput):
     native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     sent_text: str = field(metadata={"public_exclude": True, "wire_required": True})
 
+    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
+        """A native binding remains uncertain across admission and input changes."""
+        return True
+
     def __post_init__(self) -> None:
         super().__post_init__()
         try:
@@ -307,10 +311,6 @@ class BoundUnknownInput(SentInput):
     unresolved = True
     public_status = "unknown"
 
-    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
-        """A native binding remains uncertain across admission and input changes."""
-        return True
-
     def started(self, *, turn_id: str, native_id: str, text: str) -> StartedInput | None:
         return (
             self._transition(StartedInput)
@@ -323,6 +323,10 @@ class StartedInput(SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
+
+    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
+        """The original native-start receipt settled this binding's delivery."""
+        return False
 
     def require_started(self, admission: int) -> StartedInput:
         if not self.matches_admission(admission):
