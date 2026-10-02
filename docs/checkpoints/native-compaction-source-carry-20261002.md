@@ -161,7 +161,7 @@ Four existing outside-src files now close the producer/resource/consumer path:
   use the same existing carry implementation; neither launches a native owner,
   prompts a provider, fabricates a fresh enrollment or grants input admission.
 
-Measured code-only diff across these four tools: **411 lines deleted / 451
+Measured code-only diff across these four tools: **411 lines deleted / 446
 added**. Obsolete Native4-to5 column removal, TRIAGE singleton construction,
 route construction and fixture proof writing are deleted. New-case check: one
 store member owns its file/carry/publication; acquisition/prepare/install derive

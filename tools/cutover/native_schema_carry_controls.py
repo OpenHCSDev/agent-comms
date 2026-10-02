@@ -73,16 +73,11 @@ def run_journal_inventory(base, source_python, inventory_path):
     candidate.chmod(0o600)
     requests = capture_requests(candidate, source_python, original)
     before = journal_observation(candidate)
-    with closing(sqlite3.connect(candidate)) as db:
+    with closing(sqlite3.connect(candidate)) as db, db:
         db.execute('PRAGMA foreign_keys=OFF')
         db.execute('PRAGMA synchronous=FULL')
         db.execute('BEGIN IMMEDIATE')
-        try:
-            evidence = carry_compaction(db, original, target, requests)
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
+        evidence = carry_compaction(db, original, target, requests)
     after = journal_observation(candidate)
     relation = require_journal_preserved(before, after)
     if digest(inventory_path) != before_sha:
