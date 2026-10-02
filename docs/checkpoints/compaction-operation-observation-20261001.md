@@ -116,8 +116,32 @@ The same receiving UI subsequently failed on tab return at 00:21:21Z with
 `WorkerFailed: StaleRevision('Transcript application retired before source capture')`.
 Heisenberg retains the actual crash and preceding capture; Schrodinger owns the
 source-lifetime investigation. Therefore full UI continuation is **failed**,
-not passed. A subsequent read reported a committed native compaction but still
-reserved selected attempt/input; those are distinct original facts, not proof
-of final input handling or permission to replay. The one original attempt and
-all uncertainty are preserved. Neither full compaction speed nor final reply
-nor overall application stability is an acceptance claim of this checkpoint.
+not passed. The first subsequent read reported a committed native compaction
+but still-reserved selected attempt/input; that intermediate observation did
+not prove final input handling or authorize replay. The terminal receipt below
+records the later original producer settlement, without observer mutation.
+Neither full compaction speed nor visible final reply nor overall application
+stability is an acceptance claim of this checkpoint.
+
+## Later original terminal reconciliation
+
+Schrodinger's typed read at 00:24:07.202886Z reports the same original `bc86`
+attempt linked, commit `c6c11dda844d427aa03a54a862e1ca08` committed to native
+entry `1a251fa0`, original input `acp:7b910b60abc7413ea2309e6b85593e5e`
+started/unresolved=false, and no active turn. Native source size is 42,129,070
+bytes. The original receipt hash and sanitized facts are preserved in
+`evidence/compaction-operation-observation-20261001/receiving-native-terminal.json`.
+
+Read-only original native tail inspection independently corroborates compaction
+entry `1a251fa0` at 00:21:47.713Z, user `1dd3b365` at 00:21:56.609Z, and
+assistant `4332fd6f` at 00:21:59.776Z with the exact requested acknowledgment
+and stopReason=stop. Single physical submission to persisted answer was
+132.327464 seconds. This joins original input, native commit and terminal
+answer; it is not a pure provider duration or a controlled before/after latency
+comparison. The UI had already crashed before answer paint.
+
+The two registry reads per raw delta and awaited source `on_event`/readline
+remain in #489's global original-owner/custody analysis. Their presence alone
+is not timing attribution, and does not justify another caller patch, cache,
+timer, retry or local policy. Source consumption, provider completion and
+publication remain distinct facts. No new provider attempt or replay occurred.

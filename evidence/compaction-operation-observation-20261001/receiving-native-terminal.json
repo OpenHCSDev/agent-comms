@@ -1,0 +1,58 @@
+{
+  "scope": "Read-only final original-native/typed-receipt reconciliation, not visible-answer or latency-cause acceptance",
+  "original_typed_receipt": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/compaction501-shared-observation/after-ui-retirement.json",
+  "original_typed_receipt_sha256": "10d83ddcf608b10dde62330c7a9e32343bae1cae9b3d07c17a1212742d6424d3",
+  "observed_utc": "2026-10-02T00:24:07.202886+00:00",
+  "session": "compaction501-live-architecture-memory",
+  "owner_pid": 2644125,
+  "active_turn": null,
+  "source_bytes": 42129070,
+  "selected_attempts": [
+    {
+      "operation_id": "bc86b8f7f27f452da0e72a3019d71fd3",
+      "state": "linked",
+      "original_input_key": "acp:7b910b60abc7413ea2309e6b85593e5e",
+      "source_sha256": "9016e62b46db2d6e282dc4f5bfc63636083ff6734e533043228c03ff4c69a6f9"
+    }
+  ],
+  "native_commits": [
+    {
+      "commit_id": "c6c11dda844d427aa03a54a862e1ca08",
+      "state": "committed",
+      "native_entry_id": "1a251fa0"
+    }
+  ],
+  "input_rows": [
+    {
+      "key": "acp:7b910b60abc7413ea2309e6b85593e5e",
+      "kind": "started",
+      "public_status": "started",
+      "unresolved": false
+    }
+  ],
+  "native_journal": {
+    "compaction": {
+      "entry_id": "1a251fa0",
+      "utc": "2026-10-02T00:21:47.713Z"
+    },
+    "user": {
+      "entry_id": "1dd3b365",
+      "utc": "2026-10-02T00:21:56.609Z",
+      "native_input_id": "afa4f6d7522b0b172598dfa6f6eb24d6"
+    },
+    "assistant": {
+      "entry_id": "4332fd6f",
+      "utc": "2026-10-02T00:21:59.776Z",
+      "stop_reason": "stop",
+      "text": "Compaction501UI20261001-one acknowledged."
+    }
+  },
+  "single_ui_submission_utc": "2026-10-02T00:19:47.448536Z",
+  "ui_submission_to_persisted_answer_seconds": 132.327464,
+  "provider_terminal_clock": "not exposed by ACP source progress",
+  "ui_result": "Failed on tab return before answer paint: StaleRevision(Transcript application retired before source capture)",
+  "read_only": true,
+  "sent_input": false,
+  "provider_call": false,
+  "replay": false
+}
