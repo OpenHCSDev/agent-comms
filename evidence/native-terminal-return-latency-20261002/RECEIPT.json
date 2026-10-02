@@ -1,0 +1,73 @@
+{
+  "phase": "source-contribution-complete-installed-spans-pending-next-planned-channel",
+  "source_head": "1aa2d8d2cfbe5a36739636d6255e01ed740c8fb9",
+  "base_main": "f58dcaf1727950f40f96db1399b8387014682cd2",
+  "pr": 544,
+  "production": {
+    "paths": [
+      "src/agent_comms/tracked_turn.py"
+    ],
+    "added_lines": 50,
+    "deleted_lines": 39,
+    "net_lines": 11,
+    "sha256": "56a14687f178081ffeebde5ed66d28fb02c6d142f3123ad7e70472bb70cd32fa",
+    "semantic_authorities_added": 0,
+    "semantic_decisions_removed": 0,
+    "note": "Timing scopes and indentation only; original resource ordering and outcome logic retained."
+  },
+  "existing_owner": "NativeStartupAdmission.measurements: PublicationMeasurements",
+  "operations": {
+    "native_agent_settled": "Original tracked handler; maximum_started_ns identifies handler entry, not socket arrival.",
+    "native_terminal_result": "Original result assembly and refusal path.",
+    "native_terminal_proof": "Only result context_proof; tool-time proof checks unchanged.",
+    "native_custody_retirement": "Original whole AsyncExitStack callbacks, including partial acquisition failure/cancel; exit registered first, enter last."
+  },
+  "source_control": {
+    "command": "existing installed Python + borrowed pure pytest; tests/test_tracked_terminal_measurements.py -p pytest_asyncio.plugin -o addopts= -q",
+    "result": "2 passed in 0.10s",
+    "detects": [
+      "Retirement scope missing resources registered during acquisition",
+      "Cleanup LIFO order changed",
+      "Acquisition exception replaced or cancellation swallowed",
+      "Terminal result/proof operations manufactured on paths that never reached result"
+    ],
+    "native_children_started": 0,
+    "provider_calls": 0,
+    "new_environments": 0,
+    "log": "evidence/native-terminal-return-latency-20261002/source-control.log"
+  },
+  "ast": {
+    "before": "evidence/native-terminal-return-latency-20261002/before-ast.json",
+    "after": "evidence/native-terminal-return-latency-20261002/after-ast.json",
+    "parsed_modules": 311,
+    "parse_omissions": [],
+    "unique_existing_owners": [
+      "TurnSession",
+      "TrackedTurnSession",
+      "NativeCustody",
+      "PiSessionChild",
+      "ChildProcess",
+      "NativeContextProof",
+      "NativeEvidenceRead",
+      "PublicationMeasurements"
+    ],
+    "limits": [
+      "Lexical Python AST does not prove dynamic MRO resolution.",
+      "Native JavaScript and external extension sources read directly; not parsed by Python AST."
+    ]
+  },
+  "original_tail_gaps_seconds": [
+    8.450274048,
+    15.819278528
+  ],
+  "installed_acceptance": "Pending next already-planned channel acceptance owned by Mendel/parent; no separate benchmark or provider replay.",
+  "speed_claim": false,
+  "live_default_changed": false,
+  "original_inputs_replayed": false,
+  "resource_preflight": {
+    "home_free_gib": 6.9,
+    "ram_available_gib": 9.1,
+    "swap_used_gib": 12.9,
+    "scope": "Small serial source control reusing dependencies, no child/provider/fleet/build."
+  }
+}
