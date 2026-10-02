@@ -1,0 +1,1657 @@
+{
+  "base": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+  "head": "9c556480f8d821a3f3955354ae056c08f7dd3e9b",
+  "production_manifest": [
+    {
+      "path": "pyproject.toml",
+      "git_object": "1874d0750122c5605b87dd3951bbf4f7a90b5829",
+      "materialized": false
+    },
+    {
+      "path": "src/agent_comms/__init__.py",
+      "git_object": "340365eddd119cb2b12cef0e2703346cc654f2d0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/_pi_helpers/compaction_settings.mjs",
+      "git_object": "173148051b01c5810a0d6b45e87c452143070cfd",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/_pi_helpers/context_tokens.mjs",
+      "git_object": "de54f571a6ec389fc290da1b085f61eb8a431992",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/_pi_helpers/fork_session.mjs",
+      "git_object": "32061ee8e982f5cc212747e301ab7ab753727c76",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "git_object": "d4e5408bcb7de78894ecaf6d301ebd6c141cf6e7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/_pi_helpers/reopen_session.mjs",
+      "git_object": "de62606dc8403e21d3cd0cd40dd7494d6f518252",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "git_object": "79eb3fdd845aaeeafe84f3d42b78d5e340054649",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "git_object": "f6954d5c08dda976be6610ee0ee110cc6e1128af",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "git_object": "264d5c41d594c7bc84845938c10311fa846c38a9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/acp_request_consumer.py",
+      "git_object": "1f9e64d44cc29d961763bb1d50cbbac46d188e43",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "git_object": "dbb7d896b13d0bdb48e84f7a5a1ee0968d6bdb77",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "git_object": "3250607e6d69c025c7e9a5f31f8d6318b4edb715",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/activity_checkpoint.py",
+      "git_object": "2f63f03da89418e8c8c622d165ab8cb48adf05e1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "git_object": "3aa14dc299c4e59d4197017286eb1c7a5c299d4b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "git_object": "24bb245c173e430d78344ff9bcc85a3feda14a9c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "git_object": "15523943cb01c61bd19462a48527f8b9ebbea6e8",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "git_object": "ac1a39dc65d33a1b4f4100e08449286795206933",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/assignment_store.py",
+      "git_object": "ae72e584088e3a9ba58e95f481a0f246717c46a0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "git_object": "bd3f496f48c539888225a4bab18d1c24cf9697b6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/attempt_start.py",
+      "git_object": "cdea202141632fc4ef03cea78cd556142e2462b4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/attempt_states.py",
+      "git_object": "c0c1cad7a4cb9a2663865324a087f19afe6f8fc0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/attempt_store.py",
+      "git_object": "bd3a7cd684fc77e60b0282308addf1a4f532c0ff",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/audience_manifest.py",
+      "git_object": "89c3a0a1c539a22f2ca728afb119bd9fc9d3a88d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "git_object": "3e573e8957c8d313bc8c56f01538728144b04736",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "git_object": "58c508fbc072ec2f5ae7435197fbeafb264a2204",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_activity_index.py",
+      "git_object": "e20205d86ab8014f443cb0cb5920aa487beb1757",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "git_object": "ccbc2ff6fb5c85948f83790c129a196f08971b7e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "git_object": "992dc7bb5f8f09fdbb91d78ae26a0d436316435a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_projection.py",
+      "git_object": "ce0dd124f11af2c8395d9e759f8f79c38d163456",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "git_object": "3e9bed91ebf371a50ac424582a4d95a3e1f47813",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "git_object": "4f515d84f86a7d4039d59028a72f4b41c5c6a827",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/bus_source_page.py",
+      "git_object": "2e65ea1d1b61103e6f0686ad4d1535f51692d223",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/candidate_maintenance.py",
+      "git_object": "14261174704bf8ff42180b098c366cf02d2c53d2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/catalog_document.py",
+      "git_object": "c8323a443a381fc6c128c66c98017b0d1f35fbc8",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/catalog_store.py",
+      "git_object": "44f99c35ca820969e86665aa43c8b3a847a35b16",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.mjs",
+      "git_object": "ab338c6205d0616dd2284fb008b26a5a9161f42f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "git_object": "c4da9e6bb45ebadf29f14a890c4fa0011ed1b1bf",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "git_object": "8e16a7e19d10d10348c3e491a0de791cf999f477",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "git_object": "b028901c5340241ef64daf672a49a1f3db08da05",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/channel_targets.py",
+      "git_object": "b4639195c2d843cd56939754b8f496f7d6571f95",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/channels.py",
+      "git_object": "3b7cda7194a1910e5dc297e41ee2a0c5690c7e9b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "git_object": "b840ace3ede6819048fa8a9b9c725b931b6fc21f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "git_object": "9bd08e1952ac06936e9670fdc7c33b0bf6ed35f3",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "git_object": "2a2809b1204749159e302b4213a6e81ca44aee2d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cli.py",
+      "git_object": "c7a00f18cd80800f230b4a8b9f8a006c8af77910",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "git_object": "5da54ecb8aa2709f3329e64900e7c88ef91c5c6a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "git_object": "65c6841b3b81c28064d744b559a6c406576993f8",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "git_object": "e8639b0cb83705b9cd30aeb3d166365083c382a4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cohort_send.py",
+      "git_object": "10863f903cfae58e43a6267b29e2c51cf3efbe40",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/collaboration_ledger.py",
+      "git_object": "66c2dc49136066583cbdc1676925fbf5465c5ad5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/command.py",
+      "git_object": "7ecfc170daf45dd24bce55ccc7da9e7c7cdb3e4d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "git_object": "e5adf1231fd1a64faf8b74d59a03c603497887d4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "git_object": "eddfa0afd25e60a6a3b5c071c2b74c3221ff7c88",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_errors.py",
+      "git_object": "3e77e327026bff8083ad5aa127db7daa9151a646",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "git_object": "de3e138889205a632c6cdea3b5472a3933ffb8cd",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "git_object": "a38d20fad7e48195579930981b425e2fb618e0e4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_journal_role.py",
+      "git_object": "289ce199ee2fb0ca424b4bacf4fdc172b1f20a04",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "git_object": "4ae3a0ec838dc5390b5ec66c5a570697dff2f043",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "git_object": "b8caa01613f47446aca9528975500d35820545cd",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "git_object": "6b6edd06a825e20d2dbbcf87a7e9c7576a3cbbbc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_progress.py",
+      "git_object": "940db9162126f491d15f1b8449c191e4e11c695c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "git_object": "548ac8c411b0c4c98a9eeb6311d013eae3df8858",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_publication_lease.py",
+      "git_object": "7df175355342d4578746512ed49f742d57d82f40",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_publications.py",
+      "git_object": "d489ff4d2d1cf4531c84bd752e2d0bdd34c71818",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "git_object": "6f3d3a86a3844c7d8e3dd996b40c7d13ff171f02",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "git_object": "b7e8835d3959d7c3920326c53936cd1994f6d166",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_send_admission.py",
+      "git_object": "e1ba0e0ae86437647eb2d633530010147984bb68",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "git_object": "b9d3c849a4a10b54d9507404c68c05b147f353aa",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "git_object": "bada179889463e0a831a1178081a1ceb0cfa3ff6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "git_object": "ab03a0a0b4fd702d010944ab23bc4e2431a56493",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "git_object": "88099772eef23dfd1c12514fe70281e058eda309",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "git_object": "00080377b340cdf7d32c6466b5805c74c97a822e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "git_object": "54b7a55962d8648657d7bf9e61bee57d0e9a4f22",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "git_object": "4145cfea9c5e7103dae2e8cada21aa7ccd23d778",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "git_object": "e3b998b83e171a3e2eddbc68fe91b6ce3fd44932",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "git_object": "b18a387103041b5930cf7828e740f3003317b3f9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_contracts.py",
+      "git_object": "29a4af6e6362063102097992ac3eefe3a24f6974",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "git_object": "c8634d4580ff79339d70bdeb33685819d388fd39",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_errors.py",
+      "git_object": "aff504f35ed895de73a0ab7fb6ca23d7fd4ab20a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "git_object": "ebf07cca664b382e8bd83d1958bd5ea188cf887b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_results.py",
+      "git_object": "91ad3985128e55436528c9bbb0b1e8f143f2b570",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_schema.py",
+      "git_object": "240f4bcda38fa3b1bb519d046c9a2f9c17fab5bf",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_session.py",
+      "git_object": "07bd619314b2a053df7c499b082e9a28d8aa8165",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_snapshot.py",
+      "git_object": "56af547bb54bdb0757259e6928c0c700c1aceee5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/__init__.py",
+      "git_object": "9ff9380427cf2e86a5c8797206777e354126f25d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "git_object": "98a4706484e3e9aa2a65301231197e4e5bbc4f74",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "git_object": "de72b8bff2b49614cf176d6c5dd4078b21481f60",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "git_object": "42cc4868cc0aa5d0f12f38ae34202707fb4bd061",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/metadata.py",
+      "git_object": "426bfbe667f099697ebdb4d4b49640b31556b90b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "git_object": "0ad87ad4f6fa5ef4bc1da4a980ec6d98941fcd5f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "git_object": "b67572615a1a6247fcb5489f0d05d1965c6594e6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "git_object": "dc1d587dcae4cc9beb111079819409ef5337125e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/responses.py",
+      "git_object": "b32ae0ef0f34cb89989ef952c7d3f6e32b97e7d9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "git_object": "25a44edf22459026f6972249c1a87958906178c9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "git_object": "ce5e046cc86aa13f7e0e9e358ea8a084bc6e3b9f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "git_object": "09e4aa214d237fc074948c91b90bc9e3c40baae7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "git_object": "aa780be4939de58dbf3cd72e9f939fa1b769ea4c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "git_object": "ffcc7d41cc4a5d86504f5f9083a827e185d1d3cb",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/delivery_failure.py",
+      "git_object": "a8ff548af5650c5e7efe37e79908faaf942500da",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/delivery_policy.py",
+      "git_object": "1e218b15e31bce9e467b3ff0e53be68eb36a007a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/delivery_presentation.py",
+      "git_object": "a2c54df2b4baa02969b71879c5112279c0260b87",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "git_object": "d8eba44f9ad52082030b81e138df150212add836",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/display_order.py",
+      "git_object": "e88023061a41b9c548c227290354851bc9f8bea7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "git_object": "518bff851ceb41f4ac29b6f06ae82d390811f52e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "git_object": "ccc97154746802e0ce36a91165c78506e2bcc85f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/errors.py",
+      "git_object": "f0990825056a6146719afb7bb0ace5f868d50d56",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/execution_states.py",
+      "git_object": "f5b341e28b14430613d200388447eef48fad4164",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/execution_store.py",
+      "git_object": "0821583d77f5b94b0e83985e6c333296e3972fed",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "git_object": "e3599c2f061d7639f5020770b9e882457ad1c240",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "git_object": "63094bd33e119f4094205e1bbf4b28529dd74777",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "git_object": "04042e19718c418591f6fccb3e4382b7938c5e5a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "git_object": "f88431d3ef18b4e742a451277c0178cc6cc44be6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "git_object": "246484013e0113634e2731957da8b1775b633776",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_attempt_identity.py",
+      "git_object": "f2ee032b66b39d167446715187765ffa5eec7e01",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_attempt_phase.py",
+      "git_object": "71d9f1c6ac47dbfec30660cf02a06f50cd4fb471",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "git_object": "6edc4b198ef45a8439205b3d0793f476863b3c3e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "git_object": "0752ec3fdf4f1cd7fc9a477899240a1ef27645e4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_generation.py",
+      "git_object": "14a7a4864067a74f41118af43c1b3d0e62853509",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "git_object": "7007b73e8e9756a0fcde61290a80df2c877aed6a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "git_object": "2548be85780bd96da46c4d8ac9827f982121ae6f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_mentions.py",
+      "git_object": "d09d51d5bc4a16ff70c32395689cb62530ff11a1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_presentation.py",
+      "git_object": "3f7c90d5e93e6defb84920026b143b92b9f1f774",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "git_object": "3fd287133a8183332524663142de9b4112c2087d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "git_object": "bbc19ce18d7a8d6b564164a017803fdbbee338ba",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "git_object": "67ee507c00fa279bb97e4cfd9da716249f5d1bf5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "git_object": "ce30c1f698d0775f13c73a7ce34c82e58869321d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "git_object": "42c814bfe62ad51fa33a1106edcbbe7f934513f1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "git_object": "76850392b9d920b0f6aaedaf909d9dca6a0e1599",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "git_object": "21e5e5ed258ffd5bb1f501866c5e7092e97dd70e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/image_inputs.py",
+      "git_object": "f43a45bd397a8926b7116beed47b3bb57c03860b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "git_object": "3c5d4e18a3aad6ae538d6ebeb2951da168746da9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "git_object": "70a1ded393c1365b3aabc8541140b9e10cb4180e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "git_object": "1884111688654d169697b748be60bac6f11ba000",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "git_object": "9ce376efe85cee0e2da9d9c24b0ca3ff2d95b8c9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "git_object": "102b712ac3a93431d62c4536619db6a79a513684",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/input_effects.py",
+      "git_object": "e3aa7e608efbce3570fa8e6811969ba036f535a3",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "git_object": "7eb5fb492ec5b2e5c83d5eaf5f6c663fc3461457",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/automatic-title.md",
+      "git_object": "08688b1d0782edc9493899968e6b026510f8bd08",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/awareness-unavailable.md",
+      "git_object": "fc097ffba69f885934eef88c08ce134eed95b1b1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/awareness.md",
+      "git_object": "b2f8f66fa073bf5a72790f4f22fc681b3947293b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/coordination.md",
+      "git_object": "b5cfca74c89487362636c725ca5091825c6ef489",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/goal.md",
+      "git_object": "e3e5066a059ca47ade1c649ecde77e11a58649f6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/owner-pause.md",
+      "git_object": "cad839abd08f0b6bf38a736060ae9cf1257e8da2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/reply-route.md",
+      "git_object": "7a19e494e16878bf79ddc602ccbe90a0bca58e84",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/instructions/user-followup.md",
+      "git_object": "2f5e6350a4a0908ef427645b127a3eff4c41f86d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/jsonl_stream.py",
+      "git_object": "c5263c501dca2a37550e65878398649e8119d275",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/lifecycle.py",
+      "git_object": "e4f4180d01f561a713a97d5fa801fb4ca56493e0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "git_object": "4786087b21b241a68854b6ff323e3c8343bd974a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/login.py",
+      "git_object": "0126bcfaa183bf1eec49b39b7001cc2476e610c4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "git_object": "640daee693a71d36fd5913e18ff95180838fc1c3",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "git_object": "56913dddc671cfc8b76fe586a51e3b63a93f548b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/mentions.py",
+      "git_object": "6c012434d4cc0b28e5a0b940f26f77c4e39c0753",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "git_object": "13f3da8bc579a1adf5c6d3db1704b4ae99baef30",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "git_object": "7b559b2c9d0292514d33ce5894c805534353f4c2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/message_reference.py",
+      "git_object": "e79899f593438f6970573145df78b633efe4eb3b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/messages.py",
+      "git_object": "98fe87fd129e41e8d17aff65821ee861a0376bec",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "git_object": "ebc275aae485c3c5b910868f3131587a35e8b465",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/mro_dispatch.py",
+      "git_object": "8c39c00fd94b229f64ab30a44738b0b2221099bd",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "git_object": "d6d476c7f7884748c673e2f954385dca2e0c90f7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "git_object": "7c331705c4d2d7a264602ef8da848a35ac9129e5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_arguments.py",
+      "git_object": "47f490f9ef303185b6136d0e149155487b0fe814",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "git_object": "9fd7e24760ea65c4dc205aeffd74b2155de66a93",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "git_object": "3c04d4b7550da083d0d65ef1a33f7adda2592f40",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "git_object": "7335a94c1b2cebc4a57b759b2de653d8f055c248",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "git_object": "374361af26ae84c3d28b9568ecc4ff87e9897e61",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "git_object": "e258bb74fe6a8e1bf2418e4c6426a4563a9b1613",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_file_artifact.py",
+      "git_object": "ef50d8e1ac0149a719238f95c700bd0297a1b736",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "git_object": "59d299dfeecc88351304f8dd2938231f312dda3c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "git_object": "22566406f94b5065c6e913c6a13e02512ed6e509",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "git_object": "6312410a7748f5f1e7283b98c3c845ca858a1b7d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "git_object": "2f6f2db0128c9dd6830eff0c67c0493cd31c5740",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "git_object": "bef86fb437d3f46eb0a1089d5c1fd9b084221328",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "git_object": "96e8048b413f4d8ef427ca1698756b236fc48cdf",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_prompt_send.py",
+      "git_object": "83942ff5c641c796b94f1e51d80881728218df40",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_revision_text.py",
+      "git_object": "a5cb4b3373d0cfa268dbc5a234e9cb70c3e3ecb2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "git_object": "aeb8e9a613957db46f7f85a6be9837df682a4a60",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "git_object": "585140bbe8535910b4ed1b44c022c8cfab999e4b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "git_object": "9382b6b76a9823e2b2775698537930a452c40486",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "git_object": "3a88e7664678565d70a8165180dec0f805371859",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "git_object": "54da6ba19af9babf74ef6f0a91c4299d6ed3b0cc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_tool_call.py",
+      "git_object": "5527960f2069a7de98b91e6cb9f8056047750036",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_tools.py",
+      "git_object": "1c0c738925685dbd26ddd1ed8906b566acc5e522",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "git_object": "8ad2ba8d9b177683814bd0504b349594266f1301",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "git_object": "dc91d764bfd216a111eddb866b8e5f3fa3e16e67",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "git_object": "43035339c3fd020784e8070ac5c6fab02c015cb7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "git_object": "a502d66a320e04a4e0ec18b2145b1223bf26201e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/obligation_states.py",
+      "git_object": "fb7a44359c4f2de5a11224918e4f10b634ed8a81",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "git_object": "56b4115d8b073da19b7714a3d284660c939e64e1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "git_object": "7efd434341ac04714391e6576dd8bd1177d3df2e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "git_object": "d9f868a93443e740eaa711a4267e9affe0bade89",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "git_object": "e4a5c91156c04903134afde491da66c1d0c9f7e2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "git_object": "408b8c567736c3baeb398da92a04aaf18223c024",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "git_object": "34906ab8de42d58754dc068bb540bac4bf383f8d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "git_object": "dd28dd832591c9c1014b1391a1f5d8b0b4c21074",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "git_object": "2b58482c9a02702240ee682c77955b99f9430bd0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "git_object": "eb11209fe82199b2a6164a0357f8dc6137062789",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "git_object": "199db6cd34639c32bdf607922f62180abaaa3689",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "git_object": "c5ad6203a9850376a3a3ca6a5f01fca08fb14407",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "git_object": "153524ecb2e472213fe4fb9d7ccd610a0147ba22",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_cutover.py",
+      "git_object": "8ccd516248683dbb6bec16fe810aff35da0c27fe",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_fence.py",
+      "git_object": "a02110621dc4b852e1d1bdef32a6bcd9ea3ed98f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "git_object": "b0943b92178bc4222a8f6adc055ee7a8d23186b2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "git_object": "4f007f0c7c9a79e960ebcbd3110cc4ec23922588",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "git_object": "4232df3fd766a3a7db935b3b0c4e4af0462ae9e7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/participant_store.py",
+      "git_object": "d8f011eb18402efef4247ea4bf40672b32e945e2",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pending_requests.py",
+      "git_object": "9c819bca2e28ff3bb5263e4b815efdc865ae3d82",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "git_object": "1bb9305291a6437a571d8c64fb7e7ffe1a2cd825",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "git_object": "8094e9ab46830a80e13bdccbb8c1bf05022310ae",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_helper.py",
+      "git_object": "58f2334ffb4757b0a1487047c64ec120173b52e6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_login_control.ts",
+      "git_object": "e2c495cac6c5314b33da4e20f31d400231b1a4e9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "git_object": "7fad6d495957240db2e7f57b19c946978c11e1d7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_project_bootstrap.mjs",
+      "git_object": "5458eceade96e7cefc3933031bd6d37e4b7d43b3",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "git_object": "987eed2656e14012a571eb8ce3c46da0d2a6dceb",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "git_object": "61141d9f937ab26d238a35068c663659347b50ec",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "git_object": "4d6c1ee77300469d5ad175832ca804d3640f784b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "git_object": "4db5ca5b88b83360f3c22bb532a5c7a1ccf30a59",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "git_object": "cd1b5f485bbac4abaed292bce7e12cac7833553f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "git_object": "72cad3dbb65e5a1de88190be24fd24ec45b5b2f6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "git_object": "94fa53742e059f4371bf9437f308a4fa8875d172",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "git_object": "5163737fe6e27bbf4c1a30fc90c30e4889c45963",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_runtime_schema.py",
+      "git_object": "57db8347c409cdb9ed4cc51423bff05d663f1ef0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "git_object": "59daf5da2ae36ba5d9ecab40fc8b00e80d6efe09",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "git_object": "30283a0dbf6d06d730280f29bf5c0eb913a096b6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "git_object": "e5467974e09236ada218ddf41f4e0edd3759091b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "git_object": "412c755892427750c86d4000537cd1eb52a878e0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "git_object": "cdba59ea6252ab32ed63c720200cf092ce1fdf48",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/py.typed",
+      "git_object": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "git_object": "e2a97211ba8788186058f8b5f957261fc6ef2b43",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "git_object": "915f87f9759d1f54242484a0d0d1a0aa267dba7a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "git_object": "9174c5ad94de4f934a1a6823bbd041573824d09f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "git_object": "ea0bbb52ab5fab1eabe6ec9acf4915ac20ba73ca",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway_client.py",
+      "git_object": "d10fe6004e855d156c93f846ba8a4872b8405a9c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "git_object": "a4ec4c06657cf310afb7a35bc0cc388f330a9977",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/recovery_reader.py",
+      "git_object": "21501e86be846eba5e81715e10e6f813e14478ad",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/recovery_states.py",
+      "git_object": "73b40d2405915fc5eb5b279b3593fe2c87a90958",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "git_object": "857cd4ce46bcb5cdba4d96331cad8486c8cf9a3f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "git_object": "e6512dfe6d64dd0761ef4a10f40e65f81c279528",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/registration_inheritance.py",
+      "git_object": "d077c15f5a218fc8a1e22fd8d0097f70286679cc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "git_object": "f6f6b627b8722614edfa9828dbfd1ec37f1cddcc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "git_object": "7cf4b2b2d522b9781fcdc1a6911a1a10567bddfe",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "git_object": "1bd6b013196c65920eaba8a3b5f242a8e141cb61",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "git_object": "447bf21c73fe79ba582148a835826b3febc69cb9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/request_progress.py",
+      "git_object": "597e7ce87e7596eceafd6dbf37d7ed81b3c75bea",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/reservation_rules.py",
+      "git_object": "cdc2c4493c41c1f8d99764a21ef9bcf919f1d433",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/response_conversation.py",
+      "git_object": "10c493abeaff34ad27d12540bdc57c579b3ce118",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/response_policy.py",
+      "git_object": "bf654d3564eb4d72efb8e80bbf0dc8e71da89310",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "git_object": "ee7e1ddda26f7b93b6c3afb3dc3882995858404a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/restart_refusals.py",
+      "git_object": "0d5d1f8d243ab4dce7c6556fb41b33ea645c2dbc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "git_object": "a0345c3109d4fea364b5b2f09dfae4d548bbfdbc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "git_object": "11d13b020a0738f9dd6397f2d351b378c7bdce9c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "git_object": "2e633a98d81826885b5879dfd74359119dad8f04",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "git_object": "253b3bc8bf0e88abca9bf1ef620517c9d46b6eed",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "git_object": "f549728041e0008e884454993074304d74199e6d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "git_object": "e1cf7af786bca21ded325ba9f789b7247db37845",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "git_object": "cb7ce017aef1a1acdd91988f209a910cb1539f6d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/sealed.py",
+      "git_object": "e88cfed9b03b8acd2c67c3e37f2765abb8712c16",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "git_object": "940a4159418f2e1925a5331e29e990d75cdbdcd3",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_claimed_write.mjs",
+      "git_object": "dc59ff643423616b8ccb4b467053da32e86d7a08",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "git_object": "fd06e40180c8dc4c816df56fec545d863b29fe58",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "git_object": "deb9e4e45979f0c4485d182b07e9410efb4e63fc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "git_object": "93697136f13ed49bf02d3e586a06237974b95926",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "git_object": "079a5ced61e5b347a9b30d9a8bbd8c5cd724ea71",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_result.py",
+      "git_object": "7b78904a3a29dc008986fd6ffd3a5f3b1c3eda07",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "git_object": "ddbe86479a2e0f20c9420d534e48a5e5c3be7654",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "git_object": "f0a51f27dc56bfa14a93a006e785420b36466fa9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "git_object": "e93b815479f3943c3e0063ed3cde7cb230dc3dde",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "git_object": "b766808c73050eed8d38b599e387a5adee9f464f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "git_object": "6680f78db2a7e3b1c4382745cee984223e0f9eb0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "git_object": "121fa8f6cfbe941aa260439d86f85aefadc677ec",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "git_object": "d3d8803335bcf4305f3b339cf1601f26b98254a9",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_write_authority.py",
+      "git_object": "17f845b887e3bc26c86056e7a82f9ae332c9def6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "git_object": "ba87151ea4587c496471dd4f72d3128511702ef6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "git_object": "4b0f0b2f5988f9e60f37e28a9a32951465e3f02d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/session_fence.py",
+      "git_object": "ef91af3382f2bbc5b8e161e1d416c20174abbd29",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "git_object": "2da46ec640357e55f4413173aaeb29ccf461a6e4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/session_load.py",
+      "git_object": "569ce69ec1b82d5b92a5f624494441fd41d102c5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/shared_ledger.py",
+      "git_object": "1984948306e040353f8c0a190daa9d12dd66592b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/source_proof_requirement.py",
+      "git_object": "2ad57afa20471be3fdb6a436bd13714ae06f0db1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "git_object": "c32801630c899c773947bf2c8cce8eb1f07afc79",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "git_object": "caa843bea221619e856206e93bbd061f3b886556",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/text_digest.py",
+      "git_object": "2941cc56df81da2504e742c009fa8b3c2f716db8",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/thread_execution.py",
+      "git_object": "2086075baa86236a5d3aae70c62c5636b965202f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "git_object": "ad70be133827f0792721e265c1f1cd7e55be734f",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "git_object": "716338be0907ac0b687c3cb755d686e564da506d",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "git_object": "fb6ee660a57aa7297904462f8d68ede3b2b8813b",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/thread_provenance.py",
+      "git_object": "114734ea599aaf0fa44ca2fe0f1a06a0d9bd3175",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/thread_status.py",
+      "git_object": "3dc6d8efd6365f889aa2842263501b524b287ce5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "git_object": "ad11f3a114804bb92b1c17f41e751faadc4aa013",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "git_object": "1925c0bb7ef1175efd43d0b08e7f81c65f6b7bd1",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "git_object": "223e87fa41ebf624dd843035cde7ded78dfede0a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/tool_results.py",
+      "git_object": "673e2735addc3e03323ed70555f3edcde75ebc74",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "git_object": "3328c88d9d5cfbd66955e297d2bf0894dbe4d380",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "git_object": "6f55493752a81c145c4466432cd0f0d51adc20d3",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcript_events.py",
+      "git_object": "dd102a203724f0cde83569d4448c0167cb8f1696",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcript_merge.py",
+      "git_object": "b73aaa0a856878ec9c37b5d3640021a6c39fb781",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "git_object": "c47344e31e6031501b79ee0ce3ef2e7a5c71158a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "git_object": "089a88e5b8a8b3920ca409782ca413a3a39b6162",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "git_object": "2e68c10b115b50871cd3f10f50d5a8f0bd90de06",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcript_updates.py",
+      "git_object": "85fbdd1f22471bca1ed7160654c73c7fadcdfc91",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "git_object": "2bf5cbcb7bdbd428c871463c70dfc50cc9c1f96a",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/triage_native_sources.py",
+      "git_object": "509ea19a44feed13a8d057b597b83aba6c3a5a2c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "git_object": "e7d60fe31d3fff73f3c775de1e6dc6f0751aa7eb",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "git_object": "989f41909d610aca8859d6ecd1faa5652b37b5b5",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_effects.py",
+      "git_object": "e5d10a92cfb16e1f503b266900a95e7c29421550",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "git_object": "f27b7f630b5cc518971826f23b565569fe58239e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "git_object": "03847a095f190e7231fd6398171d15842556d9c7",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_goal_permission.py",
+      "git_object": "c76262d8c6b8a9f6f84fda4009624ca858752a7c",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "git_object": "54eb598b05b29f2a0f1354ddc869c5d7bca50e54",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "git_object": "65d766db266bc7fc962c7f9bdaca10152390da16",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "git_object": "98e6efe1a13fc572714f71f7f41f1281d6d153ed",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "git_object": "f6b118212104535c2ba804de07af2a36dfc9422e",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "git_object": "a76e78160cb50831c50e0a0a6af144ecd05314fa",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "git_object": "8bf4423a32228c85cfd81c6b5b2fe075964ebf64",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "git_object": "e8f833564be86be965c0f86045bb4dd09759bb82",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "git_object": "55c79d4e982fc7b39902bc8da698e4cc2c371853",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "git_object": "9af62a808231566584d0def9922f7ecb122026c4",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_usage.py",
+      "git_object": "6ca44f100320422a3e8af43db8c298be2aa11551",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "git_object": "3db24e29e12b4446b92c01f50b7aeb507373d874",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "git_object": "2f074433802a3c4b44f58b51f71caaec4d4cc2b6",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "git_object": "5be7b3f7261793567a0b02bbde4f2d09dbab36cc",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "git_object": "8ce83d522f17db3cb024a9ac667632be51f6e2a0",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "git_object": "e5b73c8f949981440704af4221633ef2ed78d733",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "git_object": "afbad70dda8932c39658a693f3097bd1ea10f059",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "git_object": "2e66592da308efdd8648e110b67e55676a0a1707",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "git_object": "8b6a362c632c6fb0d6e98910e5d6445ee95f9e18",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "git_object": "f8a132b15d7eb491bf041dc7435c4e7d6d8d3235",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "git_object": "07d98e2da7d174943fe773638bd41c1ee9748cd8",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "git_object": "346bd8d8dca24fa86c6618e34f7c53103b30db37",
+      "materialized": true
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "git_object": "57b76b53531efad0fdb2d7b6729abaea3e8f3987",
+      "materialized": true
+    }
+  ],
+  "unintended_production_deletions": []
+}

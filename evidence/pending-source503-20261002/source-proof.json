@@ -1,0 +1,370 @@
+{
+  "state": "installed-source-assets-native-trust-verified; continuous journey pending",
+  "prefix": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002",
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "4701ee10a54d8151724f102cd1861a97ce385452",
+      "location": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002/lib/python3.14/site-packages/agent_comms",
+      "files": 329,
+      "python_files": 311,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/agent-comms.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "4701ee10a54d8151724f102cd1861a97ce385452",
+          "requested_revision": "4701ee10a54d8151724f102cd1861a97ce385452"
+        }
+      },
+      "inventory_sha256": "3fc607d8a97937aee7c8b149d519515249bdd36ebb4390053d8311f27e9bc9f2"
+    },
+    {
+      "module": "toad",
+      "head": "ce788178a143bbab3f6fda43b5a73ccda2d53f77",
+      "location": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002/lib/python3.14/site-packages/toad",
+      "files": 306,
+      "python_files": 275,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/toad.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "ce788178a143bbab3f6fda43b5a73ccda2d53f77",
+          "requested_revision": "ce788178a143bbab3f6fda43b5a73ccda2d53f77"
+        }
+      },
+      "inventory_sha256": "6c7ba940851d4fe1311063f967950b19e42375d655f1e4c004930e77b478ebfc"
+    },
+    {
+      "module": "textual",
+      "head": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+      "location": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002/lib/python3.14/site-packages/textual",
+      "files": 266,
+      "python_files": 249,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+          "requested_revision": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7"
+        }
+      },
+      "inventory_sha256": "416dc893cb3ab40bb621fb91043cd6388e8973a71cc56fe42542ebb5ee459f88"
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "location": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002/lib/python3.14/site-packages/textual_diff_view",
+      "files": 3,
+      "python_files": 2,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual-diff-view.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+          "requested_revision": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+        }
+      },
+      "inventory_sha256": "c1ab2e4c7a7595de81eeb8fef14f9fa9e45b603f84e810dc7c08fa9145793679"
+    }
+  ],
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "native_tree": "5c9d304db96618de00d96b0c5143bb24cdeb935c802e29f97ef988ec38131df7",
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "package_count": 69,
+  "packages": [
+    [
+      "Jinja2",
+      "3.1.6"
+    ],
+    [
+      "MarkupSafe",
+      "3.0.3"
+    ],
+    [
+      "Pygments",
+      "2.21.0"
+    ],
+    [
+      "agent-client-protocol",
+      "0.12.1"
+    ],
+    [
+      "agent-comms",
+      "0.1.0"
+    ],
+    [
+      "aiohappyeyeballs",
+      "2.7.1"
+    ],
+    [
+      "aiohttp",
+      "3.14.3"
+    ],
+    [
+      "aiohttp-jinja2",
+      "1.6"
+    ],
+    [
+      "aiosignal",
+      "1.4.0"
+    ],
+    [
+      "aiosqlite",
+      "0.22.1"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "anyio",
+      "4.14.2"
+    ],
+    [
+      "attrs",
+      "26.1.0"
+    ],
+    [
+      "bashlex",
+      "0.18"
+    ],
+    [
+      "batrachian-toad",
+      "0.6.20"
+    ],
+    [
+      "certifi",
+      "2026.7.22"
+    ],
+    [
+      "click",
+      "8.4.0"
+    ],
+    [
+      "format-currency",
+      "0.0.10"
+    ],
+    [
+      "frozenlist",
+      "1.8.0"
+    ],
+    [
+      "h11",
+      "0.16.0"
+    ],
+    [
+      "httpcore",
+      "1.0.9"
+    ],
+    [
+      "httpx",
+      "0.28.1"
+    ],
+    [
+      "idna",
+      "3.20"
+    ],
+    [
+      "jeepney",
+      "0.9.0"
+    ],
+    [
+      "linkify-it-py",
+      "2.2.0"
+    ],
+    [
+      "loguru",
+      "0.6.0"
+    ],
+    [
+      "markdown-it-py",
+      "4.2.0"
+    ],
+    [
+      "mdit-py-plugins",
+      "0.6.1"
+    ],
+    [
+      "mdurl",
+      "0.1.2"
+    ],
+    [
+      "metaclass-registry",
+      "0.2.1"
+    ],
+    [
+      "multidict",
+      "6.9.1"
+    ],
+    [
+      "nominal-refactor-audit",
+      "0.1.0"
+    ],
+    [
+      "notify_py",
+      "0.3.43"
+    ],
+    [
+      "packaging",
+      "26.2"
+    ],
+    [
+      "pathspec",
+      "1.1.1"
+    ],
+    [
+      "platformdirs",
+      "4.9.6"
+    ],
+    [
+      "propcache",
+      "0.5.4"
+    ],
+    [
+      "psutil",
+      "7.2.2"
+    ],
+    [
+      "pydantic",
+      "2.13.5"
+    ],
+    [
+      "pydantic_core",
+      "2.46.5"
+    ],
+    [
+      "pyperclip",
+      "1.11.0"
+    ],
+    [
+      "rich",
+      "15.0.0"
+    ],
+    [
+      "setproctitle",
+      "1.3.7"
+    ],
+    [
+      "textual",
+      "8.2.8"
+    ],
+    [
+      "textual-diff-view",
+      "0.1.5"
+    ],
+    [
+      "textual-serve",
+      "1.1.3"
+    ],
+    [
+      "textual-speedups",
+      "0.2.1"
+    ],
+    [
+      "tree-sitter",
+      "0.26.0"
+    ],
+    [
+      "tree-sitter-bash",
+      "0.25.1"
+    ],
+    [
+      "tree-sitter-css",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-go",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-html",
+      "0.23.2"
+    ],
+    [
+      "tree-sitter-java",
+      "0.23.5"
+    ],
+    [
+      "tree-sitter-javascript",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-json",
+      "0.24.8"
+    ],
+    [
+      "tree-sitter-markdown",
+      "0.5.1"
+    ],
+    [
+      "tree-sitter-python",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-regex",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-rust",
+      "0.24.2"
+    ],
+    [
+      "tree-sitter-sql",
+      "0.3.11"
+    ],
+    [
+      "tree-sitter-toml",
+      "0.7.0"
+    ],
+    [
+      "tree-sitter-xml",
+      "0.7.0"
+    ],
+    [
+      "tree-sitter-yaml",
+      "0.7.2"
+    ],
+    [
+      "typeguard",
+      "4.5.2"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ],
+    [
+      "typing_extensions",
+      "4.15.0"
+    ],
+    [
+      "watchdog",
+      "6.0.0"
+    ],
+    [
+      "xdg-base-dirs",
+      "6.0.3"
+    ],
+    [
+      "yarl",
+      "1.25.1"
+    ]
+  ],
+  "requirements_sha256": "72a1cb4746862dbae24bdb428f3500e13ce4e6ee599ff67bf6c95fea4db7cf93",
+  "protected_old_prefix_files": 2839,
+  "protected_old_prefix_files_unchanged": true,
+  "public_install_changed": false,
+  "new_native_build": false,
+  "source_overlay": false,
+  "dependency_bypass": false,
+  "journey_owners": [
+    "Kepler503 pending-wave3 manyowner acceptance; parent default activation"
+  ],
+  "journey_assessment": "pending"
+}
