@@ -1,0 +1,181 @@
+{
+  "state": "PASS",
+  "installed_source": "36865f7c9b55f9273acef9eed8b139b865fc6178",
+  "pages": [
+    {
+      "owner": "openhcs-helper",
+      "direction": "earlier",
+      "max_messages": 20,
+      "max_bytes": 65536,
+      "events": 20,
+      "before": 42961993,
+      "after": 42984377,
+      "fragments": 1,
+      "decoded_entries": 21,
+      "connections": 1,
+      "source_queries": 21,
+      "reply_queries": 4
+    },
+    {
+      "owner": "openhcs-helper",
+      "direction": "earlier",
+      "max_messages": 60,
+      "max_bytes": 262144,
+      "events": 60,
+      "before": 42932905,
+      "after": 42984377,
+      "fragments": 1,
+      "decoded_entries": 53,
+      "connections": 1,
+      "source_queries": 53,
+      "reply_queries": 6
+    }
+  ],
+  "reads": [
+    {
+      "kind": "native_records",
+      "page": null,
+      "records": 1,
+      "decoded_entries": 1,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 0,
+      "closed": true
+    },
+    {
+      "kind": "native_records",
+      "page": null,
+      "records": 1,
+      "decoded_entries": 1,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 0,
+      "closed": true
+    },
+    {
+      "kind": "publication_revision",
+      "page": null,
+      "records": 0,
+      "decoded_entries": 0,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 0,
+      "closed": true
+    },
+    {
+      "kind": "publication_revision",
+      "page": null,
+      "records": 0,
+      "decoded_entries": 0,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 0,
+      "closed": true
+    },
+    {
+      "kind": "native_records",
+      "page": 0,
+      "records": 21,
+      "decoded_entries": 21,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 21,
+      "reply_queries": 4,
+      "closed": true
+    },
+    {
+      "kind": "publication_revision",
+      "page": null,
+      "records": 0,
+      "decoded_entries": 0,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 0,
+      "closed": true
+    },
+    {
+      "kind": "native_records",
+      "page": 1,
+      "records": 53,
+      "decoded_entries": 53,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 53,
+      "reply_queries": 6,
+      "closed": true
+    },
+    {
+      "kind": "direct_proof_fragment",
+      "page": null,
+      "records": 0,
+      "decoded_entries": 0,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 2,
+      "closed": true
+    },
+    {
+      "kind": "native_records",
+      "page": null,
+      "records": 1,
+      "decoded_entries": 1,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 2,
+      "closed": true
+    },
+    {
+      "kind": "native_records",
+      "page": null,
+      "records": 1,
+      "decoded_entries": 1,
+      "connections": 1,
+      "native_schema_checks": 1,
+      "response_schema_checks": 1,
+      "source_queries": 1,
+      "reply_queries": 0,
+      "closed": true
+    }
+  ],
+  "wire_calls": 11,
+  "native_render_calls": 48,
+  "all_connections_closed": true,
+  "coordinator_overlaps_wire_or_render": 0,
+  "query_scope": "source/reply SELECTs after schema verification; each native/response schema assertion counted separately",
+  "wheel_sha256": "a881c737947436433f2d040979574e101c1c1d176eff8c394d6968b4658e0788",
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_mutations": [],
+  "scope": "Existing installed saved-reader journey, original public SQL/native/wire, forwarding observation wrappers only.",
+  "observation_note": "ACP passed after=None, which uses EarlierTranscript. Direction label corrected from the observer argument-key heuristic using the original call; counts/results unchanged.",
+  "bounded_decode_control": {
+    "state": "PASS",
+    "source_head": "36865f7c9b55f9273acef9eed8b139b865fc6178",
+    "control": "test_known_native_entries_decode_once_in_both_bounded_directions",
+    "passed": 1,
+    "seconds": 0.12,
+    "prevents": "fragment prefetch expanding native decode past original earlier lookahead or forward frozen window"
+  },
+  "main_integration": {
+    "main": "155b00076312626e025861efc3ed14549adca5c0",
+    "merged_head": "a3d2f751ffbb0e9c6fbfd68503e8f9e166d1ade8",
+    "feature_production_files_unchanged": true,
+    "installed_scope": "Original installed read used36865f7c; subsequent normal main merge changes none of six525 production files. No repeated controls/provider calls."
+  }
+}

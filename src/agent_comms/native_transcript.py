@@ -82,6 +82,25 @@ class NativeTranscript:
     def __init__(self, path: Path):
         self.path = path
 
+    def fragments(self, records, *, max_records, max_bytes):
+        """Borrow original decoded records within the caller's page budget.
+
+        An oversized original stays whole. No cursor advances during capture;
+        the traversal still owns consumption of each independent source.
+        """
+        fragment, used = [], 0
+        for record in records:
+            if fragment and used + record.size > max_bytes:
+                yield tuple(fragment)
+                fragment, used = [], 0
+            fragment.append(record)
+            used += record.size
+            if len(fragment) >= max_records or used >= max_bytes:
+                yield tuple(fragment)
+                fragment, used = [], 0
+        if fragment:
+            yield tuple(fragment)
+
     @property
     def session_id(self):
         with self.path.open("rb") as stream:

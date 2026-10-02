@@ -1,0 +1,52 @@
+{
+  "state": "PASS",
+  "source_head": "36865f7c9b55f9273acef9eed8b139b865fc6178",
+  "installed_python": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/install/runtime/bin/python",
+  "module": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms",
+  "source_assets": 339,
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "owner": "openhcs-helper",
+  "native_session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl",
+  "native_file_sha256": "16f42888165773ccd65196990022b05897fbc39955b0f45c47ae512183779045",
+  "native_file_bytes": 42984377,
+  "native_file_unchanged": true,
+  "original_seq": 364,
+  "original_message_id": "78273ca7e217",
+  "original_body_sha256": "0027ff36f3de8894dabec4d55f03f1a7bb6f2cbeb6b8cb87d8d869268ba76890",
+  "original_route": {
+    "sender": "openhcs-helper2",
+    "target": "#openhcs"
+  },
+  "original_handling": "Checked \u2014 no response",
+  "native_entry_projections": {
+    "9937decf": [
+      {
+        "kind": "context",
+        "timestamp": 1790933117.857,
+        "text_sha256": "5f96ca87703783d5eb06775d9e3f8bc123212c0cb2d484de53252002b3500238"
+      }
+    ],
+    "73e6068a": [
+      {
+        "kind": "context",
+        "timestamp": 1790933112.341,
+        "text_sha256": "ef8d3759619d2ff17dca6d2e261eff6f9acd10df529e592e913eea253eb8164d"
+      }
+    ]
+  },
+  "original_wire_visible": true,
+  "existing_full_publication": {
+    "entry_id": "a463d6ed",
+    "input_id": "cf0485424f25d6aed7b2eecbcb099025",
+    "publication_sequences": [
+      360
+    ]
+  },
+  "actual_saved_live_snapshot_api": true,
+  "elapsed_seconds": 0.3835234399884939,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "unknown_replays": 0,
+  "public_mutations": [],
+  "scope": "actual installed Core transcript reader/ACP snapshot on original public saved session. Toad source maps same ContextTranscript to disclosure; physical UI not rerecorded in this Core-only package."
+}
