@@ -1,0 +1,81 @@
+{
+  "parsed_modules": 413,
+  "parse_omissions": [],
+  "owners": [
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "class": "StoppedOwnerInstallation",
+      "bases": [
+        "OwnerCutover"
+      ],
+      "members": [
+        {
+          "name": "recovery_paths",
+          "line": 79,
+          "source": "def recovery_paths(self) -> frozenset[Path]:\n    \"\"\"Original file destinations whose change forbids source restoration.\"\"\"\n    return frozenset()"
+        }
+      ]
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "class": "PublishRetainedSummary",
+      "bases": [
+        "StoppedOwnerInstallation"
+      ],
+      "members": [
+        {
+          "name": "__post_init__",
+          "line": 212,
+          "source": "def __post_init__(self):\n    object.__setattr__(self, 'recovery_originals', tuple((ReviewedArtifact(path, digest(path)) for path in sorted(self.recovery_paths()))))"
+        },
+        {
+          "name": "recovery_paths",
+          "line": 219,
+          "source": "def recovery_paths(self) -> frozenset[Path]:\n    \"\"\"Include payloads the installation may replace, not only invariants.\"\"\"\n    from agent_comms.wire_log import WireLog\n    bus = WireLog(ROOT / 'bus.jsonl')\n    paths = self.protected_files().union(RuntimeCompactionFiles(ROOT).paths, RuntimeNativeFiles(ROOT).paths, (bus.path, bus.metadata_path), self.task_carry.recovery_paths())\n    return frozenset((path for path in paths if path.exists() or path.is_symlink()))"
+        },
+        {
+          "name": "require_recovery_originals",
+          "line": 231,
+          "source": "def require_recovery_originals(self):\n    if self.recovery_paths() != frozenset((item.path for item in self.recovery_originals)):\n        raise RuntimeError('Original recovery membership changed; remain stopped')\n    for original in self.recovery_originals:\n        original.require_original()"
+        }
+      ]
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "class": "ActivateGlobalExtension",
+      "bases": [
+        "StoppedOwnerInstallation"
+      ],
+      "members": [
+        {
+          "name": "recovery_paths",
+          "line": 87,
+          "source": "def recovery_paths(self) -> frozenset[Path]:\n    return frozenset((source.destination for source in self.sources))"
+        }
+      ]
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "class": "VerifiedGlobalExtension",
+      "bases": [
+        "ActivateGlobalExtension"
+      ],
+      "members": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "class": "PublishRetainedSummary",
+      "bases": [
+        "StoppedOwnerInstallation"
+      ],
+      "members": []
+    }
+  ],
+  "source_relation": "Task source coordinates derive from original SourceInstall members; pre-stop digest/membership witness stays on PublishRetainedSummary. VerifiedGlobalExtension inherits the footprint. No new authority, recovery algorithm or registry.",
+  "limits": "AST does not establish dynamic subclass resolution. External undiscovered installation members inherit the existing empty footprint."
+}
