@@ -212,6 +212,11 @@ class UnavailableCursorObservation(CursorObservation):
 @dataclass(frozen=True)
 class EmptyCursorObservation(CursorObservation):
     @property
+    def needs_refresh(self) -> bool:
+        # Absence of a durable projection does not settle an original proof.
+        return True
+
+    @property
     def status(self) -> str:
         return "none"
 
