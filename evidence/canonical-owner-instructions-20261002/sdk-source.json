@@ -1,0 +1,12 @@
+{
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent",
+  "qualified_native_manifest": "ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04",
+  "sdk": "12.1",
+  "reviewed_loader_cli_service_files_byte_identical_to_5184": {
+    "dist/core/resource-loader.js": "8e8a1bc1c5bc9e955f6a2314dd1db02071be56d48b1fea7b8b2cacb4fc9a0628",
+    "dist/cli/args.js": "bfb311d2c5d919fa4015d6aaa3c5a71a90b90011320e5e40f56b12e448c44dfc",
+    "dist/core/agent-session-services.js": "3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06",
+    "dist/main.js": "04262c7460ed53e5135e8327c31921cc2117b2c11141c65db0d10d59f668025e"
+  },
+  "source_semantics": "Explicit appendSystemPromptSource bypasses discoverAppendSystemPromptFile; existing AgentSession consumes the supplied loader sources. JavaScript contracts read semantically, outside Python AST mapping."
+}
