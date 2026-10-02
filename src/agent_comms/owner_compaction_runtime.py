@@ -123,28 +123,30 @@ async def compact_owner_once(
             pending_input_keys=pending_input_keys,
             settings_paths=settings_paths,
         )
-        if not settings.boundary_current(source.retained, owner, bridge.registry.snapshot()):
-            return RefusedCompactionResult("Authored subtask boundary changed; optional compaction skipped")
-        if on_event is not None:
-            await on_event(CompactionStart(reason="adaptive"))
-        await asyncio.to_thread(bridge.require_source_current, owner, owner_generation, source)
-        result = await summarize(prepared, source)
+        async def at_cut(prepared: NativePreparation) -> CompactionResult:
+            if not settings.boundary_current(source.retained, owner, bridge.registry.snapshot()):
+                return RefusedCompactionResult("Authored subtask boundary changed; optional compaction skipped")
+            if on_event is not None:
+                await on_event(CompactionStart(reason="adaptive"))
+            await asyncio.to_thread(bridge.require_source_current, owner, owner_generation, source)
+            result = await summarize(prepared, source)
 
-        async def write(summary: NativeSummary) -> CompactionOperation:
-            return await _commit_native_summary(
-                bridge, owner, owner_generation, persistent, prepared, source, summary
-            )
+            async def write(summary: NativeSummary) -> CompactionOperation:
+                return await _commit_native_summary(
+                    bridge, owner, owner_generation, persistent, prepared, source, summary
+                )
 
-        operation = await result.commit_with(write)
-        admission = result.admit_original(bridge, owner, owner_generation, operation, source)
-        if admission is not None:
-            if on_admission is None:
-                admission.invalidate()
-                raise ValueError("Selected summary requires its original-input owner")
-            on_admission(admission)
-        if on_event is not None:
-            await on_event(result.completion_event)
-        return result.compaction_result(operation)
+            operation = await result.commit_with(write)
+            admission = result.admit_original(bridge, owner, owner_generation, operation, source)
+            if admission is not None:
+                if on_admission is None:
+                    admission.invalidate()
+                    raise ValueError("Selected summary requires its original-input owner")
+                on_admission(admission)
+            if on_event is not None:
+                await on_event(result.completion_event)
+            return result.compaction_result(operation)
+        return await settings.prepare(prepared).compact_owner(at_cut)
 
     return await settings.prepare(preparation).compact_owner(perform)
 

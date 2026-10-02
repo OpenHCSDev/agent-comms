@@ -11,7 +11,7 @@ from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_pi_route import (
     SelectedPiProbeUnknownError,
-    read_selected_compaction_decision,
+    observe_selected_compaction_decision,
 )
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -30,7 +30,7 @@ async def test_actual_selected_observation_retirement_without_input_replay(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
 
     async def observe(expected_package=package):
-        return await read_selected_compaction_decision(
+        return await observe_selected_compaction_decision(
             native.persistent,
             session_file=str(native.session),
             expected_package=expected_package,
@@ -105,7 +105,7 @@ async def test_actual_selected_observation_retirement_without_input_replay(
         (("data", "selected", "provider"), "foreign-provider"),
         (("data", "selected", "contextWindow"), True),
         (("data", "decision", "reserveTokens"), True),
-        (("data", "decision", "trigger"), "yes"),
+        (("data", "decision", "reason"), "foreign"),
         (("data", "decision", "keepRecentTokens"), 0),
         (("data", "summary"), "unauthorized extra field"),
         ((), None),  # Received from native, but not delivered before the deadline.
@@ -147,7 +147,7 @@ async def test_actual_selected_observation_untrusted_receipt_retires_without_rep
 
     monkeypatch.setattr(retained.child.reader, "readline", damaged_receipt)
     with pytest.raises(SelectedPiProbeUnknownError):
-        await read_selected_compaction_decision(
+        await observe_selected_compaction_decision(
             native.persistent,
             session_file=str(native.session),
             expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
