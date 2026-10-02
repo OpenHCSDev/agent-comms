@@ -95,7 +95,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         from .coordination_tables.executions import ExecutionOrigin
         from .selected_turn import SelectedAttempt
 
-        participant.require_current()
+        participant.require_current(participant.store)
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name, 1,

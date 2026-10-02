@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import secrets
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import Generator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from .agent_events import NativePhaseChanged
@@ -23,6 +24,7 @@ from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
+from .participant_store import ParticipantSnapshot
 from .turn_phase import PreparingPhase, TurnPhase
 from .diagnostics import record_request_progress
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
@@ -41,10 +43,10 @@ class SelectedParticipant(MroDispatch):
     provider: str
     model: str
 
-    def require_current(self) -> None:
+    def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)
-        with self.store.session.read():
-            self.identity.require(self.store, self.lookup)
+        with resource.session.read():
+            self.identity.require(resource, self.lookup)
 
     @property
     def response_owner(self) -> LiveResponseOwner:
@@ -53,8 +55,7 @@ class SelectedParticipant(MroDispatch):
         )
 
     def transition(self, phase: TurnPhase) -> None:
-        lease = self.owner.thread.turn_lease
-        assert lease is not None
+        lease = self.owner.thread.require_turn_lease()
         self.comms.agents.transition_turn(lease, phase)
 
     def consume_reply_wait(self) -> None:
@@ -83,6 +84,48 @@ class SelectedParticipant(MroDispatch):
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int):
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+        owner, participant, pending = await Coordination.run_async(
+            store.session.path,
+            lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
+        )
+        if not pending:
+            yield None
+            return
+        identity = ParticipantOwner(owner.thread, participant.participant_generation)
+        provider, model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
+        lease = cls.lease(comms, owner)
+        try:
+            leased = await Coordination.run_worker(lambda: next(lease))
+            sources = await cls.sources(bus, store, root_id, pending, identity)
+            batch = SelectedSourceBatch(sources)
+            selected = cls(
+                comms,
+                bus,
+                store,
+                root_id,
+                leased,
+                ParticipantOwner(leased.thread, identity.generation),
+                participant.lookup,
+                batch,
+                provider,
+                model,
+            )
+            await Coordination.run_async(store.session.path, selected.require_current)
+            await Coordination.run_worker(lambda: selected.transition(
+                PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}")
+            ))
+            yield selected
+        finally:
+            # Joined entry can acquire custody without delivering its result.
+            # The original generator owns retirement even in that case.
+            await Coordination.run_worker(lease.close)
+
+    @staticmethod
+    def prepare(
+        comms: Comms, bus: MessageBus, store: Coordination,
+        root_id: str, name: str, after_seq: int,
+    ) -> tuple[RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...]]:
+        """Capture detached original registry/participant rows in one worker."""
         with bus.log.locked():
             _require_no_private_owner_rename(comms.root)
             marker = bus.log._private_marker_unlocked()
@@ -105,38 +148,22 @@ class SelectedParticipant(MroDispatch):
         with store.session.read():
             identity.require(store, lookup)
         pending = pending_sealed_assignments(store, lookup, thread.name, after_seq=after_seq)
-        if not pending:
-            yield None
-            return
-        participant.pointer.require_idle()
-        model_selection = comms.threads.resolve_thread_model(thread.name)
+        if pending:
+            participant.pointer.require_idle()
+        return owner, participant, pending
+
+    @staticmethod
+    def configured_model(comms: Comms, name: str) -> tuple[str, str]:
+        model_selection = comms.threads.resolve_thread_model(name)
         if not model_selection or "/" not in model_selection:
             raise IdentityConflict("Selected owner has no configured provider/model")
         provider, model = model_selection.split("/", 1)
         if not provider or not model:
             raise IdentityConflict("Selected owner's configured provider/model is incomplete")
-        with cls.lease(comms, owner) as leased:
-            sources = await cls.sources(bus, store, root_id, pending, identity)
-            batch = SelectedSourceBatch(sources)
-            selected = cls(
-                comms,
-                bus,
-                store,
-                root_id,
-                leased,
-                ParticipantOwner(leased.thread, identity.generation),
-                lookup,
-                batch,
-                provider,
-                model,
-            )
-            selected.require_current()
-            selected.transition(PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}"))
-            yield selected
+        return provider, model
 
     @staticmethod
-    @contextmanager
-    def lease(comms: Comms, owner: RegistryOwner):
+    def lease(comms: Comms, owner: RegistryOwner) -> Generator[RegistryOwner, None, None]:
         # Registry CAS owns admission/turn identity; never borrow another ACP
         # instance's turn or revive an owner through a registration side effect.
         try:

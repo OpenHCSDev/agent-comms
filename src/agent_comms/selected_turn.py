@@ -45,8 +45,7 @@ class SelectedPrompt:
 
     def context(self, segments) -> TurnContext:
         owner = self.participant.owner.thread
-        lease = owner.turn_lease
-        assert lease is not None
+        lease = owner.require_turn_lease()
         return TurnContext(
             owner.incarnation,
             RecordedContextTurn(TurnId(lease.turn_id), lease.identity),
@@ -152,7 +151,7 @@ class SelectedAttempt:
     @classmethod
     def engage(cls, participant: SelectedParticipant,
                snapshot: RecoverySnapshot) -> SelectedAttempt:
-        participant.require_current()
+        participant.require_current(participant.store)
         store = participant.store
         assignment_ids = participant.batch.assignment_ids
         execution_id = participant.batch.execution_id
@@ -283,7 +282,7 @@ class SelectedConsideration:
     async def run(self, execution, session):
         participant = self.participant
         if not participant.batch.requires_triage:
-            participant.require_current()
+            participant.require_current(participant.store)
             created = participant.store.executions.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
                 participant.lookup, participant.owner.thread.name, 1,
