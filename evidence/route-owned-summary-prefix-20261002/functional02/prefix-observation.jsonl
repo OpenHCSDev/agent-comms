@@ -1,0 +1,5 @@
+{"stage":"observer-ready"}
+{"stage":"route","provider":"openai-codex","api":"openai-codex-responses","canonicalEndpoint":true,"systemHash":"046049751cce57c108385efca2900818cd3cc4bdb66e2c26cc53b5e768e56500","toolsHash":"b7028753435029a968e43709da4486c3c11fe8a209c0f08b69afdab0fb7cc186","orderedPrefixHash":"7c07eec5a635bee819b5b873581c7feae045a58b5455d637308e10db3b7c4bbd","messageCount":14,"toolCount":41,"prefixCapabilityEntered":true}
+{"stage":"selected-request","provider":"openai-codex","api":"openai-codex-responses","canonicalEndpoint":true,"systemHash":"046049751cce57c108385efca2900818cd3cc4bdb66e2c26cc53b5e768e56500","toolsHash":"b7028753435029a968e43709da4486c3c11fe8a209c0f08b69afdab0fb7cc186","orderedPrefixHash":"7c07eec5a635bee819b5b873581c7feae045a58b5455d637308e10db3b7c4bbd","messageCount":14,"toolCount":41,"toolChoiceNone":true,"originalInstructions":true,"originalTools":true,"boundProvider":true}
+{"stage":"observer-ready"}
+{"stage":"observer-ready"}

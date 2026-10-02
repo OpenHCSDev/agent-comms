@@ -23,11 +23,19 @@ export class SessionContext {
         return manager.buildContextEntries().flatMap(sessionEntryToContextMessages);
     }
     static sourceBudget(session, messages) {
-        return new ContextBudget(session.model, {
+        return new ContextBudget(session.model, this.sourceContext(session, convertToLlm(messages)));
+    }
+    static sourceContext(session, messages) {
+        return {
             systemPrompt: session.systemPrompt,
-            messages: convertToLlm(messages),
+            messages,
             tools: session.agent.state.tools,
-        });
+        };
+    }
+    static async prefixContext(session, messages) {
+        // Use the original SDK converter (including configured image exclusion),
+        // not a Python narrative or an independently captured prompt body.
+        return this.sourceContext(session, await session.agent.convertToLlm(Array.from(messages)));
     }
     compactionRequired(session, settings) {
         return SessionContext.sourceBudget(session, SessionContext.sourceMessages(this.manager).toArray())
