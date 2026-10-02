@@ -18,7 +18,8 @@ from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_private_human_ingress import _root
 
 
-def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
+@pytest.mark.asyncio
+async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
     comms, old_store, root_id, lookups = _root(tmp_path)
     old = comms.messaging.send_user_message("bob", "old pending input", worktree=str(tmp_path))
     accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
@@ -41,7 +42,7 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
             reopened = Comms(comms.root)
             WakeCandidateIndex(reopened.bus).maintain(rebuild=True)
             assert (
-                _accept_visible_deliveries(
+                await _accept_visible_deliveries(
                     reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
                 )
                 == old.seq
@@ -60,7 +61,7 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
         with reopened.bus.log.locked():
             assert reopened.bus.log._private_marker_unlocked().admission_after_seq == old.seq
         for _ in range(2):
-            _accept_visible_deliveries(
+            await _accept_visible_deliveries(
                 reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
             )
         assignments = sealed_cohort_assignments(store, lookups["bob"])

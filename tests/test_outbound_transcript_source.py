@@ -327,17 +327,16 @@ def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatc
 
 def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noqa: F811
     import sqlite3
-    from agent_comms.private_bus_checkpoint import delivery_references_unlocked
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     with comms.bus.log.certified_read() as source:
         assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
-        assert delivery_references_unlocked(source, (initial.message.reference,)) == (initial,)
+        assert tuple(source.references((initial.message.reference,))) == (initial,)
     assert source.stream.closed
     with pytest.raises(sqlite3.ProgrammingError):
         source.connection.execute("SELECT 1")
     with pytest.raises(RelationViolationError, match="lock lifetime"):
-        delivery_references_unlocked(source, (initial.message.reference,))
+        tuple(source.references((initial.message.reference,)))
 
 
 def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811

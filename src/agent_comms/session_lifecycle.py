@@ -182,7 +182,7 @@ class SessionLifecycle:
         return NewSessionResponse(
             session_id=thread.name,
             config_options=options,
-            field_meta=self.metadata(thread.name, session_id=thread.name),
+            field_meta=await self.metadata(thread.name, session_id=thread.name),
         )
 
     async def load_session(
@@ -207,7 +207,7 @@ class SessionLifecycle:
         self.effects.inputs.ensure_live_drain(session_id)
         return LoadSessionResponse(
             config_options=options,
-            field_meta=self.metadata(thread.name, session_id=session_id),
+            field_meta=await self.metadata(thread.name, session_id=session_id),
         )
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
@@ -254,7 +254,7 @@ class SessionLifecycle:
                 update=SessionInfoUpdate(
                     session_update="session_info_update",
                     title=thread.title or name,
-                    field_meta=self.metadata(name, session_id=session_id),
+                    field_meta=await self.metadata(name, session_id=session_id),
                 ),
             )
             self.titles[session_id], self.display_titles[session_id] = name, thread.title
@@ -263,7 +263,7 @@ class SessionLifecycle:
                 session_id=session_id,
                 update=SessionInfoUpdate(
                     session_update="session_info_update",
-                    field_meta=self.metadata(name, session_id=session_id),
+                    field_meta=await self.metadata(name, session_id=session_id),
                 ),
             )
             self.worktrees[session_id] = thread.worktree
@@ -278,7 +278,7 @@ class SessionLifecycle:
         )
         await self.config.publish_configuration(session_id, thread_name)
 
-    def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
+    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         thread = self.comms.registry.require(thread_name)
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
         info = self.comms.agents.agent_info_of(thread_name)
@@ -300,7 +300,7 @@ class SessionLifecycle:
             ),
             GoalChangedUpdate(goal, execution),
             self.effects.inputs.queue_state(session_id or thread_name),
-            *self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
+            *await self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
 
     async def retire_proxy(self, session_id: str) -> None:

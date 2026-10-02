@@ -8,7 +8,8 @@ import os
 import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -22,6 +23,8 @@ from .bus_publication import (
     has_private_wire_fields,
     unique_wire_object,
 )
+from .bus_source_page import AddressedPage
+from .bus_projection import BusFileRevision
 from .envelope_claim_transitions import (
     ClaimProjection,
     apply_transition,
@@ -72,23 +75,46 @@ class WireLog:
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
-        from .private_bus_checkpoint import conversation_sources_unlocked
-
         with _store_lock(self.path) as lock:
             if not self.path.exists():
                 return ()
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)
-            originals = conversation_sources_unlocked(
-                source, lookup, predicate, parameters, limit=limit, ascending=ascending
+            originals = source.conversation_sources(
+                lookup, predicate, parameters, limit=limit, ascending=ascending
             )
             source.require_current()
-            return originals
+        return tuple(originals)
+
+    def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
+        """Borrow bounded pages from one original committed append-only cut.
+
+        A later append cannot extend this iteration. Each page captures exact
+        original pointers and bytes inside certification; validation and all
+        consumer work occur after its publication custody has closed.
+        """
+        request = AddressedPage(lookup=lookup, after_seq=after_seq)
+        with self.certified_read() as source:
+            witness, captured, more = source.addressed_page(self, request)
+        while True:
+            originals = tuple(captured)
+            yield from originals
+            if not more:
+                return
+            request = replace(request, after_seq=originals[-1].message.seq)
+            with self.certified_read() as source:
+                _, captured, more = source.addressed_page(self, request, prefix=witness)
 
     def full_history(self) -> list[Message]:
-        with self.locked():
-            return list(self._iter_log_unlocked())
+        with self.verified_snapshot() as records:
+            return [message for record in records for message in record.messages()]
+
+    @contextmanager
+    def delivery_snapshot(self):
+        """Original routing members derive from the same opened strict read."""
+        with self.verified_snapshot() as records:
+            yield (item for record in records for item in record.delivery_messages())
 
     def record_context(self, manifest) -> None:
         """Append one text-free observation through the original sealed writer."""
@@ -100,18 +126,20 @@ class WireLog:
             self._append_private_unlocked(marker, record.to_wire())
 
     def context_manifests(self, name: str, registry):
-        """Read original observations for one registry-owned historical identity.
+        """Capture original source and rename membership before decoding.
 
-        The existing wire/bus/registry lock order freezes rename membership for
-        this read. Returned rows retain their recorded names and proof fields.
+        The original wire -> bus -> registry order selects the read snapshot;
+        neither physical publication lock survives into its decoder.
         """
-        with _store_lock(self.path.parent / "wire"), self.locked():
-            snapshot = registry.snapshot()
-            incarnation = snapshot.require(name).incarnation
-            marker = self._private_marker_unlocked()
+        with ExitStack() as resources:
+            with _store_lock(self.path.parent / "wire"):
+                # The bus snapshot is acquired before the registry observation.
+                records = resources.enter_context(self.verified_snapshot())
+                snapshot = registry.snapshot()
+                incarnation = snapshot.require(name).incarnation
             return tuple(
                 manifest
-                for record in self.verified_records_unlocked(marker)
+                for record in records
                 for manifest in record.context_manifests()
                 if manifest.thread.resolved(snapshot) == incarnation
             )
@@ -122,11 +150,15 @@ class WireLog:
         Caller owns the original bus lock. Outgoing declared decisions belong
         to their author's source too; unrelated messages cannot invalidate it.
         """
+        marker = self._private_marker_unlocked()
+        return self._compaction_messages(self.verified_records_unlocked(marker), recipient)
+
+    @staticmethod
+    def _compaction_messages(records, recipient: ThreadIncarnation):
         digest = hashlib.sha256()
         facts = []
         lookup = stable_thread_lookup(recipient.created_at)
-        marker = self._private_marker_unlocked()
-        for record in self.verified_records_unlocked(marker):
+        for record in records:
             for message in record.compaction_messages_for(lookup):
                 digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())
                 digest.update(b"\n")
@@ -141,19 +173,26 @@ class WireLog:
         from .retained_task_facts import RetainedTaskFacts
         from .turn_context import OwnerProvenance
 
-        with _store_lock(self.path.parent / "wire"), self.locked():
-            snapshot = registry.snapshot()
-            owner = snapshot.require(name)
-            digest, facts = self.compaction_messages_unlocked(owner.incarnation)
-            with InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs:
-                originals = {original.key: original for fact in facts
-                             for message in fact.wire_sources()
-                             for original in message.task.original_input_sources(inputs)}
-                input_facts = tuple(original.origin.retained_fact(original)
-                                    for original in originals.values())
-                retained = RetainedTaskFacts((*facts, *input_facts)).for_owner(owner, snapshot)
-                return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
-                    owner, snapshot, WireExportBoundary(self._private_marker_unlocked().last_seq, time.time()))
+        with ExitStack() as resources:
+            with _store_lock(self.path.parent / "wire"):
+                snapshot = registry.snapshot()
+                owner = snapshot.require(name)
+                inputs = InputDispositions(self.path.parent / InputDispositions.filename).read()
+                metadata, _, stream, boundary, _ = resources.enter_context(
+                    self._opened_wire_snapshot(need_sequence=False)
+                )
+                export = WireExportBoundary(metadata.last_seq, time.time())
+            digest, facts = self._compaction_messages(
+                self._snapshot_records(metadata, stream, boundary), owner.incarnation
+            )
+            originals = {original.key: original for fact in facts
+                         for message in fact.wire_sources()
+                         for original in message.task.original_input_sources(inputs)}
+            input_facts = tuple(original.origin.retained_fact(original)
+                                for original in originals.values())
+            retained = RetainedTaskFacts((*facts, *input_facts)).for_owner(owner, snapshot)
+            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
+                owner, snapshot, export)
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
@@ -179,9 +218,13 @@ class WireLog:
 
     def _claim_projection_unlocked(self, metadata: WireMetadata) -> tuple[ClaimProjection, int]:
         """Project claims and return the verified bus high-water in one scan."""
+        return self._claim_projection(self.verified_records_unlocked(metadata))
+
+    @staticmethod
+    def _claim_projection(records) -> tuple[ClaimProjection, int]:
         projection = ClaimProjection()
         verified_sequence = 0
-        for record in self.verified_records_unlocked(metadata):
+        for record in records:
             verified_sequence = record.sequence_after(verified_sequence)
             for previous in record.messages():
                 if previous.claim_transition is not None:
@@ -190,11 +233,12 @@ class WireLog:
 
     def claim_projection(self) -> ClaimProjection:
         """Derive ownership exclusively from guarded, verified bus envelopes."""
-        with _store_lock(self.path):
-            metadata = self._private_marker_unlocked()
+        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
             if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
-            projection, _verified_sequence = self._claim_projection_unlocked(metadata)
+            projection, _verified_sequence = self._claim_projection(
+                self._snapshot_records(metadata, stream, boundary)
+            )
             return projection
 
     def _private_marker_unlocked(self) -> WireMetadata:
@@ -350,29 +394,64 @@ class WireLog:
                 yield message, raw_size
 
     @contextmanager
+    def _opened_wire_snapshot(self, *, need_sequence: bool = True):
+        """Own one fixed opened inode/byte boundary beyond physical custody."""
+        with ExitStack() as resources:
+            with _store_lock(self.path) as lock:
+                metadata = (
+                    self._private_marker_unlocked()
+                    if self.path.exists() or self.metadata_path.exists()
+                    else WireMetadata()
+                )
+                through = self._committed_sequence_unlocked(lock) if need_sequence else 0
+                try:
+                    stream = resources.enter_context(self.path.open("rb"))
+                except FileNotFoundError:
+                    stream = None
+                boundary = stream.seek(0, 2) if stream is not None else 0
+                if stream is not None:
+                    stream.seek(0)
+                revision = BusFileRevision.capture(stream) if stream is not None else None
+            yield metadata, through, stream, boundary, revision
+
+    @contextmanager
+    def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
+        """Run the original strict WireScan after releasing publication custody.
+
+        Uncertified streams retain the same complete validation algorithm.
+        This resource is a fixed read, not a current append/admission permit.
+        """
+        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+            yield self._snapshot_records(metadata, stream, boundary)
+
+    @contextmanager
+    def projection_snapshot(self):
+        """Lend one opened source cut to disposable indexes after bus release.
+
+        The index may seek this stream within its original revision. If index
+        acquisition fails, the strict record iterator reads that SAME cut.
+        Its stream remains owned here; no projection acquires bus authority.
+        """
+        with self._opened_wire_snapshot(need_sequence=False) as (
+            metadata, _, stream, boundary, revision,
+        ):
+            yield metadata, revision, stream, self._snapshot_records(metadata, stream, boundary)
+
+    @staticmethod
+    def _snapshot_records(metadata, stream, boundary):
+        scan = WireScan(metadata)
+        while stream is not None and stream.tell() < boundary:
+            raw = stream.readline(min(scan.max_row_bytes + 1, boundary - stream.tell()))
+            if not raw:
+                break
+            yield scan.read(raw)
+
+    @contextmanager
     def _record_snapshot(
         self, *, need_sequence: bool = True
     ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
-        """Fixed opened-inode/byte boundary with public page-size accounting.
-
-        Display-only callers do not request a sequence watermark. Every stored
-        source has the current marker; history never repairs an absent marker.
-        """
-        with _store_lock(self.path) as lock:
-            metadata = (
-                self._private_marker_unlocked()
-                if self.path.exists() or self.metadata_path.exists()
-                else WireMetadata()
-            )
-            through = self._committed_sequence_unlocked(lock) if need_sequence else 0
-            try:
-                stream: BinaryIO | None = self.path.open("rb")
-            except FileNotFoundError:
-                stream = None
-            boundary = stream.seek(0, 2) if stream is not None else 0
-            if stream is not None:
-                stream.seek(0)
-        try:
+        """Public page accounting borrows the one original opened byte boundary."""
+        with self._opened_wire_snapshot(need_sequence=need_sequence) as (metadata, through, stream, boundary, _):
             records = (
                 (
                     page_row
@@ -385,9 +464,6 @@ class WireLog:
                 else iter(())
             )
             yield through, records
-        finally:
-            if stream is not None:
-                stream.close()
 
     @contextmanager
     def full_history_snapshot(self) -> Iterator[tuple[int, Iterator[Message]]]:
@@ -409,16 +485,15 @@ class WireLog:
 
     def deliveries_for_references(self, references):
         """One canonical lock/certificate lifetime for a visible source window."""
-        from .private_bus_checkpoint import delivery_references_unlocked
-
         if not references:
             return ()
         with self.certified_read() as source:
-            return delivery_references_unlocked(source, references)
+            originals = source.references(references)
+        return tuple(originals)
 
     def total_messages(self) -> int:
-        with _store_lock(self.path):
-            return sum(1 for _ in self._iter_log_unlocked())
+        with self.verified_snapshot() as records:
+            return sum(1 for record in records for _ in record.messages())
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""

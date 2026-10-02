@@ -1,0 +1,1 @@
+Return ONLY a JSON array of Message records, one combined answer per listed reply route. Use the shown sender, target and info type; replace each text with its answer. Do not disclose another route's private request or answer in this route's text. No markdown fences, extra records or additional metadata. Publication owns actual timing. Declared Message examples: {examples}

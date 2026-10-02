@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
 from .errors import RelationViolationError
@@ -40,54 +40,52 @@ class BusActivityIndex(BusAppendIndex):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
         self._retained: ActivityCheckpoint | None = None
 
-    def snapshot(self, revision: tuple[int, int, int, int] | None,
+    def snapshot(self, source: BusFileRevision | None, stream: BinaryIO | None,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:
-        if revision is None:
+        if source is None:
             return {}, {}
-        source = BusFileRevision(*revision)
         retained = self._retained
         if retained is not None and retained.current_for(source):
             return retained.snapshot
-        with self.bus_path.open("rb") as stream:
-            if not source.opened_by(stream):
-                raise RelationViolationError("Activity source changed before its captured read")
-            if source.size:
-                stream.seek(source.size - 1)
-                if stream.read(1) != b"\n":
-                    raise RelationViolationError("Activity source has an incomplete original row")
-            checkpoint = self.checkpoint(stream, source)
-            if checkpoint is None:
-                channels, sent, offset = {}, {}, 0
-            else:
-                channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
-                offset = checkpoint.offset
-            if offset == source.size:
-                self._retained = checkpoint or ActivityCheckpoint(
-                    source, source.size, AppendCheckpoint.fingerprint(stream, source.size),
-                    channels, sent)
-                return self._retained.snapshot
-            stream.seek(offset)
-            while stream.tell() < source.size:
-                raw = stream.readline(source.size - stream.tell())
-                if not raw.endswith(b"\n"):
-                    raise RelationViolationError("Activity source has an incomplete original row")
-                if not raw.strip():
-                    continue
-                record = json.loads(raw)
-                if not isinstance(record, Mapping):
-                    raise ValueError("JSONL bus row must be an object")
-                for sender, target, timestamp, is_user, is_sent in parse(record):
-                    last_message, last_user = channels.get(target, (0.0, 0.0))
-                    channels[target] = (max(last_message, timestamp),
-                                        max(last_user, timestamp) if is_user else last_user)
-                    if is_sent:
-                        sent[sender] = max(sent.get(sender, 0.0), timestamp)
-            projected = ActivityCheckpoint(source, source.size,
-                        AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
-            with suppress(OSError):
-                self.write(projected, fsync_parent=True)
-            self._retained = projected
-            return projected.snapshot
+        if not source.opened_by(stream):
+            raise RelationViolationError("Activity source changed before its captured read")
+        if source.size:
+            stream.seek(source.size - 1)
+            if stream.read(1) != b"\n":
+                raise RelationViolationError("Activity source has an incomplete original row")
+        checkpoint = self.checkpoint(stream, source)
+        if checkpoint is None:
+            channels, sent, offset = {}, {}, 0
+        else:
+            channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
+            offset = checkpoint.offset
+        if offset == source.size:
+            self._retained = checkpoint or ActivityCheckpoint(
+                source, source.size, AppendCheckpoint.fingerprint(stream, source.size),
+                channels, sent)
+            return self._retained.snapshot
+        stream.seek(offset)
+        while stream.tell() < source.size:
+            raw = stream.readline(source.size - stream.tell())
+            if not raw.endswith(b"\n"):
+                raise RelationViolationError("Activity source has an incomplete original row")
+            if not raw.strip():
+                continue
+            record = json.loads(raw)
+            if not isinstance(record, Mapping):
+                raise ValueError("JSONL bus row must be an object")
+            for sender, target, timestamp, is_user, is_sent in parse(record):
+                last_message, last_user = channels.get(target, (0.0, 0.0))
+                channels[target] = (max(last_message, timestamp),
+                                    max(last_user, timestamp) if is_user else last_user)
+                if is_sent:
+                    sent[sender] = max(sent.get(sender, 0.0), timestamp)
+        projected = ActivityCheckpoint(source, source.size,
+                    AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
+        with suppress(OSError):
+            self.write(projected, fsync_parent=True)
+        self._retained = projected
+        return projected.snapshot
 
 
 @dataclass(frozen=True, slots=True)

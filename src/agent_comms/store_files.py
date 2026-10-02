@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import errno
+import asyncio
 import json
+import math
 import os
 import stat
 import tempfile
 import time
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, TYPE_CHECKING
@@ -18,6 +19,7 @@ from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .private_bus_checkpoint import CertifiedSourceRead
+    from .child_process import Platform
 
 
 @dataclass(slots=True)
@@ -30,21 +32,31 @@ class StoreLockContention:
 
     remaining: float
 
-    def acquire_posix(self, descriptor: int, mode: int) -> None:
-        import fcntl
+    def waits(self, descriptor: int, platform: Platform, *, shared: bool) -> Iterator[float]:
+        """One physical acquisition algorithm; drivers own sync/async waiting."""
         while True:
             begun = time.monotonic()
             try:
-                fcntl.flock(descriptor, mode | fcntl.LOCK_NB)
+                platform.try_store_lock(descriptor, shared=shared)
             except BlockingIOError:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
                     raise
                 begun = time.monotonic()
-                time.sleep(min(self.remaining, 0.025))
-                self.remaining -= time.monotonic() - begun
+                try:
+                    yield min(self.remaining, platform.store_lock_interval)
+                finally:
+                    self.remaining -= time.monotonic() - begun
             else:
                 return
+
+    def acquire(self, descriptor: int, platform: Platform, *, shared: bool) -> None:
+        for delay in self.waits(descriptor, platform, shared=shared):
+            time.sleep(delay)
+
+    async def acquire_async(self, descriptor: int, platform: Platform, *, shared: bool) -> None:
+        for delay in self.waits(descriptor, platform, shared=shared):
+            await asyncio.sleep(delay)
 
 
 @dataclass(frozen=True)
@@ -61,6 +73,34 @@ class StoreLock:
 
 
 @contextmanager
+def _store_lock_file(store_path: Path):
+    """Own the original lock inode's descriptor before any acquisition."""
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = store_path.with_name(f".{store_path.name}.lock")
+    with open(lock_path, "a+b") as lock_file:
+        yield lock_file
+
+
+@contextmanager
+def _held_store_source(store_path, lock_file, platform, max_bus_bytes):
+    """One durability guard after physical custody, with exact release on refusal."""
+    try:
+        if max_bus_bytes is not None:
+            if type(max_bus_bytes) is not int or max_bus_bytes < 0:
+                raise ValueError("bus read cap must be a nonnegative integer")
+            if store_path.exists():
+                bus_info = store_path.lstat()
+                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
+                    raise RelationViolationError("Bus exceeds bounded read budget.")
+        from .wire_log import WireLog
+
+        with WireLog(store_path).verify_before_read_unlocked() as source:
+            yield StoreLock(lock_file.fileno(), source)
+    finally:
+        platform.release_store_lock(lock_file.fileno())
+
+
+@contextmanager
 def _store_lock(
     store_path: Path,
     *,
@@ -69,61 +109,42 @@ def _store_lock(
     shared: bool = False,
     contention: StoreLockContention | None = None,
 ) -> Iterator[StoreLock]:
-    """Hold a canonical store lock with its inheritable descriptor/resource.
+    """Canonical synchronous acquisition; inherited POSIX custody ends at last close."""
+    from .child_process import Platform
 
-    Shared document readers can coexist; updates retain exclusive ownership.
-    A bounded projection refuses over-budget bus bytes before its durability
-    scan. POSIX release is by last close, not LOCK_UN: an inherited descriptor
-    retains authority if its parent dies before native mutation finishes.
-    """
-    if max_bus_bytes is not None and (type(max_bus_bytes) is not int or max_bus_bytes < 0):
-        raise ValueError("bus read cap must be a nonnegative integer")
-    store_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = store_path.with_name(f".{store_path.name}.lock")
-    with open(lock_path, "a+b") as lock_file:
-        if os.name == "nt":
-            import msvcrt
-
-            # Windows permits locking a byte beyond EOF. Writing a sentinel
-            # before taking the lock races with another process holding it.
-            lock_file.seek(0)
-            while True:
-                try:
-                    mode = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
-                    msvcrt.locking(lock_file.fileno(), mode, 1)  # type: ignore[attr-defined]
-                    break
-                except OSError as error:
-                    if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
-                        raise
-                    time.sleep(0.01)
+    platform = Platform.current()
+    with _store_lock_file(store_path) as lock_file:
+        if contention is None:
+            platform.acquire_store_lock(lock_file.fileno(), shared=shared, blocking=blocking)
         else:
-            import fcntl
+            contention.acquire(lock_file.fileno(), platform, shared=shared)
+        with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:
+            yield lock
 
-            mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-            if contention is None:
-                fcntl.flock(lock_file.fileno(), mode | (0 if blocking else fcntl.LOCK_NB))
-            else:
-                contention.acquire_posix(lock_file.fileno(), mode)
-        try:
-            # The shared claim bus durability guard may parse the entire log.
-            # A bounded projection must refuse over-budget bytes *before* that
-            # guard starts; the flock excludes cooperating appends meanwhile.
-            if max_bus_bytes is not None and store_path.exists():
-                bus_info = store_path.lstat()
-                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
-                    raise RelationViolationError("Bus exceeds bounded read budget.")
-            from .wire_log import WireLog
 
-            with WireLog(store_path).verify_before_read_unlocked() as source:
-                yield StoreLock(lock_file.fileno(), source)
-        finally:
-            if os.name == "nt":
-                lock_file.seek(0)
-                msvcrt.locking(  # type: ignore[attr-defined]
-                    lock_file.fileno(),
-                    msvcrt.LK_UNLCK,
-                    1,  # type: ignore[attr-defined]
-                )
+@asynccontextmanager
+async def _async_store_lock(
+    store_path: Path,
+    *,
+    blocking: bool = True,
+    max_bus_bytes: int | None = None,
+    shared: bool = False,
+    contention: StoreLockContention | None = None,
+):
+    """Borrow the same physical resource without blocking its owner event loop.
+
+    Cancellation during acquisition closes only the unacquired descriptor. The
+    original durability guard runs only after custody is acquired; no SQLite
+    connection or consumer is transferred to another thread.
+    """
+    from .child_process import Platform
+
+    platform = Platform.current()
+    wait = contention if contention is not None else StoreLockContention(math.inf if blocking else 0)
+    with _store_lock_file(store_path) as lock_file:
+        await wait.acquire_async(lock_file.fileno(), platform, shared=shared)
+        with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:
+            yield lock
 
 
 def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == "nt") -> None:

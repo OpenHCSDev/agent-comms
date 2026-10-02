@@ -15,8 +15,9 @@ from agent_comms.threads import Thread
 from test_coordination_response import _ready
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("direct", [False, True])
-def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, direct: bool):
+async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, direct: bool):
     case = _ready(tmp_path, direct=direct)
     try:
         # A subscriber arriving after the original is not a historical recipient.
@@ -39,7 +40,7 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
             case.bus, case.store, wire_root_id=case.root_id, recipient_lookup=lookup
         )
         assert coverage.read().blocked_seq == response.seq
-        cursor = _accept_visible_deliveries(
+        cursor = await _accept_visible_deliveries(
             case.bus, case.root_id, case.store, lookup, 0, owner_name="sender"
         )
         assert cursor == response.seq
@@ -66,7 +67,7 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
         assert page.entries[0].wake_mode == "bounded_triage"
         # Repeating the publisher/recipient poll does not duplicate the row or K.
         publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        _accept_visible_deliveries(
+        await _accept_visible_deliveries(
             case.bus, case.root_id, case.store, lookup, 0, owner_name="sender"
         )
         assert len(case.bus.log.full_history()) == 2

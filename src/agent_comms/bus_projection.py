@@ -22,6 +22,11 @@ class BusFileRevision:
     modified: int
     changed: int
 
+    @classmethod
+    def capture(cls, stream: BinaryIO) -> BusFileRevision:
+        opened = os.fstat(stream.fileno())
+        return cls(opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
+
     def opened_by(self, stream: BinaryIO) -> bool:
         opened = os.fstat(stream.fileno())
         if opened.st_ino != self.inode or opened.st_size < self.size:

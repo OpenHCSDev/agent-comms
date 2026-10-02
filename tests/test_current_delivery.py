@@ -109,5 +109,5 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
         ExtraRouteStatisticRow(7).insert(index.connection)
         index.connection.commit()
         assert ExtraRouteStatisticRow.select(index.connection) == [ExtraRouteStatisticRow(7)]
-        assert index.sync(lambda _: None)
+        assert index.sync(None, None, lambda _: None)
         assert ExtraRouteStatisticRow.select(index.connection) == []

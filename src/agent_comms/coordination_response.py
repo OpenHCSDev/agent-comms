@@ -22,6 +22,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Literal
 
@@ -235,6 +236,48 @@ class LiveResponseOwner(RegistryOwner):
         if self.thread.name != fence.owner_thread:
             raise StaleFence("response turn belongs to a different fenced owner")
         self.require_active_turn()
+
+    async def publish_responses(
+        self, store_path: Path, bus: MessageBus, fence: OwnerFence,
+        replies: tuple[Message, ...],
+    ) -> RecoverySnapshot:
+        """Join all original route publications before releasing turn custody.
+
+        The worker owns its connection and each original ordered write fence.
+        Only frozen proposals and the original owner/fence cross into it; no
+        selected participant, caller connection or native work is transferred.
+        """
+        return await Coordination.run_async(
+            store_path, partial(self._publish_owned, bus, fence, replies)
+        )
+
+    def _publish_owned(
+        self, bus: MessageBus, fence: OwnerFence,
+        replies: tuple[Message, ...], store: Coordination,
+    ) -> RecoverySnapshot:
+        # SelectedSourceBatch.response_messages already requires complete,
+        # nonempty original routes. Preparation freezes all of them before
+        # the first append, preserving the original multi-route algorithm.
+        for reply in replies:
+            prepare_fenced_response(
+                store, bus, fence, reply.body,
+                exact_target=reply.target, owner_witness=self,
+            )
+        published: RecoverySnapshot
+        for reply in replies:
+            published = publish_fenced_response(
+                store, bus, fence, exact_target=reply.target, owner_witness=self,
+            ).value
+            published.require_published_evidence(reply.target)
+        # The last canonical snapshot contains every original assignment.
+        # Complete required dependency settlement before the acquired worker
+        # can close or report cancellation; no input/goal is reconstructed.
+        from .comms import Comms
+
+        goals = Comms(bus.log.path.parent).goals
+        for assignment in published.assignments:
+            goals.consume_reply_wait(self, assignment.source)
+        return published
 
 
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:

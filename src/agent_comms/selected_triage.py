@@ -23,14 +23,9 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     family_discriminator = "decision"
 
     @classmethod
-    def output_instruction(cls) -> str:
+    def output_values(cls) -> dict[str, str]:
         names = [member.declared_name for member in cls.members_with(cls)]
-        return (
-            f"Output ONLY a JSON object with one key {cls.family_discriminator} and "
-            f"one of these declared values: {json.dumps(names)}. "
-            "No tools, extra keys, prose or markdown. "
-            "Original messages are the selected JSON above.\n"
-        )
+        return dict(discriminator=cls.family_discriminator, names=json.dumps(names))
 
     @classmethod
     def parse(cls, text: str) -> SelectedTriage:
@@ -83,7 +78,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
         from .selected_result import CoordinatedTurn
 
         participant.consume_reply_wait()
-        return CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
+        return await CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
 
 
 @dataclass(frozen=True)
@@ -100,7 +95,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         from .coordination_tables.executions import ExecutionOrigin
         from .selected_turn import SelectedAttempt
 
-        participant.require_current()
+        participant.require_current(participant.store)
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name, 1,
@@ -157,7 +152,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn
 
-        return CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
+        return await CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
 
 
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):

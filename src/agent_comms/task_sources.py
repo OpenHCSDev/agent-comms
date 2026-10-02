@@ -149,9 +149,8 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
     def require_original(self, original_source: CertifiedSourceRead | None) -> Message:
         if original_source is None:
             raise RelationViolationError("Decision correction requires the original publication read")
-        from .private_bus_checkpoint import delivery_references_unlocked
 
-        delivery, = delivery_references_unlocked(original_source, (self.original,))
+        delivery, = original_source.references((self.original,))
         original = delivery.message
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
@@ -462,10 +461,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.change.require_publication(self, registry, original_source)
 
     def require_wording_publication(self, registry, original_source):
-        from .private_bus_checkpoint import delivery_references_unlocked
         from .bus_publication import stable_thread_lookup
 
-        delivery, = delivery_references_unlocked(original_source, (self.subject,))
+        delivery, = original_source.references((self.subject,))
         delivery.message.sender_role.require_user()
         if delivery.audience.sender_lookup != stable_thread_lookup(self.source_user.created_at):
             raise RelationViolationError("USER pin differs from its original human author")

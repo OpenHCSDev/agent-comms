@@ -121,13 +121,12 @@ async def main():
                 (SelectedRequest,('reserve',)),(NativePiRpcLaunch,('tracked',)),
                 (NativeStartupAdmission,('acquire','release')),(PiSessionChild,('start','close')),
                 (TrackedTurnSession,('attest','admit_prompt','committed_input','committed_context','context_proof','next_event')),
-                (PrivateSendAdmission,('reserve','_saved_session','verify','commit')),
+                (PrivateSendAdmission,('reserve','_saved_session','_admit_once','verify','commit')),
                 (Registration,('transition_turn',)),
                 (NativeSourceCursor,('advance',)),
                 (SourceCoverage,('prefix','last_proof','evidence')), (OptionalAwarenessProjection,('for_selected','render')),
                 (native_package,('verify_native_package',))):
                 for name in names:instrument(resources,target,name)
-            instrument(resources,PrivateSendAdmission,'_exclusion',scope=True)
             instrument(resources,send_module,'_response_boundary',scope=True)
             instrument(resources,session_module,'_response_boundary',scope=True)
             async with asyncio.timeout(90):

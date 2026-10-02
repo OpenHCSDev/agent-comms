@@ -22,9 +22,9 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
     counts = {"accept": 0, "cursor": 0}
     accept, cursor = acp._accept_visible_deliveries, acp.NativeSourceCursor.advance
 
-    def accepted(*args, **kwargs):
+    async def accepted(*args, **kwargs):
         counts["accept"] += 1
-        return accept(*args, **kwargs)
+        return await accept(*args, **kwargs)
 
     def covered(*args, **kwargs):
         counts["cursor"] += 1
@@ -145,7 +145,8 @@ async def test_during_scan_change_is_not_absorbed_as_idle(tmp_path, monkeypatch)
     assert len(calls) == 2
 
 
-def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
     root, root_id, comms, original, people = _root(tmp_path, direct=True)
     lookup = stable_thread_lookup(people[2].created_at)
     accepted = []
@@ -156,11 +157,18 @@ def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
         return accept(bus, root_id, sequence, store)
 
     monkeypatch.setattr(cohort_foreground, "accept_delivery_cohort", observed)
+    statements = []
+    original_init = Coordination.__init__
+
+    def traced_init(resource, *args, **kwargs):
+        original_init(resource, *args, **kwargs)
+        resource.session._connection.set_trace_callback(statements.append)
+
+    # Trace the worker's actual connection as well as the live caller's.
+    monkeypatch.setattr(Coordination, "__init__", traced_init)
     with Coordination(root / "coordination.sqlite3") as store:
-        statements = []
-        store.session._connection.set_trace_callback(statements.append)
         assert (
-            cohort_foreground._accept_visible_deliveries(
+            await cohort_foreground._accept_visible_deliveries(
                 comms.bus, root_id, store, lookup, 0, owner_name="beta"
             )
             == original.message.seq
@@ -168,12 +176,12 @@ def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
         assert not accepted
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
         message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")
-        cohort_foreground._accept_visible_deliveries(
+        await cohort_foreground._accept_visible_deliveries(
             comms.bus, root_id, store, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]
         statements.clear()
-        cohort_foreground._accept_visible_deliveries(
+        await cohort_foreground._accept_visible_deliveries(
             comms.bus, root_id, store, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]

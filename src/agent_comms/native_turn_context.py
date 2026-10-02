@@ -1,4 +1,5 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
+
 from dataclasses import dataclass
 
 from .pi_payloads import PiResponseData
@@ -14,6 +15,14 @@ class NativeContextManifestData(PiResponseData):
 
     def for_turn(self, thread, turn):
         return ContextManifest(thread, turn, self.segments, self.counter)
+
+    def record(self, log, thread, lease) -> None:
+        """Publish the original SDK observation under its leased owner turn."""
+        from .thread_identity import TurnId
+        from .turn_context import RecordedContextTurn
+
+        turn = RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
+        log.record_context(self.for_turn(thread.incarnation, turn))
 
 
 @dataclass(frozen=True)

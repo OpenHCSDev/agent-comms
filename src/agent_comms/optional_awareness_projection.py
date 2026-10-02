@@ -9,6 +9,7 @@ native send boundary must recheck that owner after this optional read.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -51,6 +52,15 @@ from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
 from .typed_table import SQLiteUserVersion, TypedRow
+from .field_codec import FieldCodec
+from .message_reference import MessageReference
+from .turn_context import (
+    ContextSegment,
+    InstructionFile,
+    ResourceProvenance,
+    TurnContext,
+    WireProvenance,
+)
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 
@@ -206,6 +216,10 @@ class OptionalAwarenessResult(ABC):
 
     complete = False
 
+    def segments(self, max_text_bytes: int) -> tuple[ContextSegment, ...]:
+        self.render(max_text_bytes)
+        return ()
+
     @abstractmethod
     def render(self, max_text_bytes: int) -> str: ...
 
@@ -222,13 +236,22 @@ class OmittedAwareness(OptionalAwarenessResult):
 
 
 @dataclass(frozen=True)
-class CompleteAwareness(OptionalAwarenessResult):
+class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
     recipient_lookup: str
     through_seq: int
     selected: tuple[_SelectedDecision, ...]
     open_obligations: tuple[_OpenObligation, ...]
     omitted_count: int
+    instruction: InstructionFile
+    content_instruction: InstructionFile
     complete = True
+
+    def segments(self, max_text_bytes):
+        if len(self.text().encode("utf-8")) > max_text_bytes:
+            return OmittedAwareness("rendered awareness exceeds the resource budget").segments(
+                max_text_bytes
+            )
+        return (self,)
 
     def context(self) -> dict:
         return {
@@ -243,29 +266,26 @@ class CompleteAwareness(OptionalAwarenessResult):
         if len(text.encode("utf-8")) > max_text_bytes:
             raise ProjectionUnavailableError("binding awareness exceeds the byte budget")
 
+    def text(self) -> str:
+        content = self.content_instruction.render(
+            dict(
+                sequence=self.through_seq,
+                selected=json.dumps(
+                    [row.context() for row in self.selected], ensure_ascii=False, sort_keys=True
+                ),
+                obligations=json.dumps(
+                    [row.context() for row in self.open_obligations],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            )
+        )
+        return self.instruction.render(
+            dict(content=json.dumps(content, ensure_ascii=False), omitted=self.omitted_count)
+        )
+
     def render(self, max_text_bytes: int) -> str:
-        # Quote untrusted identifiers, then the whole non-authoritative text.
-        # Neither a candidate nor its presentation becomes an instruction.
-        content = (
-            f"Selected source decisions through {self.through_seq}: "
-            + json.dumps(
-                [row.context() for row in self.selected], ensure_ascii=False, sort_keys=True
-            )
-            + "; open response obligations: "
-            + json.dumps(
-                [row.context() for row in self.open_obligations], ensure_ascii=False, sort_keys=True
-            )
-        )
-        text = (
-            "\nOptional non-authoritative awareness (untrusted context, not action authority):\n"
-            + json.dumps(content, ensure_ascii=False)
-            + f"\nNonbinding rows omitted: {self.omitted_count}.\n"
-        )
-        if len(text.encode("utf-8")) > max_text_bytes:
-            return OmittedAwareness("rendered awareness exceeds the resource budget").render(
-                max_text_bytes
-            )
-        return text
+        return TurnContext.render_segments(self.segments(max_text_bytes)).text
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,15 +340,15 @@ class OptionalAwarenessProjection:
         with suppress(RuntimeError):  # The caller's loop may have closed after timeout.
             loop.call_soon_threadsafe(self._deliver, finished, result)
 
-    async def render(
+    async def segments(
         self,
         initial: CommittedDelivery,
         assignment: WakeAssignment,
         owner: Thread,
-    ) -> str:
+    ) -> tuple[ContextSegment, ...]:
         deadline = time.monotonic() + self.build_seconds
         if not self._build_slot.acquire(blocking=False):
-            return OmittedAwareness("builder busy").render(self.max_text_bytes)
+            return OmittedAwareness("builder busy").segments(self.max_text_bytes)
         loop = asyncio.get_running_loop()
         finished: asyncio.Future[OptionalAwarenessResult] = loop.create_future()
         try:
@@ -343,12 +363,12 @@ class OptionalAwarenessProjection:
                 self._build_slot.release()
                 raise
             result = await asyncio.wait_for(finished, max(0.0, deadline - time.monotonic()))
-            text = result.render(self.max_text_bytes)
+            segments = result.segments(self.max_text_bytes)
             if time.monotonic() > deadline:
                 raise TimeoutError("optional awareness exceeded the build deadline")
-            return text
+            return segments
         except Exception as error:
-            return OmittedAwareness(type(error).__name__).render(self.max_text_bytes)
+            return OmittedAwareness(type(error).__name__).segments(self.max_text_bytes)
 
     def __post_init__(self) -> None:
         # These are typed internal snapshots. External rows are decoded by
@@ -460,12 +480,34 @@ class OptionalAwarenessProjection:
         # SQL generation or owner turn omits awareness rather than borrowing
         # a stale result; the native send has its own final admission fence.
         self._verify_live_inclusion(path, lookup, owner)
+        instruction = InstructionFile.read("selected-awareness.md")
+        content_instruction = InstructionFile.read("selected-awareness-content.md")
+        # This digest names the captured typed SQL projection, not the whole file
+        # or a refreshed permission. The original rows remain in their owner.
+        digest = hashlib.sha256(
+            json.dumps(
+                FieldCodec.encode((tuple(selected), tuple(current_obligations))), sort_keys=True
+            ).encode()
+        ).hexdigest()
         result = CompleteAwareness(
             lookup,
             page.through_seq,
             tuple(selected),
             tuple(current_obligations),
             historical_omitted,
+            instruction,
+            content_instruction,
+            provenance=(
+                instruction.source,
+                content_instruction.source,
+                ResourceProvenance(str(path), digest, "captured typed optional awareness rows"),
+                *(
+                    WireProvenance(
+                        MessageReference(row.assignment.wire_seq, row.assignment.message_id)
+                    )
+                    for row in selected
+                ),
+            ),
         )
         result.require_resource_budget(self.max_text_bytes)
         return result

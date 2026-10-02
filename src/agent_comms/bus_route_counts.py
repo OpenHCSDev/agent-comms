@@ -10,12 +10,16 @@ import json
 import os
 import sqlite3
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import ClassVar
+from typing import BinaryIO, ClassVar
 
+from .bus_projection import BusFileRevision
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .store_files import _store_lock
 from .routing import DeliveryMessage
 from .typed_table import Column, Index, TypedRow, TypedTable
 
@@ -79,106 +83,118 @@ class BusRouteCounts:
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_route_counts.sqlite3")
-        fresh = not self.path.exists()
-        self.connection = sqlite3.connect(self.path, timeout=30)
-        self.connection.execute("PRAGMA synchronous=FULL")
-        if fresh:
-            with self.connection:
-                for owner in TypedTable.members_with(RouteTable):
-                    owner.create(self.connection)
 
     def __enter__(self) -> BusRouteCounts:
+        # Readers of this disposable projection share only its own resource,
+        # never the canonical publication lock. Sync and queries see one index
+        # revision even when another reader captures a later original bus cut.
+        with ExitStack() as resources:
+            resources.enter_context(_store_lock(self.path))
+            fresh = not self.path.exists()
+            self.connection = sqlite3.connect(self.path, timeout=30)
+            resources.callback(self.connection.close)
+            self.connection.execute("PRAGMA synchronous=FULL")
+            self.connection.execute("BEGIN IMMEDIATE")
+            if fresh:
+                for owner in TypedTable.members_with(RouteTable):
+                    owner.create(self.connection)
+            self._resources = resources.pop_all()
         return self
 
-    def __exit__(self, *_error: object) -> None:
-        self.connection.close()
-
-    def sync(self, decode: Callable[[Mapping], tuple[DeliveryMessage, ...]]) -> bool:
-        """Decode only appended rows; a replaced source rebuilds the projection."""
+    def __exit__(self, error_type, _error, _traceback) -> None:
         try:
-            source = self.bus_path.open("rb")
-        except FileNotFoundError:
-            source = None
-        try:
-            identity, size, tail_digest = None, 0, None
-            if source is not None:
-                st = os.fstat(source.fileno())
-                identity = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns)
-                size = st.st_size
-                if size:
-                    source.seek(-1, os.SEEK_END)
-                    if source.read(1) != b"\n":
-                        return False
-                source.seek(max(0, size - 4096))
-                tail_digest = sha256(source.read()).hexdigest()
-            records = RouteSourceRow.select(self.connection)
-            recorded = records[0] if records else None
-            rebuild = recorded is None
-            if recorded is not None:
-                rebuild = (
-                    (recorded.identity[:2] if recorded.identity else None)
-                    != (identity[:2] if identity else None)
-                    or size < recorded.offset
-                    or size == recorded.offset
-                    and recorded.identity != identity
-                )
-            offset = 0 if rebuild else recorded.offset
-            if source is not None and offset:
-                source.seek(max(0, offset - 4096))
-                previous_tail = source.read(offset - max(0, offset - 4096))
-                if sha256(previous_tail).hexdigest() != recorded.tail_digest:
-                    rebuild, offset = True, 0
-            if not rebuild and offset == size:
-                return True
-            totals: dict[tuple[str, str, str], RouteTotalRow] = {}
-            with self.connection:
-                if rebuild:
-                    for owner in TypedTable.members_with(RouteTable):
-                        self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
-                if source is not None:
-                    source.seek(offset)
-                    for raw in source:
-                        if not raw.strip():
-                            continue
-                        for delivery in decode(json.loads(raw)):
-                            message = delivery.message
-                            row = RouteEntryRow(
-                                message.seq,
-                                message.target,
-                                message.sender,
-                                delivery.sender_lookup,
-                                message.timestamp,
-                            )
-                            row.insert(self.connection)
-                            key = row.target, row.sender, row.sender_lookup
-                            if key not in totals:
-                                prior = RouteTotalRow.select(
-                                    self.connection,
-                                    where="target=? AND sender=? AND sender_lookup=?",
-                                    parameters=key,
-                                )
-                                totals[key] = (
-                                    prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
-                                )
-                            current = totals[key]
-                            totals[key] = replace(
-                                current,
-                                total=current.total + 1,
-                                oldest=min(current.oldest, row.timestamp),
-                            )
-                for key, total in totals.items():
-                    self.connection.execute(
-                        f'DELETE FROM "{RouteTotalRow.declared_name}" '
-                        "WHERE target=? AND sender=? AND sender_lookup=?",
-                        key,
-                    )
-                    total.insert(self.connection)
-                self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-                RouteSourceRow(1, identity, size, tail_digest).insert(self.connection)
-            return True
+            if error_type is None:
+                self.connection.commit()
+            else:
+                self.connection.rollback()
         finally:
-            if source is not None:
-                source.close()
+            self._resources.close()
+
+    def sync(
+        self, source: BinaryIO | None, revision: BusFileRevision | None,
+        decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
+    ) -> bool:
+        """Decode only appended rows; a replaced source rebuilds the projection."""
+        identity, size, tail_digest = None, 0, None
+        if source is not None:
+            if not revision.opened_by(source):
+                raise RelationViolationError("Route projection source changed before its captured read")
+            st = os.fstat(source.fileno())
+            identity = (st.st_dev, revision.inode, revision.modified, revision.changed)
+            size = revision.size
+            if size:
+                source.seek(size - 1)
+                if source.read(1) != b"\n":
+                    return False
+            source.seek(max(0, size - 4096))
+            tail_digest = sha256(source.read(size - source.tell())).hexdigest()
+        records = RouteSourceRow.select(self.connection)
+        recorded = records[0] if records else None
+        rebuild = recorded is None
+        if recorded is not None:
+            rebuild = (
+                (recorded.identity[:2] if recorded.identity else None)
+                != (identity[:2] if identity else None)
+                or size < recorded.offset
+                or size == recorded.offset
+                and recorded.identity != identity
+            )
+        offset = 0 if rebuild else recorded.offset
+        if source is not None and offset:
+            source.seek(max(0, offset - 4096))
+            previous_tail = source.read(offset - max(0, offset - 4096))
+            if sha256(previous_tail).hexdigest() != recorded.tail_digest:
+                rebuild, offset = True, 0
+        if not rebuild and offset == size:
+            return True
+        totals: dict[tuple[str, str, str], RouteTotalRow] = {}
+        if rebuild:
+            for owner in TypedTable.members_with(RouteTable):
+                self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
+        if source is not None:
+            source.seek(offset)
+            while source.tell() < size:
+                raw = source.readline(size - source.tell())
+                if not raw.endswith(b"\n"):
+                    raise RelationViolationError("Route projection source has an incomplete original row")
+                if not raw.strip():
+                    continue
+                for delivery in decode(json.loads(raw)):
+                    message = delivery.message
+                    row = RouteEntryRow(
+                        message.seq,
+                        message.target,
+                        message.sender,
+                        delivery.sender_lookup,
+                        message.timestamp,
+                    )
+                    row.insert(self.connection)
+                    key = row.target, row.sender, row.sender_lookup
+                    if key not in totals:
+                        prior = RouteTotalRow.select(
+                            self.connection,
+                            where="target=? AND sender=? AND sender_lookup=?",
+                            parameters=key,
+                        )
+                        totals[key] = (
+                            prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
+                        )
+                    current = totals[key]
+                    totals[key] = replace(
+                        current,
+                        total=current.total + 1,
+                        oldest=min(current.oldest, row.timestamp),
+                    )
+        for key, total in totals.items():
+            self.connection.execute(
+                f'DELETE FROM "{RouteTotalRow.declared_name}" '
+                "WHERE target=? AND sender=? AND sender_lookup=?",
+                key,
+            )
+            total.insert(self.connection)
+        self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+        RouteSourceRow(1, identity, size, tail_digest).insert(self.connection)
+        return True
 
     def routes(self) -> list[RouteTotalRow]:
         return RouteTotalRow.select(self.connection)

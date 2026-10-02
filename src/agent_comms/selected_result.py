@@ -27,7 +27,7 @@ class CoordinatedTurn:
     fresh_session: FreshPrivateSession | None = None
 
     @classmethod
-    def capture(
+    async def capture(
         cls, participant, session, input_id, disposition: type[AssignmentState],
         publications: tuple[PublicationReceipt, ...] = (),
     ):
@@ -36,20 +36,18 @@ class CoordinatedTurn:
             disposition,
             input_id,
             publications,
-            cls.cursor_status_for(participant, input_id),
+            await cls.cursor_status_for(participant, input_id),
             session.creation,
         )
 
     @staticmethod
-    def cursor_status_for(participant, input_id) -> str:
+    async def cursor_status_for(participant, input_id) -> str:
         # Projection is auxiliary: failure never undoes a committed response,
         # creates another attempt or gives permission to replay native input.
         try:
-            cursor = NativeSourceCursor(
+            cursor = await NativeSourceCursor.advance_async(
                 participant.bus,
-                participant.store,
                 wire_root_id=participant.root_id,
-            ).advance(
                 owner=participant.owner.thread,
                 owner_admission_generation=participant.owner.admission_generation,
                 owner_generation=participant.identity.generation,
