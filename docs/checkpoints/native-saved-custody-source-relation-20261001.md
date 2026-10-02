@@ -231,3 +231,35 @@ consumers/questions, not permission to introduce a cached phase, event coalescer
 timer or independent proof. Their per-delta cost has no retained timing bracket
 yet. Native custody/receive ownership and exact lease publication must be closed
 together; the presence of two reads alone does not justify a symptom patch.
+
+## Next code-bearing launch/source checkpoint
+
+Main `3c6df83a` (#490/#501) is normally merged, preserving the unfinished
+Native6 declarations and original UNKNOWN references. This increment changes
+seven production files: 130 lines added / 163 deleted, no new type or store.
+
+| Removed decision/copy | Existing owner and complete production callers |
+|---|---|
+| CLI, managed and tracked each build Node bootstrap, import fence, module environment and configuration normalization | `NativePiRpcLaunch._build` owns one shared acquired-process construction algorithm. CLI `main`, `managed`, and `tracked` all consume it after their original package validation. |
+| Tracked ordinary continuation unconditionally disables automatic extensions/skills/context files | Existing `SelectedSession` ordinary behavior retains configured discovery. Existing `FirstSelectedSession` alone owns its original offline first-start isolation, exact creation receipt/header and tool denial. No caller switches on a copied selected level. |
+| `NativePiRpcLaunch.private_environment` chooses an isolation branch from separately supplied selected level | Deleted. `SelectedSession.launch_environment` and inherited ordinary saved behavior preserve configured credentials before installing private no-retry settings. `FirstSelectedSession` supplies its existing distinct isolated environment. |
+| `TrackedTurnSession.execute` accepts a separate fresh receipt and re-derives its level | Deleted parameter. Launch and `NativeStartupAdmission` receive the SAME original selected session; startup derives from `session.startup()`. `PrivateSendAdmission` no longer separately passes the receipt. |
+| TurnRunner owns a native identity environment unavailable to selected participants | `Thread.native_environment` projects original registry fields through existing `ProjectRuntimeRequest.for_native` full owner/process binding. `OwnedTurn`, preparation and `PrivateSendAdmission` all receive that projection; old `TurnRunner.native_environment` definition is deleted. |
+
+The pinned native CLI source confirms `--no-tools` means all tools, including
+extension tools (`main.js` passes `noTools="all"`; SDK allowlist becomes empty).
+Configured discovery therefore does not turn triage's original no-tool contract
+into an instruction-only promise. Coding tool policy, prompt admission, package
+trust, first-start mint and UNKNOWN settlement remain their existing owners.
+
+This is a source checkpoint, **not Ready**. No sanity or native input has run
+during reasoning/implementation. Remaining constructors include obsolete test
+callers passing session_dir/session_file or fresh_selected instead of original
+SelectedSession members, and the project-observation fixture's deleted runner
+method. Those must migrate before final validation, without compatibility aliases.
+Continued raw coverage still infers lookup from a directory, reservation still
+classifies coverage lexically, and paused dispatch/recovery/source-switch custody
+still require complete closure. Native6 preservation/carry and actual configured
+ordinary saved/fork/cancel/continue validation remain final obligations; Native5
+receiving release is independent. The prior NRA artifact is not relabeled to
+fingerprint this newer source.

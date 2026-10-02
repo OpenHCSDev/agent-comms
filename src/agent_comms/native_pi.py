@@ -25,7 +25,6 @@ from .native_arguments import NativeArguments
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
-from .pi_vocabulary import ThinkingLevel
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .selected_tool_broker import NativeToolMode
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -102,38 +101,11 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
-    environment = dict(os.environ)
-    # Global extensions invoke this installation's console tools. Services
-    # need not inherit an activated virtualenv or an interactive shell PATH.
-    environment["PATH"] = os.pathsep.join(
-        (str(Path(sys.executable).parent), environment.get("PATH", os.defpath))
+    process = NativePiRpcLaunch._build(
+        cli, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ),
+        Path.cwd(), None, launch.native_package,
     )
-    environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-        Path(
-            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-            or environment.get("PI_CODING_AGENT_DIR")
-            or "~/.pi/agent"
-        )
-        .expanduser()
-        .resolve()
-    )
-    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-        environment.pop(name, None)
-    environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-    os.execvpe(
-        "node",
-        [
-            "node",
-            "--no-global-search-paths",
-            "--import",
-            str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import",
-            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli),
-            *sys.argv[1:],
-        ],
-        environment,
-    )
+    os.execvpe(process.argv[0], list(process.argv), process.env)
     return 0
 
 
@@ -425,6 +397,33 @@ class NativePiRpcLaunch:
     package: Path
 
     @classmethod
+    def _build(cls, cli, arguments, cwd, environment, directory, saved, package):
+        """One bootstrap/environment algorithm after original package validation.
+
+        The caller retains source-selection and input custody. This method only
+        constructs the acquired process resource; it never enrolls a session.
+        """
+        env = dict(environment)
+        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            env.pop(name, None)
+        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        env["PI_WORKTREE"] = str(cwd)
+        env["PATH"] = os.pathsep.join(
+            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
+        )
+        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(Path(
+            env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+            or env.get("PI_CODING_AGENT_DIR") or "~/.pi/agent"
+        ).expanduser().resolve())
+        argv = (
+            "node", "--no-global-search-paths",
+            "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli), *arguments,
+        )
+        return cls(argv, cwd, env, directory, saved, package)
+
+    @classmethod
     def package_for_command(cls, command: str) -> Path:
         """Resolve an explicitly supported launcher to the reviewed package.
 
@@ -487,36 +486,10 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            env.pop(name, None)
-        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        env["PI_WORKTREE"] = str(cwd)
-        env["PATH"] = os.pathsep.join(
-            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
-        )
-        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-            Path(
-                env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                or env.get("PI_CODING_AGENT_DIR")
-                or "~/.pi/agent"
-            )
-            .expanduser()
-            .resolve()
-        )
         saved = Path(session_file).absolute() if session_file else None
         if saved is not None:
             arguments += ("--fork" if fork_session else "--session", str(saved))
-        argv = (
-            "node",
-            "--no-global-search-paths",
-            "--import",
-            str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import",
-            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli),
-            *arguments,
-        )
-        return cls(argv, cwd, env, saved.parent if saved else cwd, saved, package)
+        return cls._build(cli, arguments, cwd, env, saved.parent if saved else cwd, saved, package)
 
     @classmethod
     def tracked(
@@ -528,7 +501,7 @@ class NativePiRpcLaunch:
         provider: str = "openrouter",
         model: str = "z-ai/glm-5.3-flash",
         thinking_level: str | None = None,
-        selected_thinking_level: str | None = None,
+        environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
     ) -> NativePiRpcLaunch:
         """Verify compiled Pi bytes and commit private no-retry policy before spawning.
@@ -546,44 +519,27 @@ class NativePiRpcLaunch:
                     raise ValueError("Provider/model must be single non-option tokens")
         except (TypeError, ValueError) as error:
             raise NativePiUnavailable("Native Pi requires an explicit provider and model") from error
-        if selected_thinking_level is not None and (
-            type(selected_thinking_level) is not str
-            or not ThinkingLevel.supports_selected(selected_thinking_level)
-            or session_file is None
-        ):
-            raise NativePiUnavailable(
-                "Selected launch requires a saved session and supported level"
-            )
         if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
             raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
-        if selected_thinking_level is not None and selected_tool_mode is not None:
-            raise NativePiUnavailable("Selected fresh source cannot launch a file tool")
+        session.require_launch_tools(selected_tool_mode)
         cli = _trusted_package(package)
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
         _durable_private_session_dir(session_dir)
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        if session_file is not None:
-            from .fresh_private_session import FreshPrivateSession
-
-            FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
+        session.require_launch_header()
         agent_dir = _private_agent_dir(session_dir)
         tool_arguments = (
             selected_tool_mode.launch_arguments(package)
             if selected_tool_mode is not None
             else ("--no-tools",)
         )
-        argv = [
-            "node",
-            str(cli),
+        arguments = [
             "--mode",
             "rpc",
             "--no-approve",
             *tool_arguments,
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
             "--session-dir",
             str(session_dir),
             "--provider",
@@ -591,67 +547,11 @@ class NativePiRpcLaunch:
             "--model",
             model,
         ]
-        if selected_thinking_level is not None:
-            argv.extend(
-                ("--thinking", selected_thinking_level, "--no-prompt-templates", "--no-themes")
-            )
+        arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:
-            argv.extend(("--session", str(session_file)))
-        if thinking_level is not None and selected_thinking_level is None:
-            argv.extend(("--thinking", thinking_level))
-        env = cls.private_environment(agent_dir, session_dir, selected_thinking_level)
-        return cls(tuple(argv), worktree, env, session_dir, session_file, package)
-
-    @staticmethod
-    def private_environment(
-        agent_dir: Path, session_dir: Path, selected_thinking_level: str | None
-    ) -> dict[str, str]:
-        if selected_thinking_level is not None:
-            # This selected-only candidate is still hard-denied before real spawn.
-            # Do not hand a credential, proxy, hooks, or ambient provider settings
-            # to even a future reviewed source CLI. The copied c1 gate needs its
-            # explicit marker; PR94 must separately review this exact env contract.
-            if os.name != "posix":
-                raise NativePiUnavailable("Selected source requires reviewed POSIX isolation")
-            import pwd
-
-            username = pwd.getpwuid(os.geteuid()).pw_name
-            env = {
-                "HOME": str(agent_dir),
-                "USER": username,
-                "LOGNAME": username,
-                "PATH": os.defpath,
-                "LANG": "C.UTF-8",
-                "TMPDIR": str(session_dir),
-                "PI_OFFLINE": "1",
-                "PI_CODING_AGENT_DIR": str(agent_dir),
-                "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
-            }
-        else:
-            env = os.environ.copy()
-            for name in (
-                "PI_AGENT_ID",
-                "PI_PARENT_ID",
-                "PI_AGENT_TAGS",
-                "AGENT_COMMS_THREAD",
-                "AGENT_COMMS_TAGS",
-                "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-                "AGENT_COMMS_SELECTED_TOOL_TOKEN",
-            ):
-                env.pop(name, None)
-            env["PI_OFFLINE"] = "1"
-            # Canonical credentials/catalog remain separate from retry isolation.
-            env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-                Path(
-                    env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                    or env.get("PI_CODING_AGENT_DIR")
-                    or "~/.pi/agent"
-                )
-                .expanduser()
-                .resolve()
-            )
-            env["PI_CODING_AGENT_DIR"] = str(agent_dir)
-        return env
+            arguments.extend(("--session", str(session_file)))
+        env = session.launch_environment(agent_dir, environment)
+        return cls._build(cli, tuple(arguments), worktree, env, session_dir, session_file, package)
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

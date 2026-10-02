@@ -156,8 +156,11 @@ class PrivateSendAdmission:
                     provider=provider,
                     model=model,
                     thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
+                    environment=self.owner.thread.native_environment(
+                        self.bus.log.path.parent, self.bus._registry.snapshot(),
+                        self.owner.thread.worktree,
+                    ),
                     maintenance_root=self.bus.log.path.parent,
-                    fresh_selected=self.session.startup(),
                     selected_tool_mode=selected_tool_mode,
                     observe_event=observe_event,
                     prompt_send_boundary=self,

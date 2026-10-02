@@ -17,7 +17,6 @@ from . import pi_events as pi
 from .agent_events import AgentEvent
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .errors import RelationViolationError
-from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError, ObservedAttestation
@@ -179,10 +178,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         provider: str = "openrouter",
         model: str = "z-ai/glm-5.3-flash",
         thinking_level: str | None = None,
+        environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
         prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
         maintenance_root: Path | None = None,
-        fresh_selected: FreshPrivateSession | None = None,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
     ) -> NativeTurnResult:
@@ -201,9 +200,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             provider=provider,
             model=model,
             thinking_level=thinking_level,
-            selected_thinking_level=(
-                fresh_selected.selected_thinking_level if fresh_selected else None
-            ),
+            environment=environment,
             selected_tool_mode=selected_tool_mode,
         )
         turn = cls(
@@ -215,7 +212,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
             startup=NativeStartupAdmission.for_launch(
-                launch, root=maintenance_root, fresh_selected=fresh_selected,
+                launch, root=maintenance_root, fresh_selected=session.startup(),
                 prompt_send_boundary=prompt_send_boundary,
             ),
             selected_tool_mode=selected_tool_mode,

@@ -173,20 +173,6 @@ class TurnRunner:
     def native_arguments(self, thread: Thread) -> tuple[str, ...]:
         return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
 
-    def native_environment(self, thread: Thread, worktree: str) -> dict[str, str]:
-        from .runtime_requests import ProjectRuntimeRequest
-
-        project = ProjectRuntimeRequest.for_native(self.comms.registry.snapshot(), thread)
-        return {
-            "AGENT_COMMS_THREAD": thread.name,
-            "PI_AGENT_ID": thread.name,
-            "AGENT_COMMS_ROOT": str(self.comms.root),
-            "PI_PARENT_ID": thread.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
-            "PI_WORKTREE": worktree,
-            **project.environment(self.comms.root),
-        }
-
     async def prepare_selected_session(self, session_id: str, thread: Thread) -> StateData:
         from .native_session_prepare import NativeSessionPreparation
 
@@ -197,7 +183,9 @@ class TurnRunner:
             self.agent_bin,
             self.native_arguments(thread),
             worktree=thread.worktree,
-            environment=self.native_environment(thread, thread.worktree),
+            environment=thread.native_environment(
+                self.comms.root, self.comms.registry.snapshot(), thread.worktree
+            ),
             session_file=thread.session_file,
         )
         state.model.require_selection(thread.model)

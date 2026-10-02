@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -40,6 +41,34 @@ class SelectedSession:
 
     def startup(self) -> FreshPrivateSession | None:
         return None
+
+    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
+        return ("--thinking", thinking_level) if thinking_level is not None else ()
+
+    def require_launch_tools(self, mode) -> None:
+        pass
+
+    def require_launch_header(self) -> None:
+        pass
+
+    def launch_environment(self, agent_dir: Path, original) -> dict[str, str]:
+        environment = dict(os.environ)
+        for name in (
+            "PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD",
+            "AGENT_COMMS_TAGS", "AGENT_COMMS_SELECTED_TOOL_SOCKET",
+            "AGENT_COMMS_SELECTED_TOOL_TOKEN",
+        ):
+            environment.pop(name, None)
+        environment.update(original or {})
+        # Preserve canonical credentials/global discovery before retry isolation
+        # replaces Pi's writable agent directory. The launch owns normalization.
+        environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = (
+            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+            or environment.get("PI_CODING_AGENT_DIR") or "~/.pi/agent"
+        )
+        environment["PI_CODING_AGENT_DIR"] = str(agent_dir)
+        environment["PI_OFFLINE"] = "1"
+        return environment
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.
@@ -126,6 +155,9 @@ class SavedSelectedSession(SelectedSession):
     def path(self) -> Path:
         return self.identity.path
 
+    def require_launch_header(self) -> None:
+        FreshPrivateSession.require_launch_header(self.path, None)
+
     def attest(self, identity: NativeSessionIdentity) -> Path:
         self.identity.require_same_session(identity)
         return self.path
@@ -147,6 +179,36 @@ class FirstSelectedSession(SavedSelectedSession):
 
     def startup(self) -> FreshPrivateSession:
         return self.creation
+
+    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
+        return (
+            "--thinking", self.creation.selected_thinking_level,
+            "--no-extensions", "--no-skills", "--no-context-files",
+            "--no-prompt-templates", "--no-themes",
+        )
+
+    def require_launch_tools(self, mode) -> None:
+        if mode is not None:
+            raise NativePiUnavailable("Selected fresh source cannot launch a file tool")
+
+    def require_launch_header(self) -> None:
+        self.creation.verify_selected_startup()
+        FreshPrivateSession.require_launch_header(self.path, self.creation.selected_thinking_level)
+
+    def launch_environment(self, agent_dir: Path, original) -> dict[str, str]:
+        # Original selected-source first-start isolation is a distinct leaf
+        # capability, not the configuration of ordinary saved continuation.
+        if os.name != "posix":
+            raise NativePiUnavailable("Selected source requires reviewed POSIX isolation")
+        import pwd
+
+        username = pwd.getpwuid(os.geteuid()).pw_name
+        return {
+            "HOME": str(agent_dir), "USER": username, "LOGNAME": username,
+            "PATH": os.defpath, "LANG": "C.UTF-8", "TMPDIR": str(self.directory),
+            "PI_OFFLINE": "1", "PI_CODING_AGENT_DIR": str(agent_dir),
+            "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
+        }
 
     def admit(self, actual: NativeSessionIdentity, runtime_revision) -> Path:
         saved = super().admit(actual, runtime_revision)
