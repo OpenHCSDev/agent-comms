@@ -13,6 +13,7 @@ from pathlib import Path
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_cutover import OwnerCutover
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.store_files import _atomic_write_text
 from thread_format_retirement import GoalReportMemberRetirement
 from cutover_child import run_cutover_child
@@ -42,9 +43,7 @@ class ThreadRetirementCutover(OwnerCutover):
         return projected, json.loads(result.stdout)
 
     def require_selection(self, snapshot, owners):
-        live = {thread.name for thread in snapshot.threads.values()
-                if thread.role.executable and snapshot.statuses[thread.name].active
-                and thread.process_alive}
+        live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if {thread.name for thread in owners} != live:
             raise RelationViolationError('Thread retirement requires the complete live batch')
         if not self.receipt.is_absolute() or self.receipt.exists() or self.receipt.is_symlink():

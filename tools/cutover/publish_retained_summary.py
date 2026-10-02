@@ -22,6 +22,7 @@ from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import PrivateDirectoryRole
@@ -240,8 +241,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         _atomic_write_text(self.receipt, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
 
     def require_selection(self, snapshot, owners):
-        live = {thread.name for thread in snapshot.threads.values()
-                if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive}
+        live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if live != {thread.name for thread in owners} or live != {item.name for item in self.audience}:
             raise RuntimeError('Complete original owner audience changed; recapture/review required')
         for selection, original in zip(self.audience, self.originals, strict=True):
@@ -371,8 +371,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
     cohort.require_original()
     service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
-    owners = tuple(thread for thread in snapshot.threads.values()
-                   if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive)
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
         raise RuntimeError('Empty original audience requires review')
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)

@@ -11,6 +11,7 @@ import sys
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 
 
 @dataclass(frozen=True)
@@ -26,8 +27,7 @@ class RetainedTaskSourceCarry(StoppedOwnerInstallation):
         self.leave_stopped(failure)
 
     def require_selection(self, snapshot, owners):
-        live = {thread.incarnation for thread in snapshot.threads.values()
-                if thread.role.executable and thread.process_alive}
+        live = {thread.incarnation for thread in OwnerRestartRequest().threads(snapshot)}
         if live != {thread.incarnation for thread in owners}:
             raise RelationViolationError('Task carry requires the whole live owner audience.')
         if not self.original_python.is_absolute() or not self.original_python.is_file():

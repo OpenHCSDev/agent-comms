@@ -12,6 +12,7 @@ from typing import ClassVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.native_package import verify_native_package
 from agent_comms.wire_metadata import WireRootIdText
 from checkpoint_schema import declared_schema_digest
@@ -35,11 +36,9 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
         return ()
 
     def require_selection(self, snapshot, owners) -> None:
-        audience = {thread.name for thread in snapshot.threads.values()
-                    if thread.role.executable and snapshot.statuses[thread.name].active
-                    and thread.process_alive}
+        audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if {thread.name for thread in owners} != audience:
-            raise RelationViolationError('Index cutover requires every live executable owner.')
+            raise RelationViolationError('Index cutover requires every managed restart owner.')
         if not self.original_python.is_absolute() or not self.original_python.is_file():
             raise RelationViolationError('Original installed writer interpreter is required.')
         WireRootIdText.from_text(self.wire_root_id)
