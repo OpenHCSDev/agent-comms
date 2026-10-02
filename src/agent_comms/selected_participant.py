@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 
 from .agent_events import NativePhaseChanged
@@ -18,6 +18,7 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
@@ -71,8 +72,8 @@ class SelectedParticipant(MroDispatch):
         self.transition(current.observed(event.phase))
 
     @classmethod
-    @contextmanager
-    def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int):
+    @asynccontextmanager
+    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int):
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
         with bus.log.locked():
             _require_no_private_owner_rename(comms.root)
@@ -107,7 +108,7 @@ class SelectedParticipant(MroDispatch):
         if not provider or not model:
             raise IdentityConflict("Selected owner's configured provider/model is incomplete")
         with cls.lease(comms, owner) as leased:
-            sources = cls.sources(bus, store, root_id, pending, identity)
+            sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch(sources)
             selected = cls(
                 comms,
@@ -121,6 +122,7 @@ class SelectedParticipant(MroDispatch):
                 provider,
                 model,
             )
+            selected.require_current()
             selected.transition(PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}"))
             yield selected
 
@@ -149,29 +151,43 @@ class SelectedParticipant(MroDispatch):
             comms.agents.finish_turn(lease)
 
     @staticmethod
-    def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:
+    async def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:
         """Borrow one original certificate for the already sealed pending batch.
 
         Initial acceptance owns writes. Selection verifies every original sealed
         receipt through that same validator, without re-entering acceptance. Both
         read resources close before any native preparation or provider request.
         """
-        selected = []
-        with bus.log.certified_read() as source:
-            marker = source.marker
-            if marker.root_id != root_id:
-                raise IdentityConflict("selected source wire root changed")
-            with store.session.read():
-                assert_cohort_schema(store.session._connection)
+        def capture(resource: Coordination):
+            # The certificate lends original pointer/byte snapshots. Decode
+            # outside its custody, using only the worker's owned SQL connection.
+            with bus.log.certified_read() as source:
+                marker = source.marker
+                if marker.root_id != root_id:
+                    raise IdentityConflict("selected source wire root changed")
                 for assignment in assignments:
                     if assignment.wire_seq <= marker.admission_after_seq:
                         raise IdentityConflict("historical source precedes the current admission floor")
-                    initial = source.delivery(assignment.wire_seq)
-                    receipt = _receipt_matches(store.session._connection, initial)
+                captured = source.references(tuple(
+                    MessageReference(assignment.wire_seq, assignment.message_id)
+                    for assignment in assignments
+                ))
+            originals = tuple(captured)
+            with resource.session.read():
+                assert_cohort_schema(resource.session._connection)
+                for assignment, initial in zip(assignments, originals, strict=True):
+                    receipt = _receipt_matches(resource.session._connection, initial)
                     if not any(row.assignment_id == assignment.assignment_id
                                for row in receipt.assignments):
                         raise IdentityConflict("selected assignment is absent from its sealed receipt")
                     assignment.require_selected_source(initial, identity.thread)
-                    identity.require(store, assignment.recipient_lookup)
-                    selected.append(SelectedSource(assignment.assignment_id, store.assignments, initial))
-        return tuple(selected)
+                    identity.require(resource, assignment.recipient_lookup)
+            return originals
+
+        originals = await Coordination.run_async(store.session.path, capture)
+        # Mutable claims stay with the original caller's open store; the worker
+        # exports no connection, lease or second source/lifecycle authority.
+        return tuple(
+            SelectedSource(assignment.assignment_id, store.assignments, initial)
+            for assignment, initial in zip(assignments, originals, strict=True)
+        )

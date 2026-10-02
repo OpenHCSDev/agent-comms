@@ -396,7 +396,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         with bus.log.locked():
             admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
         with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-            _accept_visible_deliveries(
+            await _accept_visible_deliveries(
                 bus,
                 wire_root_id,
                 store,
