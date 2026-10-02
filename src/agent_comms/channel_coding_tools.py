@@ -139,8 +139,8 @@ class CodingToolMode(NativeToolMode):
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return CodingToolSocket(directory, token, self.owner)
 
-    def finish(self) -> None:
-        self.owner.finish()
+    async def finish(self) -> None:
+        await Coordination.run_worker(self.owner.finish)
 
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
