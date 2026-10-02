@@ -8,7 +8,7 @@ import os
 import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -85,8 +85,8 @@ class WireLog:
         return tuple(originals)
 
     def full_history(self) -> list[Message]:
-        with self.locked():
-            return list(self._iter_log_unlocked())
+        with self.verified_snapshot() as records:
+            return [message for record in records for message in record.messages()]
 
     def record_context(self, manifest) -> None:
         """Append one text-free observation through the original sealed writer."""
@@ -98,18 +98,20 @@ class WireLog:
             self._append_private_unlocked(marker, record.to_wire())
 
     def context_manifests(self, name: str, registry):
-        """Read original observations for one registry-owned historical identity.
+        """Capture original source and rename membership before decoding.
 
-        The existing wire/bus/registry lock order freezes rename membership for
-        this read. Returned rows retain their recorded names and proof fields.
+        The original wire -> bus -> registry order selects the read snapshot;
+        neither physical publication lock survives into its decoder.
         """
-        with _store_lock(self.path.parent / "wire"), self.locked():
-            snapshot = registry.snapshot()
-            incarnation = snapshot.require(name).incarnation
-            marker = self._private_marker_unlocked()
+        with ExitStack() as resources:
+            with _store_lock(self.path.parent / "wire"):
+                # The bus snapshot is acquired before the registry observation.
+                records = resources.enter_context(self.verified_snapshot())
+                snapshot = registry.snapshot()
+                incarnation = snapshot.require(name).incarnation
             return tuple(
                 manifest
-                for record in self.verified_records_unlocked(marker)
+                for record in records
                 for manifest in record.context_manifests()
                 if manifest.thread.resolved(snapshot) == incarnation
             )
@@ -348,29 +350,50 @@ class WireLog:
                 yield message, raw_size
 
     @contextmanager
+    def _opened_wire_snapshot(self, *, need_sequence: bool = True):
+        """Own one fixed opened inode/byte boundary beyond physical custody."""
+        with ExitStack() as resources:
+            with _store_lock(self.path) as lock:
+                metadata = (
+                    self._private_marker_unlocked()
+                    if self.path.exists() or self.metadata_path.exists()
+                    else WireMetadata()
+                )
+                through = self._committed_sequence_unlocked(lock) if need_sequence else 0
+                try:
+                    stream = resources.enter_context(self.path.open("rb"))
+                except FileNotFoundError:
+                    stream = None
+                boundary = stream.seek(0, 2) if stream is not None else 0
+                if stream is not None:
+                    stream.seek(0)
+            yield metadata, through, stream, boundary
+
+    @contextmanager
+    def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
+        """Run the original strict WireScan after releasing publication custody.
+
+        Uncertified streams retain the same complete validation algorithm.
+        This resource is a fixed read, not a current append/admission permit.
+        """
+        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary):
+            scan = WireScan(metadata)
+
+            def records():
+                while stream is not None and stream.tell() < boundary:
+                    raw = stream.readline(min(scan.max_row_bytes + 1, boundary - stream.tell()))
+                    if not raw:
+                        break
+                    yield scan.read(raw)
+
+            yield records()
+
+    @contextmanager
     def _record_snapshot(
         self, *, need_sequence: bool = True
     ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
-        """Fixed opened-inode/byte boundary with public page-size accounting.
-
-        Display-only callers do not request a sequence watermark. Every stored
-        source has the current marker; history never repairs an absent marker.
-        """
-        with _store_lock(self.path) as lock:
-            metadata = (
-                self._private_marker_unlocked()
-                if self.path.exists() or self.metadata_path.exists()
-                else WireMetadata()
-            )
-            through = self._committed_sequence_unlocked(lock) if need_sequence else 0
-            try:
-                stream: BinaryIO | None = self.path.open("rb")
-            except FileNotFoundError:
-                stream = None
-            boundary = stream.seek(0, 2) if stream is not None else 0
-            if stream is not None:
-                stream.seek(0)
-        try:
+        """Public page accounting borrows the one original opened byte boundary."""
+        with self._opened_wire_snapshot(need_sequence=need_sequence) as (metadata, through, stream, boundary):
             records = (
                 (
                     page_row
@@ -383,9 +406,6 @@ class WireLog:
                 else iter(())
             )
             yield through, records
-        finally:
-            if stream is not None:
-                stream.close()
 
     @contextmanager
     def full_history_snapshot(self) -> Iterator[tuple[int, Iterator[Message]]]:
@@ -414,8 +434,8 @@ class WireLog:
         return tuple(originals)
 
     def total_messages(self) -> int:
-        with _store_lock(self.path):
-            return sum(1 for _ in self._iter_log_unlocked())
+        with self.verified_snapshot() as records:
+            return sum(1 for record in records for _ in record.messages())
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""

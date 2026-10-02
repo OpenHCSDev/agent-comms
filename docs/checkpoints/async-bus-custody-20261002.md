@@ -121,3 +121,24 @@ with the original cause. Its locked `delivery` and every captured iterator call
 this same method. `read_bytes` similarly translates only its own seek/read
 OSError; it does not catch consumer exceptions. No per-caller catches or generic
 error suppression was added, and input/UNKNOWN disposition is unchanged.
+
+## Working code checkpoint — complete read stream lifetime
+
+`_opened_wire_snapshot` factors the original fixed inode/byte-boundary acquisition
+and closes its resources through ExitStack. Public page accounting and strict
+`verified_snapshot` consume that same opened resource after publication custody
+ends. `full_history` and `total_messages` now use the original WireScan outside
+the publication lock; uncertified original streams keep strict parsing instead
+of a generic fallback. `context_manifests` captures source and registry rename
+membership under the original maintenance-wire ordering, then releases both
+physical locks before strict decoding. The registry observation is a read
+snapshot, not a competing current identity/admission authority.
+
+New incoming consumers from #503/#507 are explicit remaining closure:
+`SelectedParticipant.sources` is a plural certified acquisition but still
+invokes locked delivery decoding; `CursorPublication.refresh` is async yet
+calls synchronous NativeSourceCursor.advance. The latter needs a complete
+operation-owned async resource path, not a consumer-only thread wrapper or a
+connection transferred across threads. Singer keeps cursor proof/participant
+behavior; this draft owns its acquisition/scheduling API. These unfinished
+relations keep the draft non-Ready.
