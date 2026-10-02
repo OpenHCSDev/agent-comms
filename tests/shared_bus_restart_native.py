@@ -188,9 +188,13 @@ async def configured_pure_channel(arguments):
                 f'{stage.name} original {ordinal}: New isolated user channel question to all participants: '
                 'please answer here with the value of 10+2. This is a fresh question, '
                 'not continuation or retry of any previous input. No project edits are requested.' + (
-                    ' Before answering, use comms_subtask exactly once with to your own current '
-                    'private thread, text "Verified 10 plus 2", and completed true. This explicitly '
-                    'marks only that small subtask, not a completed goal. Use no file-writing tools.'
+                    ' Before answering, publish one authored subtask notice through the ordinary '
+                    'CLI: agent-comms invoke --tool comms_subtask --arguments '
+                    '\'{"to":"#openhcs","text":"Verified 10 plus 2","completed":true}\'. '
+                    'Use those exact arguments once, without retry or another target. The existing '
+                    'wire forbids sending to yourself; this channel notice records only that small '
+                    'subtask, not a completed goal. Do not inspect or dump environment, auth or '
+                    'settings. Use no file-writing tools.'
                     if arguments.configured_task_timing else ''),
                 MessageType.INFO),
                 _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
