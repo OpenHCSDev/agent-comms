@@ -106,3 +106,12 @@ introduced. The final receiving check used the existing matching540 package and
 completed original501/529 records. This qualifies the reader/report consumer,
 not a matched model experiment, prompt presence, authorized revision mass,
 three sequential checkpoint quality, action execution or a default policy flip.
+
+## Normal main integration
+
+Merged current main `f58dcaf1` normally with no conflicts. The evaluation files
+are byte-identical to their qualified `c2370432` checkpoint. PR542 remains its
+own landed admission change; this PR makes no runtime production edit. Main's
+`NativeEvidenceRead.branch` extracts the same original duplicate-ID/ancestry
+algorithm into `entry_index`; managed-cut, linkage and envelope APIs are unchanged.
+No native/provider journey was repeated for this source-independent union.

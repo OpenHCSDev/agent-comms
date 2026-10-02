@@ -95,7 +95,9 @@
             "observe",
             "decode_rows",
             "retained_task_facts",
+            "entry_index",
             "branch",
+            "recorded_source_prefix",
             "covered_prefix"
           ]
         },
@@ -858,5 +860,11 @@
     }
   ],
   "dynamic_resolution": "Lexical imports/calls are leads, not inferred runtime dispatch",
-  "changed_owner": "RecordedNativeCheckpoint borrows NativeEvidenceRead and delegates original commit/cut/envelope checks; no new class or production declaration"
+  "changed_owner": "RecordedNativeCheckpoint borrows NativeEvidenceRead and delegates original commit/cut/envelope checks; no new class or production declaration",
+  "normal_main_integration": {
+    "base": "f58dcaf1",
+    "conflicts": false,
+    "evaluation_source_delta_after_merge": false,
+    "reviewed_relation": "NativeEvidenceRead.branch delegates the same duplicate-ID/ancestry algorithm to entry_index; managed-cut/link/envelope APIs unchanged"
+  }
 }
