@@ -583,7 +583,7 @@ class TestAgentTurn:
         )
         from input_source_cases import owner_original
 
-        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
+        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt", agent.inputs.dispositions.read())
         await agent._emit_event("proj", event, FakeClient())
         update = sent[-1]
         (failed,) = facts(update.field_meta, InputFailedUpdate)
@@ -596,7 +596,7 @@ class TestAgentTurn:
         agent.inputs.dispositions.record(
             key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
         )
-        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
+        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt", agent.inputs.dispositions.read())
         agent.inputs.dispositions.bind(
             key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
         )

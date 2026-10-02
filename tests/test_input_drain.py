@@ -53,7 +53,6 @@ async def owner(tmp_path, monkeypatch):
     agent.turns.active_turns["owner"] = "turn"
     from input_source_cases import owner_original
 
-    agent.inputs.original_sources["owner"] = owner_original(("acp:original",), "original")
     agent.inputs.dispositions.record(
         "acp:original",
         seq=None,
@@ -61,6 +60,9 @@ async def owner(tmp_path, monkeypatch):
         admission=current.active_turn.admission_generation,
         target="owner",
         text="original",
+    )
+    agent.inputs.original_sources["owner"] = owner_original(
+        ("acp:original",), "original", agent.inputs.dispositions.read()
     )
     # Only native package verification is outside this source-boundary fixture.
     # The actual registry, wire, disposition, session locks and source CAS run.

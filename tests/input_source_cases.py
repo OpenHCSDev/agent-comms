@@ -5,14 +5,13 @@ from agent_comms.turn_goal_permission import OwnerGoalPermission
 from agent_comms.turn_input_source import OwnerOriginalInput, NoInputDependency
 
 
-def owner_original(keys, text):
+def owner_original(keys, text, inputs):
     return OwnerOriginalInput(
-        keys=tuple(keys),
         accepted_id=None,
         goal_permission=OwnerGoalPermission(None),
         prompt=text,
         original_display=text,
         origins=(),
         dependency=NoInputDependency(),
-        batch=SingleInputBatch(),
+        batch=SingleInputBatch(inputs.originals(tuple(keys))),
     )

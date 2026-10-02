@@ -9,7 +9,6 @@ from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
@@ -71,7 +70,7 @@ async def authored_context_operations(fixture, owner, source, fresh_session, fre
             return attempt
 
         attempt = await observer.run(compact_source())
-    captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+    captured = attempt.request
     snapshot = owner._comms.registry.snapshot()
     committed_pin, = captured.retained.current_authored_sources(snapshot.require(source.name), snapshot)
     assert committed_pin == declaration

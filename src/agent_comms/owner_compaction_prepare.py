@@ -15,10 +15,11 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from .declared_family import DeclaredFamily
 from .native_package import verify_native_package
+from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_helper import PiHelper, SessionHelperRequest
 from .native_revision_text import NativeRevisionText
@@ -33,29 +34,21 @@ class NativePreparationError(ValueError):
 
 
 @dataclass(frozen=True)
-class NativeWitness:
+class NativeWitness(NativeSessionIdentity):
     """One decoded native cutpoint; later owner/disk CAS remains independent."""
 
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
     leaf_id: str = field(metadata={"wire_name": "leafId"})
     first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
-    revision: str
+    revision: Annotated[FileRevision, NativeRevisionText]
 
     def __post_init__(self):
-        if any(not getattr(self, item.name) for item in fields(self)):
+        super().__post_init__()
+        if not self.leaf_id or not self.first_kept_entry_id:
             raise NativePreparationError("Exact native witness required")
-        if not self.session_file.startswith("/"):
-            raise NativePreparationError("Canonical native path and revision required")
-        NativeRevisionText.decode(self.revision)
-
-    def require_session(self, canonical: str) -> None:
-        if self.session_file != canonical:
-            raise ValueError("Native witness does not identify owner's canonical session")
 
     def require_current_file(self, file: Path) -> None:
         self.require_session(str(file))
-        if NativeRevisionText.decode(self.revision) != FileRevision.from_stat(file.stat()):
+        if self.revision != FileRevision.from_stat(file.stat()):
             raise ValueError("Native retained source changed since preparation")
 
     def retained_task_facts(self):
@@ -69,7 +62,7 @@ class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
     family_discriminator = "status"
 
     @abstractmethod
-    def checked(self, file: Path, revision: str) -> Self:
+    def checked(self, file: Path, revision: FileRevision) -> Self:
         """Bind an observed cutpoint to the already captured native revision."""
 
     @abstractmethod
@@ -87,7 +80,7 @@ class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
 class SkipPreparationResult(NativePreparationResult):
     session_id: str = field(metadata={"wire_name": "sessionId"})
 
-    def checked(self, file: Path, revision: str) -> Self:
+    def checked(self, file: Path, revision: FileRevision) -> Self:
         if not self.session_id:
             raise NativePreparationError("Native session identity missing")
         return self
@@ -111,7 +104,7 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
         if not 0 <= self.tokens_before <= 2**53 - 1:
             raise NativePreparationError("Invalid native preparation token count")
 
-    def checked(self, file: Path, revision: str) -> NativePreparation:
+    def checked(self, file: Path, revision: FileRevision) -> NativePreparation:
         if self.witness.session_file != str(file) or self.witness.revision != revision:
             raise NativePreparationError("Invalid native witness")
         return self
@@ -181,7 +174,7 @@ def prepare_native_source(
         revision = FileRevision.from_stat(before)
         if revision != FileRevision.from_stat(after):
             raise NativePreparationError("Native preparation failed or changed")
-        return result.checked(file, NativeRevisionText.encode(revision))
+        return result.checked(file, revision)
     except (OSError, ValueError, TypeError) as error:
         if isinstance(error, NativePreparationError):
             raise

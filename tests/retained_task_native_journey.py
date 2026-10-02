@@ -14,7 +14,6 @@ from agent_comms.acp_extension import CompactRequest, QueuePromptRequest, encode
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
@@ -116,7 +115,7 @@ async def run(destination):
                              if a.state.commit_id not in {r['commit_id'] for r in receipt['commits']})
             assert isinstance(attempt.state, ManualCommittedSummary)
             assert journal.operations.get(attempt.state.commit_id).state.committed
-            captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+            captured = attempt.request
             snapshot = owner._comms.registry.snapshot()
             selected, = captured.retained.current_authored_sources(snapshot.require(thread.name), snapshot)
             assert selected == pin

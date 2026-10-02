@@ -88,23 +88,11 @@ class AttemptStore:
     def _resume_retry(self, snapshot: RecoverySnapshot, request: AttemptStart) -> None:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
         db, execution = self.session._connection, snapshot.execution
-        if (
-            request.attempt_ordinal > 1
-            and snapshot.replay is not None
-            and snapshot.replay.replay_safe
-        ):
+        if request.attempt_ordinal > 1:
             # Replay safety is execution-scoped in v2, not bound to the new
             # attempt.  Monotonically revoke the previous attempt's proof;
             # a further automatic retry needs a separately versioned schema.
-            updated = ReplayAssessments.update(
-                db,
-                where="execution_id=?",
-                parameters=(request.execution_id,),
-                replay_safe=False,
-                revision=snapshot.replay.revision + 1,
-            )
-            if updated.rowcount != 1:
-                raise IntegrityViolationError("retry safety revocation lost its assessment")
+            ReplayAssessments.revoke_for_retry(db, request.execution_id)
         for obligation in snapshot.obligations:
             if obligation.lifecycle.deferred:
                 ResponseObligation.update(
@@ -237,15 +225,9 @@ class AttemptStore:
                 raise StaleRevision("pointer revision changed")
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
-            before = snapshot.replay
-            ReplayAssessments(
-                fence.execution_id,
-                (before.facts if before is not None else ReplayFact.NONE)
-                | ReplayFact.UNKNOWN_EFFECTS,
-                False,
-                True,
-                1 if before is None else before.revision + 1,
-            ).record(self.session._connection, before)
+            ReplayAssessments.accumulate(
+                self.session._connection, fence.execution_id, ReplayFact.UNKNOWN_EFFECTS
+            )
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 attempt.advance(
                     self.session,

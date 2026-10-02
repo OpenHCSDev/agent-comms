@@ -48,6 +48,9 @@ class NativeAttestation(ABC):
     state = None
     identity = None
 
+    def require_identity(self) -> NativeSessionIdentity:
+        raise ValueError("Native child has not attested an original session identity")
+
     @property
     def diagnostic_evidence(self):
         return {"attestation": "lost"}
@@ -123,6 +126,12 @@ class ObservedAttestation(NativeAttestation):
     @property
     def identity(self):
         return self.state.identity
+
+    def require_identity(self) -> NativeSessionIdentity:
+        identity = self.state.identity
+        if identity is None:
+            return super().require_identity()
+        return identity
 
     def admits_extension_input(self, inputs) -> bool:
         return self.identity is not None and inputs.permits_admission

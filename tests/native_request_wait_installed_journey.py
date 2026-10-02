@@ -199,6 +199,8 @@ async def run(arguments):
             assert observations, "No retained request measurements"
             requests = {}
             for observation in observations:
+                if "native" not in observation:
+                    continue  # Parent acquisition spans use their own clock origin.
                 assert observation["native_process"] is not None, "Native request clock lost its original process fence"
                 requests.setdefault(observation["native"]["requestId"], []).append(observation)
             assert len(requests) == 2, "Unexpected provider request or replay"

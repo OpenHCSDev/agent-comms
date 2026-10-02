@@ -67,7 +67,7 @@ def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
         RetainedTaskFacts(()),
     )
     original = SelectedSummaryAttempt("a" * 32, str(native),
-                                     json.dumps(FieldCodec.encode(source)), ReservedSummary())
+                                     source.journal_json(), source, ReservedSummary())
     later = replace(original, operation_id="b" * 32,
                     state=RefusedSummary("original bounded refusal"))
     with journal.transaction() as db:

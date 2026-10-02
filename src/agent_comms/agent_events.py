@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_presentation import GoalExecution
     from .goals import Goal
+    from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
 
 
@@ -335,14 +336,18 @@ class McpLiveStatus(AgentEvent):
 
 @dataclass(frozen=True)
 class TurnState(AgentEvent):
+    """Watchdog observation, not an input disposition or replay assessment.
+
+    Retry permission belongs to the original execution's ReplayAssessments.
+    The original Pi retry event carries its own attempt data without another
+    tuple, session copy or interpretation of that data here.
+    """
+
     state: str
     reason_code: str
     elapsed_ms: int
-    phase: str
-    retryable: bool
-    replay_safe: bool
-    side_effects_possible: bool
-    attempt: dict[str, int | None] | None = None
+    phase: TurnPhase
+    attempt: RetryAttemptEvent | None = None
 
 
 @dataclass(frozen=True)

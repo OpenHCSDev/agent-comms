@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .native_package import verify_native_package
 from .pi_helper import PiHelper, SessionHelperRequest
+from .private_path import FileRevision
 
 
 class NativeReopenError(ValueError):
@@ -31,6 +32,25 @@ class NativeSessionIdentity:
         if not self.session_id or not Path(self.session_file).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
 
+    @property
+    def path(self) -> Path:
+        return Path(self.session_file)
+
+    def require_same_session(self, other: NativeSessionIdentity) -> None:
+        if not self.same_session(other):
+            raise NativeReopenError("Native saved source identity changed")
+
+    def require_context(self, context) -> None:
+        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))
+
+    def same_session(self, other: NativeSessionIdentity) -> bool:
+        """A cutpoint may extend this identity without changing its meaning."""
+        return self.session_id == other.session_id and self.session_file == other.session_file
+
+    def require_session(self, canonical: str) -> None:
+        if self.session_file != canonical:
+            raise ValueError("Native identity differs from owner's canonical session")
+
 
 class ReopenSessionHelper(PiHelper):
     script = Path(__file__).with_name("_pi_helpers") / "reopen_session.mjs"
@@ -40,8 +60,8 @@ class ReopenSessionHelper(PiHelper):
 
 def validate_native_reopen(
     package: Path, session_file: str, *, expected_session_id: str | None = None
-) -> str:
-    """Return the strict saved session ID; never mutate/recover an invalid file."""
+) -> NativeSessionIdentity:
+    """Return the strict saved session identity; never mutate/recover an invalid file."""
     try:
         verify_native_package(package)
         file = Path(session_file).absolute()
@@ -60,16 +80,13 @@ def validate_native_reopen(
         )
         after = file.stat()
 
-        def revision(info: os.stat_result) -> tuple[int, ...]:
-            return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-
-        if revision(before) != revision(after):
+        if FileRevision.from_stat(before) != FileRevision.from_stat(after):
             raise NativeReopenError("Saved native session validation failed or changed")
         if identity.session_file != str(file) or (
             expected_session_id is not None and identity.session_id != expected_session_id
         ):
             raise NativeReopenError("Saved native session identity changed")
-        return identity.session_id
+        return identity
     except (OSError, ValueError) as error:
         if isinstance(error, NativeReopenError):
             raise

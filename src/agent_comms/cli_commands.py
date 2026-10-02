@@ -577,7 +577,9 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     pid: int | None = option("--pid", default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        attached = ctx.threads.attach_session(self.name, self.session_file, pid=self.pid)
+        attached = ctx.threads.attach_session(
+            ctx.registry.require(self.name), self.session_file, pid=self.pid
+        )
         return {
             "attached": attached.name,
             "session_file": attached.session_file,

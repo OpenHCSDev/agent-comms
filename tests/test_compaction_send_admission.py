@@ -51,9 +51,6 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     (tmp_path / "project").mkdir()
-    agent.turns.adaptive_compaction_enabled = (
-        False  # This case tests ordinary goal/input admission.
-    )
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)

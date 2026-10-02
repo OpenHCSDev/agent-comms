@@ -388,7 +388,7 @@ class InputDrain(FutureInputQueue):
         return inbox
 
     def future_inputs(
-        self, owner: Thread, pending_input_key: str | None
+        self, owner: Thread, pending_input_keys: tuple[str, ...]
     ) -> dict[str, InputAttempt]:
         """Live queued receipts only; durable UNKNOWN alone never grants this exception.
 
@@ -396,14 +396,14 @@ class InputDrain(FutureInputQueue):
         clear and promotion use that same lock, including their in-memory edits.
         No receipt survives a process restart or an owner/turn change.
         """
-        if pending_input_key is None:
+        if not pending_input_keys:
             return {}
         if owner.pid != os.getpid() or owner.active_turn is None or self.closing:
             return {}
         result = {}
         for session_id, original in self.original_sources.items():
             if (
-                original.compaction_key(owner.session_file) != pending_input_key
+                original.compaction_keys(owner.session_file) != pending_input_keys
                 or self.sessions.bindings.get(session_id) != owner.name
             ):
                 continue

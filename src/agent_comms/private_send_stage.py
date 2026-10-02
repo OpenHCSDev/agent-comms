@@ -121,19 +121,19 @@ class NativeSendStage(ABC):
         token_digest: str,
         context: NativeContextProof,
         *,
-        session_dir: Path,
         wire_root_id: str,
         prompt: str,
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
         with NativeEntry.open_evidence(context.session_file) as evidence:
-            if not context.corroborates_input(input_id, session_dir, evidence=evidence):
+            if not context.corroborates_input(input_id, evidence=evidence):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
             with store.session.read():
-                self.pending_input(store, input_id, owner, token_digest)
+                original = self.pending_input(store, input_id, owner, token_digest)
+                original.require_session_identity().require_context(context)
                 binding = self.require_binding(
                     store,
                     input_id,

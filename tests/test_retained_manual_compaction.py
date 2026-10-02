@@ -185,14 +185,14 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         assert attempt.state.commit_id
         operation = journal.operations.get(attempt.state.commit_id)
         assert operation.state.committed
-        envelope = attempt.envelope()
+        envelope = attempt.request
         if retained_text:
             assert envelope.retained.text.count(retained_text) == 1
             assert len(attempt.source_json.encode()) > RetainedTaskFacts.journal_control_bytes
             assert len(operation.intent_json.encode()) > RetainedTaskFacts.journal_control_bytes
         # A fresh reader must accept the same original complete payload and links.
         recovered = CompactionJournal(journal.path)
-        assert recovered.summaries.get(attempt.operation_id).envelope() == envelope
+        assert recovered.summaries.get(attempt.operation_id).request == envelope
         assert NativeIntent.read(recovered.operations.get(operation.commit_id)).witness == preparation.witness
         recovered.operations.get(operation.commit_id).committed_outcome()
         operation.require_summary_link(attempt, admit_original=True)

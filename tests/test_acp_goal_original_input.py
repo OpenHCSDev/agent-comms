@@ -33,9 +33,6 @@ async def owner(tmp_path, monkeypatch):
 
     agent.on_connect(Client())
     (tmp_path / "project").mkdir()
-    agent.turns.adaptive_compaction_enabled = (
-        False  # This case tests ordinary goal/input admission.
-    )
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()

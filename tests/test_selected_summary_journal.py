@@ -85,6 +85,7 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     attempt = reopened.summaries.get(operation_id)
     assert attempt.state == ReservedSummary()
     assert attempt.source_json == source.journal_json()
+    assert attempt.request == source
     assert reopened.summaries.unresolved(session) == (attempt,)
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="never replay"):
@@ -96,6 +97,36 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         reopened.summaries.link_commit(operation_id, "b" * 32)
+
+
+def test_opaque_original_proof_is_not_a_current_request_or_input_grant(reserved):
+    from agent_comms.compaction_states import UnknownSummary
+
+    journal, session, request = reserved
+    # This synthetic historical proof is deliberately not current wire JSON.
+    # The outside carry must authenticate real historical request transforms;
+    # the runtime neither performs that carry nor derives admission from a row.
+    original_bytes = "original native proof bytes: not current JSON"
+    attempt = SelectedSummaryAttempt(
+        "e" * 32, session, original_bytes, request, UnknownSummary()
+    )
+    with journal.transaction() as db:
+        attempt.insert(db)
+    reopened = CompactionJournal(journal.path)
+    observed = reopened.summaries.get(attempt.operation_id)
+    assert observed == attempt
+    assert observed.request == request
+    assert reopened.summaries.blocking(session) == (observed,)
+    reference = SelectedCommitReference(
+        attempt.operation_id, TextDigest.of(original_bytes).value
+    )
+    reference.require_source(observed.source_json)
+    with pytest.raises(CompactionJournalError, match="source digest"):
+        reference.require_source(observed.request.journal_json())
+    with pytest.raises(CompactionJournalError, match="does not admit|does not grant|does not|terminal"):
+        reopened.summaries.require_original_admission(observed)
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        reopened.summaries.reserve(session, request)
 
 
 def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved):
@@ -186,7 +217,7 @@ def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
     other.write_text('{"type":"session","id":"other"}\n')
     journal.private_inputs.reserve(Path(session), "a" * 32)
     reopened = CompactionJournal(journal.path)
-    with pytest.raises(CompactionJournalError, match="never replay"):
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
         reopened.summaries.reserve(session, source)
     with reopened.private_inputs.send_fence(Path(session), private_input_id="a" * 32):
         pass  # The exact prewrite marker permits its own PR94 raw input only.
@@ -206,7 +237,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
     alias = Path(session).with_name("alias.jsonl")
     alias.symlink_to(Path(session))
     journal.private_inputs.reserve(alias, "a" * 32)
-    with pytest.raises(CompactionJournalError, match="never replay"):
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
         journal.summaries.reserve(session, source)
     other = Path(session).with_name("other.jsonl")
     other.write_text("{}\n")
@@ -256,7 +287,7 @@ os._exit(0)
     assert process.returncode == 0, process.stderr
     assert marker.exists() is (moment == "after-write")
     reopened = CompactionJournal(journal.path)
-    with pytest.raises(CompactionJournalError, match="never replay"):
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
         reopened.summaries.reserve(session, source)
 
 
@@ -269,7 +300,7 @@ def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reser
     monkeypatch.setattr(os, "fsync", fsync)
     reopened = CompactionJournal(journal.path)
     # The marker may be visible despite UNKNOWN; raw os.write has not run.
-    with pytest.raises(CompactionJournalError, match="never replay"):
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
         reopened.summaries.reserve(session, source)
     with pytest.raises(CompactionJournalError, match="already reserved"):
         reopened.private_inputs.reserve(Path(session), "a" * 32)
@@ -327,10 +358,11 @@ import json,sys
 from pathlib import Path
 from agent_comms.compaction_journal import CompactionJournal,CompactionJournalError
 from agent_comms.compaction_records import SelectedSummarySource
+from agent_comms.field_codec import FieldCodec
 j=CompactionJournal(Path(sys.argv[1]))
 sys.stdin.buffer.read(1)
 try:
-    j.summaries.reserve(sys.argv[2],SelectedSummarySource.read(sys.argv[3]),operation_id=sys.argv[4])
+    j.summaries.reserve(sys.argv[2],FieldCodec.decode(SelectedSummarySource, json.loads(sys.argv[3])),operation_id=sys.argv[4])
 except CompactionJournalError:
     print('blocked')
 else:
@@ -551,8 +583,9 @@ import os,sys,json
 from pathlib import Path
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummarySource
+from agent_comms.field_codec import FieldCodec
 CompactionJournal(Path(sys.argv[1])).summaries.reserve(
-    sys.argv[2], SelectedSummarySource.read(sys.argv[3]), operation_id='c'*32)
+    sys.argv[2], FieldCodec.decode(SelectedSummarySource, json.loads(sys.argv[3])), operation_id='c'*32)
 os._exit(17)
 """,
             str(path),

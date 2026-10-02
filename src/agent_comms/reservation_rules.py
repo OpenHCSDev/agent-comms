@@ -9,6 +9,7 @@ from typing import ClassVar
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
+from .retained_task_facts import RetainedTaskFacts
 from .selected_source import SelectedAdmissionSource, SelectedSource, SessionObservation
 from .thread_identity import ThreadIncarnation, TurnId
 
@@ -39,7 +40,8 @@ class ReservationCheck(RuleCheck):
 @dataclass(frozen=True, kw_only=True)
 class InputSourceCheck(ReservationCheck):
     source: SelectedAdmissionSource
-    row: InputAttempt
+    rows: tuple[InputAttempt, ...]
+    retained: RetainedTaskFacts
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,7 +58,7 @@ class OwnerReservationCheck(ReservationCheck):
 @dataclass(frozen=True, kw_only=True)
 class CommitReservationCheck(OwnerReservationCheck):
     owner: ProcessIdentity
-    pending_input_key: str | None
+    pending_input_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -121,7 +123,7 @@ class IngressChangedRule(ReservationRule):
     explanation = "The pending original input differs from the selected source."
 
     def violated(self, check: CommitReservationCheck) -> bool:
-        return not check.source.matches_pending_input(check.pending_input_key)
+        return not check.source.matches_pending_inputs(check.pending_input_keys)
 
 
 class MissingInputRule(ReservationRule):
@@ -129,7 +131,7 @@ class MissingInputRule(ReservationRule):
     explanation = "The reserved original input no longer exists."
 
     def violated(self, check: InputSourceCheck) -> bool:
-        return not check.row.exists
+        return len(check.rows) != len(check.source.originals) or any(not row.exists for row in check.rows)
 
 
 class AlreadySentRule(ReservationRule):
@@ -137,7 +139,7 @@ class AlreadySentRule(ReservationRule):
     explanation = "The original input is no longer reserved; it cannot authorize a send."
 
     def violated(self, check: InputSourceCheck) -> bool:
-        return not check.row.accepts_reservation
+        return any(not row.accepts_reservation for row in check.rows)
 
 
 class NativeBindingExistsRule(ReservationRule):
@@ -145,7 +147,7 @@ class NativeBindingExistsRule(ReservationRule):
     explanation = "The original has a native binding; its outcome cannot be retired as unsent."
 
     def violated(self, check: InterruptedInputCheck) -> bool:
-        return check.row.has_native_binding
+        return any(row.has_native_binding for row in check.rows)
 
 
 class InputOwnerChangedRule(ReservationRule):
@@ -153,7 +155,7 @@ class InputOwnerChangedRule(ReservationRule):
     explanation = "The reserved input belongs to a different owner."
 
     def violated(self, check: InputSourceCheck) -> bool:
-        return not check.row.matches_owner(check.source.incarnation)
+        return any(not row.matches_owner(check.source.incarnation) for row in check.rows)
 
 
 class AdmissionChangedRule(ReservationRule):
@@ -161,12 +163,17 @@ class AdmissionChangedRule(ReservationRule):
     explanation = "The reserved input belongs to a different admission generation."
 
     def violated(self, check: InputSourceCheck) -> bool:
-        return not check.row.matches_admission(check.source.admission_generation)
+        return any(not row.matches_admission(check.source.admission_generation) for row in check.rows)
 
 
 class ContentChangedRule(ReservationRule):
     check_type = InputSourceCheck
-    explanation = "The original input content changed after reservation."
+    explanation = "The original input provenance or content changed after reservation."
 
     def violated(self, check: InputSourceCheck) -> bool:
-        return check.row.digest != check.source.original_digest
+        return any(
+            not row.matches_original_source(original)
+            for original, row in zip(
+                check.retained.original_inputs(check.source.originals), check.rows, strict=True
+            )
+        )

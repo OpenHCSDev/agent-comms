@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+import pytest
+
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import Message, MessageType
@@ -33,6 +35,11 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
         ((replace(origins[0], target="owner"), origins[1]), keys, prompt),
         (origins, tuple(reversed(keys)), prompt),
         (origins, keys, "corrected prompt"),
-        (origins, (keys[0], "missing"), prompt),
     ):
         assert not InputBatch.capture(messages, input_keys, text, owner, ledger).admits_multiple
+
+    with pytest.raises(ValueError, match="receipt is unavailable"):
+        InputBatch.capture(origins, (keys[0], "missing"), prompt, owner, ledger)
+    admitted = InputBatch.capture(origins, keys, prompt, owner, ledger)
+    assert admitted.originals == ledger.read().originals(keys)
+    assert admitted.keys == keys and admitted.prompt == prompt

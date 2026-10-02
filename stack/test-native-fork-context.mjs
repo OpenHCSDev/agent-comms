@@ -62,7 +62,7 @@ try {
         sessionManager:child,settingsManager:settings,resourceLoader:loader,noTools:'all'}));
     const before=session.getContextUsage();
     assert.equal(before.tokens,percent*1000);assert.equal(before.percent,percent);
-    assert.equal(session.storedContext.requiresCompaction(),false,`${percent}% token context must not use summary byte allowance`);
+    session.storedContext.requireReady();
     assert.equal(child.entryStore.latest(child.getLeafId(),'compaction'),undefined);
     await session.prompt('FIRST_CHILD_INPUT');
     assert.equal(requests.length,1,'No summary or replay call');

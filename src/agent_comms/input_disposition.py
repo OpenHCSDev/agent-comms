@@ -23,6 +23,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
+    from .input_origin import InputProvenance
     from .selected_source import SelectedSource
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
@@ -46,13 +47,13 @@ class FutureInputQueue(ABC):
             incarnation=owner.incarnation,
             owner=owner.process_identity,
             turn=TurnId(owner.active_turn.id),
-            pending_input_key=source.pending_input_key,
+            pending_input_keys=source.pending_input_keys,
         ).require_valid()
-        return replace(inputs, rows=inputs.compaction_rows(owner, source.pending_input_key, self))
+        return replace(inputs, rows=inputs.compaction_rows(owner, source.pending_input_keys, self))
 
     @abstractmethod
     def future_inputs(
-        self, owner: Thread, pending_input_key: str | None
+        self, owner: Thread, pending_input_keys: tuple[str, ...]
     ) -> dict[str, InputAttempt]: ...
 
 
@@ -68,41 +69,50 @@ class InputDocument:
     def lookup(self, key: str | None) -> InputAttempt:
         return self.rows.get(key, MissingInput())
 
+    def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:
+        """Capture ordered originals from their sole durable declaration owner."""
+        if len(set(keys)) != len(keys):
+            raise ValueError("Original input membership contains duplicate keys")
+        try:
+            return tuple(self.rows[key] for key in keys)
+        except KeyError as error:
+            raise ValueError("Original input receipt is unavailable") from error
+
+    def original_provenances(self, keys: tuple[str, ...]) -> tuple[InputProvenance, ...]:
+        """Source proofs reference originals without copying mutable disposition data."""
+        return tuple(row.context_provenance() for row in self.originals(keys))
+
     def compaction_rows(
-        self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None = None
+        self, owner: Thread, pending_input_keys: tuple[str, ...], queue: FutureInputQueue | None = None
     ) -> dict[str, StoredInput]:
         """Caller holds wire; native CAS additionally retains document lock."""
         assert owner.active_turn is not None
-        pending = self.lookup(pending_input_key)
-        if pending_input_key is not None and not pending.pending_for(owner):
+        if len(set(pending_input_keys)) != len(pending_input_keys) or any(
+            not self.lookup(key).pending_for(owner) for key in pending_input_keys
+        ):
             raise RelationViolationError("Original owner input already attempted")
-        future = queue.future_inputs(owner, pending_input_key) if queue is not None else {}
+        future = queue.future_inputs(owner, pending_input_keys) if queue is not None else {}
         if any(self.lookup(key) != receipt for key, receipt in future.items()):
             raise RelationViolationError("Queued owner input changed after acceptance")
         relevant = {}
         for key, row in self.rows.items():
             if not row.matches_owner(owner.incarnation):
                 continue
-            if key != pending_input_key and key in future and row.pending_for(owner):
+            if key not in pending_input_keys and key in future and row.pending_for(owner):
                 continue
-            if row.unsettled_for(owner, pending_input_key):
+            if row.unsettled_for(owner, key if key in pending_input_keys else None):
                 raise RelationViolationError("Unsettled owner input; compaction not dispatched")
             relevant[key] = row
         return relevant
 
-    def source_texts(self, keys: tuple[str, ...]) -> tuple[str, ...] | None:
-        if any(key not in self.rows for key in keys):
-            return None
-        return tuple(self.rows[key].source_text for key in keys)
-
-    def compaction_material(self, owner: Thread, pending_input_key: str | None,
+    def compaction_material(self, owner: Thread, pending_input_keys: tuple[str, ...],
                             queue: FutureInputQueue | None):
         """Project exactly the input source selected by existing queue custody.
 
         Unadmitted future inputs remain in their original durable queue; they
         cannot become the source of an earlier native checkpoint.
         """
-        rows = self.compaction_rows(owner, pending_input_key, queue)
+        rows = self.compaction_rows(owner, pending_input_keys, queue)
         return rows, tuple(row.origin.retained_fact(row) for row in rows.values())
 
     def started_for_native(
@@ -228,12 +238,30 @@ class InputDispositions(LockedStore[InputDocument]):
         return changed
 
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
-        return self._transition(
-            key,
-            lambda row: row.bind(
-                admission=admission, turn_id=turn_id, native_id=native_id, text=text
-            ),
+        return self.bind_originals(
+            (key,), admission=admission, turn_id=turn_id, native_id=native_id, text=text
         )
+
+    def bind_originals(
+        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str
+    ) -> bool:
+        """Bind the complete captured original atomically; no partial batch grant."""
+        bound = False
+
+        def change(document: InputDocument) -> InputDocument:
+            nonlocal bound
+            if not keys or len(set(keys)) != len(keys):
+                return document
+            successors = tuple(document.lookup(key).bind(
+                admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            ) for key in keys)
+            if any(row is None for row in successors):
+                return document
+            bound = True
+            return replace(document, rows={**document.rows, **dict(zip(keys, successors, strict=True))})
+
+        self.update(change)
+        return bound
 
     def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
         return self._transition(

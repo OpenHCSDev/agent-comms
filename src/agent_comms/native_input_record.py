@@ -207,6 +207,11 @@ class NativeInputIdentity:
 class NativeContextReference(DeclaredFamily, affix="Reference"):
     """Recorded context or an original row with no recorded context."""
 
+    recorded = False
+
+    def require_recorded(self) -> NativeInputReference:
+        raise IdentityConflict("Native input has no recorded context")
+
     def require_recorded_input(self, owner, db) -> None:
         """An unrecorded context grants no committed-input identity."""
 
@@ -224,6 +229,11 @@ class NativeInputReference(NativeContextReference):
     stage: type[NativeInputExecution]
     session_id: str
     request_generation: int
+
+    recorded = True
+
+    def require_recorded(self) -> NativeInputReference:
+        return self
 
     @classmethod
     def acquire(cls, row) -> NativeInputReference:
@@ -292,15 +302,20 @@ class NativeInputContext:
     request_generation: int | None
 
     @property
+    @abstractmethod
+    def context_anchor(self) -> str | None:
+        """Original storage member that distinguishes unrecorded context."""
+
+    @property
     def reference_stage(self) -> type[NativeInputExecution] | None:
         return self.stage
 
     @property
     def reference(self) -> NativeContextReference:
         # SQL NULL is classified at this original storage boundary only. An
-        # absent session must have the entire declared context group absent;
+        # absent context anchor must have the entire declared context group absent;
         # a partial group is corruption, never an unrecorded reference.
-        if self.session_id is None:
+        if self.context_anchor is None:
             try:
                 for item in fields(self):
                     if item.metadata.get("native_context"):

@@ -8,7 +8,7 @@ import os
 import re
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
@@ -68,6 +68,15 @@ class PublicationMeasurements:
     maximum_ns: int = 0
     maximum_started_ns: int = 0
     maximum_finished_ns: int = 0
+    operations: dict[str, PublicationMeasurements] = field(default_factory=dict)
+
+    def operation(self, name: str):
+        """Borrow bounded counters for a declared acquisition/publication operation.
+
+        These counters observe resources; they never decide readiness, receipt
+        acceptance or replay. Owners call this with their fixed operation names.
+        """
+        return self.operations.setdefault(name, PublicationMeasurements()).measuring()
 
     @contextmanager
     def measuring(self):
@@ -97,6 +106,23 @@ def record_request_progress(root, lease, progress, *, native_process, publicatio
               "recorded_monotonic_ns": now}
     if publication is not None:
         record["publication_completed_cumulative"] = FieldCodec.encode(publication)
+    _record_request_observation(root, lease, record)
+
+
+def record_acquisition_progress(root, lease, input_id, measurements):
+    """Publish the original parent acquisition spans after its custody closes.
+
+    The same diagnostic stream retains native and parent clocks with distinct
+    keys. There is no additional phase, readiness ledger or observation store.
+    """
+    _record_request_observation(root, lease, {
+        "turn": FieldCodec.encode(lease), "input_id": input_id,
+        "acquisition": FieldCodec.encode(measurements),
+        "recorded_monotonic_ns": time.monotonic_ns(),
+    })
+
+
+def _record_request_observation(root, lease, record):
     try:
         directory = root / "diagnostics"
         directory.mkdir(mode=0o700, exist_ok=True)

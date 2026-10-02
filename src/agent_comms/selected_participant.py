@@ -24,6 +24,7 @@ from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import ParticipantOwner, RegistryOwner
+from .native_attestation import ObservedAttestation
 from .private_registry_guard import _require_no_private_owner_rename
 from .participant_store import ParticipantSnapshot
 from .turn_phase import PreparingPhase, TurnPhase
@@ -31,7 +32,7 @@ from .diagnostics import record_request_progress
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 
 
-@dataclass(frozen=True)
+@dataclass
 class SelectedParticipant(MroDispatch):
     comms: Comms
     bus: MessageBus
@@ -43,6 +44,21 @@ class SelectedParticipant(MroDispatch):
     batch: SelectedSourceBatch
     provider: str
     model: str
+
+    @handles(ObservedAttestation)
+    async def native_source(self, event: ObservedAttestation) -> None:
+        """Publish the original child identity before its one input is admitted.
+
+        The registry remains the current-source owner. This acquired operation
+        receives its returned snapshot; admission references this SAME context,
+        rather than maintaining another independently refreshed owner snapshot.
+        """
+        identity = event.identity
+        if identity is None:
+            raise IdentityConflict("Native source publication lacks its attested identity")
+        self.owner = await Coordination.run_worker(partial(
+            self.comms.registry.attach_native_session, self.owner, identity.session_file
+        ))
 
     def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)

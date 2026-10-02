@@ -17,6 +17,7 @@ from .native_startup import NATIVE_STARTUP_POLICY
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import PiEvent
+    from .pi_events import RetryAttemptEvent
 
 
 class ProgressWatchdog:
@@ -31,7 +32,6 @@ class ProgressWatchdog:
         self.prompt_start_deadline: float | None = None
         self.prompt_accepted = False
         self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
-        self.tool_ever_started = self.output_started = self.compaction_started = False
         self.retry_recovery_pending = False
         self.retry_recovery_reason = "provider_auto_retry_progress"
 
@@ -72,11 +72,9 @@ class ProgressWatchdog:
     ) -> AsyncIterator[events.AgentEvent]:
         self.tick()
         if self.retry_recovery_pending and event.retry_progress:
-            self.output_started |= event.output_progress
-            self.tool_ever_started |= event.tool_progress
             self.retry_recovery_pending = False
             yield self.state(
-                session, "recovered", self.retry_recovery_reason, 0, event_phase="model_wait"
+                "recovered", self.retry_recovery_reason, 0, phase=phases.ModelWaitPhase()
             )
         if event.accepts_prompt:
             self.prompt_accepted = True
@@ -109,33 +107,19 @@ class ProgressWatchdog:
 
     def state(
         self,
-        session: TurnSession,
         state: str,
         reason_code: str,
         elapsed_ms: int,
         *,
-        event_phase: str | None = None,
-        attempt: tuple[int | None, int | None] | None = None,
+        phase: phases.TurnPhase,
+        attempt: RetryAttemptEvent | None = None,
     ) -> events.TurnState:
-        replay_safe = not (
-            session.admission.dispatched
-            or self.tool_ever_started
-            or self.output_started
-            or session.inputs.started
-            or self.compaction_started
-        )
         return events.TurnState(
             state=state,
             reason_code=reason_code,
             elapsed_ms=max(0, elapsed_ms),
-            phase=event_phase or self.phase.declared_name,
-            retryable=replay_safe,
-            replay_safe=replay_safe,
-            side_effects_possible=session.admission.dispatched
-            or self.tool_ever_started
-            or session.inputs.started
-            or self.compaction_started,
-            attempt={"current": attempt[0], "max": attempt[1]} if attempt is not None else None,
+            phase=phase,
+            attempt=attempt,
         )
 
     async def read(self, session: TurnSession) -> bytes:
@@ -192,7 +176,8 @@ class ProgressWatchdog:
             reason, phase = "input_start_timeout", "await_input"
             started = self.prompt_start_deadline - self.input_timeout
         else:
-            reason, phase = self.phase.stalled(self.prompt_accepted)
+            stalled = self.phase.stalled(self.prompt_accepted)
+            reason, phase = stalled.stall_reason, stalled.declared_name
             started = self.last_model_progress
         return TimeoutError(
             f"{reason}: phase={phase}; no progress for "
@@ -239,17 +224,18 @@ class ProgressWatchdog:
             session.finished = True
             return
         elapsed_ms = round((self.clock() - self.last_model_progress) * 1000)
-        reason_code, stalled_phase = self.phase.stalled(self.prompt_accepted)
+        stalled_phase = self.phase.stalled(self.prompt_accepted)
+        reason_code = stalled_phase.stall_reason
         if self.prompt_accepted:
             yield self.state(
-                session, "model_stalled", reason_code, elapsed_ms, event_phase=stalled_phase
+                "model_stalled", reason_code, elapsed_ms, phase=stalled_phase
             )
-        yield self.state(session, "aborting", reason_code, elapsed_ms, event_phase="shutdown")
+        yield self.state("aborting", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
         await session.abort_stalled_rpc()
         for input_id in session.started_during_abort:
             yield events.InputStarted(id=input_id)
         failed_elapsed_ms = round((self.clock() - self.last_model_progress) * 1000)
-        yield self.state(session, "failed", reason_code, failed_elapsed_ms, event_phase="shutdown")
+        yield self.state("failed", reason_code, failed_elapsed_ms, phase=phases.ShutdownPhase())
         session.output.record_failure(
             failures.ModelStalled(
                 f"Model produced no RPC progress for {self.model_wait_timeout:g} seconds."

@@ -1,5 +1,5 @@
 /** Session context admission: history stays in EntryStore until the native policy can load it. */
-import { estimateTokens } from './compaction/compaction.js';
+import { ContextBudget } from '../../node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
 
 export class SessionContext {
@@ -11,12 +11,7 @@ export class SessionContext {
         const manager=session.sessionManager;
         const model=session.model;
         const settings=session.settingsManager.getCompactionSettings();
-        // AgentSession owns measured selected-branch usage. After compaction it
-        // deliberately reports unknown until a new assistant response: estimate
-        // that current context without reusing stale pre-compaction usage.
-        const tokens=session.getContextUsage()?.tokens ?? manager.buildContextEntries()
-            .flatMap(sessionEntryToContextMessages).reduce((total, message)=>total+estimateTokens(message), 0);
-        if (!model || tokens > model.contextWindow - settings.reserveTokens) {
+        if (!model || this.sourceBudget(session).compactionRequired(settings)) {
                 session.storedContext=new CompactionContext(manager);
                 session.storedContext.install(session.agent);
                 return session.storedContext;
@@ -25,10 +20,20 @@ export class SessionContext {
         session.storedContext.install(session.agent);
         return session.storedContext;
     }
+    static sourceBudget(session) {
+        return new ContextBudget(session.model, {
+            systemPrompt: session.systemPrompt,
+            messages: session.sessionManager.buildContextEntries()
+                .flatMap(sessionEntryToContextMessages).toArray(),
+            tools: session.agent.state.tools,
+        });
+    }
+    compactionRequired(session, settings) {
+        return SessionContext.sourceBudget(session).compactionRequired(settings);
+    }
     install(agent) { throw new Error('Concrete session context required'); }
     requireReady() { throw new Error('Native compaction did not admit the retained context'); }
     messages(agent) { throw new Error("Concrete context messages required"); }
-    requiresCompaction() { return false; }
     async beforeInput(session) {}
 }
 export class ReadyContext extends SessionContext {
@@ -39,7 +44,6 @@ export class ReadyContext extends SessionContext {
     }
 }
 export class CompactionContext extends SessionContext {
-    requiresCompaction() { return true; }
     messages() { return this.manager.buildContextEntries().flatMap(sessionEntryToContextMessages); }
     install(agent) { agent.state.messages=[]; }
     async beforeInput(session) {

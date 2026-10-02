@@ -350,6 +350,37 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
     side_effects_possible: bool = dataclass_field(metadata={"sql": Column()})
     revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
 
+    @classmethod
+    def accumulate(cls, db, execution_id: str, observed: ReplayFact) -> None:
+        """Join original observations under the caller's existing attempt fence.
+
+        Missing replay evidence cannot establish safety. Only an existing
+        assessment may retain that fact, and every incoming observation can
+        revoke it. The monotonic record and SQL constraints own the write.
+        """
+        before = cls.one(db, execution_id=execution_id)
+        if before is None:
+            if not observed:
+                return
+            after = cls(execution_id, observed, False, True, 1)
+        else:
+            facts = before.facts | observed
+            after = replace(
+                before,
+                facts=facts,
+                replay_safe=before.replay_safe and not facts,
+                side_effects_possible=before.side_effects_possible or bool(observed),
+                revision=before.revision + 1,
+            )
+        after.record(db, before)
+
+    @classmethod
+    def revoke_for_retry(cls, db, execution_id: str) -> None:
+        """A new fenced attempt cannot reuse the prior attempt's safety proof."""
+        before = cls.one(db, execution_id=execution_id)
+        if before is not None and before.replay_safe:
+            replace(before, replay_safe=False, revision=before.revision + 1).record(db, before)
+
     def require_successor(self, after: ReplayAssessments) -> None:
         accumulated = replace(
             after,

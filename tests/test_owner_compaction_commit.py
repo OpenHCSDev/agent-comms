@@ -436,9 +436,9 @@ def test_only_exact_unattempted_original_input_can_cross_source_and_commit(nativ
     with pytest.raises(RelationViolationError, match="Unsettled"):
         bridge.capture_source(owner, owner_generation, witness)
     source = bridge.capture_source(
-        owner, owner_generation, witness, pending_input_key="acp:original"
+        owner, owner_generation, witness, pending_input_keys=("acp:original",)
     )
-    assert source.pending_input_key == "acp:original"
+    assert source.pending_input_keys == ("acp:original",)
     result = OwnerCompactionCommit.commit(
         bridge, owner, owner_generation, witness, "summary", 42, source=source
     )
@@ -461,7 +461,7 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
         text="original",
     )
     source = bridge.capture_source(
-        owner, owner_generation, witness, pending_input_key="acp:original"
+        owner, owner_generation, witness, pending_input_keys=("acp:original",)
     )
     inputs.record(
         "acp:correction",
@@ -484,7 +484,7 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
         text="original",
     )
     with pytest.raises(RelationViolationError, match="already attempted"):
-        bridge.capture_source(owner, owner_generation, witness, pending_input_key="acp:original")
+        bridge.capture_source(owner, owner_generation, witness, pending_input_keys=("acp:original",))
     assert entries(witness)[-1]["type"] == "message"
 
 

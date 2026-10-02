@@ -32,15 +32,11 @@ function acSelectedCompactionSettings(command, session, conflict) {
         settings.reserveTokens < 0 || settings.reserveTokens > 10000000 ||
         !Number.isSafeInteger(settings.keepRecentTokens) || settings.keepRecentTokens <= 0 ||
         settings.keepRecentTokens > 10000000) throw Error("Invalid effective compaction settings");
-    // Cold restored history can require compaction before any runtime usage has
-    // been published. The selected session owns both stored admission and usage.
-    const requiresCompaction = session.storedContext.requiresCompaction();
-    const tokens = requiresCompaction ? undefined : session.getContextUsage()?.tokens;
     return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
         selected: command.selected,
         decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
             keepRecentTokens: settings.keepRecentTokens,
-            trigger: requiresCompaction || (tokens != null && shouldCompact(tokens, model.contextWindow, settings))}};
+            trigger: session.storedContext.compactionRequired(session, settings)}};
 }
 function acValidSummaryRequest(value) {
     const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings", "retainedText"];

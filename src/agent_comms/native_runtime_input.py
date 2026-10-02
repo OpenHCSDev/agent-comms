@@ -23,6 +23,7 @@ from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
+    from .native_session_reopen import NativeSessionIdentity
 
 
 class NativeRuntimeTable:
@@ -38,7 +39,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[5] = field(default=5, kw_only=True)
+    version: Literal[6] = field(default=6, kw_only=True)
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
     @classmethod
@@ -80,6 +81,57 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     def __post_init__(self):
         self.execution
+        # The selected identity and the later context receipt are separate
+        # acquisition phases of this ORIGINAL row, never two source selectors.
+        if self.session_id is None:
+            from .field_codec import FieldCodec
+
+            FieldCodec.decode(type(None), self.session_file)
+        else:
+            self.require_session_identity()
+        self.reference
+
+    @property
+    def context_anchor(self) -> str | None:
+        return self.session_entry_id
+
+    def require_session_identity(self) -> NativeSessionIdentity:
+        """Recover the source originally attested before this row's raw writer."""
+        from .native_session_reopen import NativeSessionIdentity
+
+        try:
+            return NativeSessionIdentity(self.session_id, self.session_file)
+        except (TypeError, ValueError) as error:
+            raise IdentityConflict("Native input has no recorded selected session") from error
+
+    def require_context_proof(self) -> NativeContextProof:
+        """Recover the original committed receipt, never manufacture it from a path."""
+        from .native_pi import NativeContextProof
+
+        reference = self.reference.require_recorded()
+        return NativeContextProof(
+            reference.input_id, reference.session_id, self.session_entry_id,
+            reference.request_generation, self.llm_context_digest,
+            self.require_session_identity().path,
+        )
+
+    @classmethod
+    def recorded_contexts(
+        cls, db: sqlite3.Connection, session: NativeSessionIdentity
+    ) -> dict[str, NativeContextProof]:
+        """Recover complete original receipts for the selected native source.
+
+        A routing name or resource directory cannot select these rows. Query
+        the originally admitted file, then corroborate its header identity.
+        A selected prewrite row without a context receipt remains a refusal.
+        """
+        proofs = {}
+        for row in cls.select(
+            db, where="session_file=?", parameters=(session.session_file,)
+        ):
+            session.require_same_session(row.require_session_identity())
+            proofs[row.input_id] = row.require_context_proof()
+        return proofs
 
     @property
     def execution(self) -> NativeInputExecution:
@@ -208,8 +260,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         metadata={"sql": Column(check="sent_owner_admission_generation>0",
                                  storage=IntegerStorage, nullable=True)},
     )
-    session_id: str | None = field(default=None, metadata={"native_context": str})
-    session_file: str | None = field(default=None, metadata={"native_context": str})
+    session_id: str | None = None
+    session_file: str | None = None
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
@@ -222,18 +274,18 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
-        "(session_id IS NULL AND session_file IS NULL AND session_entry_id IS NULL "
-        "AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
+        "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
-        "AND length(session_file)>0 AND session_entry_id IS NOT NULL AND "
-        "length(session_entry_id)>0 "
-        "AND request_generation>0 AND length(llm_context_digest)=64)",
+        "AND length(session_file)>0 AND sent_owner_admission_generation IS NOT NULL)",
+        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
+        "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
+        "AND length(llm_context_digest)=64 AND session_id IS NOT NULL)",
         "stage='triage' OR verdict IS NULL",
     )
 
     def require_unproven(self, token_digest: str) -> None:
         """Only the original reserved capability can acquire its first proof."""
-        if self.owner_token_digest != token_digest or self.session_id is not None:
+        if self.owner_token_digest != token_digest or self.reference.recorded:
             raise StaleFence("native proof belongs to a different or already settled dispatch")
 
     def commit_context(
@@ -243,15 +295,14 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         *,
         verdict: type[SelectedTriage] | None = None,
     ) -> None:
-        """Commit the five context facts together, once, after live verification."""
+        """Commit the context receipt once against the original selected session."""
         if context.input_id != self.input_id:
             raise StaleFence("native context belongs to another reserved input")
+        self.require_session_identity().require_context(context)
         updated = self.update(
             db,
-            where="input_id=? AND session_id IS NULL",
+            where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
-            session_id=context.session_id,
-            session_file=str(context.session_file),
             session_entry_id=context.session_entry_id,
             request_generation=context.request_generation,
             llm_context_digest=context.llm_context_digest,
@@ -278,7 +329,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                     AND NEW.sent_owner_admission_generation
                         IS NOT OLD.sent_owner_admission_generation)
                 OR (NEW.sent_owner_admission_generation IS NULL AND NEW.session_id IS NOT NULL)
-                OR OLD.session_id IS NOT NULL
+                OR (OLD.session_id IS NOT NULL AND
+                    (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS NOT OLD.session_file))
+                OR OLD.session_entry_id IS NOT NULL
                 OR (NEW.session_id IS NULL AND NEW.sent_owner_admission_generation IS NULL)
             BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
             f"{name}_delete_guard": f"CREATE TRIGGER {name}_delete_guard BEFORE DELETE ON {name} "
@@ -288,6 +341,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
 @dataclass(frozen=True)
 class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
+    @property
+    def context_anchor(self) -> str | None:
+        return self.session_id
+
     wire_root_id: str = field(
         metadata={
             "sql": Column(

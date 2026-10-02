@@ -23,7 +23,7 @@ def main(path: Path) -> None:
     source = replace_once(source,
         'import * as crypto from "node:crypto";',
         'import * as crypto from "node:crypto";\n'
-        'import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";\n'
+        'import { compact, prepareCompaction } from "../../core/compaction/index.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()
     source = replace_once(source, "export async function runRpcMode(runtimeHost) {", helper + "\nexport async function runRpcMode(runtimeHost) {")

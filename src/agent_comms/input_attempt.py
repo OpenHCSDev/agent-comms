@@ -63,6 +63,12 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
         return False
 
+    def matches_original_provenance(self, source: InputProvenance) -> bool:
+        return False
+
+    def matches_original_source(self, source: StoredInput) -> bool:
+        return False
+
     def require_original_provenance(self, source: InputProvenance):
         raise RelationViolationError("Constraint lacks its original input provenance")
 
@@ -82,7 +88,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         admission: int,
         turn: TurnId,
         sent_digest: TextDigest,
-        original_digest: TextDigest,
+        original: StoredInput,
     ) -> bool:
         return False
 
@@ -126,8 +132,14 @@ class StoredInput(InputAttempt):
     def context_provenance(self) -> InputProvenance:
         return InputProvenance(self.key, self.origin)
 
+    def matches_original_provenance(self, source: InputProvenance) -> bool:
+        return self.context_provenance() == source
+
+    def matches_original_source(self, source: StoredInput) -> bool:
+        return self.matches_original_provenance(source.context_provenance()) and self.digest == source.digest
+
     def require_original_provenance(self, source: InputProvenance):
-        if self.context_provenance() != source:
+        if not self.matches_original_provenance(source):
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
         return self
@@ -339,14 +351,14 @@ class StartedInput(SentInput):
         admission: int,
         turn: TurnId,
         sent_digest: TextDigest,
-        original_digest: TextDigest,
+        original: StoredInput,
     ) -> bool:
         return (
             self.matches_owner(owner)
             and self.matches_admission(admission)
             and self.turn_id == turn.value
             and self.sent_digest == sent_digest
-            and self.digest == original_digest
+            and self.matches_original_source(original)
         )
 
 

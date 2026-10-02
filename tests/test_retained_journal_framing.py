@@ -7,12 +7,13 @@ from agent_comms.compaction_states import (
     UnknownNativeOutcome,
 )
 from agent_comms.retained_task_facts import RetainedTaskFacts
+from agent_comms.private_path import FileIdentity, FileRevision
 
 
 @pytest.mark.parametrize("outcome", [
     UnknownNativeOutcome("uncertain original"),
-    CommittedNativeOutcome("entry", "revision", "leaf", "0" * 64),
-    AbortedNoWriteNativeOutcome("revision", "leaf"),
+    CommittedNativeOutcome("entry", FileRevision(FileIdentity(1, 2), 3, 4, 5), "leaf", "0" * 64),
+    AbortedNoWriteNativeOutcome(FileRevision(FileIdentity(1, 2), 3, 4, 5), "leaf"),
 ])
 def test_native_outcome_metadata_uses_existing_frame_owner(outcome):
     assert NativeOutcome.read(outcome.journal_json()) == outcome

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .bus_publication import CommittedDelivery
-from .channel_input_batch import InputBatch
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .field_codec import FieldCodec
@@ -43,7 +42,7 @@ class SelectedSource:
 
 
 @dataclass(frozen=True)
-class SelectedSourceBatch(InputBatch):
+class SelectedSourceBatch:
     sources: tuple[SelectedSource, ...]
 
     def __post_init__(self):
@@ -60,10 +59,6 @@ class SelectedSourceBatch(InputBatch):
             raise IdentityConflict("Selected batch crosses recipient ownership")
         if any(derive_exact_reply_target(source.delivery.message) is None for source in self.sources):
             raise IdentityConflict("Selected source lacks an original reply route")
-
-    @property
-    def admits_multiple(self) -> bool:
-        return len(self.sources) > 1
 
     @property
     def assignments(self) -> tuple[WakeAssignment, ...]:

@@ -17,8 +17,6 @@ from .compaction_identity import (
 from .compaction_journal_role import JournalRole
 from .compaction_records import (
     CompactionOperation,
-    EnrolledPrivateSession,
-    PrivateRawInput,
     SelectedSummaryAttempt,
     SelectedSummarySource,
 )
@@ -84,23 +82,6 @@ class SelectedSummaries(JournalRole):
             # lexical path evades the private-root floor. Never reserve on a
             # multiply linked inode, regardless of the supplied path.
             raise CompactionJournalError("Selected saved session must have one private inode link")
-        private_sessions = (self.journal.path.parent / "native-sessions").resolve(strict=False)
-        private = Path(canonical).is_relative_to(private_sessions)
-        if private and fresh_session is not None:
-            # Never infer coverage from a visible file, missing marker, or an
-            # enrolment SQL row alone after an uncertain fsync/restart. The
-            # original O_EXCL creation object must still be in this process.
-            from .fresh_private_session import FreshPrivateSession
-
-            if type(fresh_session) is not FreshPrivateSession:
-                raise CompactionJournalError(
-                    "Private selected reservation requires reviewed raw-history coverage floor"
-                )
-            fresh_session.verify_saved_identity()
-            if fresh_session.path != Path(canonical) or (
-                admission_generation is not None and type(admission_generation) is not int
-            ):
-                raise CompactionJournalError("Fresh private selected identity changed")
         envelope = source
         payload = envelope.journal_json()
         from .selected_source import SessionRevision
@@ -119,7 +100,7 @@ class SelectedSummaries(JournalRole):
                     ).reading() as inputs,
                     self.journal.transaction() as db,
                 ):
-                    envelope.source.reservation_check(
+                    envelope.reservation_check(
                         SessionRevision.observe(canonical), inputs
                     ).require_valid()
                     covered_inputs = (
@@ -127,48 +108,18 @@ class SelectedSummaries(JournalRole):
                         if future_queue is not None
                         else inputs
                     )
-                    if private and fresh_session is not None:
-                        assert fresh_session is not None
-                        coverage = EnrolledPrivateSession.one(db, session_file=canonical)
-                        if coverage is None:
-                            raise CompactionJournalError(
-                                "Fresh private owner coverage differs: not enrolled"
-                            )
-                        self.journal.private_inputs.require_coverage(
-                            coverage, fresh_session, envelope.source, admission_generation
-                        )
-                    raw_ids = frozenset(
-                        row.input_id
-                        for row in PrivateRawInput.select(
-                            db, where="session_file=?", parameters=(canonical,)
-                        )
+                    self.journal.private_inputs.require_source_coverage(
+                        db, Path(canonical), envelope.source, covered_inputs,
+                        fresh=fresh_session, admission_generation=admission_generation,
                     )
-                    if private and fresh_session is None:
-                        from .continued_private_session import verify_continued_private_session
-
-                        try:
-                            verify_continued_private_session(
-                                self.journal.path.parent,
-                                Path(canonical),
-                                envelope.source,
-                                raw_ids,
-                                covered_inputs,
-                            )
-                        except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
-                            raise CompactionJournalError(
-                                "Private selected reservation requires reviewed "
-                                "raw-history coverage floor"
-                            ) from error
                     if CompactionOperation.unresolved_in(db, canonical):
                         raise CompactionJournalError(
                             "Unresolved native commit; no selected summary"
                         )
-                    if SelectedSummaryAttempt.blocking_in(db, canonical, inputs) or (
-                        raw_ids and (not private or fresh_session is not None)
-                    ):
+                    if SelectedSummaryAttempt.blocking_in(db, canonical, inputs):
                         raise CompactionJournalError("Blocked selected summary; never replay")
                     SelectedSummaryAttempt(
-                        operation_id, canonical, payload, ReservedSummary()
+                        operation_id, canonical, payload, envelope, ReservedSummary()
                     ).insert(db)
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(

@@ -42,6 +42,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
+    """Original identity and author coordinate, independent of disposition."""
     key: str
     origin: InputOrigin
 
