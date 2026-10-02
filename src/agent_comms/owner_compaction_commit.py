@@ -25,7 +25,7 @@ from .native_compaction_request import NativeIntent, NativeSummaryPayload
 from .native_compaction_writer import NativeCompactionWriter
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
 from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
-from .pi_summary_payloads import SelectedModel, SummaryFiles, SummaryUsage
+from .pi_summary_payloads import SelectedModel, SummaryDeclinedData, SummaryFiles, SummaryUsage
 from .registration import Registration
 from .reservation_rules import CommitReservationCheck
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
@@ -174,7 +174,7 @@ class OwnerCompactionCommit:
     def reconcile_interrupted_summaries(
         self, owner: Thread, owner_generation: int, witness: NativeWitness
     ) -> None:
-        """Retire an interrupted summary only when no original input or write occurred.
+        """Retire a prior reservation/refusal only with original no-write evidence.
 
         The provider outcome remains UNKNOWN. A later explicit input may request
         a new summary; neither this method nor the retired row replays anything.
@@ -189,7 +189,10 @@ class OwnerCompactionCommit:
                 )
                 self.journal.summaries.retire_unchanged(attempt, check)
 
-    def settle_selected_refusal(self, owner, owner_generation, source, declined) -> None:
+    def settle_selected_refusal(
+        self, owner: Thread, owner_generation: int, source: CompactionSource,
+        declined: SummaryDeclinedData,
+    ) -> None:
         """Settle a fresh correlated no-write refusal, never its original input.
 
         Unlike interrupted recovery this is the still-current operation. The
@@ -214,7 +217,6 @@ class OwnerCompactionCommit:
                 SessionRevision.observe(source.native.session_file),
                 self.inputs._read_unlocked(),
             )
-            check.require_valid()
             self.journal.summaries.refuse(attempt.operation_id, declined.reason)
             self.journal.summaries.retire_unchanged(
                 self.journal.summaries.get(attempt.operation_id), check
