@@ -1,8 +1,11 @@
 # Selected turn context: original S5 consumer closure
 
 Owner: Singer. Source baseline: `d51100ec`, including merged 503 and 507.
-Implementation is published as a source checkpoint. Installed receiving inspection
-remains open; this is not an S5 completion or live activation claim.
+Implementation and one installed reader journey are published. Normal integration
+of merged 509 leaves **zero production delta** against main `f9135463`.
+The selected producer is already in 509's qualified configured workflow. This is
+not an S5 completion or default-activation claim; 511 now closes documentation and
+original evidence only.
 
 ## Existing owner search and concrete gap
 
@@ -42,11 +45,10 @@ Source reasoning and coherent implementation precede batched final validation.
 The final installed receiving journey must cover pure-channel TRIAGE to FULL and
 direct FULL, original manifests, contributors and CLI historical inspection.
 No original failed input is replayed. Schrodinger owns the existing 304/307
-receiving seam. His frozen 307 stage does not contain 511; its acceptance must
-remain separate. One bounded inspection of original saved selected proof and
-context CLI in an exact 511 installed wheel follows the source checkpoint. It
-uses no new paid input or native gate and cannot establish new selected provider
-behavior by reading historical evidence.
+receiving seam. His frozen 307 stage does not contain 511; its acceptance remains
+separate. The bounded installed inspection below uses no new paid input or native
+gate and cannot establish new selected provider behavior by reading historical
+evidence. Arendt owns the combined 509 native receiving journey.
 
 ## Coherent source checkpoint and deletion evidence
 
@@ -95,10 +97,52 @@ definitions have distinct native-compaction and delivery/AssignmentStore meaning
 `.artifacts/selected-context511-ast-raw` directory. The temporary analysis dependency
 target was removed and is not used for the published census.
 
-Production source is frozen at `47d16ba74bb8658e3aa35047025f2f4b6b5e6f79`.
+The installed assembly/transport checkpoint is
+`47d16ba74bb8658e3aa35047025f2f4b6b5e6f79`. A final minimal handler correction
+uses `Thread.require_turn_lease` in `SelectedParticipant.observe_context` too.
+The earlier edit changed `transition` instead; earlier prose claiming both
+callers were already corrected was wrong. `final-handler-owner-correction.json`
+records the exact before/after AST. Qualified 509 already uses this contract.
+This changes no prompt bytes, source, manifest identity, schema or native protocol;
+the unchanged suite and model journey are not repeated.
 The two action instruction assets intentionally retain their original final spaces
 and absence of a final newline: removing these whitespace warnings would change
 the required original prompt bytes.
+
+## Final installed reader journey
+
+Normal Git installation of exact production `47d16ba7` in one small owned prefix
+resolved nine dependencies including ACP 0.12.1. All 340 installed source and asset
+files exactly match that commit; no overlay or native build was used.
+
+The actual installed `agent-comms` entrypoint read `openhcs-helper2`'s existing
+recorded context diff on the current canonical root. It returned original previous
+and current turn identities and text-free contributor changes. It made no RPC,
+provider call or new input. This is an inspection of existing original observations,
+not a new selected native producer qualification.
+
+The same installed package corroborated the original 503/507 FULL input
+`da17d8ffbf8f23b6579ecdc7c24ca24c`, entry `c4eca65d`, generation 2, through the
+existing native proof owner. That selected wire has no context manifests; the CLI
+correctly refused to invent one. Eight archived wire/registry/session/proof files
+had identical before/after hashes. The preserved 504 fixture's final incarnation
+replacement also correctly refused its old turn. Earlier positive 504 query
+receipts describe earlier fixture states and were not reused as current evidence.
+
+`installed-reader-journey.json` records the exact installed package provenance,
+commands, original proof coordinates and protected hashes. The merged combined
+509 checkpoint contains the same selected producer and its existing worker
+callback with `require_turn_lease`. Normal three-way integration preserves it.
+509's original configured qualification is recorded in
+`evidence/async-bus-custody-20261002/configured509-qualified01.json`: nine completed
+claims, three FULL native proofs and channel receipts, preserved original settings
+and sixteen files. Its raw driver timeout remains recorded; current cursors
+legitimately advanced to later TRIAGE. No new provider or test gate is run here.
+
+The separately granted follow-up will put the manifest writer's async resource
+lifetime in the existing declaration, make both callbacks await it and delete the
+selected forwarding helper. That new source change is outside 511's final zero
+production delta and outside the frozen 509 receiving stage.
 
 ## Original goal remains open
 
