@@ -87,5 +87,8 @@
   "provider_calls": 0,
   "native_inputs": 0,
   "validation_order": "semantic existing-owner analysis, coherent implementation, final installed journey",
-  "receipt": "installed-complete490-operator14.json"
+  "receipt": "installed-complete490-operator14.json",
+  "qualified_main_merge": "5cf5536f1805df9ba020521d6db7f9e88df88e3e",
+  "normal_integration_head": "2dc702c51eed3ec2b455351eb9307de15c081e38",
+  "qualified499_merge_changes_carry_declarations": false
 }
