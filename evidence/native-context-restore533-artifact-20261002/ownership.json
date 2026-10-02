@@ -1,0 +1,15 @@
+{
+  "owner": "Schrodinger sole artifact builder; Arendt533 producer/acceptance",
+  "source": "4f5823db6dca2b0a948157b5c4359873b8bf4bfe",
+  "purpose": "One independent normal compiled source-restore resource artifact",
+  "expected_peak_scratch_bytes": 300000000,
+  "provider_calls": 0,
+  "public_writes": 0,
+  "protected_native": [
+    "publicad533",
+    "qualified0b306",
+    "original5184"
+  ],
+  "cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "active_other_proof": "Einstein520 f76 compactprefix/native0b306 remains immutable"
+}
