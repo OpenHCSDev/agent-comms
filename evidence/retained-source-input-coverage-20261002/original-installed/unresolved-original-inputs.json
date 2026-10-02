@@ -1,0 +1,14 @@
+{
+  "snapshot_owner_active": false,
+  "rows": [
+    {
+      "key": "acp:0d9d2784d0f34858947e138b375e83e5",
+      "type": "NotSentInput",
+      "has_started": false,
+      "unresolved": true,
+      "origin_type": "UnattributedInputOrigin"
+    }
+  ],
+  "current_queue_authority": "not held; not inferred from durable rows",
+  "disposition": "No inputs removed or reclassified"
+}

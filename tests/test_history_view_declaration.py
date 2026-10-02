@@ -53,7 +53,7 @@ def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participan
     from test_coordinated_runtime import _root
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    lease = comms.agents.begin_turn("beta", "ordinary-snapshot-active-participant")
+    lease = comms.agents.begin_turn("beta", "ordinary-snapshot-active-participant").turn_lease
     try:
         snapshot = comms.views.coordination_snapshot()
         assert [person.thread.name for person in snapshot.participants("#team")] == ["beta"]
