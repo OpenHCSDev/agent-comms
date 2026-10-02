@@ -44,6 +44,15 @@ lifetime now waits for the sole bounded physical recorder's explicit cleanup;
 EOF also retires it. Corrected physical observation and final teardown are
 pending; no new input or provider turn is dispatched.
 
+The corrected recorder completed and cleaned its processes, but Lovelace reports
+the app refused saved-source startup because its CLI invocation did not preserve
+the original project directory. `physical-cwd-startup-refusal.json` retains this
+recorder receipt as unreviewed; recorder completion is not Tree acceptance.
+The installed CLI declares project_dir both as an option and positional
+argument. Lovelace is using its positional authoritative Thread worktree for
+the final physical path, without a production CLI edit or another native owner.
+The same prepared child remains held through this invocation correction.
+
 The harness dispatches no prompt; it does not instrument unrelated startup
 network traffic. This check does not attribute the historical terminal tail
 or claim general latency acceptance.
