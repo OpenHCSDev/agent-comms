@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 
 from .agent_events import NativePhaseChanged
+from .pi_events import TurnContextObserved
 from .bus_publication import stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
@@ -60,6 +61,13 @@ class SelectedParticipant(MroDispatch):
         """Consume each original dependency reply included in this completed input."""
         for source in self.batch.sources:
             self.comms.goals.consume_reply_wait(self.owner, source.delivery.message.reference)
+
+    @handles(TurnContextObserved)
+    async def observe_context(self, event: TurnContextObserved) -> None:
+        self.owner.require_active_turn()
+        lease = self.owner.thread.turn_lease
+        assert lease is not None
+        event.context.record(self.bus.log, self.owner.thread, lease)
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
