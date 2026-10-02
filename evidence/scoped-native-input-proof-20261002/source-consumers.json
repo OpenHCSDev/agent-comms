@@ -1,0 +1,1052 @@
+{
+  "source": "5c55d1ccf552007d569fa0343f2d66bb9aae53d1",
+  "root": "src/agent_comms",
+  "parser": "existing audit.findings.Package.load",
+  "parsed": 311,
+  "parse_failures": [],
+  "enumeration_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 88,
+      "context": "",
+      "name": "PersistentPiSession",
+      "bases": [],
+      "members": [
+        "__init__",
+        "available",
+        "open",
+        "retain",
+        "close",
+        "close_idle",
+        "require_reopen",
+        "discard_for_external_write"
+      ],
+      "sha256": "d8f8564f113c21ed5f1f3a908bb6f4e42c91a89ffbba8302cb7e43edbb86d6e5"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 828,
+      "context": "",
+      "name": "ChildProcess",
+      "bases": [
+        "Sealed",
+        "ABC"
+      ],
+      "members": [
+        "__init__",
+        "pid",
+        "alive",
+        "force",
+        "retired",
+        "wait",
+        "_stop_plan",
+        "_stop",
+        "_release_retired_io",
+        "stop"
+      ],
+      "sha256": "1d56ac545c5b94d4b62274e7ea91acc26a434f75b5bd5adc42a39104657b06c8"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 855,
+      "context": "ChildProcess",
+      "name": "_stop_plan",
+      "async": false,
+      "returns": null
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 209,
+      "context": "",
+      "name": "_response_boundary",
+      "async": false,
+      "returns": "Iterator[RegistrySnapshot]"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 234,
+      "context": "",
+      "name": "LiveResponseOwner",
+      "bases": [
+        "RegistryOwner"
+      ],
+      "members": [
+        "recipient_lookup",
+        "require_live",
+        "publish_responses",
+        "_publish_owned"
+      ],
+      "sha256": "09e2f3083c6dbcbd240ed9cf7120e6fa116c57026bc00d4208f43f13f3f98350"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 305,
+      "context": "",
+      "name": "_require_cohort_assignments",
+      "async": false,
+      "returns": "None"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 365,
+      "context": "",
+      "name": "_require_final_owner",
+      "async": false,
+      "returns": "RecoverySnapshot"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 379,
+      "context": "",
+      "name": "prepare_fenced_response",
+      "async": false,
+      "returns": "Applied[PublicationIntents] | AlreadyApplied[PublicationIntents]"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 490,
+      "context": "",
+      "name": "_settle_fenced_response",
+      "async": false,
+      "returns": "Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 576,
+      "context": "",
+      "name": "publish_fenced_response",
+      "async": false,
+      "returns": "Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 590,
+      "context": "",
+      "name": "resolve_existing_response",
+      "async": false,
+      "returns": "Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 249,
+      "context": "LiveResponseOwner",
+      "name": "publish_responses",
+      "async": true,
+      "returns": "RecoverySnapshot"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 263,
+      "context": "LiveResponseOwner",
+      "name": "_publish_owned",
+      "async": false,
+      "returns": "RecoverySnapshot"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 64,
+      "context": "",
+      "name": "PublicationMeasurements",
+      "bases": [],
+      "members": [
+        "operation",
+        "measuring"
+      ],
+      "sha256": "7b0b1ea46f53f610a4a9f060438ab71e5dabacc96e9e61d3f6dd187b1b89db3c"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 25,
+      "context": "",
+      "name": "DurableTurn",
+      "bases": [
+        "MroDispatch"
+      ],
+      "members": [
+        "__init__",
+        "current",
+        "model_started",
+        "advance",
+        "accepted",
+        "context",
+        "excursion",
+        "model",
+        "tool",
+        "compaction",
+        "finish",
+        "fail_unknown",
+        "fail_terminal"
+      ],
+      "sha256": "8947ee46bfcd475dedb536c56e49880facaceb51697db33f412a78898ea48ca4"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 333,
+      "context": "Goals",
+      "name": "consume_reply_wait",
+      "async": false,
+      "returns": "bool"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 23,
+      "context": "",
+      "name": "PiSessionChild",
+      "bases": [],
+      "members": [
+        "reply_ui",
+        "start",
+        "stderr_tail",
+        "close",
+        "failures"
+      ],
+      "sha256": "56fadcd2a23560ba621464207fd8e67b6c9ca32dc1e9f232bcfe06f926a8cb05"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 72,
+      "context": "",
+      "name": "NativeCustody",
+      "bases": [
+        "ABC"
+      ],
+      "members": [
+        "available",
+        "reuse",
+        "idle",
+        "inspect_context",
+        "expected",
+        "retire",
+        "closed",
+        "reopen"
+      ],
+      "sha256": "56fadcd2a23560ba621464207fd8e67b6c9ca32dc1e9f232bcfe06f926a8cb05"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 186,
+      "context": "",
+      "name": "NativeEvidenceRead",
+      "bases": [],
+      "members": [
+        "__init__",
+        "require_path",
+        "open",
+        "borrow",
+        "close",
+        "observe",
+        "decode_rows",
+        "retained_task_facts"
+      ],
+      "sha256": "8446c270bc520f6941a8b2a59adad4a983db4ee4160cc1932cdbd1d25a07b4c4"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 306,
+      "context": "",
+      "name": "NativeInputEvidenceRead",
+      "bases": [
+        "NativeEvidenceRead"
+      ],
+      "members": [
+        "decode_rows"
+      ],
+      "sha256": "8446c270bc520f6941a8b2a59adad4a983db4ee4160cc1932cdbd1d25a07b4c4"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 99,
+      "context": "NativeEntry",
+      "name": "read_evidence",
+      "async": false,
+      "returns": null
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 113,
+      "context": "NativeEntry",
+      "name": "open_input_evidence",
+      "async": false,
+      "returns": null
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 189,
+      "context": "",
+      "name": "NativeContextJournal",
+      "bases": [
+        "NativeContextRecord",
+        "TypedTable"
+      ],
+      "members": [
+        "triggers",
+        "native_contract",
+        "open_evidence",
+        "for_input",
+        "corroborate"
+      ],
+      "sha256": "0acbcaedbceb1ef0a0e0e74f4a74a692dfa8ddd32df257d3c1d1d8d62e6e9024"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 586,
+      "context": "",
+      "name": "PrivateEvidenceRead",
+      "bases": [],
+      "members": [
+        "__init__",
+        "open",
+        "close",
+        "_capture_append",
+        "_decode_row",
+        "rows",
+        "verify_snapshot"
+      ],
+      "sha256": "0acbcaedbceb1ef0a0e0e74f4a74a692dfa8ddd32df257d3c1d1d8d62e6e9024"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 305,
+      "context": "NativeContextProof",
+      "name": "corroborates_input",
+      "async": false,
+      "returns": "bool"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 318,
+      "context": "NativeContextProof",
+      "name": "read_evidence",
+      "async": false,
+      "returns": "NativeContextProof"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 666,
+      "context": "PrivateEvidenceRead",
+      "name": "verify_snapshot",
+      "async": false,
+      "returns": null
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 49,
+      "context": "",
+      "name": "PrivateSendAdmission",
+      "bases": [],
+      "members": [
+        "bus",
+        "store_path",
+        "wire_root_id",
+        "owner",
+        "participant",
+        "__post_init__",
+        "reserve",
+        "verify",
+        "prepare_context",
+        "execute",
+        "commit",
+        "_admit_once",
+        "__call__"
+      ],
+      "sha256": "28f4e6b316996a1c5efd22305b76064614b309ca08f4d8c4f4c792367fed8f8d"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 42,
+      "context": "",
+      "name": "NativeSendStage",
+      "bases": [
+        "ABC"
+      ],
+      "members": [
+        "recipient_lookup",
+        "execution",
+        "require_phase",
+        "reserve_claim",
+        "fail_terminal",
+        "fail_unknown",
+        "reserve",
+        "identity",
+        "pending_input",
+        "verify",
+        "require_claim",
+        "require_reservation",
+        "require_sources",
+        "require_binding",
+        "bound_prompt",
+        "require_bound_prompt"
+      ],
+      "sha256": "f484466bb1fa8127e7af30e73bde2e3e1124ed158e8289ece24b64dea67511d6"
+    },
+    {
+      "path": "src/agent_comms/response_conversation.py",
+      "line": 16,
+      "context": "",
+      "name": "ResponseConversation",
+      "bases": [],
+      "members": [
+        "capture",
+        "audience",
+        "record"
+      ],
+      "sha256": "9f431e5e7530c80779ad2b744ea02dad91b12d2a5b2c04e433c5778cbc69c66f"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 77,
+      "context": "SelectedParticipant",
+      "name": "consume_reply_wait",
+      "async": false,
+      "returns": "None"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 139,
+      "context": "",
+      "name": "TrackedTurnSession",
+      "bases": [
+        "TurnSession",
+        "MroDispatch"
+      ],
+      "members": [
+        "__init__",
+        "execute",
+        "complete",
+        "resume_prepared",
+        "open_transport",
+        "started_input",
+        "active_tools",
+        "apply_native_event",
+        "next_event",
+        "send",
+        "attest",
+        "write",
+        "prompt_boundary",
+        "admit_prompt",
+        "response",
+        "committed_input",
+        "committed_context",
+        "message_update",
+        "text_delta",
+        "message_end",
+        "accept_tool_round",
+        "accept_final_message",
+        "fail_terminal",
+        "context_proof",
+        "tool_started",
+        "tool_finished",
+        "settled",
+        "result"
+      ],
+      "sha256": "08c662809aa31e842d42750805443965e8860043df8276be405ce06aad8c9d63"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 394,
+      "context": "TrackedTurnSession",
+      "name": "committed_input",
+      "async": true,
+      "returns": "None"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 436,
+      "context": "TrackedTurnSession",
+      "name": "context_proof",
+      "async": false,
+      "returns": "NativeContextProof"
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 65,
+      "context": "VerifiedOwnerLoss.observe_native_release",
+      "import": "from agent_comms.coordination_response import _response_boundary"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 70,
+      "context": "VerifiedOwnerLoss.observe_native_release",
+      "name": "_response_boundary",
+      "call": "_response_boundary(comms.bus)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 235,
+      "context": "RecoveryMonitorCapability.recover_native_failure",
+      "name": "read_evidence",
+      "call": "NativeContextProof.read_evidence(session_file, reserved.input_id, evidence=evidence)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 43,
+      "context": "",
+      "import": "from .native_custody import BorrowedNative, EmptyNative, NativeCleanupFailed, NativeCustody, PiSessionChild, RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 312,
+      "context": "TurnSession.__init__",
+      "name": "PersistentPiSession",
+      "call": "PersistentPiSession()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 874,
+      "context": "ChildProcess._stop",
+      "name": "_stop_plan",
+      "call": "self._stop_plan(nullcontext)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1221,
+      "context": "SynchronousProcess.stop_sync",
+      "name": "_stop_plan",
+      "call": "self._stop_plan(guard)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 28,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 182,
+      "context": "PrivateInputs.admission",
+      "name": "PublicationMeasurements",
+      "call": "PublicationMeasurements()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 88,
+      "context": "verify_continued_private_session",
+      "name": "read_evidence",
+      "call": "NativeContextProof.read_evidence(session, native_id, request_generation=proof.request_generation, evidence=evidence)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 28,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 375,
+      "context": "_require_final_owner",
+      "name": "_require_cohort_assignments",
+      "call": "_require_cohort_assignments(store, bus, snapshot, wire_root_id)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 483,
+      "context": "_terminal_replay",
+      "name": "_require_cohort_assignments",
+      "call": "_require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=snapshot.completed_response())",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 585,
+      "context": "publish_fenced_response",
+      "name": "_settle_fenced_response",
+      "call": "_settle_fenced_response(store, bus, fence, allow_append=True, exact_target=exact_target, owner_witness=owner_witness)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 599,
+      "context": "resolve_existing_response",
+      "name": "_settle_fenced_response",
+      "call": "_settle_fenced_response(store, bus, fence, allow_append=False, exact_target=exact_target, owner_witness=owner_witness)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 218,
+      "context": "_response_boundary",
+      "name": "PublicationMeasurements",
+      "call": "PublicationMeasurements()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 406,
+      "context": "prepare_fenced_response",
+      "name": "_response_boundary",
+      "call": "_response_boundary(bus)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 504,
+      "context": "_settle_fenced_response",
+      "name": "_response_boundary",
+      "call": "_response_boundary(bus)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 271,
+      "context": "LiveResponseOwner._publish_owned",
+      "name": "prepare_fenced_response",
+      "call": "prepare_fenced_response(store, bus, fence, reply.body, exact_target=reply.target, owner_witness=self)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 288,
+      "context": "LiveResponseOwner._publish_owned",
+      "name": "consume_reply_wait",
+      "call": "goals.consume_reply_wait(self, assignment.source)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 412,
+      "context": "prepare_fenced_response",
+      "name": "_require_final_owner",
+      "call": "_require_final_owner(store, bus, fence, metadata.root_id, owner_witness, exact_target)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 538,
+      "context": "_settle_fenced_response",
+      "name": "_require_final_owner",
+      "call": "_require_final_owner(store, bus, fence, wire_root_id, owner_witness, exact_target)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 550,
+      "context": "_settle_fenced_response",
+      "import": "from .response_conversation import ResponseConversation"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 277,
+      "context": "LiveResponseOwner._publish_owned",
+      "name": "publish_fenced_response",
+      "call": "publish_fenced_response(store, bus, fence, exact_target=reply.target, owner_witness=self)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 518,
+      "context": "_settle_fenced_response",
+      "name": "_require_final_owner",
+      "call": "_require_final_owner(store, bus, fence, wire_root_id, owner_witness, exact_target)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 79,
+      "context": "PublicationMeasurements.operation",
+      "name": "PublicationMeasurements",
+      "call": "PublicationMeasurements()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 161,
+      "context": "read_historical_native_inputs",
+      "name": "read_evidence",
+      "call": "NativeContextProof.read_evidence(session_file, row.input_id, request_generation=row.request_generation, evidence=source_reads.for_source(session_file))",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 19,
+      "context": "",
+      "import": "from .private_send_stage import NativeSendStage"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 207,
+      "context": "NativeEvidenceRead.open",
+      "import": "from .native_pi import PrivateEvidenceRead, _private_session_dir"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 29,
+      "context": "",
+      "import": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 822,
+      "context": "read_tracked_input_digest",
+      "import": "from .native_entries import NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 325,
+      "context": "NativeContextProof.read_evidence",
+      "import": "from .native_entries import NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 845,
+      "context": "_verify_context",
+      "name": "read_evidence",
+      "call": "NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 315,
+      "context": "NativeContextProof.corroborates_input",
+      "name": "read_evidence",
+      "call": "self.read_evidence(self.session_file, input_id, evidence=evidence)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 658,
+      "context": "PrivateEvidenceRead.rows",
+      "name": "verify_snapshot",
+      "call": "self.verify_snapshot(size, digest.digest())",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "context": "",
+      "import": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 39,
+      "context": "",
+      "import": "from .private_send_stage import NativeSendStage"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_send.py",
+      "line": 18,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 16,
+      "context": "",
+      "import": "from .coordination_response import _response_boundary"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 122,
+      "context": "NativeSourceCursor._advance_proven",
+      "name": "_response_boundary",
+      "call": "_response_boundary(self.bus, blocking=False, contention=contention)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 195,
+      "context": "NativeSourceCursor.read",
+      "name": "_response_boundary",
+      "call": "_response_boundary(self.bus, blocking=False)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 223,
+      "context": "NativeSourceCursor.read",
+      "name": "_response_boundary",
+      "call": "_response_boundary(self.bus, blocking=False)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 17,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 67,
+      "context": "NativeStartupAdmission.__init__",
+      "name": "PublicationMeasurements",
+      "call": "PublicationMeasurements()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 122,
+      "context": "NativeTranscript.require_publication_context",
+      "import": "from .native_pi import NativeContextJournal, _private_session_dir"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 421,
+      "context": "OwnedTurn.stream",
+      "name": "PersistentPiSession",
+      "call": "backend.PersistentPiSession()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 360,
+      "context": "OwnedTurn.prepare_native",
+      "name": "PersistentPiSession",
+      "call": "backend.PersistentPiSession()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 14,
+      "context": "",
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 14,
+      "context": "",
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 13,
+      "context": "",
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 14,
+      "context": "",
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 23,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 34,
+      "context": "",
+      "import": "from .tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 45,
+      "context": "",
+      "import": "from .private_send_stage import NativeSendStage"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 18,
+      "context": "",
+      "import": "from .durable_turn import DurableTurn"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 328,
+      "context": "FullNativeSend.fail_unknown",
+      "import": "from .coordination_response import _response_boundary"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 129,
+      "context": "NativeSendStage.verify",
+      "name": "open_input_evidence",
+      "call": "NativeEntry.open_input_evidence(context.session_file)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 330,
+      "context": "FullNativeSend.fail_unknown",
+      "name": "_response_boundary",
+      "call": "_response_boundary(bus)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 130,
+      "context": "NativeSendStage.verify",
+      "name": "corroborates_input",
+      "call": "context.corroborates_input(input_id, evidence=evidence)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 19,
+      "context": "",
+      "import": "from .coordination_response import LiveResponseOwner, _assert_response_schema"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 69,
+      "context": "SelectedParticipant.response_owner",
+      "name": "LiveResponseOwner",
+      "call": "LiveResponseOwner(thread=self.owner.thread, admission_generation=self.owner.admission_generation)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 80,
+      "context": "SelectedParticipant.consume_reply_wait",
+      "name": "consume_reply_wait",
+      "call": "self.comms.goals.consume_reply_wait(self.owner, source.delivery.message.reference)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 12,
+      "context": "",
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 17,
+      "context": "",
+      "import": "from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 10,
+      "context": "",
+      "import": "from .private_send_admission import PrivateSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 13,
+      "context": "",
+      "import": "from .coordination_response import _response_boundary"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 16,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 26,
+      "context": "",
+      "import": "from .tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 135,
+      "context": "SelectedSession.prepare.acquire",
+      "name": "_response_boundary",
+      "call": "_response_boundary(participant.bus)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 80,
+      "context": "IgnoreSelectedTriage.continue_turn",
+      "name": "consume_reply_wait",
+      "call": "participant.consume_reply_wait()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 16,
+      "context": "",
+      "import": "from .durable_turn import DurableTurn"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 177,
+      "context": "SelectedAttempt.engage",
+      "name": "DurableTurn",
+      "call": "DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, '')",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 267,
+      "context": "SelectedAttempt.run",
+      "name": "publish_responses",
+      "call": "participant.response_owner.publish_responses(participant.store.session.path, participant.bus, self.stage.fence, replies)",
+      "awaited": true
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 36,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 48,
+      "context": "",
+      "import": "from .private_send_admission import PrivateSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 452,
+      "context": "TrackedTurnSession.tool_started",
+      "name": "context_proof",
+      "call": "self.context_proof()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 466,
+      "context": "TrackedTurnSession.result",
+      "name": "context_proof",
+      "call": "self.context_proof()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 398,
+      "context": "TrackedTurnSession.committed_input",
+      "name": "open_input_evidence",
+      "call": "NativeEntry.open_input_evidence(self.active_session_file)",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 22,
+      "context": "",
+      "import": "from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 83,
+      "context": "TurnProgress.__init__",
+      "name": "PublicationMeasurements",
+      "call": "PublicationMeasurements()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 193,
+      "context": "TurnRunner.inspect_context",
+      "name": "PersistentPiSession",
+      "call": "backend.PersistentPiSession()",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 180,
+      "context": "TurnRunner.prepare_selected_session",
+      "name": "PersistentPiSession",
+      "call": "backend.PersistentPiSession()",
+      "awaited": false
+    }
+  ],
+  "limits": [
+    "Nominal AST references are candidates, not proof of dynamic receiver or imported runtime binding.",
+    "Native JavaScript, stdlib/ACP SDK and embedded programs are not parsed by this Python query; their relevant original source was read separately. No zero claim for those boundaries."
+  ]
+}
