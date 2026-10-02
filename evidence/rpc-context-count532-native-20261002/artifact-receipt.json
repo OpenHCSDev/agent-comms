@@ -1,0 +1,43 @@
+{
+  "source": "f42e2fc19a817d1f3f95fd9e10a6615d7519ce48",
+  "manifest": "0b306dac5a8b9b603949cc245f0629a9cbfc01bc4534090f2c88ca2561c1f34e",
+  "tree": "1e27f3ff7d93232528b26693fe462052f067bbd4ec6efd30216eb1b6ddd0575e",
+  "capture": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/rpc-context-count532-20261002/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-0b306dac5a8b9b60/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/session-context.js",
+      "original_sha256": "e8c9e8d966aae854634bac96c4b3be3734486fdf6c6eebe9775d89cd678610cb",
+      "new_sha256": "9f96b7dce77ab180524fe9c586756551a7cadaefae1a1b7dcce6e9509915e047"
+    },
+    {
+      "path": "dist/core/session-entry-store.d.ts",
+      "original_sha256": "71d83e8ee4afdc6058673835c427a10c26182592c84047be97bab4bd702dfd4a",
+      "new_sha256": "a895cebf8e21389a97727dc63abbcc841e37ddc57943e9563886812460f6e343"
+    },
+    {
+      "path": "dist/core/session-entry-store.js",
+      "original_sha256": "456254c763e05b16378c70ee8fa364e138521690cd30bc421805cb62f01a8479",
+      "new_sha256": "66d34653479999e5110dd34183fdf69626ffd9cbd55c9b429a3e868919a5de11"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "136a8ada8ef2a17d1bc25f278432573a3966dc59960b304a225cc74f78459c87",
+      "new_sha256": "b87fdc99f16ee1b37246cfec58500a6520e89740fac3e407a78687a528ce9cc1"
+    }
+  ],
+  "all_other_files_identical_to_ad533": true,
+  "regular_files": 19190,
+  "source_copy_bindings_exact": true,
+  "pristine_stock_recipe": "PASS;95lockedoffline dependencies",
+  "provider_calls": 0,
+  "public_changes": false,
+  "native_inputs": 0,
+  "qualification": "Source artifact; canonical preparation and Arendt532 saved42MBget_state/count/revision sanity follow",
+  "canonical_prepare": "PASS normal pristine stack/bin/prepare-pi-native;95lockedoffline deps,allmodule/fulltree andsyntaxchecks",
+  "artifact_source_trust": true,
+  "disposed_owned_unpublished_duplicate_bytes": 138400512,
+  "duplicate_borrowers": [],
+  "public_ad533_edited": false,
+  "installed_runtime_or_provider_acceptance": "Arendt532 saved42MB no-provider get_state/count/revision pending; original18/20s cause not attributed"
+}

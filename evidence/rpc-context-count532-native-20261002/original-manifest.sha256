@@ -3,7 +3,7 @@
 2c41563287283e83d899254aa7ff4a6d070c044835dc7fde95d90b987a480622  dist/core/compaction/compaction.js
 1a7a8c6323a8f227d4de1bacc667c6894e40e0c54844f19d36125e978ffa35fb  dist/core/compaction/compaction.d.ts
 4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67  dist/core/session-manager.js
-b87fdc99f16ee1b37246cfec58500a6520e89740fac3e407a78687a528ce9cc1  dist/modes/rpc/rpc-mode.js
+136a8ada8ef2a17d1bc25f278432573a3966dc59960b304a225cc74f78459c87  dist/modes/rpc/rpc-mode.js
 39c0b4203c25509f64089bbff3a9dceec9281cfc80a205d7c49d64a73fc09e16  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
 88bce628eb358af08ec861e7596f507c9bb3dfd3f3ed38051b3296273d8165c9  dist/modes/rpc/rpc-types.d.ts
@@ -18,8 +18,8 @@ a2807c7397e69f560e9dc6f40b3b266cbd6f09da57826ad7012c5553638f6043  node_modules/@
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
 3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06  dist/core/agent-session-services.js
 26e34462390efffdac8253f83d4a33ccc5125c4f2b8aecc5b2e1b03d979396b6  dist/core/settings-manager.js
-66d34653479999e5110dd34183fdf69626ffd9cbd55c9b429a3e868919a5de11  dist/core/session-entry-store.js
-9f96b7dce77ab180524fe9c586756551a7cadaefae1a1b7dcce6e9509915e047  dist/core/session-context.js
+456254c763e05b16378c70ee8fa364e138521690cd30bc421805cb62f01a8479  dist/core/session-entry-store.js
+e8c9e8d966aae854634bac96c4b3be3734486fdf6c6eebe9775d89cd678610cb  dist/core/session-context.js
 d274f8fea1374c41ada56876d50f67ad836e185327afd7ebb22758b486ff1d1d  dist/core/compaction/agent-comms-source.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
@@ -52,4 +52,4 @@ b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tool
 233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f  dist/core/tools/native-file-artifact-schema.mjs
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
 31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
-# agent-comms-native-tree-v1 1e27f3ff7d93232528b26693fe462052f067bbd4ec6efd30216eb1b6ddd0575e
+# agent-comms-native-tree-v1 adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9
