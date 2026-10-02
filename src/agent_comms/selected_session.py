@@ -232,6 +232,8 @@ class SavedSelectedSession(SelectedSession):
             # that crossing needs a new native acquisition and attestation.
             # An unchanged original child remains under this turn's custody.
             await turn.resume_prepared(turn.custody)
+        else:
+            persistent.custody.idle()
 
 
     def require_launch_header(self) -> None:
