@@ -1,0 +1,59 @@
+{
+  "state": "INSTALLED_ORIGINAL_INDEX_REBUILD_AND_RECORDED_CLI_PASS",
+  "python": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/python",
+  "core": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "source_head": "36921fc9041f13dff4b815dd40ad97c4e15e656a",
+  "sdk": "0.12.1",
+  "direct_url": {
+    "url": "file:///home/ts/.cache/agent-scratch/mendel-certified-context551-20261003/wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "root": "/home/ts/.cache/agent-scratch/m549/wire",
+  "old_schema_digest": "d43dc91034ae0cddbbaa4dc2aa2a8c8cfae35f31a0ce057c7b53839a84e2029f",
+  "target_schema_digest": "c4ff566ee8f2c15407d486291971c9ef52efb99801150311a9f0fe40cd8ce8d2",
+  "original_manifests_preserved": 2,
+  "through_seq": 4,
+  "original_root_admission_identity_preserved": true,
+  "protected_files_unchanged": {
+    "/home/ts/.cache/agent-scratch/m549/wire/native_prompt_bindings.sqlite3": "9d2800cc06530c9b1e7f2cc2563d295fa9cf76b26bca42f16b1244b9d032985e",
+    "/home/ts/.cache/agent-scratch/m549/wire/wake_candidates.sqlite3-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    "/home/ts/.cache/agent-scratch/m549/wire/.bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/catalog.json": "2857444e16674b00ac9d8806e248b2a5aefff3ac0b6cd71d465f0d8174665a22",
+    "/home/ts/.cache/agent-scratch/m549/wire/compaction-commits.sqlite3": "7ef1efab379eeb09ac084d5f183342ec5684886a2248098cc463fee875284ca7",
+    "/home/ts/.cache/agent-scratch/m549/wire/coordination.sqlite3": "1eec455658712e1027215c53c5d07dd0d8be62a5720b47ba6695170b8f2c5e54",
+    "/home/ts/.cache/agent-scratch/m549/wire/.input_dispositions.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/bus.jsonl": "ac0c71717fac73f2e4f79309db38a4f6d21b7481b258b68a44913d552baa8880",
+    "/home/ts/.cache/agent-scratch/m549/wire/activity.jsonl": "641c1e4c373fe9b675e2cc94cb1c8a0090575f5654859bbd4baaa6e7ed3f9c05",
+    "/home/ts/.cache/agent-scratch/m549/wire/wake_candidates.sqlite3": "9facc4b7915d05a07e0bc2b3c54840b6a515c39a793c45217a1d2fb8e738329f",
+    "/home/ts/.cache/agent-scratch/m549/wire/.activity.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/bus_page_index.sqlite3": "f3b21e6aa0383685ead463e5f19d4aa6a80e7e6b0bdd3ecaadce04fbe240841a",
+    "/home/ts/.cache/agent-scratch/m549/wire/wake_candidates.sqlite3-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/registry.json": "98f9750e5d57a932af9375d1bb0e3696b47ebe59e61abfdfa9a042b9563560c2",
+    "/home/ts/.cache/agent-scratch/m549/wire/.wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.registry-owner-guard": "af3c7eaa64aefba76c93f2af6af3551122a0e537d7fbe177b173d36a12c79b77",
+    "/home/ts/.cache/agent-scratch/m549/wire/.bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/diagnostics/17cfa2f2d567169001e0b2981803e981.requests.jsonl": "ca2c1bf366e61f355a2b18ca1fd81d1693c0852a34fcfd9dd170fcb21217ab0f",
+    "/home/ts/.cache/agent-scratch/m549/wire/native-sessions/971db3d964414b2bee7b572a1f0c2932/.native-pi-agent/settings.json": "b25410bb9ae164c9c5736066f70923cfb3233893afdeefd3b17c00e181531307",
+    "/home/ts/.cache/agent-scratch/m549/wire/native-sessions/971db3d964414b2bee7b572a1f0c2932/selected-tool-ledger/2c703f646637fe4273ff2cc7407f3b55": "91a10b5bf54c4e9d2b65b3b2cb7b7d6cd49e76c4ae2c3d8d49115ee29e0639e6",
+    "/home/ts/.cache/agent-scratch/m549/wire/native-sessions/971db3d964414b2bee7b572a1f0c2932/selected-tool-ledger/2c703f646637fe4273ff2cc7407f3b55.done": "91a10b5bf54c4e9d2b65b3b2cb7b7d6cd49e76c4ae2c3d8d49115ee29e0639e6",
+    "/home/ts/.cache/agent-scratch/m549/wire/runtime/native-startup/0.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_files_verified": 339,
+  "profile_selected_sources": {
+    "read_bytes": 2,
+    "decode_bytes": 2
+  },
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_actions": 0,
+  "rebuild": {
+    "root_id": "7da48e8d5a004c89ae16a49b2ecb6b0f",
+    "through_seq": 4,
+    "retained_writer_descriptor_verified": true
+  },
+  "frontend_limit": "unchanged309 consumer contract reviewed; normal pin-only frontend metadata receiving required before public pairing; no current551 UI claim",
+  "old_runtime_schema_rejected": "Private bus checkpoint schema is unavailable."
+}

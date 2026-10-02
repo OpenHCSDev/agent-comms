@@ -1,0 +1,5 @@
+{
+  "tools/cutover/retained_index_writer.py": "54dc573bc79a0d16055a137c7e8364c80c50035c911ca44f5cd1ae8f4143876a",
+  "tools/cutover/install_retained_index.py": "3060f64db3d180452452b5ec12c5cd2730f8f8052ab5676c8807f49c42b3982d",
+  "tools/cutover/checkpoint_schema.py": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee"
+}

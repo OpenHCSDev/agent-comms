@@ -1,6 +1,8 @@
 # Source checkpoint
 
-Source d24d3ba67fdee6f4c9f24a4be7bfe08304593c0b; Core551, not installed/Ready.
+Core551 source family is unchanged from335b8ff0. Current source36921fc9 normally
+integrates main4761b60c, including accepted549. Installed original-index rebuild
+and recorded CLI acceptance passed; see INSTALLED-ACCEPTANCE.md.
 Five production files: 33 deleted lines, 97 added lines against main71e15bba.
 
 Original manifest data remains solely in bus.jsonl. ContextManifestSources stores
@@ -63,7 +65,13 @@ descriptor's exact lock inode and original root; its behavior stays unchanged.
 Sch owns the publisher/carry lane. Public and frozen original artifacts remain
 untouched; a private installed rebuild control belongs to final acceptance.
 
-Installed original observation CLI/Tree acceptance remains pending Sch's release
-of the reused normal holder after the critical550 publication. No new environment,
-native copy, package overlay, provider call or public modification was performed.
-This checkpoint removes source-proven work and makes no historical8–16s claim.
+Installed original observation CLI acceptance passed in the released485/488
+normal69 holder, with all339 source/resource files exact and SDK0.12.1 unchanged.
+The original writer rebuilt the existing private checkpoint from declaration
+membership, preserving the root/admission facts, all25 protected file hashes and
+the two actual saved native observations. Old schema is rejected. No new
+environment, native copy, overlay, provider call or public modification.
+The unchanged309 frontend consumer needs a normal pin-only receiving pair before
+live installation; Sch owns that receiving step. No extra309 UI/provider repeat
+is required by that unchanged source contract. This checkpoint makes no
+historical8–16s or current many-owner latency claim.
