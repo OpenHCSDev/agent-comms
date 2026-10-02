@@ -1,0 +1,62 @@
+{
+  "log": "/home/ts/.cache/agent-scratch/compaction501-performance284-canonical-live-20261001-01/ui-state/toad/logs/_home_ts_wt_toad-receiving-reader493-scroll275-20261001__artifacts_runtime-compaction499-operation-observation-20261001_bin_python_2026-10-01T20_19_32_421783.txt",
+  "log_snapshot_sha256": "61900ef497b0f8203fd652cd480433550b4fd5fb2d36340550fb35979b2ecbf6",
+  "log_snapshot_bytes": 641030,
+  "session": "compaction501-live-architecture-memory",
+  "operation": "bc86b8f7f27f452da0e72a3019d71fd3",
+  "event_counts": {
+    "compaction_summary_progress": 1042
+  },
+  "source_observations": 1042,
+  "text_records": 1039,
+  "text_chars": 4582,
+  "leaf_observation_counts": {
+    "history": 463,
+    "current-turn": 579
+  },
+  "leaf_switches": 363,
+  "aggregate_work_changes": 0,
+  "whole_turn_publications": 1,
+  "repeated_whole_turn_work_publications": 0,
+  "first_source_observation": {
+    "line": 17,
+    "source": {
+      "sourceBytesDone": 0,
+      "sourceBytesTotal": 389430,
+      "summaryPhase": "history",
+      "startedAtMs": 1790900409595,
+      "observedAtMs": 1790900409595
+    },
+    "text_chars": 0
+  },
+  "last_source_observation": {
+    "line": 1058,
+    "source": {
+      "sourceBytesDone": 0,
+      "sourceBytesTotal": 389430,
+      "summaryPhase": "current-turn",
+      "startedAtMs": 1790900409595,
+      "observedAtMs": 1790900430613
+    },
+    "text_chars": 7
+  },
+  "whole_turn_observations": [
+    {
+      "line": 16,
+      "turn_id": "0c24c9351979405599087b95577845d5",
+      "phase": "compaction",
+      "source": {
+        "sourceBytesDone": 0,
+        "sourceBytesTotal": 389430,
+        "summaryPhase": "history",
+        "startedAtMs": 1790900409595,
+        "observedAtMs": 1790900409595
+      }
+    }
+  ],
+  "prompt_terminal_results_in_log": [],
+  "provider_terminal_clock": "not exposed by ACP source progress",
+  "scope": "Original source-consumption clocks, not network arrival or UI paint clocks; terminal SQL/native/UI proof joins separately.",
+  "read_only": true,
+  "sent_input": false
+}

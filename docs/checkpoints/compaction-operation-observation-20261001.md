@@ -90,3 +90,15 @@ Parent owns fork/binding and Heisenberg owns the single UI input. Arendt only
 observes raw ACP progress, whole-turn publications and terminal witnesses.
 Package readiness is verified; journey completion is not yet claimed. Public
 defaults and the completed original attempt remain unchanged.
+
+The single physical Return occurred at 00:19:47.448536Z. Original ACP request
+3 selected operation `bc86b8f7f27f452da0e72a3019d71fd3`. The first read-only
+progress snapshot contains 1,042 source observations / 1,039 text deltas /
+4,582 characters and 363 leaf switches, with no aggregate-work change. There
+is one whole-turn publication for that measured operation, and zero repeated
+whole-turn publications with the same aggregate work. Raw leaf events retain
+both history and current-turn values. This is an **in-flight publication
+finding**, not commit, provider completion, final reply, UI completion or Ready.
+The original pending input remains preserved; no observer submitted or retried
+input. The saved snapshot hash and analysis script are under
+`evidence/compaction-operation-observation-20261001/`.
