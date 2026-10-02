@@ -1,0 +1,1421 @@
+{
+  "kind": "source-census-not-runtime-proof",
+  "revision": "24c60646eeab364fd32a8acb4777d40a4d47f865",
+  "parser": "audit.findings.Package.load",
+  "roots": [
+    "src/agent_comms",
+    "tests",
+    "tools"
+  ],
+  "omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 40,
+      "name": "SelectedSummarySource",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [],
+      "fields": {
+        "source": "SelectedSource",
+        "selected": "SelectedModel",
+        "settings": "PiCompactionSettings",
+        "retained": "RetainedTaskFacts"
+      },
+      "members": [
+        "__post_init__",
+        "summary_instructions",
+        "reservation_check",
+        "interrupted_check",
+        "original_has_started",
+        "journal_json"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 37,
+      "name": "OwnerCompactionCommit",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [],
+      "fields": {},
+      "members": [
+        "__init__",
+        "compact_selected",
+        "capture_source",
+        "prepare_source",
+        "require_source_current",
+        "reconcile_interrupted_summaries",
+        "settle_selected_refusal",
+        "commit",
+        "admit_selected_decline",
+        "admit_selected_original",
+        "reconcile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 46,
+      "name": "compact_selected",
+      "context": "OwnerCompactionCommit",
+      "kind": "AsyncFunctionDef"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 98,
+      "name": "NativePreparation",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [
+        "NativePreparationResult"
+      ],
+      "fields": {
+        "witness": "NativeWitness",
+        "tokens_before": "int",
+        "is_split_turn": "bool"
+      },
+      "members": [
+        "__post_init__",
+        "checked",
+        "require_ready",
+        "compact_owner"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 52,
+      "name": "NativeSummary",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [
+        "OwnerSummaryOutcome"
+      ],
+      "fields": {
+        "text": "str",
+        "details": "SummaryFiles | None",
+        "usage": "SummaryUsage | None"
+      },
+      "members": [
+        "commit_with",
+        "compaction_result",
+        "completion_event",
+        "commit_options"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 52,
+      "name": "SummaryCost",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [
+        "PiCost"
+      ],
+      "fields": {},
+      "members": [
+        "__post_init__",
+        "commit_metadata"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 76,
+      "name": "SummaryUsage",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [
+        "PiUsage"
+      ],
+      "fields": {
+        "cost": "SummaryCost | None"
+      },
+      "members": [
+        "__post_init__",
+        "commit_metadata"
+      ]
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 17,
+      "name": "RetainedSegment",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [
+        "ContextSegment"
+      ],
+      "fields": {
+        "retained": "RetainedTaskFacts",
+        "scope": "AuthoredSourceScope",
+        "boundary": "WireExportBoundary"
+      },
+      "members": [
+        "capture",
+        "text",
+        "original_text_source",
+        "export"
+      ]
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 219,
+      "name": "RetainedTaskFacts",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [],
+      "fields": {
+        "facts": "tuple[ExactTaskFact, ...]",
+        "journal_control_bytes": "ClassVar[int]"
+      },
+      "members": [
+        "original_inputs",
+        "canonical_journal_bytes",
+        "frame_journal",
+        "original_text_source",
+        "current_authored_sources",
+        "for_owner",
+        "text",
+        "require_summary"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 60,
+      "name": "SelectedSummarySlot",
+      "context": "",
+      "kind": "ClassDef",
+      "bases": [],
+      "fields": {
+        "owner": "str",
+        "session": "str",
+        "lock": "asyncio.Lock"
+      },
+      "members": [
+        "run_selected_summary"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 65,
+      "name": "run_selected_summary",
+      "context": "SelectedSummarySlot",
+      "kind": "AsyncFunctionDef"
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 146,
+      "name": "RetainedTaskFacts",
+      "context": "HeldCompaction.capture",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 48,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedCommitReference.from_intent",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 50,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedSummarySource",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 73,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedSummarySource.journal_json",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 74,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedSummarySource.journal_json",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 182,
+      "name": "SelectedSummarySource",
+      "context": "SelectedSummaryAttempt",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 31,
+      "name": "RetainedTaskFacts",
+      "context": "CompactionSource",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 374,
+      "name": "RetainedTaskFacts",
+      "context": "NativeOutcome.journal_json",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 61,
+      "name": "SelectedSummarySource",
+      "context": "SelectedSummaries.reserve",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 58,
+      "name": "SummaryUsage",
+      "context": "NativeSummaryPayload",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 121,
+      "name": "RetainedTaskFacts",
+      "context": "NativeIntent.journal_json",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 122,
+      "name": "RetainedTaskFacts",
+      "context": "NativeIntent.journal_json",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 135,
+      "name": "RetainedTaskFacts",
+      "context": "NativeIntent.read",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 71,
+      "name": "OwnerCompactionCommit",
+      "context": "maybe_compact_owner_turn",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 81,
+      "name": "compact_selected",
+      "context": "maybe_compact_owner_turn",
+      "kind": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 77,
+      "name": "NativePreparation",
+      "context": "OwnerCompactionCommit.compact_selected.summarize",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 81,
+      "name": "run_selected_summary",
+      "context": "OwnerCompactionCommit.compact_selected.summarize",
+      "kind": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 81,
+      "name": "SelectedSummarySlot",
+      "context": "OwnerCompactionCommit.compact_selected.summarize",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 85,
+      "name": "SelectedSummarySource",
+      "context": "OwnerCompactionCommit.compact_selected.summarize",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 133,
+      "name": "NativePreparation",
+      "context": "OwnerCompactionCommit.prepare_source",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 138,
+      "name": "NativePreparation",
+      "context": "OwnerCompactionCommit.prepare_source",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 236,
+      "name": "SummaryUsage",
+      "context": "OwnerCompactionCommit.commit",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 27,
+      "name": "NativeSummary",
+      "context": "ManualSelectedSummary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 63,
+      "name": "OwnerCompactionCommit",
+      "context": "compact_manual_owner",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 77,
+      "name": "compact_selected",
+      "context": "compact_manual_owner",
+      "kind": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 69,
+      "name": "NativePreparation",
+      "context": "NativePreparationResult.require_ready",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 74,
+      "name": "NativePreparation",
+      "context": "NativePreparationResult.compact_owner",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 88,
+      "name": "NativePreparation",
+      "context": "SkipPreparationResult.require_ready",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 107,
+      "name": "NativePreparation",
+      "context": "NativePreparation.checked",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 112,
+      "name": "NativePreparation",
+      "context": "NativePreparation.require_ready",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 27,
+      "name": "NativeSummary",
+      "context": "OwnerSummaryOutcome.commit_with",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 42,
+      "name": "OwnerCompactionCommit",
+      "context": "OwnerSummaryOutcome.admit_original",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 55,
+      "name": "SummaryUsage",
+      "context": "NativeSummary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 58,
+      "name": "NativeSummary",
+      "context": "NativeSummary.commit_with",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 27,
+      "name": "NativeSummary",
+      "context": "SelectedNativeSummary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 38,
+      "name": "OwnerCompactionCommit",
+      "context": "SelectedNativeSummary.admit_original",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 66,
+      "name": "NativeSummary",
+      "context": "SelectedSummaryDecline.commit_with",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 75,
+      "name": "OwnerCompactionCommit",
+      "context": "SelectedSummaryDecline.admit_original",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 87,
+      "name": "OwnerCompactionCommit",
+      "context": "compact_owner_once",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 91,
+      "name": "NativePreparation",
+      "context": "compact_owner_once",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 115,
+      "name": "NativePreparation",
+      "context": "compact_owner_once.perform",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 131,
+      "name": "NativeSummary",
+      "context": "compact_owner_once.perform.write",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 151,
+      "name": "OwnerCompactionCommit",
+      "context": "_commit_native_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 155,
+      "name": "NativePreparation",
+      "context": "_commit_native_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 157,
+      "name": "NativeSummary",
+      "context": "_commit_native_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 78,
+      "name": "SummaryCost",
+      "context": "SummaryUsage",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 120,
+      "name": "SummaryUsage",
+      "context": "SummaryResult",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/reservation_rules.py",
+      "line": 44,
+      "name": "RetainedTaskFacts",
+      "context": "InputSourceCheck",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 18,
+      "name": "RetainedTaskFacts",
+      "context": "RetainedSegment",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 23,
+      "name": "RetainedTaskFacts",
+      "context": "RetainedSegment.capture",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 55,
+      "name": "RetainedSegment",
+      "context": "RetainedFormat",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 302,
+      "name": "RetainedTaskFacts",
+      "context": "RetainedTaskFacts.for_owner",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 308,
+      "name": "RetainedTaskFacts",
+      "context": "RetainedTaskFacts.for_owner",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 70,
+      "name": "SelectedSummarySource",
+      "context": "SelectedSummarySlot.run_selected_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 218,
+      "name": "OwnerCompactionCommit",
+      "context": "SavedSelectedSession.prepare_context",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 225,
+      "name": "compact_selected",
+      "context": "SavedSelectedSession.prepare_context",
+      "kind": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 127,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedSource.original_has_started",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 130,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedSource.require_retained",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 143,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedSource.reservation_check",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 204,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedAdmissionSource.require_retained",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 234,
+      "name": "RetainedTaskFacts",
+      "context": "SelectedAdmissionSource.original_has_started",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 40,
+      "name": "SelectedSummarySource",
+      "context": "SelectedAdmissionIdentity.matches_source",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 55,
+      "name": "SelectedSummarySource",
+      "context": "SelectedAdmissionIdentity.require_current",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 193,
+      "name": "RetainedTaskFacts",
+      "context": "WireLog.retained_context",
+      "kind": "Name"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 194,
+      "name": "RetainedSegment",
+      "context": "WireLog.retained_context",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 37,
+      "name": "RetainedTaskFacts",
+      "context": "manual_summary_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 56,
+      "name": "RetainedTaskFacts",
+      "context": "manual_summary_record",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 57,
+      "name": "SelectedSummarySource",
+      "context": "manual_summary_record",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 59,
+      "name": "SelectedSummarySource",
+      "context": "manual_summary_record",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 69,
+      "name": "SelectedSummarySource",
+      "context": "summary_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 98,
+      "name": "SelectedSummarySource",
+      "context": "refresh_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 105,
+      "name": "RetainedTaskFacts",
+      "context": "native_intent",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 143,
+      "name": "OwnerCompactionCommit",
+      "context": "run",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 154,
+      "name": "RetainedTaskFacts",
+      "context": "run",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 163,
+      "name": "RetainedTaskFacts",
+      "context": "run",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 164,
+      "name": "SelectedSummarySource",
+      "context": "run",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 334,
+      "name": "SelectedSummarySource",
+      "context": "configured_pure_channel",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 38,
+      "name": "RetainedTaskFacts",
+      "context": "test_witness_has_one_owner_and_preserves_external_source_json",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 62,
+      "name": "SelectedSummarySource",
+      "context": "test_late_original_outcome_invalidates_source_and_pages_once",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 67,
+      "name": "RetainedTaskFacts",
+      "context": "test_late_original_outcome_invalidates_source_and_pages_once",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 57,
+      "name": "RetainedTaskFacts",
+      "context": "continued",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 215,
+      "name": "RetainedTaskFacts",
+      "context": "test_direct_human_input_pin_shares_original_source_lineage_without_replay.captured",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 221,
+      "name": "RetainedTaskFacts",
+      "context": "test_direct_human_input_pin_shares_original_source_lineage_without_replay",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 225,
+      "name": "RetainedTaskFacts",
+      "context": "test_direct_human_input_pin_shares_original_source_lineage_without_replay",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 327,
+      "name": "SelectedSummarySource",
+      "context": "_private_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 348,
+      "name": "RetainedTaskFacts",
+      "context": "test_started_delivery_and_original_ingress_use_distinct_owned_relations",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 70,
+      "name": "OwnerCompactionCommit",
+      "context": "owner",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 90,
+      "name": "run_selected_summary",
+      "context": "test_actual_acp_queued_during_summary_runs_once_after_original",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 90,
+      "name": "SelectedSummarySlot",
+      "context": "test_actual_acp_queued_during_summary_runs_once_after_original",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 133,
+      "name": "SelectedSummarySlot",
+      "context": "test_actual_acp_queued_during_summary_runs_once_after_original",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 98,
+      "name": "RetainedTaskFacts",
+      "context": "test_original_file_operation_survives_later_file_change_and_branch_cut",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 150,
+      "name": "OwnerCompactionCommit",
+      "context": "test_failed_tree_verification_precedes_journal_creation",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 166,
+      "name": "OwnerCompactionCommit",
+      "context": "test_copied_helper_must_match_packaged_resource_before_journal",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 79,
+      "name": "OwnerCompactionCommit",
+      "context": "native",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 129,
+      "name": "OwnerCompactionCommit",
+      "context": "test_native_file_operations_survive_journaled_commit",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 140,
+      "name": "SummaryUsage",
+      "context": "test_native_file_operations_survive_journaled_commit",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 179,
+      "name": "OwnerCompactionCommit",
+      "context": "test_metadata_digest_preserves_unicode_paths_and_binary_costs",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 189,
+      "name": "SummaryUsage",
+      "context": "test_metadata_digest_preserves_unicode_paths_and_binary_costs",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 240,
+      "name": "OwnerCompactionCommit",
+      "context": "test_native_metadata_digest_refuses_changed_transport_before_write",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 249,
+      "name": "SummaryUsage",
+      "context": "test_native_metadata_digest_refuses_changed_transport_before_write",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 276,
+      "name": "OwnerCompactionCommit",
+      "context": "test_metadata_transport_rehash_cannot_claim_wrong_native_commit",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 308,
+      "name": "OwnerCompactionCommit",
+      "context": "test_native_metadata_reconcile_refuses_changed_persisted_entry",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 318,
+      "name": "SummaryUsage",
+      "context": "test_native_metadata_reconcile_refuses_changed_persisted_entry",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 442,
+      "name": "OwnerCompactionCommit",
+      "context": "test_only_exact_unattempted_original_input_can_cross_source_and_commit",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 475,
+      "name": "OwnerCompactionCommit",
+      "context": "test_original_input_exception_refuses_other_unknown_or_bound_original",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 113,
+      "name": "OwnerCompactionCommit",
+      "context": "test_canonical_owner_prepares_source_before_summary_and_commits_once",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 520,
+      "name": "OwnerCompactionCommit",
+      "context": "test_large_history_cli_prepare_commit_reopen_under_memory_budget",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 601,
+      "name": "OwnerCompactionCommit",
+      "context": "test_prepared_owner_source_refuses_later_bus_correction",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 646,
+      "name": "OwnerCompactionCommit",
+      "context": "test_late_correction_after_summary_refuses_write_without_reusing_manager",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 655,
+      "name": "NativeSummary",
+      "context": "test_late_correction_after_summary_refuses_write_without_reusing_manager.corrected_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 693,
+      "name": "OwnerCompactionCommit",
+      "context": "test_cancelled_owner_joins_real_native_commit_before_turn_lock_releases",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 718,
+      "name": "NativeSummary",
+      "context": "test_cancelled_owner_joins_real_native_commit_before_turn_lock_releases.synthetic_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 846,
+      "name": "OwnerCompactionCommit",
+      "context": "test_three_sequential_native_commits_keep_exact_ids_and_prior_history",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 926,
+      "name": "OwnerCompactionCommit",
+      "context": "test_provider_free_three_round_owner_commit_to_local_acp_metadata",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 967,
+      "name": "NativeSummary",
+      "context": "test_provider_free_three_round_owner_commit_to_local_acp_metadata.synthetic_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 38,
+      "name": "NativePreparation",
+      "context": "test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 51,
+      "name": "NativePreparation",
+      "context": "test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper.Bridge.prepare_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 70,
+      "name": "NativeSummary",
+      "context": "test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper.synthetic_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 135,
+      "name": "NativeSummary",
+      "context": "test_unresolved_native_write_has_no_completion_observation",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 91,
+      "name": "RetainedTaskFacts",
+      "context": "test_rule_family_names_actual_refusals_and_discovers_new_policy",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 167,
+      "name": "RetainedTaskFacts",
+      "context": "test_source_family_roundtrips_nested_values_and_requires_declared_kind",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 198,
+      "name": "RetainedTaskFacts",
+      "context": "test_plural_originals_preserve_order_and_bind_without_partial_transition",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 32,
+      "name": "RetainedSegment",
+      "context": "test_original_human_pin_revision_drop_and_atomic_export",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 123,
+      "name": "RetainedSegment",
+      "context": "original_input_consumer_journey",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_retained_journal_framing.py",
+      "line": 23,
+      "name": "RetainedTaskFacts",
+      "context": "test_unknown_reason_is_control_metadata_not_retained_content",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 191,
+      "name": "RetainedTaskFacts",
+      "context": "test_actual_cold_retained_commit_and_reopen",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 192,
+      "name": "RetainedTaskFacts",
+      "context": "test_actual_cold_retained_commit_and_reopen",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 252,
+      "name": "RetainedTaskFacts",
+      "context": "test_actual_cold_retained_commit_and_reopen",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 471,
+      "name": "run_selected_summary",
+      "context": "acp_selected_summary_journey",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 471,
+      "name": "SelectedSummarySlot",
+      "context": "acp_selected_summary_journey",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 510,
+      "name": "SelectedSummarySlot",
+      "context": "acp_selected_summary_journey",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 748,
+      "name": "OwnerCompactionCommit",
+      "context": "test_correction_after_native_commit_never_mints_original_admission",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 762,
+      "name": "OwnerCompactionCommit",
+      "context": "test_correction_after_native_commit_never_mints_original_admission",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 48,
+      "name": "SelectedSummarySource",
+      "context": "_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 50,
+      "name": "RetainedTaskFacts",
+      "context": "_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 85,
+      "name": "RetainedTaskFacts",
+      "context": "retained_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 88,
+      "name": "SelectedSummarySlot",
+      "context": "retained_summary",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 91,
+      "name": "run_selected_summary",
+      "context": "retained_summary.run",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 148,
+      "name": "SelectedSummarySource",
+      "context": "test_actual_selected_mismatch_refuses_without_provider_or_replay",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 360,
+      "name": "RetainedTaskFacts",
+      "context": "selected_request",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 520,
+      "name": "SelectedSummarySlot",
+      "context": "test_retained_native_summary_preserves_source_and_blocks_replay",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 525,
+      "name": "RetainedTaskFacts",
+      "context": "test_retained_native_summary_preserves_source_and_blocks_replay",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 534,
+      "name": "run_selected_summary",
+      "context": "test_retained_native_summary_preserves_source_and_blocks_replay",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 561,
+      "name": "run_selected_summary",
+      "context": "test_retained_native_summary_preserves_source_and_blocks_replay",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 258,
+      "name": "SelectedSummarySlot",
+      "context": "selected_owner",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 273,
+      "name": "run_selected_summary",
+      "context": "test_actual_native_provider_failure_attests_source_and_reopens",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 281,
+      "name": "RetainedTaskFacts",
+      "context": "test_actual_native_provider_failure_attests_source_and_reopens",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 319,
+      "name": "run_selected_summary",
+      "context": "test_actual_native_child_disconnect_remains_unknown",
+      "kind": "Attribute"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 327,
+      "name": "RetainedTaskFacts",
+      "context": "test_actual_native_child_disconnect_remains_unknown",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 365,
+      "name": "RetainedTaskFacts",
+      "context": "test_actual_summary_slot_denies_mutation_and_joins_cancellation",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 65,
+      "name": "OwnerCompactionCommit",
+      "context": "test_interrupted_summary_recovery_requires_unsent_original_and_unchanged_native",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 77,
+      "name": "SelectedSummarySource",
+      "context": "test_interrupted_summary_recovery_requires_unsent_original_and_unchanged_native",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 90,
+      "name": "RetainedTaskFacts",
+      "context": "test_interrupted_summary_recovery_requires_unsent_original_and_unchanged_native",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 143,
+      "name": "SelectedSummarySource",
+      "context": "test_summary_recovery_requires_original_no_write_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 144,
+      "name": "RetainedTaskFacts",
+      "context": "test_summary_recovery_requires_original_no_write_source",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 192,
+      "name": "SelectedSummarySource",
+      "context": "test_known_refusal_retirement_does_not_admit_or_reclassify_original",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 193,
+      "name": "RetainedTaskFacts",
+      "context": "test_known_refusal_retirement_does_not_admit_or_reclassify_original",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 76,
+      "name": "RetainedTaskFacts",
+      "context": "test_user_pin_original_source_without_model_lease_and_complete_lineage.captured",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 85,
+      "name": "RetainedTaskFacts",
+      "context": "test_user_pin_original_source_without_model_lease_and_complete_lineage",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 147,
+      "name": "RetainedTaskFacts",
+      "context": "test_user_pin_goal_scope_replacement_and_original_subject_fences",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 192,
+      "name": "RetainedTaskFacts",
+      "context": "test_constraint_original_wording_scope_correction_and_human_authority",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 196,
+      "name": "RetainedTaskFacts",
+      "context": "test_constraint_original_wording_scope_correction_and_human_authority",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 206,
+      "name": "RetainedTaskFacts",
+      "context": "test_constraint_original_wording_scope_correction_and_human_authority",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 243,
+      "name": "RetainedTaskFacts",
+      "context": "test_original_choice_correction_and_authority_survive_reopen",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 247,
+      "name": "RetainedTaskFacts",
+      "context": "test_original_choice_correction_and_authority_survive_reopen",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 306,
+      "name": "RetainedTaskFacts",
+      "context": "test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 312,
+      "name": "RetainedTaskFacts",
+      "context": "test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 395,
+      "name": "RetainedTaskFacts",
+      "context": "test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 400,
+      "name": "RetainedTaskFacts",
+      "context": "test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 518,
+      "name": "RetainedTaskFacts",
+      "context": "test_cross_audience_corrections_capture_only_eligible_owned_lineage",
+      "kind": "Name"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 523,
+      "name": "RetainedTaskFacts",
+      "context": "test_cross_audience_corrections_capture_only_eligible_owned_lineage",
+      "kind": "Name"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 466,
+      "name": "SelectedSummarySource",
+      "context": "carry_compaction",
+      "kind": "Name"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 74,
+      "name": "RetainedTaskFacts",
+      "context": "main",
+      "kind": "Name"
+    }
+  ],
+  "limitations": [
+    "References are conservative spellings, not dynamic resolution or runtime dispatch proof.",
+    "Native JS and dependency declarations are manually read; no installed JS AST grammar found. No claim of complete native AST coverage, no native semantic edits authorized by this partial map."
+  ]
+}
