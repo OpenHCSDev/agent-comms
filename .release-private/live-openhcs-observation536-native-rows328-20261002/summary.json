@@ -1,0 +1,73 @@
+{
+  "state": "Original407 real configured channel replies complete; actual default330 UI FAILED with SQLite worker crash",
+  "source_message": {
+    "seq": 407,
+    "id": "4007d9fb94f0",
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790954425.4277203,
+    "type": "info",
+    "text": "testing the installed scrolling and turn-observation checkpoint; please reply tersely if you receive this",
+    "sender_role": "user"
+  },
+  "commit_seconds": 1.3597404956817627,
+  "reply_count": 10,
+  "reply_seconds": [
+    {
+      "sender": "compaction501-live-architecture-memory",
+      "seconds": 45.41369843482971
+    },
+    {
+      "sender": "openhcs-architecture-memory",
+      "seconds": 45.559420585632324
+    },
+    {
+      "sender": "openhcs-audit-merged-models",
+      "seconds": 45.63107705116272
+    },
+    {
+      "sender": "openhcs-helper2",
+      "seconds": 45.72658586502075
+    },
+    {
+      "sender": "compaction499-live-architecture-memory",
+      "seconds": 46.058059215545654
+    },
+    {
+      "sender": "openhcs-helper",
+      "seconds": 46.09055757522583
+    },
+    {
+      "sender": "openhcs-audit-merged-runtime",
+      "seconds": 46.12033653259277
+    },
+    {
+      "sender": "openhcs-audit-merged-boundaries",
+      "seconds": 53.43454384803772
+    },
+    {
+      "sender": "openhcs-audit-open-prs",
+      "seconds": 53.45970559120178
+    },
+    {
+      "sender": "openhcs-pr159-viewer-bind-owner",
+      "seconds": 61.125824213027954
+    }
+  ],
+  "original_claims": {
+    "triage_pending": 2,
+    "completed": 10
+  },
+  "peer_claims": {
+    "triage_pending": 20,
+    "ignored": 90
+  },
+  "external_pending": [
+    "Linnaeus",
+    "openhcs-headless-bootstrap-worker"
+  ],
+  "observed_at": 1790954746.3464475,
+  "new_alerts": [],
+  "input_repeated": false,
+  "limits": "No UI acceptance or latency improvement. Recorder completed flags describe capture completion and do not establish application success; application exited1 and after required DTO failed. Original images/movie/receipt remain unchanged."
+}

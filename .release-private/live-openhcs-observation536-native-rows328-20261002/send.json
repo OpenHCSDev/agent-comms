@@ -1,0 +1,17 @@
+{
+  "started_at": 1790954425.3570569,
+  "returned_at": 1790954426.7167974,
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "message": {
+    "seq": 407,
+    "id": "4007d9fb94f0",
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790954425.4277203,
+    "type": "info",
+    "text": "testing the installed scrolling and turn-observation checkpoint; please reply tersely if you receive this",
+    "sender_role": "user"
+  },
+  "purpose": "ONE original sent input recovered from canonical wire after local receipt JSON serialization failure; not resent",
+  "input_repeated": false
+}
