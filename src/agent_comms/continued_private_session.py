@@ -7,9 +7,7 @@ context evidence. All UNKNOWN rows remain unchanged.
 
 from __future__ import annotations
 
-import os
 import sqlite3
-import stat
 from contextlib import closing
 from pathlib import Path
 
@@ -18,8 +16,10 @@ from .input_disposition import InputDocument
 from .native_entries import NativeEntry
 from .native_pi import NativeContextProof
 from .native_runtime_input import NativeRuntimeInput
+from .native_session_reopen import NativeSessionIdentity
 from .pi_payloads import TextContent
 from .private_sidecar import native_request_digest
+from .private_path import PrivateFileRole
 from .selected_source import SelectedSource, SessionRevision
 
 
@@ -32,35 +32,33 @@ def verify_continued_private_session(
 ) -> None:
     """Reprove complete saved user history; never promote an unresolved attempt."""
     before = SessionRevision.observe(str(session))
-    owner = source.incarnation.name
-    if (
-        not before.matches(source.reserved_revision)
-        or session.parent.parent != (root / "native-sessions").resolve(strict=True)
-    ):
+    if not before.matches(source.reserved_revision):
         raise ValueError("Continued private source identity changed")
     with NativeEntry.open_evidence(session) as evidence:
         header, entries = evidence.observe()
         if header.version != 3:
             raise ValueError("Continued private session needs a strict native header")
+        identity = NativeSessionIdentity(header.id, str(session))
         tracked = NativeEntry.tracked_users(entries)
         rows = inputs.rows
         # The locked document already excludes proven process-local future inputs.
         # Every other unresolved owner input except the exact original remains a stop.
         # Do not use admission rollover to hide uncertain history.
         if any(
-            row.owner == owner and row.unresolved and key != source.pending_input_key
+            row.matches_owner(source.incarnation) and row.unresolved
+            and key != source.pending_input_key
             for key, row in rows.items()
         ):
             raise ValueError("Continued private history contains unresolved owner input")
         started = {}
         for row in rows.values():
-            if row.owner == owner and row.has_started:
+            if row.matches_owner(source.incarnation) and row.has_started:
                 native_id = row.native_id
                 if native_id in started:
                     raise ValueError("Continued private native start is ambiguous")
                 started[native_id] = row
         recorded = (
-            _recorded_private_contexts(root, session, owner)
+            _recorded_private_contexts(root, identity)
             if raw_ids or (root / "coordination.sqlite3").exists()
             else {}
         )
@@ -100,33 +98,18 @@ def verify_continued_private_session(
 
 
 def _recorded_private_contexts(
-    root: Path, session: Path, owner: str
+    root: Path, session: NativeSessionIdentity
 ) -> dict[str, NativeContextProof]:
     """Read immutable live-result columns; journal parsing never supplies them."""
     database = root / "coordination.sqlite3"
     # Read-only URI cannot create a missing coordinator or install its schema.
     info = database.lstat()
-    if (
-        database != database.resolve(strict=True)
-        or not stat.S_ISREG(info.st_mode)
-        or info.st_nlink != 1
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-    ):
+    PrivateFileRole.require(info)
+    if database != database.resolve(strict=True) or info.st_nlink != 1:
         raise ValueError("Continued private coordinator is not canonical private storage")
     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("BEGIN")
         assert_native_runtime_schema(db)
-        rows = NativeRuntimeInput.select(
-            db, where="owner_lookup=?", parameters=(session.parent.name,)
-        )
-    # Context completion belongs to the original row's reference family. A
-    # prewrite selected session never promotes an uncertain original input.
-    proofs = tuple(row.require_context_proof() for row in rows)
-    return {
-        row.input_id: proof
-        for row, proof in zip(rows, proofs, strict=True)
-        if row.session_file == str(session) and row.owner_thread == owner
-    }
+        return NativeRuntimeInput.recorded_contexts(db, session)

@@ -105,8 +105,8 @@ The remaining independent decisions are explicit blockers to Ready:
 
 | Unchanged consumer | Independent answer still present | Required deletion |
 |---|---|---|
-| `continued_private_session.verify_continued_private_session` | parent-parent decides source class; parent name decides owner lookup | Derive original stable owner lookup from captured incarnation and whole original input/context coverage; preserve raw UNKNOWN. |
-| `compaction_summaries.SelectedSummaries.reserve` | lexical private path decides fresh/continued coverage and raw refusal | Original enrolled fresh capability versus verified continued coverage owns the algorithm/case hook; storage path is not permission. |
+| `continued_private_session.verify_continued_private_session` | Directory/routing-name selection deleted in the receiving coverage increment below | Original `NativeRuntimeInput` selected session plus committed reference determines receipt membership. A current routing name cannot erase the original source's history. |
+| `compaction_summaries.SelectedSummaries.reserve` | Caller-side fresh/continued coverage selection deleted in the receiving coverage increment below | Existing `PrivateInputs` consumes original enrollment/raw receipts; the allocated storage namespace supplies only a prewrite-marker obligation. |
 | tracked private launch | fixed private launch flags ignore ordinary configured settings/extensions | Complete the existing launch/configuration contract before claiming ordinary configured ACP continuation. No fixture-only override or disabled extensions acceptance. |
 | paused next-model dispatch | active writer and summary commit still interpreted by idle assumptions | Extend existing custody behavior and delete idle reacquisition/retirement assumptions; preserve the same input and writer, never re-admit it. |
 
@@ -257,9 +257,50 @@ during reasoning/implementation. Remaining constructors include obsolete test
 callers passing session_dir/session_file or fresh_selected instead of original
 SelectedSession members, and the project-observation fixture's deleted runner
 method. Those must migrate before final validation, without compatibility aliases.
-Continued raw coverage still infers lookup from a directory, reservation still
-classifies coverage lexically, and paused dispatch/recovery/source-switch custody
+That checkpoint still inferred continued lookup from a directory and classified
+coverage in reservation; the receiving coverage increment below deletes those
+decisions. Paused dispatch/recovery/source-switch custody
 still require complete closure. Native6 preservation/carry and actual configured
 ordinary saved/fork/cancel/continue validation remain final obligations; Native5
 receiving release is independent. The prior NRA artifact is not relabeled to
 fingerprint this newer source.
+
+## Receiving coverage implementation after current-main integration
+
+Current main `b2834902` (#495/#500 included) is normally merged at `7bf62729`.
+The two merge resolutions retain main's nominal `NativePreparationResult`
+return/compaction behavior together with this scope's `FileRevision`, and retain
+both native context hooks (`requiresCompaction`, `summaryDeclineReason`). There
+is no rebase, lost parent contribution or Native5-to-Native6 acceptance inference.
+
+The subsequent code increment changes six production files, deleting 87 lines
+and adding 100. It adds no class, schema, store, alias or proof source.
+
+| Deleted independent answer | Existing determining owner and consumers |
+|---|---|
+| `session.parent.name` chooses native SQL membership; current `owner_thread` filters committed source history | `NativeRuntimeInput.recorded_contexts` queries the original admitted session file and requires the original `NativeSessionIdentity` from its header. Every selected row must supply its committed `NativeContextReference`. `continued_private_session` is the consumer; it cannot mint a receipt or accept an incomplete prewrite context. |
+| Continued coverage requires a specific parent-parent directory | Deleted. Original native identity, exact reserved revision, original started-input text/digest, committed context and retained-history proof cover the selected source. Directory ancestry grants no history or owner identity. |
+| Fresh coverage reconstructs stable lookup from `fresh.path.parent.name` | Existing `FreshCoverageIdentity.require_owner` checks the original witness incarnation/process. `PrivateInputs.require_coverage` still requires the exact process-local returned enrollment ACK. Its stored stable lookup remains the original allocation fact; no consumer manufactures it from a path. |
+| Reservation separately interprets fresh/continued/raw cases | `PrivateInputs.require_source_coverage` owns the algorithm on the existing journal owner. `SelectedSummaries.reserve` consumes it under the same wire/input/journal custody. A fresh mint must have its exact enrollment and no raw UNKNOWN; continued raw IDs require complete original context corroboration. |
+| Reservation and send fencing separately derive the private writer namespace | `PrivateInputs.requires_raw_marker` declares that physical allocation obligation once. `send_fence` and source coverage consume it. It grants neither source selection nor enrollment; recorded raw/enrollment obligations also apply outside the namespace. |
+| Coverage directly compares a stored input's raw owner-name field | Existing `StoredInput.matches_owner` supplies that existing storage relation. Historical rows still do not attest birth time; live full-incarnation selection is independently retained by the original `SelectedSource` owner witness. No global incarnation-equality relaxation or name alias is introduced. |
+
+This is code-bearing **unfinished source**, not Ready. The previous NRA census
+remains labeled with its original fingerprint. No tests, native inputs, installed
+runtime changes, public mutation or historical replay ran during implementation.
+
+Remaining concrete closure obligations:
+
+1. Remove independently supplied launch/turn source fields and close ALL normal,
+   tracked and preparation constructors through the original `SelectedSession`.
+   Preserve native-generated and explicit fork behavior rather than guessing a
+   default saved identity from a launch directory.
+2. Existing `NativeCustody`/`TurnSession` must own paused-dispatch receive and
+   commit through the active writer. `SelectedSummarySlot` still assumes an idle
+   retained child, and `compact_owner_once` still retires it for external commit.
+   These are not repaired by the coverage change or by pending-query correlation.
+3. Migrate obsolete constructor consumers, then close original Native6 storage
+   preservation with Singer. Native5 carry qualification cannot supply this.
+4. Only after the coherent source closure, batch affected sanity and run the
+   actual configured ordinary saved-fork/channel/DM/compaction/cancel/continuation
+   journey. No old input or uncertain provider operation is replayed.
