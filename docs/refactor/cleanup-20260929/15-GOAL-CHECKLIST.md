@@ -1,3 +1,28 @@
+## Merged source and current live goal blocker — 2026-10-02 06:27 UTC
+
+Core509 mergedf913; Core511 merged after normal main integration with zero
+additional production delta. Toad308 merged5dab and receiving310 mergedb8f2.
+Toad296 is closed as superseded after full unique-product delta review.
+Default remains certified508. No new public cutover or input replay occurred.
+
+Actual goal677e was saved before tool-end ledger reopen failed: FailureReason
+grew model_request_failed, generating changed SQL while the manually maintained
+GoalAttemptSchema marker still claimed6. Source513 removes the manual marker,
+deriving identity from all existing GoalLedgerTable declarations. Mendel514
+extends the existing installer/carry to include this ledger and preserve every
+row. Sch owns one real installed goal workflow; Kepler one paired stage; parent
+publishes. This Native5 release is independent of remaining Native6 work.
+
+Full performance continues311/Textual22. Text22 f777 commits the existing Styles
+batch lifetime used by compiled CSS and programmatic mutations, combining
+inherited cache invalidation. Source74 checks passed2.31s; changed installed
+recording/profile remains. No overall CPU/144Hz claim.
+
+All original scope below remains active. Batch coherent owner/all-consumer
+changes first, then proportionate checks for concrete failure mechanisms and
+the real installed path. Do not repeat unchanged gates or use best practice
+as justification.
+
 ## Working checkpoints merged; publication and runtime work continue — 2026-10-02
 
 Toad305 is merged9d2afceb after its actual114.794s public saved-history journey:
