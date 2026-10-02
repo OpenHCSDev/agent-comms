@@ -19,7 +19,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import ThreadIncarnation, TurnId
 from agent_comms.threads import Thread
 from selected_summary_cases import manual_source
 
@@ -70,7 +70,13 @@ def test_original_state_changes_below_frontier_are_scoped_and_read_only(original
     journal.summaries.mark_unknown(later)
     assert observe(original).revision == first_view.revision
     # A changed older outcome matters even when a later unrelated row exists.
-    journal.summaries.retire_unchanged(journal.summaries.get(first))
+    attempt = journal.summaries.get(first)
+    check = attempt.request.interrupted_check(
+        attempt.request.source.reserved_revision,
+        InputDispositions(session.parent / InputDispositions.filename).read(),
+        incarnation, TurnId("later"),
+    )
+    journal.summaries.retire_unchanged(attempt, check)
     retired = observe(original)
     assert retired.outcomes[0].attempt.state == RetiredUnknownSummary()
     assert retired.revision == first_view.revision  # Same truthful projected UNKNOWN.

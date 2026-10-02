@@ -1,0 +1,122 @@
+{
+  "head": "3a28790d720b6c240553f92842f6eee2325e0b76",
+  "parsed": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 51,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 236,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 206,
+      "declaration": "blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 129,
+      "declaration": "manual_recovery"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 137,
+      "declaration": "retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 194,
+      "declaration": "retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 280,
+      "declaration": "manual_recovery"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 174,
+      "declaration": "retire_refused"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 183,
+      "declaration": "retire_unchanged"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 176,
+      "reference": "attempt.state.manual_recovery"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 185,
+      "reference": "attempt.state.retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 163,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 119,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 177,
+      "declaration": "reconcile_interrupted_summaries"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 149,
+      "reference": "self.reconcile_interrupted_summaries"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 98,
+      "reference": "source.summary_outcome"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 187,
+      "reference": "attempt.state.reconcile_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 195,
+      "reference": "self.journal.summaries.retire_unchanged"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 70,
+      "reference": "refusal.state.manual_recovery"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 98,
+      "reference": "bridge.journal.summaries.retire_refused"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 134,
+      "declaration": "summary_outcome"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 151,
+      "declaration": "summary_outcome"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 197,
+      "declaration": "summary_outcome"
+    }
+  ]
+}
