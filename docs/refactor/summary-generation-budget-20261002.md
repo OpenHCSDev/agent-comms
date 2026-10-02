@@ -81,3 +81,26 @@ declarations or references. Source and compiled `CompactionPolicy` are two
 representations of the same build declaration, not separate semantic owners.
 The original529 receipt hash is recorded unchanged. The installed RPC check
 remains pending the matching wheel and package resources.
+
+## Installed receiving result
+
+One local HTTP request through the installed native selected RPC reported output
+5534. The summary returned, native compaction committed once, and the typed
+journal link, original source digest and exact retained facts were checked.
+The installed Core is builder `beb54a1a`, native `ad533a9f08581561`; no source
+overlay, paid call, configured-model experiment, public input or529 replay.
+
+The existing test then failed on its obsolete `ReopenNative.session_file` query,
+after the affected budget path had succeeded. Whole once-admission is **not**
+reported as passed. Both fixture consumers now query the existing native
+identity; no runtime alias was added. Earlier invocation failed before summary
+because five fixture calls still used the removed launcher argument/scalar
+ingress. They were migrated together through the current plural source contract.
+These original failures are retained. No extra compaction is run to repair a
+fixture assertion. The actual worker and provider server are closed.
+
+The canonical scoped result is `summary-budget-source/installed-budget-receipt.json`
+under this feature's evidence directory. Arendt's combined529 receiving owns the
+next distinct configured saved-source/continuation journey. The optional S1
+compaction and next answer remain unfinished; this budget correction ships
+independently when the parent accepts its scoped proof.

@@ -1,0 +1,39 @@
+{
+  "scope": "summary generation/accounting and retained-context admission",
+  "budget_scope_passed": true,
+  "whole_once_admission_journey_passed": false,
+  "terminal_exit": 1,
+  "elapsed_seconds": 10.19,
+  "terminal_failure": "Fixture queried removed ReopenNative.session_file after native commit; updated source fixture uses original identity.session_file. No compaction repeat.",
+  "configured_provider_calls": 0,
+  "controlled_local_posts": 1,
+  "public_inputs": 0,
+  "original529_input_replays": 0,
+  "original529_sha256_unchanged": "bbe40e750825571dca5a355d717b4a6c8682d4e93b2fac0f17f136c47cd178aa",
+  "native_manifest": "ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04",
+  "installed_core": "beb54a1a72a04cf5273b038a7aa688e598546ac6",
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+  "installed_import_provenance": "installed-rpc03.log first line",
+  "saved_native_compactions": [
+    {
+      "path": "/home/ts/wt/a520budget02/test_selected_native_summary_c0/sessions/2026-10-02T11-41-41-597Z_01a0fc6b-8b5c-7163-ab9d-8ab0794cc625.jsonl",
+      "entry_id": "f2e360b0",
+      "output": 5534,
+      "reasoning": 0,
+      "summary_bytes": 1334,
+      "file_sha256": "2abc13434b1a1a9976a95cb3e3af5eab508036b07fd6c9a9a6cecbec15027a9e"
+    }
+  ],
+  "request_budget_fields": [
+    {
+      "max_completion_tokens": 562
+    }
+  ],
+  "owned_live_fixture_processes": [],
+  "raw_terminal_log": "installed-rpc03.log",
+  "preserved_preprovider_failures": [
+    "installed-rpc01.log",
+    "installed-rpc02.log"
+  ],
+  "next_owner": "Arendt529 actual configured source/continuation journey on normally integrated budget artifact; S1 optional compaction/next-answer remains unverified"
+}

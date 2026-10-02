@@ -1,0 +1,101 @@
+Installed Core: /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-retained-human-main-20261001
+configfile: pyproject.toml
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+tests/test_selected_owner_compaction_integration.py::test_selected_native_summary_commits_and_admits_original_exactly_once[5534] FAILED
+
+=================================== FAILURES ===================================
+_ test_selected_native_summary_commits_and_admits_original_exactly_once[5534] __
+
+tmp_path = PosixPath('/home/ts/wt/a520budget02/test_selected_native_summary_c0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3a62eb43e0>
+completion_tokens = 5534
+
+    @pytest.mark.parametrize("completion_tokens", [5, 5534])
+    async def test_selected_native_summary_commits_and_admits_original_exactly_once(
+        tmp_path, monkeypatch, completion_tokens
+    ):
+        async with owner_fixture(tmp_path, monkeypatch, completion_tokens=completion_tokens) as (
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+            from agent_comms.field_codec import FieldCodec
+            from agent_comms.retained_task_facts import CurrentDecisionTaskFact, UserSourceTaskFact
+            from agent_comms.tools import invoke_tool
+    
+            comms = Comms(tmp_path)
+            user = comms.messaging.send_user_message(
+                "owner", "Never replay UNKNOWN; preserve /artifacts/exact-root.",
+                worktree=str(tmp_path),
+            )
+            monkeypatch.setenv("PI_AGENT_ID", "owner")
+            declared = invoke_tool(comms, "comms_decision", {
+                "chosen": "/artifacts/exact-root",
+                "rejected": ["/scratch/guessed-root"],
+                "to": "#retention-acceptance",
+            })
+            choice = comms.bus.log.full_history()[-1]
+            assert FieldCodec.encode(choice.reference) == declared["reference"]
+            admitted = []
+            observed = []
+    
+            async def observe(event):
+                observed.append(event)
+    
+            assert (
+                await maybe_compact_owner_turn(
+                    registry,
+                    "owner",
+                    "turn",
+                    info,
+                    ("acp:original",),
+                    persistent,
+                    input_text="Continue",
+                    on_admission=admitted.append,
+                    on_event=observe,
+                )
+                is True
+            )
+            assert len(admitted) == 1
+            assert isinstance(observed[0], events.CompactionStart)
+            assert isinstance(observed[-1], events.CompactionEnd) and not observed[-1].aborted
+            assert any(isinstance(event, events.CompactionSummaryProgress) for event in observed)
+    
+            journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+            rows = journal.summaries.blocking(file)
+            assert len(rows) == 1 and rows[0].state.declared_name == "linked"
+            captured = rows[0].request
+            assert tuple(fact.source for fact in captured.retained.facts
+                         if isinstance(fact, UserSourceTaskFact)) == (user,)
+            assert tuple(fact.source for fact in captured.retained.facts
+                         if isinstance(fact, CurrentDecisionTaskFact)) == (choice,)
+            operation = journal.operations.get(rows[0].state.commit_id)
+            assert operation.state.declared_name == "committed"
+            intent = json.loads(operation.intent_json)
+            assert intent["selectedSummaryOperationId"] == rows[0].operation_id
+            assert (
+                intent["selectedSummarySourceDigest"]
+                == hashlib.sha256(rows[0].source_json.encode()).hexdigest()
+            )
+            entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
+            assert sum(row["type"] == "compaction" for row in entries) == 1
+            committed = next(row for row in entries if row["type"] == "compaction")
+            captured.retained.require_summary(committed["summary"])
+            assert len(journal.publications.pending(file)) == 1
+>           assert not persistent.available and persistent.custody.session_file == file
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'ReopenNative' object has no attribute 'session_file'
+
+tests/test_selected_owner_compaction_integration.py:292: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_owner_compaction_integration.py::test_selected_native_summary_commits_and_admits_original_exactly_once[5534] - AttributeError: 'ReopenNative' object has no attribute 'session_file'
+============================== 1 failed in 10.19s ==============================

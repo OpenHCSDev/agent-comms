@@ -289,7 +289,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         committed = next(row for row in entries if row["type"] == "compaction")
         captured.retained.require_summary(committed["summary"])
         assert len(journal.publications.pending(file)) == 1
-        assert not persistent.available and persistent.custody.session_file == file
+        assert not persistent.available and persistent.custody.identity.session_file == file
         assert not native_input_admitted(tmp_path, file)
         token = admitted[0]
         assert inputs.read().lookup("acp:original").accepts_reservation
