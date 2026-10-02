@@ -1,0 +1,14 @@
+{
+  "source_head": "a36173356f6e3fe43a9cb35e56c5324fc784d3a3",
+  "source_assets": 339,
+  "source_assets_hash": "1f6b5bc15a6880c9f11149af38a8ccbe07ee2dab0049e741f4f72425371b54e3",
+  "wheel_sha256": "6b93ef47aa590fe1826129aeb18b5f6f1572f3a9459ac25a430ffb8ffbf242e8",
+  "prefix": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/install/runtime",
+  "sdk": "0.12.1",
+  "environment_reused": true,
+  "source_overlay": false,
+  "dependency_bypass": false,
+  "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+  "native_unchanged_from_first_trusted_install": true,
+  "original_source_owner": "merged542 atomic RegistryOwner at begin; borrowed by TurnProgress"
+}
