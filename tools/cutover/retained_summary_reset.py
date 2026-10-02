@@ -10,9 +10,11 @@ from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path
+import tempfile
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import FileRevision, PrivateDirectoryRole, PrivateFileRole
+from agent_comms.store_files import _replace_snapshot
 from publish_openhcs_recovery import fsync_directory, retain_file
 
 
@@ -41,6 +43,53 @@ class RetainedRuntimeFile:
         if FileRevision.from_stat(opened) != self.revision:
             raise RuntimeError('Opened runtime journal changed during stopped custody')
 
+    def evidence(self):
+        return {'path': str(self.path), 'sha256': self.sha256,
+                'revision': FieldCodec.encode(self.revision)}
+
+    @contextmanager
+    def prepare_replacement(self, candidate: Path, expected_sha256: str):
+        """Hold a private candidate on this destination's filesystem.
+
+        Recovery archives may live elsewhere. Failure retains the staged bytes;
+        only a completed publication retires its disposable staging directory.
+        """
+        self.require_original()
+        PrivateDirectoryRole.require(self.path.parent.lstat())
+        directory = Path(tempfile.mkdtemp(prefix=f'.{self.path.name}.carry-',
+                                         dir=self.path.parent))
+        PrivateDirectoryRole.require(directory.lstat())
+        fsync_directory(self.path.parent)
+        path = directory / self.path.name
+        proof = retain_file(candidate, path)
+        fsync_directory(directory)
+        if proof['sha256'] != expected_sha256:
+            raise ValueError('Staged candidate differs from reviewed carry')
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            replacement = RetainedRuntimeFile(
+                path, FileRevision.from_stat(os.fstat(descriptor)),
+                expected_sha256, descriptor)
+            replacement.require_original()
+            if replacement.checksum() != expected_sha256:
+                raise ValueError('Opened staged candidate differs from reviewed carry')
+            yield replacement
+            path.unlink(missing_ok=True)
+            directory.rmdir()
+            fsync_directory(self.path.parent)
+        finally:
+            os.close(descriptor)
+
+    def replace_original(self, original: RetainedRuntimeFile):
+        """Publish this held candidate through the existing atomic file owner."""
+        original.require_original()
+        self.require_original()
+        if self.checksum() != self.sha256:
+            raise ValueError('Staged candidate changed before publication')
+        self.require_original()
+        _replace_snapshot(self.path, original.path)
+        fsync_directory(original.path.parent)
+
 
 @dataclass(frozen=True)
 class AcquiredRuntimeFiles:
@@ -58,8 +107,7 @@ class AcquiredRuntimeFiles:
             original.require_original()
 
     def evidence(self):
-        return [{'path': str(item.path), 'sha256': item.sha256,
-                 'revision': FieldCodec.encode(item.revision)} for item in self.originals]
+        return [item.evidence() for item in self.originals]
 
     def retain_and_remove(self, destination: Path):
         """Retain EVERY present named member before removing ANY runtime file."""
