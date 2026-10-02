@@ -132,6 +132,11 @@ class CompactionReason(DeclaredFamily, affix="CompactionReason"):
         return True
 
     @classmethod
+    def declined_manual(cls, data, journal, settle_refusal):
+        journal.summaries.refuse(data.operation_id, data.reason)
+        raise ValueError(f"Selected Pi declined manual summary ({data.reason})")
+
+    @classmethod
     def from_external(cls, value):
         from .field_codec import FieldCodec
 
@@ -163,6 +168,14 @@ class UnneededCompactionReason(CompactionReason):
 
 
 class TaskBoundaryCompactionReason(CompactionReason):
+    @classmethod
+    def declined_manual(cls, data, journal, settle_refusal):
+        from .compaction_result import RefusedCompactionResult
+
+        data.require_clean_prestart()
+        settle_refusal(data)
+        return RefusedCompactionResult(f"Optional subtask compaction skipped: {data.reason}")
+
     @classmethod
     def boundary_current(cls, retained, boundary, owner, registry):
         return bool(boundary) and retained.optional_boundary(owner, registry) == boundary

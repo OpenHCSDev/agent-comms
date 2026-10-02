@@ -81,7 +81,6 @@ class OwnerCompactionCommit:
         async def summarize(prepared: NativePreparation, captured: CompactionSource):
             attestation = owner.compaction_attestation(owner_generation, prepared.witness)
             attestation.require_registry(self.registry, owner)
-            self.require_source_current(owner, owner_generation, captured)
             settings.require_current(await decision())
             if before_summary is not None:
                 before_summary()
@@ -99,11 +98,13 @@ class OwnerCompactionCommit:
                 future_queue=self.boundary.future_queue,
                 on_event=on_event, reason=reason,
             )
-            outcome = source.summary_outcome(result, self.journal)
             attestation.require_registry(self.registry, owner)
-            self.require_source_current(owner, owner_generation, captured)
             settings.require_current(await decision())
-            return outcome
+
+            def settle_refusal(data):
+                self.settle_selected_refusal(owner, owner_generation, captured, data)
+
+            return source.summary_outcome(result, self.journal, settings.reason, settle_refusal)
 
         return await compact_owner_once(
             self, owner, owner_generation, persistent, summarize,
