@@ -88,3 +88,32 @@ operation and publication states, all UNKNOWN rows, enrollment and coverage
 must survive unchanged. No runtime old reader, mirrored request authority,
 reset or archive-as-admission is acceptable. Patterns: IDEN-1, IDEN-5, BOUND-2,
 TIME-9. No carry acceptance or installed-readiness claim is made here.
+
+
+## Authentic installed declaration check
+
+The installed Native5 interpreter from
+`/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/bin/python`
+read only the private inventory backup with query-only SQLite. Installed Core
+`74877f2dd108ed211871a098064178eaf3a4fdb5` was confirmed by its wheel
+`direct_url.json`. Its actual `JournalTable` declarations exactly match the
+observed SQL DDL. All four attempts decode through its original
+`SelectedSummaryAttempt.envelope()` and round-trip to the EXACT original
+`source_json` bytes. Existing `ExactTaskFact.original_sources()` supplies exactly
+one recorded `InputProvenance` for each original ingress; its original human
+origin and text digest certify the shape/equality lead above. No changed schema,
+current provider request, admission ACK or public write was created.
+
+See `authentic-installed-declaration-inventory.json` beside the other sanitized
+receipts. This is source authentication on a running-source logical backup,
+not owner-stop custody, native execution or cutover acceptance.
+
+Einstein reports Arendt's granted target contract on the existing attempt:
+`operation_id`, `session_file`, opaque original `source_json`, mandatory typed
+`request: SelectedSummarySource`, then `state`. The derived target SQL adds
+`request TEXT NOT NULL`; the reserved/unknown unique state index remains.
+All semantic source/envelope consumers must use this ONE typed request; native
+commit verification continues hashing only the untouched original bytes.
+The published determining-owner production checkpoint and complete Native5 to
+Native6 schema relation remain prerequisites for extending the carry operator.
+The original root is still running and no stopped donor is claimed.
