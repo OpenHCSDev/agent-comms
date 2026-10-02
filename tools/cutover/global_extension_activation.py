@@ -8,10 +8,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+import stat
 import subprocess
 
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-from agent_comms.private_path import TrustedAncestorRole
+from agent_comms.private_path import PrivateFileRole, TrustedAncestorRole
 from agent_comms.store_files import _atomic_write_text
 from publish_openhcs_recovery import digest, fsync_directory
 from publish_retained_summary import ReviewedArtifact
@@ -37,14 +38,21 @@ class GlobalSourceInstall(ABC):
 
     def install(self):
         self.require_original()
-        _atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True)
+        _atomic_write_text(self.destination, self.source.path.read_text(),
+                           fsync_parent=True, mode=self.installation_mode())
         if digest(self.destination) != self.source.sha256:
             raise RuntimeError(f'Installed global source differs: {self.destination}')
+
+    def installation_mode(self) -> int:
+        return PrivateFileRole.permissions
 
 
 @dataclass(frozen=True)
 class ReplaceGlobalSource(GlobalSourceInstall):
     original: ReviewedArtifact
+
+    def installation_mode(self) -> int:
+        return stat.S_IMODE(self.original.path.stat().st_mode)
 
     def require_destination(self):
         if self.original.path != self.destination:
@@ -75,6 +83,9 @@ class CreateGlobalSource(GlobalSourceInstall):
 class ActivateGlobalExtension(StoppedOwnerInstallation):
     sources: tuple[GlobalSourceInstall, ...]
     preimages: Path
+
+    def recovery_paths(self) -> frozenset[Path]:
+        return frozenset(source.destination for source in self.sources)
 
     def require_selection(self, snapshot, owners):
         if self.preimages.exists() or self.preimages.is_symlink():
