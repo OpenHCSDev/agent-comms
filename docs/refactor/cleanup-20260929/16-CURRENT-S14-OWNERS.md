@@ -1,3 +1,7 @@
+## Context explorer implementation
+
+Lovelace01a0fe48-719e-7c51-a7c4-c29e81fa6327 is a parent-context fork and owns existing Toad309 through implementation and actual UI acceptance. The tree goes at the bottom of the right thread/agent sidebar and derives from the existing canonical context manifest and detail owners, with no competing reconstruction/store. Reuses the completed parent340 checkout `toad-command-discovery-handoff`; Singer's completed cleanup agent is closed with context/receipts preserved, so the fleet remains six. Existing338/339/341 work stays with its context owners; only genuine shared hooks require direct coordination.
+
 ## Latest concrete checkpoints
 
 Core545 and546 merged: the original boundaries source-floor check passed with its original NotSent row, full input document and source in2.454s, with no replay or changed bytes. Receiver337 is READY and is the sole next cutover;336 remains preserved as evidence. Public334 stays installed until current Toad clients/drafts permit cutover.
