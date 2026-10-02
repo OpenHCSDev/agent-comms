@@ -5,30 +5,19 @@ Canonical 499 qualification is independent; no public activation is requested.
 
 ## PR base and exact ancestry
 
-PR500 is stacked on PR499's `fix/selected-native-compaction-budget-20261001`
-branch. It must not merge independently while 499's real fresh501 fork
-qualification is running. Retargeting does not rewrite the branch or alter source.
+PR499 qualified source `7cf50` is now merged in main at
+`5cf5536f1805df9ba020521d6db7f9e88df88e3e`. PR500 normally merged that
+actual main at `bb338b0c` and its PR base is restored to main. There was no
+reset, rebase, source rewrite or repeated provider/native qualification.
 
-Included ancestry, in order:
-
-- Original481 producer head `34e3dd875e9282b8a71a9b16ca80fb0157f21b16`.
-- Main `9954cdd73dff20e590aebf15467a170f0a69e799`, normally merged at `9b1238ee`.
-- Core499/native5184 checkpoint `07934d583cd1175f17a8843d3e7feec5093c2fb5`,
-  normally merged at `cfbeb06a`.
-- Consumer source closure `58dfb83b` and installed CLI validation `96f517e0`.
-
-PR499's head at retarget review was `496bd8a4029deb4b6d60795eae1b13a696d3e914`;
-those newer499 changes are not claimed as merged or validated here. The stacked
-diff still intentionally includes the481 original producer extensions in
-input_attempt.py, input_origin.py, messaging.py, retained_task_facts.py,
-task_sources.py and turn_context.py. Only the four declared consumer seams are
-new consumer implementation. The inherited499 native5184 and compaction changes
-are qualified by499's owner, not independently by500's CLI fixture.
-
-After qualified499 merges, normally merge main into500 and restore its PR base
-to main. Review `58dfb83b` and `96f517e0` as the consumer commits, retaining the
-explicit original481 producer review. Existing installed CLI evidence remains
-valid at its recorded strength; no provider qualification repeats are requested.
+Original481 producer `34e3dd875e9282b8a71a9b16ca80fb0157f21b16` and consumer
+closure `58dfb83b` / installed validation `96f517e0` remain included. Earlier
+normal merges main9954 (`9b1238ee`) and49907934 (`cfbeb06a`) are historical
+ancestry. The current main diff contains only the nine original481/consumer
+production files; inherited499 policy/native code is no longer in that diff.
+The original481 producer remains explicit review scope, alongside the four
+consumer seams. Existing installed CLI evidence retains its recorded strength;
+499's configured provider qualification belongs to499 and is not repeated here.
 
 ## Existing owners and caller closure
 
