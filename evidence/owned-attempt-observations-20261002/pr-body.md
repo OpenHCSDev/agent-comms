@@ -1,3 +1,11 @@
+## Final consumption hook correction (source bc27f626, published001f6ae8)
+
+Existing MroDispatch now selects once and owns normal async/sync handler consumption plus their shared replacement validator. DurableTurn overrides consumption only: the SAME selected bound handlers run inside its original Coordination worker resource. Its independent probe and re-dispatch are deleted. No new class/registry/queue/cache. Correction19deleted/27added across2existingfiles; child source unchanged.
+
+Final receipt `evidence/owned-attempt-observations-20261002/DISPATCH-CONSUMPTION.md`. Before/after full-family AST includes direct and qualified/inherited consumers. Final four installed handler/cancellation controls PASS1.26s; all311source files match. Small wheel in existing author environment only; native/receiving327 unchanged. Prior e61 receipts and wheel retained; six child controls NOT repeated.
+
+Below is the accepted previous resource scope, preserved as historical evidence:
+
 ## Source owner closure
 
 21 production lines deleted / 46 added in two existing owners:
