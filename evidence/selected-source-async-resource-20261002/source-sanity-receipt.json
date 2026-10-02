@@ -1,0 +1,41 @@
+{
+  "state": "SOURCE_SANITY_PASSED_INSTALLED_ACCEPTANCE_PENDING",
+  "source_head": "1c8bde0e858c345ef454def23b415483042f8789",
+  "shared_owner_head": "9d557bf469ff1c61494b323a8cccb9fa9dd947c8",
+  "production_added_lines": 81,
+  "production_deleted_lines": 63,
+  "production_files": {
+    "src/agent_comms/acp.py": "4835d4258a582d12f4a2babd7e1fe32d299792665e51c56915df6e8110ce05f7",
+    "src/agent_comms/cohort_foreground.py": "157c049b62ad5889bd486fd80b5b3d611f0428875eaf5b7152a7828e214c2fef",
+    "src/agent_comms/coordinated_runtime.py": "8b6ac62017a8f301b6cae60b7c85965070007b73488f2949bf7f726e17fe61cd",
+    "src/agent_comms/selected_participant.py": "53b539c04acc7d1efe04a2f7c266cf863748e1ba38ba529e81320ef8694c52a5"
+  },
+  "sanity": {
+    "exit_code": 0,
+    "passed": 6,
+    "duration_seconds": 8.07,
+    "cases": [
+      "test_selected_source_batch.py",
+      "test_cutover_admission.py",
+      "test_channel_participant_registration.py",
+      "test_private_idle_drain.py::test_sealed_cohorts_are_not_reaccepted_or_rewritten"
+    ],
+    "strength": "current source sanity with existing donor dependency interpreter, not installed async509/512 acceptance",
+    "import_source": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/src/agent_comms/__init__.py",
+    "provider_calls": 0,
+    "native_prompts": 0
+  },
+  "installed_gate_owner": "Arendt509",
+  "retained_scratch": [
+    {
+      "path": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/async512-sanity-deps",
+      "purpose": "six isolated validation dependencies; no donor installed-package mutation",
+      "size_approx_mib": 11
+    },
+    {
+      "path": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/async512-sanity-state",
+      "purpose": "original bounded source-sanity private roots/claim disposition evidence",
+      "size_approx_mib": 4.5
+    }
+  ]
+}
