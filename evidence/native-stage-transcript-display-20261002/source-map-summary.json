@@ -30,5 +30,30 @@
     "field_reference_candidates": 736
   },
   "limitations": "Syntactic declarations/imports/annotations/call and field candidates, not dynamic binding or MRO proof. Native SDK semantics read separately. Historical snapshots without original selected native rows stay unclassified; no inference or proof reconstruction.",
-  "production_diff": "40\t0\tsrc/agent_comms/native_input_record.py\n45\t41\tsrc/agent_comms/native_runtime_input.py\n10\t1\tsrc/agent_comms/transcript_events.py\n17\t22\tsrc/agent_comms/transcript_receipts.py\n"
+  "production_diff": "40\t0\tsrc/agent_comms/native_input_record.py\n44\t41\tsrc/agent_comms/native_runtime_input.py\n19\t0\tsrc/agent_comms/native_transcript.py\n10\t1\tsrc/agent_comms/transcript_events.py\n38\t30\tsrc/agent_comms/transcript_receipts.py\n1\t1\tsrc/agent_comms/transcripts.py\n",
+  "production_diff_initial": "40\t0\tsrc/agent_comms/native_input_record.py\n45\t41\tsrc/agent_comms/native_runtime_input.py\n10\t1\tsrc/agent_comms/transcript_events.py\n17\t22\tsrc/agent_comms/transcript_receipts.py\n",
+  "resource_after": {
+    "ref": "a3d2f751ffbb0e9c6fbfd68503e8f9e166d1ade8",
+    "nra_parsed": 917,
+    "candidate_stdlib_314": 1,
+    "unparsed": [],
+    "declarations": 59,
+    "consumer_candidates": 314,
+    "canonical_sql_read_callers": [
+      {
+        "path": "src/agent_comms/native_runtime_input.py",
+        "line": 220,
+        "caller": "publication_revision",
+        "reference": "cls._publication_read"
+      },
+      {
+        "path": "src/agent_comms/transcript_receipts.py",
+        "line": 258,
+        "caller": "native_records",
+        "reference": "NativeRuntimeInput._publication_read"
+      }
+    ],
+    "production_identical_to_installed": "36865f7c9b55f9273acef9eed8b139b865fc6178"
+  },
+  "resource_before_declarations": "Existing after.json.gz at79e556ab contains all59 existing owner declarations/members; new resource-after.json.gz extends these owners, no added class."
 }
