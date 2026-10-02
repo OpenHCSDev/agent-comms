@@ -1,25 +1,25 @@
 {
-  "as_of": "2026-10-02T07:30:04.669077+00:00",
+  "as_of": "2026-10-02T07:54:22.695127+00:00",
   "scope": "All open PRs in OpenHCSDev agent-comms/toad/textual/textual-diff-view; source/receiving ownership for this goal.",
-  "default_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002",
+  "default_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002",
   "prs": [
     {
-      "createdAt": "2026-10-02T07:28:40Z",
-      "headRefName": "fix/carry-destination-filesystem-20261002",
-      "headRefOid": "c67609055965aa763d7dcc3efd382c07562cdb66",
+      "createdAt": "2026-10-02T07:32:50Z",
+      "headRefName": "fix/stopped-cutover-failure-custody-20261002",
+      "headRefOid": "77779b738b21e90a56f3e5b73413400d1f43e30f",
       "isDraft": true,
-      "number": 517,
-      "title": "Stage atomic carry replacements on their destination filesystem",
-      "updatedAt": "2026-10-02T07:28:40Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/517",
+      "number": 518,
+      "title": "Retain stopped cutover failure custody for explicit recovery",
+      "updatedAt": "2026-10-02T07:32:50Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/518",
       "repo": "agent-comms",
-      "owner": "Mendel",
-      "scope": "One shared destination-filesystem atomic carry publication",
+      "owner": "Schrodinger",
+      "scope": "Retain stopped failure custody and operation-owned disposition; no input replay",
       "worktrees": [
         {
-          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
-          "head": "c67609055965aa763d7dcc3efd382c07562cdb66",
-          "branch": "fix/carry-destination-filesystem-20261002",
+          "path": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002",
+          "head": "77779b738b21e90a56f3e5b73413400d1f43e30f",
+          "branch": "fix/stopped-cutover-failure-custody-20261002",
           "registered": true,
           "exists": true
         }
@@ -28,19 +28,19 @@
     {
       "createdAt": "2026-10-02T07:10:07Z",
       "headRefName": "fix/native-launch-configuration-owner-20261002",
-      "headRefOid": "64e9f9b46962a649f090e75c2532e00ec962b363",
+      "headRefOid": "c6019afd34313db81504a364e3cc4024470a3034",
       "isDraft": true,
       "number": 516,
       "title": "Own native configuration through the existing launch contract",
-      "updatedAt": "2026-10-02T07:29:02Z",
+      "updatedAt": "2026-10-02T07:43:23Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/516",
       "repo": "agent-comms",
       "owner": "Arendt",
-      "scope": "Existing native launch configuration and auth/settings consumers",
+      "scope": "Whole native launch-config/auth/settings migration, including current Native6",
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
-          "head": "64e9f9b46962a649f090e75c2532e00ec962b363",
+          "head": "c6019afd34313db81504a364e3cc4024470a3034",
           "branch": "fix/native-launch-configuration-owner-20261002",
           "registered": true,
           "exists": true
@@ -72,11 +72,11 @@
     {
       "createdAt": "2026-10-02T04:23:28Z",
       "headRefName": "fix/native-compaction-source-carry-20261002",
-      "headRefOid": "1a2f1af8f453b781981f0c13980617138d7197e0",
+      "headRefOid": "c0135047625945ad1c2115a86a3181a8d16c3ab3",
       "isDraft": true,
       "number": 510,
       "title": "Carry original compaction source proofs across Native6 cutover",
-      "updatedAt": "2026-10-02T07:08:42Z",
+      "updatedAt": "2026-10-02T07:46:51Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/510",
       "repo": "agent-comms",
       "owner": "Mendel",
@@ -84,52 +84,8 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
-          "head": "1a2f1af8f453b781981f0c13980617138d7197e0",
+          "head": "c0135047625945ad1c2115a86a3181a8d16c3ab3",
           "branch": "fix/native-compaction-source-carry-20261002",
-          "registered": true,
-          "exists": true
-        }
-      ]
-    },
-    {
-      "createdAt": "2026-10-02T03:21:20Z",
-      "headRefName": "fix/selected-preparation-compaction-owner-20261002",
-      "headRefOid": "a13f67ac816826ca7f0b7a55fad6e56b75490dc9",
-      "isDraft": false,
-      "number": 506,
-      "title": "fix: journal selected saved-context preparation before input",
-      "updatedAt": "2026-10-02T07:25:22Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/506",
-      "repo": "agent-comms",
-      "owner": "Einstein",
-      "scope": "Same-child saved-context preparation and compaction. Content digest derives from the existing frozen source; migrate all consumers.",
-      "worktrees": [
-        {
-          "path": "/home/ts/wt/comms-retained-human-main-20261001",
-          "head": "a13f67ac816826ca7f0b7a55fad6e56b75490dc9",
-          "branch": "fix/selected-preparation-compaction-owner-20261002",
-          "registered": true,
-          "exists": true
-        }
-      ]
-    },
-    {
-      "createdAt": "2026-10-01T18:18:14Z",
-      "headRefName": "fix/request-budget-compaction-custody-20261001",
-      "headRefOid": "28401d70228237936d6489cba419271764edb905",
-      "isDraft": true,
-      "number": 489,
-      "title": "Own native runtime facts and lifecycle through existing nominal authorities",
-      "updatedAt": "2026-10-02T07:01:59Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/489",
-      "repo": "agent-comms",
-      "owner": "Arendt",
-      "scope": "Native turn lifecycle, budget and compaction authority; separate from the Native5 async checkpoint.",
-      "worktrees": [
-        {
-          "path": "/home/ts/wt/comms-request-budget-compaction-custody-20261001",
-          "head": "28401d70228237936d6489cba419271764edb905",
-          "branch": "fix/request-budget-compaction-custody-20261001",
           "registered": true,
           "exists": true
         }
@@ -138,11 +94,11 @@
     {
       "createdAt": "2026-09-30T00:21:49Z",
       "headRefName": "refactor/cleanup-live-integration-20260929",
-      "headRefOid": "dec951bb5f7d27103e67ee160efd70a84a6284ac",
+      "headRefOid": "7eaaad724b6020efc5962b5451d68657df478c93",
       "isDraft": true,
       "number": 432,
       "title": "Track live checkpoint and remaining nominal integration scope",
-      "updatedAt": "2026-10-02T06:59:38Z",
+      "updatedAt": "2026-10-02T07:30:29Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/432",
       "repo": "agent-comms",
       "owner": "Parent",
@@ -150,52 +106,8 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-          "head": "dec951bb5f7d27103e67ee160efd70a84a6284ac",
+          "head": "7eaaad724b6020efc5962b5451d68657df478c93",
           "branch": "refactor/cleanup-live-integration-20260929",
-          "registered": true,
-          "exists": true
-        }
-      ]
-    },
-    {
-      "createdAt": "2026-10-02T07:12:50Z",
-      "headRefName": "deploy/native6-wire-source-pin-20261002",
-      "headRefOid": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
-      "isDraft": false,
-      "number": 314,
-      "title": "Pair Native6 selected-source correction with frontend dependency",
-      "updatedAt": "2026-10-02T07:25:21Z",
-      "url": "https://github.com/OpenHCSDev/toad/pull/314",
-      "repo": "toad",
-      "owner": "Einstein",
-      "scope": "Qualified saved-fork natural compaction/cancel/continue pair",
-      "worktrees": [
-        {
-          "path": "/home/ts/wt/toad-native6-wire-source-pin-20261002",
-          "head": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
-          "branch": "deploy/native6-wire-source-pin-20261002",
-          "registered": true,
-          "exists": true
-        }
-      ]
-    },
-    {
-      "createdAt": "2026-10-02T06:50:49Z",
-      "headRefName": "deploy/native6-owned-receiving-20261002",
-      "headRefOid": "4219a24093472ed69b219dfce59af30926794647",
-      "isDraft": true,
-      "number": 313,
-      "title": "Package owned Native6 source with qualified frontend",
-      "updatedAt": "2026-10-02T06:54:09Z",
-      "url": "https://github.com/OpenHCSDev/toad/pull/313",
-      "repo": "toad",
-      "owner": "Einstein (end-to-end integration); Kepler package completed",
-      "scope": "Existing built combined lifecycle/compaction candidate; Einstein owns actual saved-fork/cancel/continue through fixes and final candidate.",
-      "worktrees": [
-        {
-          "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
-          "head": "4219a24093472ed69b219dfce59af30926794647",
-          "branch": "deploy/native6-owned-receiving-20261002",
           "registered": true,
           "exists": true
         }
@@ -208,7 +120,7 @@
       "isDraft": true,
       "number": 311,
       "title": "Continue sidebar and native style performance after308",
-      "updatedAt": "2026-10-02T07:18:00Z",
+      "updatedAt": "2026-10-02T07:30:19Z",
       "url": "https://github.com/OpenHCSDev/toad/pull/311",
       "repo": "toad",
       "owner": "Heisenberg",
@@ -240,19 +152,19 @@
     {
       "createdAt": "2026-10-02T07:08:56Z",
       "headRefName": "feat/native-subtree-strips-20261002",
-      "headRefOid": "b31765dd2001e3d52875206f8d928e92370d722e",
+      "headRefOid": "0b09964dab647fd644ea6a0639a83c04b3c9eaec",
       "isDraft": true,
       "number": 23,
       "title": "Render complete intrinsic subtree strips through native compositor",
-      "updatedAt": "2026-10-02T07:22:46Z",
+      "updatedAt": "2026-10-02T07:37:58Z",
       "url": "https://github.com/OpenHCSDev/textual/pull/23",
       "repo": "textual",
-      "owner": "Kepler",
-      "scope": "Complete-body strips API; Heisenberg integrates body state/readiness",
+      "owner": "Kepler; Heisenberg integration",
+      "scope": "Complete body strip rendering and original input preparation hook",
       "worktrees": [
         {
           "path": "/home/ts/wt/textual-native-subtree-strips-20261002",
-          "head": "b31765dd2001e3d52875206f8d928e92370d722e",
+          "head": "0b09964dab647fd644ea6a0639a83c04b3c9eaec",
           "branch": "feat/native-subtree-strips-20261002",
           "registered": true,
           "exists": true
@@ -282,12 +194,13 @@
       ]
     }
   ],
-  "draft_count": 10,
+  "draft_count": 8,
   "reconciled_since_previous": [
     "Core513 merged57aeb5e; Core514 mergeda8a3ba05; complete src/tools equal installed9ccc.",
     "Goal ledger carry preserved492 factrows and row identities; sourcecontrol only, installedjourney Sch in progress.",
     "Toad312 packaged Native5 goal cohort; parent publication follows affected journey.",
     "Visual assessment was deferred in latestperformance run. Existing recorder must supply appframe delivery timeline and concurrent motion review.",
-    "Toad312 merged; goal publication failed EXDEV before replacement;19 original owners restored normally with39 protected files unchanged."
+    "Toad312 merged; goal publication failed EXDEV before replacement;19 original owners restored normally with39 protected files unchanged.",
+    "Core489/506/517/519 and Toad314 merged;313 superseded. Goal/async/sidebar installed and default physical read verified. No original input replay; aa78 remains without generation, lifecycle Blockedrev2."
   ]
 }

@@ -1,27 +1,37 @@
 ## Current delivery state — 2026-10-02
 
-Core509/511/513/514 and Toad308/310/312 are merged. The combined installed
-package passed the actual configured saved-fork native set/complete/send and
-physical goal Edit/Clear journey, preserving492 original fact rows and rowids.
-Core506 also passed its198.515s configured saved-fork natural compaction,
-retained-UNKNOWN cancellation and distinct continuation; it is ready, not live.
+The combined goal, async messaging and sidebar checkpoint is now the default
+installed package: Core9ccc / Toadf07f / Textual2382 / unchanged Native5184.
+All19 target owners are alive. Installed source inventories and the configured
+saved-fork native set/complete/send plus physical Edit/Clear journey passed.
+Actual default Toad saved-helper history/Ready/editor verification passed19.695s;
+frames were inspected during the same isolatedst run and all capture resources closed.
 
-The urgent513/514 publication exposed EXDEV: the shared carry staged under
-/home and renamed into /var/tmp. No database replacement or default-link
-publication occurred. All39 protected files match their preimages. All19
-original owners were restored through the existing normal configured508 start
-path and verified alive/idle. Transient extinct process environments were not
-claimed retained. Failed publication receipts and staged candidates remain.
-Mendel owns destination-filesystem atomic publication for every carry consumer.
-Schrodinger owns the lifecycle failure-custody gap through existing batch types.
-Parent owns the corrected one-use publication and actual default verification.
+The public carry preserved492 original fact rows and rowids, retained original
+preimages, and left38 other protected files byte-identical before publication.
+Two real operator bugs were fixed at their shared owners:517 moves held atomic
+replacement to the destination filesystem;519 freezes original file membership
+and derives its partition once. Both failed attempts and the explicit committed-
+carry continuation remain in parent .release-private notes; no carry/input replay.
 
-Arendt516 uses existing launch configuration types, removes three setup copies,
-and migrates auth/settings readers. No independent new config authority.
-Heisenberg311 owns body state/readiness/interaction; Kepler23 delivered the
-complete-subtree strips API on disjoint Textual source. Restored history must
-paint existing strips instead of rebuilding widgets. Actual frame delivery and
-motion inspection, correlated with profiling, remain final acceptance.
+Original failed goalaa78 remains the same identity/text and has no Generation.
+The existing Goal.after_failed_turn lifecycle correctly marked it Blockedrev2.
+It was not recreated, granted, resumed or resent. All other durable thread
+settings are unchanged. Explicit normal configured starts were used after the
+old in-RAM launch custody was lost; extinct transient environments are not
+claimed retained. Sch518 owns that lifecycle failure-custody gap.
+
+Core489/506 and paired Toad314 are merged. Their198.515s configured saved-fork
+natural compaction, triage cancellation and distinct continuation passed;
+they are NOT in this default package. Mendel510 owns current-producer historical
+carry, including immutable original proof/source/UNKNOWN preservation.
+
+Arendt516 migrates all launch-config/auth/settings consumers through existing
+types. Heisenberg311 owns Live/Rendered/Measured body state and every readiness/
+interaction consumer; Kepler23 delivered complete-subtree strips on disjoint
+Textual source. Restored history must paint its existing lines, not rebuild
+widgets. Actual frame delivery/motion inspection correlated with profiling is
+final acceptance, not screenshot/readability or capture FPS.
 
 The full original goal remains active. Historical checkpoint notes below
 record earlier states and do not override this section.
