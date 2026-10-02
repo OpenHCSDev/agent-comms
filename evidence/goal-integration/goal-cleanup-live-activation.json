@@ -1,0 +1,23 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-goal-cleanup-20260928",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2452460,
+      "pid": 2480925
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2452463,
+      "pid": 2480930
+    }
+  ],
+  "error": null,
+  "ready": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true
+  },
+  "roster_count": 103,
+  "bus_seq": 46
+}

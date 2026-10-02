@@ -1,0 +1,23 @@
+patching file dist/core/session-manager.js
+patching file dist/core/compaction/compaction.js
+patching file dist/core/agent-session-runtime.js
+patching file dist/core/agent-session.js
+Hunk #9 FAILED at 2056.
+1 out of 16 hunks FAILED -- saving rejects to file dist/core/agent-session.js.rej
+patching file dist/core/cache-stats.d.ts
+patching file dist/core/cache-stats.js
+patching file dist/core/compaction/branch-summarization.d.ts
+patching file dist/core/compaction/branch-summarization.js
+patching file dist/core/compaction/compaction.d.ts
+patching file dist/core/export-html/index.js
+patching file dist/core/extensions/types.d.ts
+patching file dist/core/output-guard.js
+patching file dist/core/sdk.js
+patching file dist/core/session-export.js
+patching file dist/core/session-manager.d.ts
+patching file dist/index.d.ts
+patching file dist/index.js
+patching file dist/main.js
+patching file dist/modes/interactive/components/footer.js
+patching file dist/modes/interactive/interactive-mode.js
+patching file dist/modes/rpc/rpc-mode.js

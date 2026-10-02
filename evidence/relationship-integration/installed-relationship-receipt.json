@@ -1,0 +1,12 @@
+{
+  "command": [
+    "timeout",
+    "60",
+    "/home/ts/.local/share/agent-comms/runtime-relationship-cleanup-20260928/bin/python",
+    "/home/ts/.local/state/agent-comms/nominal-states-history-ui-20260928.py"
+  ],
+  "cwd": "/home/ts/wt/toad-historical-selection-20260928",
+  "PYTHONPATH": "unset",
+  "exit_code": 0,
+  "elapsed_seconds": 38.263
+}

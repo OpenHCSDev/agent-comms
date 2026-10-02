@@ -1,0 +1,137 @@
+{
+  "reviewed_baseline_manifest": "7616293d01862aba5bdbe17adce2a3171955bdd08da716a53c0d8523e2f3a04c",
+  "baseline_head": "60ecf89fdc149872a8e980e8e0d1c2ce775fc4f1",
+  "existing_observation_source": "a5d715263412d692716aa6672b96c727b7d2cd7f",
+  "artifact_status": "Unverified provider-module control snapshot, NOT new reviewed native artifact. Existing761 manifest/native untouched. Arendt owns combined454 build/fulltreepins/wheel.",
+  "patch": {
+    "sha256": "a2487318927f092417e2d73fd7892bd4aa0f189dbe65598325cf2f0cbf9b78ab",
+    "added_lines": 96,
+    "deleted_lines": 25
+  },
+  "helper_extension": {
+    "added_js_lines": 24,
+    "added_declaration_lines": 2,
+    "clock_counter_changes": 0,
+    "deleted_js_lines": 4
+  },
+  "budget_coordinate_forwarding": {
+    "added_lines": 2,
+    "deleted_lines": 2,
+    "semantics": "Original retry callback attempt forwarded through existing negotiated send; no attempt state/counter/reset."
+  },
+  "changed_control_modules": [
+    {
+      "path": "api/agent-comms-context-budget.js",
+      "before_sha256": "341144a917f37155a77ffbc1ff12915ba51a057fa028dfa966fc0e99222cbc9f",
+      "after_sha256": "f9224adad46d6bc83e7ebe6fe1daeb8b1f79dde278dab11ee705574ff10e8c45",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/anthropic-messages.js",
+      "before_sha256": "a3d15bac7882e95f72a4d29e729f41c472b77458b467e74aa023c437e0c96b98",
+      "after_sha256": "18e31d26ef1fd603442c3d22fc1c3eeb9576b03cda5018a24e617734ff2b9d34",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/azure-openai-responses.js",
+      "before_sha256": "93bfb287c5ddaf32f5d8cd7d6c505709515d4757b7ade527657b260c6d48b73f",
+      "after_sha256": "d6327c233c87a07f580f3f983c51929c41dd5a6d7fcb3670b75c0ca1691329ae",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/bedrock-converse-stream.js",
+      "before_sha256": "f23cfcad959bd54c0a910213fa13cf7b826ccdeaadcc9a3db1203e38b27c3d19",
+      "after_sha256": "2f419e00e26c32462a8643d694fcfb8d793cf7119a1995023f19b3acbc492059",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/google-generative-ai.js",
+      "before_sha256": "e44687be4b8714a17d71bb6934a7dc2a376cd3492d3138944460836b230e345e",
+      "after_sha256": "bffb924d3c540ea0deeb9818c0ee1c479d49412a34159dde084390b88913cfe4",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/google-shared.d.ts",
+      "before_sha256": "db610796db8f0b86816c55837c310227aace08c72c909c71b966e3de34dbfc60",
+      "after_sha256": "7dbf7636f672cd9a50b3963c5f2f63ebc132fd164e9d45f934c752957907c988",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/google-shared.js",
+      "before_sha256": "c06c0d8eb5f7727dc8b3cd5b48cd099508bfda668b25e3ca06dde244b11a3be8",
+      "after_sha256": "829f127c4e760ea3f0a3fa429f32699c1bfa612738dd6918a056fde05b93f1e3",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/google-vertex.js",
+      "before_sha256": "c49b82a8316f24a027d414c758e408f475026b8753526f00bd8aced49bca38dd",
+      "after_sha256": "50e59adbedd97bc6a8f2923eff13c3e845ae1bc45484821b51b86309bae5b07b",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/mistral-conversations.js",
+      "before_sha256": "c768f1c7815e679c229413f4bb46776854b835572b27a136d42c98c66edd0eb1",
+      "after_sha256": "84e5a9c8f4fefd6218265a024c2cea23724faf7552d2e1e4a89e5b08de481d9d",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/openai-codex-responses.js",
+      "before_sha256": "8db5b5eae1e10129056732e29fe8dc9f1b7ed28cc1555e6f986b16341e8f8d90",
+      "after_sha256": "9ce603078e7ad9fc79ea1d6713adf08b8eeb99c6e050c6108907df1e8fe0f2cf",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/openai-completions.js",
+      "before_sha256": "de2453bbec026afab7a7a0a4495a7e079d7656cc91600455b71d1c249229a3e3",
+      "after_sha256": "29a53e609b7a28e0976af49efb3ec0bd2334cd18f23fe8b2f2ad1b5456b51763",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/openai-responses.js",
+      "before_sha256": "db945fb2f8528cef97e2976307000d427ca75d3b5317baca567219e49e73602c",
+      "after_sha256": "ff2fab0a533a5a3b9e0316169a2dcac522ebf2acfaf4305041a11cce99026b49",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/pi-messages.js",
+      "before_sha256": "730f3c4076356299b98fda934b96d6cc83c74d62302748ba40315ee7f1f388ef",
+      "after_sha256": "c8708543a42959475b15f7aa0e07412cfa0bd29bd61249841a16aa2e200ddaed",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "api/simple-options.js",
+      "before_sha256": "dd08e5cc28e0966746ddbf5dad2586dce0f65ef7cff9807792f23551029e39f7",
+      "after_sha256": "9605f7cc8986b81f4e11d1d9f297632989d84339779751778c54c2769c85e2b4",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "types.d.ts",
+      "before_sha256": "ae6d784ad8a63299720ecd3628a8c162becee22791208f569723994d709475c5",
+      "after_sha256": "845edb9a4509f79bf973310a37dafa7adb1110dd77e88bfbe5e1c00292dbac68",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "utils/agent-comms-request-observation.d.ts",
+      "before_sha256": null,
+      "after_sha256": "c275d4a0f33742607136ec6fbeac785e301d1a8f7eb0c268f9d80f527b301150",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "utils/agent-comms-request-observation.js",
+      "before_sha256": null,
+      "after_sha256": "9e9c9ea5eb3e33c301c25d86bae866cc41a8ff21266badc458fcdff766d464a9",
+      "custody": "adapter contribution or canonical helper source"
+    },
+    {
+      "path": "utils/provider-retry.js",
+      "before_sha256": "f14a8cfb9a99901a7cde6d588fad11aa8030e409d760d76050e580b6dba5c3f5",
+      "after_sha256": "a6fb5fbaf5c699f881d7d6bd4303d75b1d99b7cb1ac4c510e3e02fd0dc846532",
+      "custody": "Arendt original retry counter fixture patch only"
+    }
+  ],
+  "all_changed_js_syntax": "PASS",
+  "zero_fuzz_patch_dry_run": "PASS (actual checked subprocess exit0; missing-newline diff repaired before publication)",
+  "scope": "Ten existing native exported stream adapters. Header proof absent for Google SDK; no invented HTTP header status on WebSocket. Bedrock dispatch includes SDK-owned internals/retries; point does not prove socket write or each SDK attempt.",
+  "public_schema_route_config_changes": false,
+  "paid_calls": 0
+}

@@ -1,0 +1,3001 @@
+F821 Undefined name `MessageRoute`
+   --> src/agent_comms/acp.py:720:70
+    |
+719 |     async def _emit_text(
+720 |         self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None
+    |                                                                      ^^^^^^^^^^^^
+721 |     ) -> None:
+722 |         if not text:
+    |
+
+F821 Undefined name `MessageRoute`
+   --> src/agent_comms/acp.py:745:16
+    |
+743 |         *,
+744 |         turn_id: str | None = None,
+745 |         route: MessageRoute | None = None,
+    |                ^^^^^^^^^^^^
+746 |     ) -> None:
+747 |         """Publish typed live or saved transcript events."""
+    |
+
+F821 Undefined name `_store_lock`
+  --> src/agent_comms/claim_admission.py:39:10
+   |
+37 |     if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+38 |         raise IdentityConflict("Wake coordinator does not belong to this wire root")
+39 |     with _store_lock(comms._wire_lock_path):
+   |          ^^^^^^^^^^^
+40 |         _require_no_private_owner_rename(comms.root)
+41 |         try:
+   |
+
+F821 Undefined name `_require_no_private_owner_rename`
+  --> src/agent_comms/claim_admission.py:40:9
+   |
+38 |         raise IdentityConflict("Wake coordinator does not belong to this wire root")
+39 |     with _store_lock(comms._wire_lock_path):
+40 |         _require_no_private_owner_rename(comms.root)
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+41 |         try:
+42 |             initial = comms.bus.read_initial_cohort(admission.wire_root_id, admission.source_seq)
+   |
+
+F821 Undefined name `RelationViolationError`
+  --> src/agent_comms/claim_admission.py:44:17
+   |
+42 |             initial = comms.bus.read_initial_cohort(admission.wire_root_id, admission.source_seq)
+43 |             owner, generation = comms.registry.live_owner_with_admission(owner_name)
+44 |         except (RelationViolationError, ValueError) as error:
+   |                 ^^^^^^^^^^^^^^^^^^^^^^
+45 |             raise IdentityConflict("Wake bus or live owner authority changed") from error
+46 |         _verify_selected_wake_state(initial, owner, generation, store, admission)
+   |
+
+F821 Undefined name `Thread`
+  --> src/agent_comms/claim_admission.py:51:12
+   |
+49 | def _verify_selected_wake_state(
+50 |     initial: CommittedInitial,
+51 |     owner: Thread,
+   |            ^^^^^^
+52 |     generation: int,
+53 |     store: MutationStore,
+   |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/claim_admission.py:116:9
+    |
+114 |     bus = comms.bus
+115 |     with (
+116 |         _store_lock(comms._wire_lock_path),
+    |         ^^^^^^^^^^^
+117 |         _store_lock(bus._path),
+118 |         _store_lock(comms.registry.store.path),
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/claim_admission.py:117:9
+    |
+115 |     with (
+116 |         _store_lock(comms._wire_lock_path),
+117 |         _store_lock(bus._path),
+    |         ^^^^^^^^^^^
+118 |         _store_lock(comms.registry.store.path),
+119 |     ):
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/claim_admission.py:118:9
+    |
+116 |         _store_lock(comms._wire_lock_path),
+117 |         _store_lock(bus._path),
+118 |         _store_lock(comms.registry.store.path),
+    |         ^^^^^^^^^^^
+119 |     ):
+120 |         registry = comms.registry.store._read_unlocked().snapshot()
+    |
+
+F821 Undefined name `_require_no_private_owner_rename`
+   --> src/agent_comms/claim_admission.py:134:9
+    |
+132 |         ):
+133 |             raise IdentityConflict("Selected wake owner stopped or changed")
+134 |         _require_no_private_owner_rename(comms.root)
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |         metadata = bus._private_marker_unlocked()
+136 |         if metadata["wire_root_id"] != admission.wire_root_id:
+    |
+
+F821 Undefined name `Message`
+   --> src/agent_comms/claim_admission.py:196:13
+    |
+194 |             target = "#all"
+195 |         committed = bus.publish_claim_envelope(
+196 |             Message(owner.name, target, "Resource claim admitted", MessageType.INFO, notice=True),
+    |             ^^^^^^^
+197 |             worktree=Path(owner.worktree),
+198 |             incarnation=str(owner.created_at),
+    |
+
+F821 Undefined name `MessageType`
+   --> src/agent_comms/claim_admission.py:196:68
+    |
+194 |             target = "#all"
+195 |         committed = bus.publish_claim_envelope(
+196 |             Message(owner.name, target, "Resource claim admitted", MessageType.INFO, notice=True),
+    |                                                                    ^^^^^^^^^^^
+197 |             worktree=Path(owner.worktree),
+198 |             incarnation=str(owner.created_at),
+    |
+
+F821 Undefined name `Message`
+   --> src/agent_comms/claim_admission.py:238:17
+    |
+236 |             target = initial.message.sender if initial.message.sender != owner.name else "#all"
+237 |             bus.publish_claim_envelope(
+238 |                 Message(
+    |                 ^^^^^^^
+239 |                     owner.name,
+240 |                     target,
+    |
+
+F821 Undefined name `MessageType`
+   --> src/agent_comms/claim_admission.py:242:21
+    |
+240 |                     target,
+241 |                     "Completed coding tool claims released",
+242 |                     MessageType.INFO,
+    |                     ^^^^^^^^^^^
+243 |                     notice=True,
+244 |                 ),
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/claim_admission.py:346:9
+    |
+344 |     bus = comms.bus
+345 |     with (
+346 |         _store_lock(comms._wire_lock_path),
+    |         ^^^^^^^^^^^
+347 |         _store_lock(bus._path),
+348 |         _store_lock(comms.registry.store.path),
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/claim_admission.py:347:9
+    |
+345 |     with (
+346 |         _store_lock(comms._wire_lock_path),
+347 |         _store_lock(bus._path),
+    |         ^^^^^^^^^^^
+348 |         _store_lock(comms.registry.store.path),
+349 |     ):
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/claim_admission.py:348:9
+    |
+346 |         _store_lock(comms._wire_lock_path),
+347 |         _store_lock(bus._path),
+348 |         _store_lock(comms.registry.store.path),
+    |         ^^^^^^^^^^^
+349 |     ):
+350 |         registry = comms.registry.store._read_unlocked().snapshot()
+    |
+
+F821 Undefined name `_require_no_private_owner_rename`
+   --> src/agent_comms/claim_admission.py:365:9
+    |
+363 |         ):
+364 |             raise IdentityConflict("Selected write owner stopped or changed")
+365 |         _require_no_private_owner_rename(comms.root)
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+366 |         marker = bus._private_marker_unlocked()
+367 |         if marker["wire_root_id"] != admission.wire_root_id:
+    |
+
+F821 Undefined name `_store_lock`
+  --> src/agent_comms/cohort_foreground.py:63:10
+   |
+61 |     comms = Comms(root)
+62 |     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+63 |     with _store_lock(bus._path):
+   |          ^^^^^^^^^^^
+64 |         marker = bus._private_marker_unlocked()
+65 |     if marker["wire_root_id"] != wire_root_id:
+   |
+
+F821 Undefined name `_store_lock`
+  --> src/agent_comms/cohort_foreground.py:84:10
+   |
+82 |     Never infer a cohort from an ordinary public message or its body.
+83 |     """
+84 |     with _store_lock(bus._path):
+   |          ^^^^^^^^^^^
+85 |         _require_no_private_owner_rename(bus._path.parent)
+86 |         marker = bus._private_marker_unlocked()
+   |
+
+F821 Undefined name `_require_no_private_owner_rename`
+  --> src/agent_comms/cohort_foreground.py:85:9
+   |
+83 |     """
+84 |     with _store_lock(bus._path):
+85 |         _require_no_private_owner_rename(bus._path.parent)
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+86 |         marker = bus._private_marker_unlocked()
+87 |         if marker["wire_root_id"] != root_id:
+   |
+
+F821 Undefined name `Thread`
+   --> src/agent_comms/cohort_foreground.py:119:22
+    |
+117 |     opt_in: bool = True,
+118 |     wait_seconds: float = 60.0,
+119 |     ready: Callable[[Thread], None] | None = None,
+    |                      ^^^^^^
+120 |     selected_existing_file_write: SelectedExistingFileWrite | None = None,
+121 | ) -> CoordinatedTurn | NoWakeReceipt | None:
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/cohort_foreground.py:147:14
+    |
+145 |         # Refuse an uninitialized claim protocol or permanently invalid
+146 |         # resource before owner registration or an irreversible native send.
+147 |         with _store_lock(comms.bus._path):
+    |              ^^^^^^^^^^^
+148 |             marker = comms.bus._private_marker_unlocked()
+149 |         if marker.get("claim_envelopes_version") != 1:
+    |
+
+F821 Undefined name `Thread`
+   --> src/agent_comms/cohort_foreground.py:152:14
+    |
+150 |             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
+151 |         normalize_existing_file(worktree, selected_existing_file_write.resource)
+152 |     thread = Thread(name, tags, str(worktree), pid=os.getpid())
+    |              ^^^^^^
+153 |     # The registry name reservation and registration must be ONE wire-locked
+154 |     # operation; `claim_thread` silently chooses a suffix on a collision.
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/cohort_foreground.py:155:10
+    |
+153 |     # The registry name reservation and registration must be ONE wire-locked
+154 |     # operation; `claim_thread` silently chooses a suffix on a collision.
+155 |     with _store_lock(comms._wire_lock_path):
+    |          ^^^^^^^^^^^
+156 |         if comms.registry.name_reserved(name):
+157 |             raise IdentityConflict("recipient name already reserved; no takeover")
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/cohort_foreground.py:208:14
+    |
+206 |         # RUNNING PID: that state requires explicit manual disposition, not an
+207 |         # automatic takeover of an uncertain claim.
+208 |         with _store_lock(comms._wire_lock_path):
+    |              ^^^^^^^^^^^
+209 |             try:
+210 |                 current, _generation = comms.registry.live_owner_with_admission(name)
+    |
+
+F821 Undefined name `Thread`
+   --> src/agent_comms/cohort_foreground.py:265:23
+    |
+263 |     args = parser.parse_args(argv)
+264 |
+265 |     def ready(thread: Thread) -> None:
+    |                       ^^^^^^
+266 |         print(json.dumps({"ready": True, "name": thread.name, "pid": os.getpid()}), flush=True)
+    |
+
+F821 Undefined name `_store_lock`
+  --> src/agent_comms/cohort_send.py:37:10
+   |
+35 |     _private_session_dir(root)
+36 |     comms = Comms(root, private_initial_writes=True)
+37 |     with _store_lock(comms.bus._path):
+   |          ^^^^^^^^^^^
+38 |         marker = comms.bus._private_marker_unlocked()
+39 |     if marker["wire_root_id"] != wire_root_id:
+   |
+
+F821 Undefined name `Goal`
+  --> src/agent_comms/goal_actions.py:51:20
+   |
+49 |     goal_id: str | None = None
+50 |     expected_status: str | None = None
+51 |     expected_goal: Goal | None = None
+   |                    ^^^^
+52 |     expected_owner_pid: int | None = None
+   |
+
+F821 Undefined name `Thread`
+  --> src/agent_comms/goal_actions.py:78:13
+   |
+76 | class GoalActionContext:
+77 |     goals: Goals
+78 |     thread: Thread
+   |             ^^^^^^
+79 |     actor: type = RuntimeInvocable
+80 |     owner_store: GoalAttemptStore | None = None
+   |
+
+F821 Undefined name `Goal`
+  --> src/agent_comms/goal_actions.py:90:31
+   |
+88 |         return self.actor is ModelInvocable
+89 |
+90 |     def require_goal(self) -> Goal:
+   |                               ^^^^
+91 |         if self.thread.goal is None:
+92 |             raise ValueError("No goal is set for this thread.")
+   |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:111:48
+    |
+109 |             raise ValueError("Owner goal authority requires goal creation or explicit resume.")
+110 |
+111 |     def apply(self, ctx: GoalActionContext) -> Goal | None:
+    |                                                ^^^^
+112 |         self.expect.check(ctx)
+113 |         if not isinstance(self, ctx.actor):
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:140:49
+    |
+139 |     @abstractmethod
+140 |     def change(self, ctx: GoalActionContext) -> Goal | None: ...
+    |                                                 ^^^^
+141 |
+142 |     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:142:36
+    |
+140 |     def change(self, ctx: GoalActionContext) -> Goal | None: ...
+141 |
+142 |     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
+    |                                    ^^^^
+143 |         pass
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:153:49
+    |
+151 |     def next_state(self, ctx: GoalActionContext) -> GoalState: ...
+152 |
+153 |     def change(self, ctx: GoalActionContext) -> Goal:
+    |                                                 ^^^^
+154 |         goal = ctx.require_goal()
+155 |         state = self.next_state(ctx)
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:225:36
+    |
+223 |         return ActiveGoal()
+224 |
+225 |     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
+    |                                    ^^^^
+226 |         assert goal is not None
+227 |         thread = ctx.thread
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:365:36
+    |
+363 | @dataclass(frozen=True, kw_only=True)
+364 | class ReplacementGoalAction(GoalAction):
+365 |     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
+    |                                    ^^^^
+366 |         goal = ctx.thread.goal
+367 |         if goal is not None:
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:392:49
+    |
+390 |         pass
+391 |
+392 |     def change(self, ctx: GoalActionContext) -> Goal:
+    |                                                 ^^^^
+393 |         goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1)
+394 |         goal = replace(
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:393:16
+    |
+392 |     def change(self, ctx: GoalActionContext) -> Goal:
+393 |         goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1)
+    |                ^^^^
+394 |         goal = replace(
+395 |             goal,
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:418:49
+    |
+416 |     preserve_wait = True
+417 |
+418 |     def change(self, ctx: GoalActionContext) -> Goal:
+    |                                                 ^^^^
+419 |         goal = ctx.require_goal()
+420 |         text = self.text.strip()
+    |
+
+F821 Undefined name `Goal`
+   --> src/agent_comms/goal_actions.py:452:49
+    |
+450 |             raise ValueError("Retry requires the executing owner's private goal authority.")
+451 |
+452 |     def change(self, ctx: GoalActionContext) -> Goal:
+    |                                                 ^^^^
+453 |         goal = ctx.require_goal()
+454 |         if not isinstance(goal.state, BlockedGoal):
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/nk_foreground.py:101:10
+    |
+ 99 |     _private_session_dir(worktree)
+100 |     comms = Comms(root)
+101 |     with _store_lock(comms.bus._path):
+    |          ^^^^^^^^^^^
+102 |         marker = comms.bus._private_marker_unlocked()
+103 |     if marker["wire_root_id"] != wire_root_id:
+    |
+
+F821 Undefined name `Thread`
+   --> src/agent_comms/nk_foreground.py:105:13
+    |
+103 |     if marker["wire_root_id"] != wire_root_id:
+104 |         raise RelationViolationError("Private wire root changed before owner reservation")
+105 |     owner = Thread(name, tags, str(worktree), pid=os.getpid(), task=task)
+    |             ^^^^^^
+106 |     # Ordinary Comms.register intentionally supports replacing idle owners. That
+107 |     # is NOT safe for a private foreground attempt: serialize the exact fresh
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/nk_foreground.py:110:10
+    |
+108 |     # check and registry write against every public Comms.register/send caller
+109 |     # on the same wire lock without changing the shared operations module.
+110 |     with _store_lock(comms._wire_lock_path):
+    |          ^^^^^^^^^^^
+111 |         canonical = comms.registry.canonical_name(owner.name)
+112 |         if canonical != owner.name or canonical in comms.registry.all_threads():
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/selected_write_plan.py:127:14
+    |
+125 |         if not raw or len(raw) > _MAX_BYTES:
+126 |             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
+127 |         with _store_lock(self.comms._wire_lock_path):
+    |              ^^^^^^^^^^^
+128 |             with _store_lock(self.comms.bus._path):
+129 |                 marker = self.comms.bus._private_marker_unlocked()
+    |
+
+F821 Undefined name `_store_lock`
+   --> src/agent_comms/selected_write_plan.py:128:18
+    |
+126 |             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
+127 |         with _store_lock(self.comms._wire_lock_path):
+128 |             with _store_lock(self.comms.bus._path):
+    |                  ^^^^^^^^^^^
+129 |                 marker = self.comms.bus._private_marker_unlocked()
+130 |             if marker["wire_root_id"] != self.root_id or marker.get("claim_envelopes_version") != 1:
+    |
+
+F821 Undefined name `Thread`
+   --> src/agent_comms/selected_write_plan.py:197:45
+    |
+195 |             }
+196 |
+197 |     def load(self, claim: WakeClaim, owner: Thread, epoch: int) -> PlannedWrite | None:
+    |                                             ^^^^^^
+198 |         lookup = stable_thread_lookup(owner.created_at)
+199 |         path = self._path(claim.wire_seq, lookup)
+    |
+
+F821 Undefined name `Thread`
+   --> src/agent_comms/selected_write_plan.py:225:48
+    |
+223 |         return PlannedWrite(Path(resource), raw, operation_id)
+224 |
+225 |     def applied(self, claim: WakeClaim, owner: Thread, operation_id: str) -> None:
+    |                                                ^^^^^^
+226 |         path = self._path(claim.wire_seq, stable_thread_lookup(owner.created_at))
+227 |         row = self._read(path)
+    |
+
+F821 Undefined name `Message`
+  --> tests/test_acp_input_disposition.py:26:9
+   |
+24 | def test_each_direct_sequence_gets_its_own_native_turn():
+25 |     first = ScheduledTurn.incoming(
+26 |         Message(sender="peer", target="project", body="alpha", type=MessageType.INFO, seq=1)
+   |         ^^^^^^^
+27 |     )
+28 |     second = ScheduledTurn.incoming(
+   |
+
+F821 Undefined name `MessageType`
+  --> tests/test_acp_input_disposition.py:26:69
+   |
+24 | def test_each_direct_sequence_gets_its_own_native_turn():
+25 |     first = ScheduledTurn.incoming(
+26 |         Message(sender="peer", target="project", body="alpha", type=MessageType.INFO, seq=1)
+   |                                                                     ^^^^^^^^^^^
+27 |     )
+28 |     second = ScheduledTurn.incoming(
+   |
+
+F821 Undefined name `Message`
+  --> tests/test_acp_input_disposition.py:29:9
+   |
+27 |     )
+28 |     second = ScheduledTurn.incoming(
+29 |         Message(sender="peer", target="project", body="beta", type=MessageType.INFO, seq=2)
+   |         ^^^^^^^
+30 |     )
+31 |     batch, remaining = ScheduledTurn.take_batch([first, second])
+   |
+
+F821 Undefined name `MessageType`
+  --> tests/test_acp_input_disposition.py:29:68
+   |
+27 |     )
+28 |     second = ScheduledTurn.incoming(
+29 |         Message(sender="peer", target="project", body="beta", type=MessageType.INFO, seq=2)
+   |                                                                    ^^^^^^^^^^^
+30 |     )
+31 |     batch, remaining = ScheduledTurn.take_batch([first, second])
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_acp_private_nk_delivery.py:41:28
+   |
+39 |     root = tmp_path / "wire"
+40 |     comms = Comms(root)
+41 |     comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+   |                            ^^^^^^
+42 |     owner = Thread(
+43 |         "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_acp_private_nk_delivery.py:42:13
+   |
+40 |     comms = Comms(root)
+41 |     comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+42 |     owner = Thread(
+   |             ^^^^^^
+43 |         "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+44 |     )
+   |
+
+F821 Undefined name `Thread`
+   --> tests/test_acp_private_nk_delivery.py:318:28
+    |
+316 |     project.mkdir()
+317 |     comms = Comms(root)
+318 |     comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    |                            ^^^^^^
+319 |     root_id = comms.messaging.initialize_private_initial_protocol()
+320 |     with MutationStore(str(root / "coordination.sqlite3")) as store:
+    |
+
+F821 Undefined name `_store_lock`
+   --> tests/test_acp_private_nk_delivery.py:725:10
+    |
+723 |     assert updates[-1]["status"] == "proven"
+724 |     before = len(updates)
+725 |     with _store_lock(comms.root / "wire"):
+    |          ^^^^^^^^^^^
+726 |         # This is an actual contended flock in the canonical read path, not a
+727 |         # mocked error. A new attachment cannot claim an unread observation.
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_acp_private_nk_delivery.py:798:13
+    |
+796 | async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
+797 |     comms, agent, root_id = _session(tmp_path)
+798 |     alpha = Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    |             ^^^^^^
+799 |     comms.threads.register(alpha)
+800 |     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    |
+
+F821 Undefined name `Thread`
+  --> tests/test_agent_loop.py:30:32
+   |
+28 |         monkeypatch.chdir(tmp_path)
+29 |         comms = wire(root)
+30 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+   |                                ^^^^^^
+31 |         comms.threads.register(Thread(name="bot", tags=frozenset({"bot"}), worktree=str(tmp_path)))
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_agent_loop.py:31:32
+   |
+29 |         comms = wire(root)
+30 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+31 |         comms.threads.register(Thread(name="bot", tags=frozenset({"bot"}), worktree=str(tmp_path)))
+   |                                ^^^^^^
+32 |
+33 |         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_agent_loop.py:54:32
+   |
+52 |         monkeypatch.chdir(tmp_path)
+53 |         comms = wire(root)
+54 |         comms.threads.register(Thread(name="human", tags=frozenset({"ci"}), worktree=str(tmp_path)))
+   |                                ^^^^^^
+55 |         comms.threads.register(Thread(name="bot", tags=frozenset({"ci", "bot"}), worktree=str(tmp_path)))
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_agent_loop.py:55:32
+   |
+53 |         comms = wire(root)
+54 |         comms.threads.register(Thread(name="human", tags=frozenset({"ci"}), worktree=str(tmp_path)))
+55 |         comms.threads.register(Thread(name="bot", tags=frozenset({"ci", "bot"}), worktree=str(tmp_path)))
+   |                                ^^^^^^
+56 |
+57 |         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_agent_loop.py:80:32
+   |
+78 |         monkeypatch.chdir(tmp_path)
+79 |         comms = wire(root)
+80 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+   |                                ^^^^^^
+81 |
+82 |         participant = Participant(root=root, agent_bin=str(identity), agent_args=[])
+   |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:104:32
+    |
+102 |         monkeypatch.chdir(tmp_path)
+103 |         comms = wire(root)
+104 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(sender_wt)))
+    |                                ^^^^^^
+105 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:105:32
+    |
+103 |         comms = wire(root)
+104 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(sender_wt)))
+105 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+106 |
+107 |         participant = Participant(root=root, agent_bin=str(capture), agent_args=[])
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:128:32
+    |
+126 |         monkeypatch.chdir(tmp_path)
+127 |         comms = wire(root)
+128 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+129 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+130 |         participant = Participant(root=root, agent_bin="definitely-not-real-bin-xyz", agent_args=[])
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:129:32
+    |
+127 |         comms = wire(root)
+128 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+129 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+130 |         participant = Participant(root=root, agent_bin="definitely-not-real-bin-xyz", agent_args=[])
+131 |         participant.start()
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:147:32
+    |
+145 |         monkeypatch.chdir(tmp_path)
+146 |         comms = wire(root)
+147 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+148 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:148:32
+    |
+146 |         comms = wire(root)
+147 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+148 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+149 |
+150 |         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:192:32
+    |
+190 |         monkeypatch.chdir(tmp_path)
+191 |         comms = wire(root)
+192 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+193 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_agent_loop.py:193:32
+    |
+191 |         comms = wire(root)
+192 |         comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+193 |         comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    |                                ^^^^^^
+194 |
+195 |         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+    |
+
+F821 Undefined name `Thread`
+  --> tests/test_claim_admission_verifier.py:49:17
+   |
+47 |         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
+48 |             comms.threads.register(
+49 |                 Thread(
+   |                 ^^^^^^
+50 |                     name, frozenset({"team"}), str(worktree), pid=os.getpid(), created_at=created
+51 |                 )
+   |
+
+F821 Undefined name `ClaimEnvelopeUnknownError`
+   --> tests/test_claim_admission_verifier.py:120:36
+    |
+118 |             with monkeypatch.context() as patch:
+119 |                 patch.setattr(comms.bus, "_append_private_unlocked", append_then_lose_receipt)
+120 |                 with pytest.raises(ClaimEnvelopeUnknownError):
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+121 |                     publish_selected_resource_claim(comms, store, admission, owner.name, resource)
+122 |             selected_owner = Comms(root).bus.claim_projection()[str(resource)]
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_claim_admission_verifier.py:137:32
+    |
+135 |             with intent.open("rb") as stream:
+136 |                 os.fsync(stream.fileno())
+137 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+    |                                ^^^^^^^^^^^^^^^^^^^^^^
+138 |                 verify_selected_wake(comms, store, admission, "Alice")
+139 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_claim_admission_verifier.py:139:32
+    |
+137 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+138 |                 verify_selected_wake(comms, store, admission, "Alice")
+139 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+    |                                ^^^^^^^^^^^^^^^^^^^^^^
+140 |                 publish_selected_resource_claim(comms, store, admission, "Alice", resource)
+141 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_claim_admission_verifier.py:141:32
+    |
+139 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+140 |                 publish_selected_resource_claim(comms, store, admission, "Alice", resource)
+141 |             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+    |                                ^^^^^^^^^^^^^^^^^^^^^^
+142 |                 write_selected_claimed_file(
+143 |                     comms, store, admission, "Alice", selected_owner, b"forbidden\n"
+    |
+
+F821 Undefined name `declarations`
+  --> tests/test_concurrency.py:36:5
+   |
+34 |     start.wait()
+35 |
+36 |     declarations.time.time = lambda: 1_700_000_000.0
+   |     ^^^^^^^^^^^^
+37 |     wire(root).threads.register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+   |
+
+F821 Undefined name `RelationViolationError`
+  --> tests/test_declarations.py:96:28
+   |
+94 |     monkeypatch.chdir(unsafe)
+95 |     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
+96 |         with pytest.raises(RelationViolationError, match="ancestry is not trusted"):
+   |                            ^^^^^^^^^^^^^^^^^^^^^^
+97 |             Comms(root, private_initial_writes=True).messaging.initialize_private_initial_protocol()
+98 |         assert not (root / "bus_meta.json").exists()
+   |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:105:30
+    |
+105 | def response_intent(message: Message, execution_id: str = "execution-1") -> PublicationIntent:
+    |                              ^^^^^^^
+106 |     return PublicationIntent(
+107 |         execution_id=execution_id,
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:123:11
+    |
+121 | def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
+122 |     registry = Registration(tmp_path / "registry.json")
+123 |     bus = MessageBus(tmp_path / "bus.jsonl", registry, private_initial_writes=True)
+    |           ^^^^^^^^^^
+124 |     with pytest.raises(RelationViolationError, match="POSIX ownership"):
+125 |         bus.initialize_private_protocol()
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:124:24
+    |
+122 |     registry = Registration(tmp_path / "registry.json")
+123 |     bus = MessageBus(tmp_path / "bus.jsonl", registry, private_initial_writes=True)
+124 |     with pytest.raises(RelationViolationError, match="POSIX ownership"):
+    |                        ^^^^^^^^^^^^^^^^^^^^^^
+125 |         bus.initialize_private_protocol()
+    |
+
+F821 Undefined name `Goal`
+   --> tests/test_declarations.py:150:13
+    |
+148 |     def test_rejects_noncanonical_or_exhausted_revision(self, revision):
+149 |         with pytest.raises(ValueError, match="revision"):
+150 |             Goal(text="work", id="goal-id", revision=revision)
+    |             ^^^^
+151 |
+152 |     def test_old_registry_goal_without_revision_reopens_at_zero(self, tmp_path: Path):
+    |
+
+F821 Undefined name `Goal`
+   --> tests/test_declarations.py:156:73
+    |
+154 |         registry = Registration(path)
+155 |         registry.register(
+156 |             Thread(name="owner", tags=frozenset(), worktree="/wt", goal=Goal("work", "old-id"))
+    |                                                                         ^^^^
+157 |         )
+158 |         raw = json.loads(path.read_text())
+    |
+
+F821 Undefined name `Goal`
+   --> tests/test_declarations.py:162:28
+    |
+160 |         path.write_text(json.dumps(raw))
+161 |         restored = Registration(path).require("owner").goal
+162 |         assert restored == Goal("work", "old-id", revision=0)
+    |                            ^^^^
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:184:28
+    |
+183 |     def test_rejects_self_parent(self):
+184 |         with pytest.raises(RelationViolationError, match="own parent"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+185 |             Thread(name="a", tags=frozenset(), worktree="/wt", parent="a")
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:200:19
+    |
+198 | class TestMessageDeclaration:
+199 |     def test_constructing_declares(self):
+200 |         message = Message(sender="a", target="b", body="hello", type=MessageType.INFO)
+    |                   ^^^^^^^
+201 |         assert message.sender == "a" and message.target == "b"
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:200:70
+    |
+198 | class TestMessageDeclaration:
+199 |     def test_constructing_declares(self):
+200 |         message = Message(sender="a", target="b", body="hello", type=MessageType.INFO)
+    |                                                                      ^^^^^^^^^^^
+201 |         assert message.sender == "a" and message.target == "b"
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:204:28
+    |
+203 |     def test_rejects_self_message(self):
+204 |         with pytest.raises(RelationViolationError, match="itself"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+205 |             Message(sender="a", target="a", body="hello", type=MessageType.INFO)
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:205:13
+    |
+203 |     def test_rejects_self_message(self):
+204 |         with pytest.raises(RelationViolationError, match="itself"):
+205 |             Message(sender="a", target="a", body="hello", type=MessageType.INFO)
+    |             ^^^^^^^
+206 |
+207 |     def test_rejects_empty_sender(self):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:205:64
+    |
+203 |     def test_rejects_self_message(self):
+204 |         with pytest.raises(RelationViolationError, match="itself"):
+205 |             Message(sender="a", target="a", body="hello", type=MessageType.INFO)
+    |                                                                ^^^^^^^^^^^
+206 |
+207 |     def test_rejects_empty_sender(self):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:208:28
+    |
+207 |     def test_rejects_empty_sender(self):
+208 |         with pytest.raises(RelationViolationError, match="sender"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+209 |             Message(sender="", target="b", body="hello", type=MessageType.INFO)
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:209:13
+    |
+207 |     def test_rejects_empty_sender(self):
+208 |         with pytest.raises(RelationViolationError, match="sender"):
+209 |             Message(sender="", target="b", body="hello", type=MessageType.INFO)
+    |             ^^^^^^^
+210 |
+211 |     def test_rejects_empty_target(self):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:209:63
+    |
+207 |     def test_rejects_empty_sender(self):
+208 |         with pytest.raises(RelationViolationError, match="sender"):
+209 |             Message(sender="", target="b", body="hello", type=MessageType.INFO)
+    |                                                               ^^^^^^^^^^^
+210 |
+211 |     def test_rejects_empty_target(self):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:212:28
+    |
+211 |     def test_rejects_empty_target(self):
+212 |         with pytest.raises(RelationViolationError, match="target"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+213 |             Message(sender="a", target="", body="hello", type=MessageType.INFO)
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:213:13
+    |
+211 |     def test_rejects_empty_target(self):
+212 |         with pytest.raises(RelationViolationError, match="target"):
+213 |             Message(sender="a", target="", body="hello", type=MessageType.INFO)
+    |             ^^^^^^^
+214 |
+215 |     def test_rejects_empty_body(self):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:213:63
+    |
+211 |     def test_rejects_empty_target(self):
+212 |         with pytest.raises(RelationViolationError, match="target"):
+213 |             Message(sender="a", target="", body="hello", type=MessageType.INFO)
+    |                                                               ^^^^^^^^^^^
+214 |
+215 |     def test_rejects_empty_body(self):
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:217:13
+    |
+215 |     def test_rejects_empty_body(self):
+216 |         with pytest.raises(ValueError, match="body"):
+217 |             Message(sender="a", target="b", body="", type=MessageType.INFO)
+    |             ^^^^^^^
+218 |
+219 |     def test_id_is_identity_not_ordering(self):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:217:59
+    |
+215 |     def test_rejects_empty_body(self):
+216 |         with pytest.raises(ValueError, match="body"):
+217 |             Message(sender="a", target="b", body="", type=MessageType.INFO)
+    |                                                           ^^^^^^^^^^^
+218 |
+219 |     def test_id_is_identity_not_ordering(self):
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:222:13
+    |
+220 |         # Hash identity: two identical messages share an id, ids are not
+221 |         # monotonic in time, so delivery order must come from seq.
+222 |         a = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+    |             ^^^^^^^
+223 |         b = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+224 |         assert a.message_id == b.message_id
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:222:60
+    |
+220 |         # Hash identity: two identical messages share an id, ids are not
+221 |         # monotonic in time, so delivery order must come from seq.
+222 |         a = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+    |                                                            ^^^^^^^^^^^
+223 |         b = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+224 |         assert a.message_id == b.message_id
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:223:13
+    |
+221 |         # monotonic in time, so delivery order must come from seq.
+222 |         a = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+223 |         b = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+    |             ^^^^^^^
+224 |         assert a.message_id == b.message_id
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:223:60
+    |
+221 |         # monotonic in time, so delivery order must come from seq.
+222 |         a = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+223 |         b = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+    |                                                            ^^^^^^^^^^^
+224 |         assert a.message_id == b.message_id
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:227:20
+    |
+226 |     def test_wire_roundtrip(self):
+227 |         original = Message(sender="a", target="b", body="hello", type=MessageType.HANDOFF, seq=7)
+    |                    ^^^^^^^
+228 |         restored = Message.from_wire(original.to_wire())
+229 |         assert restored.sender == original.sender
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:227:71
+    |
+226 |     def test_wire_roundtrip(self):
+227 |         original = Message(sender="a", target="b", body="hello", type=MessageType.HANDOFF, seq=7)
+    |                                                                       ^^^^^^^^^^^
+228 |         restored = Message.from_wire(original.to_wire())
+229 |         assert restored.sender == original.sender
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:228:20
+    |
+226 |     def test_wire_roundtrip(self):
+227 |         original = Message(sender="a", target="b", body="hello", type=MessageType.HANDOFF, seq=7)
+228 |         restored = Message.from_wire(original.to_wire())
+    |                    ^^^^^^^
+229 |         assert restored.sender == original.sender
+230 |         assert restored.target == original.target
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:232:33
+    |
+230 |         assert restored.target == original.target
+231 |         assert restored.body == original.body
+232 |         assert restored.type is MessageType.HANDOFF
+    |                                 ^^^^^^^^^^^
+233 |         assert restored.seq == 7
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:246:28
+    |
+244 |     def test_fail_closed_unknown_reference(self, tmp_path: Path):
+245 |         registry = Registration(tmp_path / "registry.json")
+246 |         with pytest.raises(UnregisteredThreadError):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+247 |             registry.require("missing")
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:259:28
+    |
+257 |         assert registry.status("a") == StoppedThreadStatus()
+258 |         # Only unknown references fail closed.
+259 |         with pytest.raises(UnregisteredThreadError):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+260 |             registry.unregister("ghost")
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:271:28
+    |
+269 |         assert registry.status("a") == RunningThreadStatus()
+270 |         assert registry.live_owner_with_generation("a")[1] > epoch
+271 |         with pytest.raises(RelationViolationError, match="stopped or changed"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+272 |             registry.claim_live_turn_with_generation(
+273 |                 expected, "new-turn", expected_owner_generation=epoch
+    |
+
+F821 Undefined name `Goal`
+   --> tests/test_declarations.py:308:22
+    |
+306 |                 worktree="/wt",
+307 |                 pid=os.getpid(),
+308 |                 goal=Goal("Finish the goal", "goal-1"),
+    |                      ^^^^
+309 |             )
+310 |         )
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:369:28
+    |
+367 |         registry.register(claimed)
+368 |         assert registry.require("a").active_turn.admission_generation is None
+369 |         with pytest.raises(RelationViolationError, match="unavailable"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+370 |             registry.live_owner_with_generation("a")
+371 |         if revocation == "stop":
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:381:28
+    |
+379 |         comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+380 |         comms.registry.unregister("a")
+381 |         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+382 |             comms.agents.begin_turn("a", "revived")
+383 |         assert comms.registry.status("a") == StoppedThreadStatus()
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:424:28
+    |
+422 |             data.pop(field)
+423 |         registry_path.write_text(json.dumps(data))
+424 |         with pytest.raises(RelationViolationError, match="guard does not match"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+425 |             comms.agents.begin_turn("a", "must-not-claim")
+426 |         with pytest.raises(RelationViolationError, match="guard does not match"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:426:28
+    |
+424 |         with pytest.raises(RelationViolationError, match="guard does not match"):
+425 |             comms.agents.begin_turn("a", "must-not-claim")
+426 |         with pytest.raises(RelationViolationError, match="guard does not match"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+427 |             comms.registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+428 |         assert json.loads(registry_path.read_text())["threads"]["a"].get("active_turn") is None
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:468:38
+    |
+466 |         monkeypatch.setattr(os, "fsync", fsync)
+467 |         monkeypatch.setattr(store_files, "_atomic_write_text", write)
+468 |         with pytest.raises((OSError, RelationViolationError), match="injected|guard"):
+    |                                      ^^^^^^^^^^^^^^^^^^^^^^
+469 |             comms.registry.register(
+470 |                 Thread(name="b", tags=frozenset(), worktree="/wt", pid=os.getpid())
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:480:32
+    |
+478 |             if fail_at in {"pending", "replacement"}:
+479 |                 assert "b" not in json.loads((root / "registry.json").read_text())["threads"]
+480 |             with pytest.raises(RelationViolationError, match="Private registry guard"):
+    |                                ^^^^^^^^^^^^^^^^^^^^^^
+481 |                 cold.require("a")
+482 |             with pytest.raises(RelationViolationError, match="Private registry guard"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:482:32
+    |
+480 |             with pytest.raises(RelationViolationError, match="Private registry guard"):
+481 |                 cold.require("a")
+482 |             with pytest.raises(RelationViolationError, match="Private registry guard"):
+    |                                ^^^^^^^^^^^^^^^^^^^^^^
+483 |                 Registration(root / "registry.json")
+484 |             child = subprocess.run(
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:525:28
+    |
+523 |         assert (root / ".registry-owner-guard").exists()
+524 |         assert (root / "bus_meta.json").exists()
+525 |         with pytest.raises(RelationViolationError, match="guard is pending"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+526 |             Registration(root / "registry.json")
+527 |         with pytest.raises(RelationViolationError, match="fresh bus root"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:527:28
+    |
+525 |         with pytest.raises(RelationViolationError, match="guard is pending"):
+526 |             Registration(root / "registry.json")
+527 |         with pytest.raises(RelationViolationError, match="fresh bus root"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+528 |             comms.messaging.initialize_private_initial_protocol()  # never auto-repair
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:553:28
+    |
+552 |         monkeypatch.setattr(os, "pwrite", pwrite)
+553 |         with pytest.raises(RelationViolationError, match="slot write was incomplete"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+554 |             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+555 |         monkeypatch.undo()
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:556:28
+    |
+554 |             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+555 |         monkeypatch.undo()
+556 |         with pytest.raises(RelationViolationError, match="slot checksum"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+557 |             Registration(root / "registry.json")
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:585:28
+    |
+583 |             data.pop("owner_epoch_counter")
+584 |             path.write_text(json.dumps(data))  # simulated old writer ignores marker
+585 |         with pytest.raises(RelationViolationError, match="Private registry guard"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+586 |             cold.require("a")
+587 |         with pytest.raises(RelationViolationError, match="Private registry guard"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:587:28
+    |
+585 |         with pytest.raises(RelationViolationError, match="Private registry guard"):
+586 |             cold.require("a")
+587 |         with pytest.raises(RelationViolationError, match="Private registry guard"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+588 |             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+589 |         assert "registry_guard" not in comms.registry.store.cache.document.threads["a"].to_wire()
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:615:28
+    |
+613 |         data.pop("owner_epoch_counter")
+614 |         path.write_text(json.dumps(data))
+615 |         with pytest.raises(RelationViolationError, match="stopped or changed"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+616 |             registry.claim_live_turn_with_generation(
+617 |                 owner, "claimed", expected_owner_generation=epoch
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:619:28
+    |
+617 |                 owner, "claimed", expected_owner_generation=epoch
+618 |             )
+619 |         with pytest.raises(RelationViolationError, match="unavailable"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+620 |             registry.live_owner_with_generation("a")
+621 |         data["owner_epochs"] = {"a": True}
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:625:13
+    |
+623 |         path.write_text(json.dumps(data))
+624 |         with pytest.raises(
+625 |             RelationViolationError, match="invalid private registry owner generations"
+    |             ^^^^^^^^^^^^^^^^^^^^^^
+626 |         ):
+627 |             registry.live_owner_with_generation("a")
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:636:28
+    |
+634 |         registry.begin_delete("a")
+635 |         assert registry.status("a") == DeletingThreadStatus()
+636 |         with pytest.raises(RelationViolationError, match="permanently deleted"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+637 |             registry.heartbeat("a")
+638 |         with pytest.raises(RelationViolationError, match="permanently deleted"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:638:28
+    |
+636 |         with pytest.raises(RelationViolationError, match="permanently deleted"):
+637 |             registry.heartbeat("a")
+638 |         with pytest.raises(RelationViolationError, match="permanently deleted"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+639 |             registry.register(thread)
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:654:28
+    |
+652 |         registry.remove("a")
+653 |         assert "a" not in registry
+654 |         with pytest.raises(UnregisteredThreadError):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+655 |             registry.require("a")
+656 |         # remove is not idempotent: unknown references fail closed.
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:657:28
+    |
+655 |             registry.require("a")
+656 |         # remove is not idempotent: unknown references fail closed.
+657 |         with pytest.raises(UnregisteredThreadError):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+658 |             registry.remove("a")
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:688:39
+    |
+687 | class TestMessageBus:
+688 |     def _bus(self, tmp_path: Path) -> MessageBus:
+    |                                       ^^^^^^^^^^
+689 |         registry = Registration(tmp_path / "registry.json")
+690 |         for name in ("a", "b"):
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:692:16
+    |
+690 |         for name in ("a", "b"):
+691 |             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+692 |         return MessageBus(tmp_path / "bus.jsonl", registry)
+    |                ^^^^^^^^^^
+693 |
+694 |     def test_send_returns_id(self, tmp_path: Path):
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:696:24
+    |
+694 |     def test_send_returns_id(self, tmp_path: Path):
+695 |         bus = self._bus(tmp_path)
+696 |         mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.INFO))
+    |                        ^^^^^^^
+697 |         assert isinstance(mid, str) and len(mid) == 12
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:696:71
+    |
+694 |     def test_send_returns_id(self, tmp_path: Path):
+695 |         bus = self._bus(tmp_path)
+696 |         mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.INFO))
+    |                                                                       ^^^^^^^^^^^
+697 |         assert isinstance(mid, str) and len(mid) == 12
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:701:28
+    |
+699 |     def test_fail_closed_unregistered_sender(self, tmp_path: Path):
+700 |         bus = self._bus(tmp_path)
+701 |         with pytest.raises(UnregisteredThreadError, match="Sender"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+702 |             bus.send(Message(sender="ghost", target="b", body="x", type=MessageType.INFO))
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:702:22
+    |
+700 |         bus = self._bus(tmp_path)
+701 |         with pytest.raises(UnregisteredThreadError, match="Sender"):
+702 |             bus.send(Message(sender="ghost", target="b", body="x", type=MessageType.INFO))
+    |                      ^^^^^^^
+703 |
+704 |     def test_fail_closed_unregistered_target(self, tmp_path: Path):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:702:73
+    |
+700 |         bus = self._bus(tmp_path)
+701 |         with pytest.raises(UnregisteredThreadError, match="Sender"):
+702 |             bus.send(Message(sender="ghost", target="b", body="x", type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+703 |
+704 |     def test_fail_closed_unregistered_target(self, tmp_path: Path):
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:706:28
+    |
+704 |     def test_fail_closed_unregistered_target(self, tmp_path: Path):
+705 |         bus = self._bus(tmp_path)
+706 |         with pytest.raises(UnregisteredThreadError, match="Target"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+707 |             bus.send(Message(sender="a", target="ghost", body="x", type=MessageType.INFO))
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:707:22
+    |
+705 |         bus = self._bus(tmp_path)
+706 |         with pytest.raises(UnregisteredThreadError, match="Target"):
+707 |             bus.send(Message(sender="a", target="ghost", body="x", type=MessageType.INFO))
+    |                      ^^^^^^^
+708 |
+709 |     def test_broadcast_target_accepted(self, tmp_path: Path):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:707:73
+    |
+705 |         bus = self._bus(tmp_path)
+706 |         with pytest.raises(UnregisteredThreadError, match="Target"):
+707 |             bus.send(Message(sender="a", target="ghost", body="x", type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+708 |
+709 |     def test_broadcast_target_accepted(self, tmp_path: Path):
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:711:18
+    |
+709 |     def test_broadcast_target_accepted(self, tmp_path: Path):
+710 |         bus = self._bus(tmp_path)
+711 |         bus.send(Message(sender="a", target="broadcast", body="x", type=MessageType.INFO))
+    |                  ^^^^^^^
+712 |         assert bus.total_messages() == 1
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:711:73
+    |
+709 |     def test_broadcast_target_accepted(self, tmp_path: Path):
+710 |         bus = self._bus(tmp_path)
+711 |         bus.send(Message(sender="a", target="broadcast", body="x", type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+712 |         assert bus.total_messages() == 1
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:716:18
+    |
+714 |     def test_inbox_excludes_self_sent(self, tmp_path: Path):
+715 |         bus = self._bus(tmp_path)
+716 |         bus.send(Message(sender="a", target="b", body="x", type=MessageType.INFO))
+    |                  ^^^^^^^
+717 |         assert bus.inbox("a") == []
+718 |         assert len(bus.inbox("b")) == 1
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:716:65
+    |
+714 |     def test_inbox_excludes_self_sent(self, tmp_path: Path):
+715 |         bus = self._bus(tmp_path)
+716 |         bus.send(Message(sender="a", target="b", body="x", type=MessageType.INFO))
+    |                                                                 ^^^^^^^^^^^
+717 |         assert bus.inbox("a") == []
+718 |         assert len(bus.inbox("b")) == 1
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:723:18
+    |
+721 |         """Regression: read cursor must be monotonic seq, never hash order."""
+722 |         bus = self._bus(tmp_path)
+723 |         bus.send(Message(sender="a", target="b", body="first", type=MessageType.INFO))
+    |                  ^^^^^^^
+724 |         bus.mark_delivered("b")
+725 |         # A later message whose hash happens to sort before the first id
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:723:69
+    |
+721 |         """Regression: read cursor must be monotonic seq, never hash order."""
+722 |         bus = self._bus(tmp_path)
+723 |         bus.send(Message(sender="a", target="b", body="first", type=MessageType.INFO))
+    |                                                                     ^^^^^^^^^^^
+724 |         bus.mark_delivered("b")
+725 |         # A later message whose hash happens to sort before the first id
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:727:18
+    |
+725 |         # A later message whose hash happens to sort before the first id
+726 |         # must still be delivered.
+727 |         bus.send(Message(sender="a", target="b", body="second", type=MessageType.INFO))
+    |                  ^^^^^^^
+728 |         inbox = bus.inbox("b")
+729 |         assert len(inbox) == 1 and inbox[0].body == "second"
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:727:70
+    |
+725 |         # A later message whose hash happens to sort before the first id
+726 |         # must still be delivered.
+727 |         bus.send(Message(sender="a", target="b", body="second", type=MessageType.INFO))
+    |                                                                      ^^^^^^^^^^^
+728 |         inbox = bus.inbox("b")
+729 |         assert len(inbox) == 1 and inbox[0].body == "second"
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:734:22
+    |
+732 |         bus = self._bus(tmp_path)
+733 |         for i in range(10):
+734 |             bus.send(Message(sender="a", target="b", body=f"m{i}", type=MessageType.INFO))
+    |                      ^^^^^^^
+735 |         seqs = [m.seq for m in bus.inbox("b")]
+736 |         assert seqs == list(range(1, 11))
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:734:73
+    |
+732 |         bus = self._bus(tmp_path)
+733 |         for i in range(10):
+734 |             bus.send(Message(sender="a", target="b", body=f"m{i}", type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+735 |         seqs = [m.seq for m in bus.inbox("b")]
+736 |         assert seqs == list(range(1, 11))
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:748:26
+    |
+746 |             bus = self._bus(root)
+747 |             for body in ("first", "second"):
+748 |                 bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+    |                          ^^^^^^^
+749 |             if private:
+750 |                 sequence_path = root / "bus_meta.json"
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:748:74
+    |
+746 |             bus = self._bus(root)
+747 |             for body in ("first", "second"):
+748 |                 bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+    |                                                                          ^^^^^^^^^^^
+749 |             if private:
+750 |                 sequence_path = root / "bus_meta.json"
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:757:23
+    |
+755 |                 bus._path.chmod(0o600)
+756 |                 _test_only_guard_for_handcrafted_marker(bus._registry)
+757 |                 bus = MessageBus(bus._path, bus._registry, private_response_writes=True)
+    |                       ^^^^^^^^^^
+758 |
+759 |             original_fsync = os.fsync
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:770:36
+    |
+768 |                 with pytest.raises(OSError, match="metadata parent fsync failure"):
+769 |                     if private:
+770 |                         intended = Message(
+    |                                    ^^^^^^^
+771 |                             sender="a", target="b", body="interrupted", type=MessageType.INFO
+772 |                         )
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:771:78
+    |
+769 |                     if private:
+770 |                         intended = Message(
+771 |                             sender="a", target="b", body="interrupted", type=MessageType.INFO
+    |                                                                              ^^^^^^^^^^^
+772 |                         )
+773 |                         bus.publish_keyed_response(response_intent(intended))
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:776:29
+    |
+774 |                     else:
+775 |                         bus.send(
+776 |                             Message(
+    |                             ^^^^^^^
+777 |                                 sender="a", target="b", body="interrupted", type=MessageType.INFO
+778 |                             )
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:777:82
+    |
+775 |                         bus.send(
+776 |                             Message(
+777 |                                 sender="a", target="b", body="interrupted", type=MessageType.INFO
+    |                                                                                  ^^^^^^^^^^^
+778 |                             )
+779 |                         )
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:781:24
+    |
+779 |                         )
+780 |
+781 |             reopened = MessageBus(bus._path, bus._registry, private_response_writes=private)
+    |                        ^^^^^^^^^^
+782 |             assert [message.seq for message in reopened.views.full_history()] == [1, 2]
+783 |             if private:
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:784:32
+    |
+782 |             assert [message.seq for message in reopened.views.full_history()] == [1, 2]
+783 |             if private:
+784 |                 next_message = Message(
+    |                                ^^^^^^^
+785 |                     sender="a", target="b", body="after restart", type=MessageType.INFO
+786 |                 )
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:785:72
+    |
+783 |             if private:
+784 |                 next_message = Message(
+785 |                     sender="a", target="b", body="after restart", type=MessageType.INFO
+    |                                                                        ^^^^^^^^^^^
+786 |                 )
+787 |                 reopened.publish_keyed_response(response_intent(next_message))
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:790:21
+    |
+788 |             else:
+789 |                 reopened.messaging.send(
+790 |                     Message(sender="a", target="b", body="after restart", type=MessageType.INFO)
+    |                     ^^^^^^^
+791 |                 )
+792 |             sequences = [message.seq for message in reopened.views.full_history()]
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:790:80
+    |
+788 |             else:
+789 |                 reopened.messaging.send(
+790 |                     Message(sender="a", target="b", body="after restart", type=MessageType.INFO)
+    |                                                                                ^^^^^^^^^^^
+791 |                 )
+792 |             sequences = [message.seq for message in reopened.views.full_history()]
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:806:26
+    |
+804 |             bus = self._bus(root)
+805 |             for body in ("first", "second"):
+806 |                 bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+    |                          ^^^^^^^
+807 |             sequence_path = root / "bus_meta.json"
+808 |             old_metadata = sequence_path.read_bytes()
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:806:74
+    |
+804 |             bus = self._bus(root)
+805 |             for body in ("first", "second"):
+806 |                 bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+    |                                                                          ^^^^^^^^^^^
+807 |             sequence_path = root / "bus_meta.json"
+808 |             old_metadata = sequence_path.read_bytes()
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:809:22
+    |
+807 |             sequence_path = root / "bus_meta.json"
+808 |             old_metadata = sequence_path.read_bytes()
+809 |             bus.send(Message(sender="a", target="b", body="third", type=MessageType.INFO))
+    |                      ^^^^^^^
+810 |             if unterminated:
+811 |                 bus._path.write_bytes(bus._path.read_bytes()[:-1])
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:809:73
+    |
+807 |             sequence_path = root / "bus_meta.json"
+808 |             old_metadata = sequence_path.read_bytes()
+809 |             bus.send(Message(sender="a", target="b", body="third", type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+810 |             if unterminated:
+811 |                 bus._path.write_bytes(bus._path.read_bytes()[:-1])
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:822:24
+    |
+820 |                 sequence_path.unlink()
+821 |
+822 |             reopened = MessageBus(bus._path, bus._registry)
+    |                        ^^^^^^^^^^
+823 |             reopened.messaging.send(Message(sender="a", target="b", body="new", type=MessageType.INFO))
+824 |             assert [message.seq for message in reopened.views.full_history()] == [1, 2, 3, 4]
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:823:37
+    |
+822 |             reopened = MessageBus(bus._path, bus._registry)
+823 |             reopened.messaging.send(Message(sender="a", target="b", body="new", type=MessageType.INFO))
+    |                                     ^^^^^^^
+824 |             assert [message.seq for message in reopened.views.full_history()] == [1, 2, 3, 4]
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:823:86
+    |
+822 |             reopened = MessageBus(bus._path, bus._registry)
+823 |             reopened.messaging.send(Message(sender="a", target="b", body="new", type=MessageType.INFO))
+    |                                                                                      ^^^^^^^^^^^
+824 |             assert [message.seq for message in reopened.views.full_history()] == [1, 2, 3, 4]
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:828:18
+    |
+826 |     def test_ack_only_clears_up_to_latest(self, tmp_path: Path):
+827 |         bus = self._bus(tmp_path)
+828 |         bus.send(Message(sender="a", target="b", body="1", type=MessageType.INFO))
+    |                  ^^^^^^^
+829 |         bus.mark_delivered("b")
+830 |         bus.send(Message(sender="a", target="b", body="2", type=MessageType.INFO))
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:828:65
+    |
+826 |     def test_ack_only_clears_up_to_latest(self, tmp_path: Path):
+827 |         bus = self._bus(tmp_path)
+828 |         bus.send(Message(sender="a", target="b", body="1", type=MessageType.INFO))
+    |                                                                 ^^^^^^^^^^^
+829 |         bus.mark_delivered("b")
+830 |         bus.send(Message(sender="a", target="b", body="2", type=MessageType.INFO))
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:830:18
+    |
+828 |         bus.send(Message(sender="a", target="b", body="1", type=MessageType.INFO))
+829 |         bus.mark_delivered("b")
+830 |         bus.send(Message(sender="a", target="b", body="2", type=MessageType.INFO))
+    |                  ^^^^^^^
+831 |         assert [m.body for m in bus.inbox("b")] == ["2"]
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:830:65
+    |
+828 |         bus.send(Message(sender="a", target="b", body="1", type=MessageType.INFO))
+829 |         bus.mark_delivered("b")
+830 |         bus.send(Message(sender="a", target="b", body="2", type=MessageType.INFO))
+    |                                                                 ^^^^^^^^^^^
+831 |         assert [m.body for m in bus.inbox("b")] == ["2"]
+    |
+
+F821 Undefined name `UnregisteredThreadError`
+   --> tests/test_declarations.py:835:28
+    |
+833 |     def test_fail_closed_inbox_unknown_thread(self, tmp_path: Path):
+834 |         bus = self._bus(tmp_path)
+835 |         with pytest.raises(UnregisteredThreadError):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+836 |             bus.inbox("ghost")
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:843:15
+    |
+841 |         for name in ("a", "b"):
+842 |             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+843 |         bus = MessageBus(path, registry)
+    |               ^^^^^^^^^^
+844 |         mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.ALERT))
+845 |         lines = [json.loads(line) for line in path.read_text().splitlines()]
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:844:24
+    |
+842 |             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+843 |         bus = MessageBus(path, registry)
+844 |         mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.ALERT))
+    |                        ^^^^^^^
+845 |         lines = [json.loads(line) for line in path.read_text().splitlines()]
+846 |         assert lines[0]["type"] == "alert" and lines[0]["id"] == mid
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:844:71
+    |
+842 |             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+843 |         bus = MessageBus(path, registry)
+844 |         mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.ALERT))
+    |                                                                       ^^^^^^^^^^^
+845 |         lines = [json.loads(line) for line in path.read_text().splitlines()]
+846 |         assert lines[0]["type"] == "alert" and lines[0]["id"] == mid
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:855:17
+    |
+853 |             target = "#all" if index != 4 else "b"
+854 |             bus.send(
+855 |                 Message(
+    |                 ^^^^^^^
+856 |                     sender="a",
+857 |                     target=target,
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:859:26
+    |
+857 |                     target=target,
+858 |                     body=f"m{index + 1}",
+859 |                     type=MessageType.INFO,
+    |                          ^^^^^^^^^^^
+860 |                 )
+861 |             )
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:888:22
+    |
+886 |         target = "b" if route == "dm" else "#all"
+887 |         for body in ("a" * 120_000, "b" * middle_bytes, "small"):
+888 |             bus.send(Message(sender="a", target=target, body=body, type=MessageType.INFO))
+    |                      ^^^^^^^
+889 |
+890 |         def page(after):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:888:73
+    |
+886 |         target = "b" if route == "dm" else "#all"
+887 |         for body in ("a" * 120_000, "b" * middle_bytes, "small"):
+888 |             bus.send(Message(sender="a", target=target, body=body, type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+889 |
+890 |         def page(after):
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:913:22
+    |
+911 |         bus = self._bus(tmp_path)
+912 |         for body in ("first", "second", "third"):
+913 |             bus.send(Message(sender="a", target="#all", body=body, type=MessageType.INFO))
+    |                      ^^^^^^^
+914 |
+915 |         lines = bus._path.read_bytes().splitlines(keepends=True)
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:913:73
+    |
+911 |         bus = self._bus(tmp_path)
+912 |         for body in ("first", "second", "third"):
+913 |             bus.send(Message(sender="a", target="#all", body=body, type=MessageType.INFO))
+    |                                                                         ^^^^^^^^^^^
+914 |
+915 |         lines = bus._path.read_bytes().splitlines(keepends=True)
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:937:21
+    |
+935 |     def test_keyed_response_receipt_is_same_row_and_reopens_without_reappend(self, tmp_path: Path):
+936 |         legacy = self._bus(tmp_path)
+937 |         legacy.send(Message(sender="a", target="#all", body="legacy", type=MessageType.INFO))
+    |                     ^^^^^^^
+938 |         legacy._path.chmod(0o600)
+939 |         sequence_path = legacy._path.parent / "bus_meta.json"
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:937:76
+    |
+935 |     def test_keyed_response_receipt_is_same_row_and_reopens_without_reappend(self, tmp_path: Path):
+936 |         legacy = self._bus(tmp_path)
+937 |         legacy.send(Message(sender="a", target="#all", body="legacy", type=MessageType.INFO))
+    |                                                                            ^^^^^^^^^^^
+938 |         legacy._path.chmod(0o600)
+939 |         sequence_path = legacy._path.parent / "bus_meta.json"
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:944:17
+    |
+942 |         sequence_path.write_text(json.dumps(metadata))
+943 |         _test_only_guard_for_handcrafted_marker(legacy._registry)
+944 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+    |                 ^^^^^^^^^^
+945 |         intended = Message(
+946 |             sender="a", target="#all", body="response", type=MessageType.INFO, timestamp=42.5
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:945:20
+    |
+943 |         _test_only_guard_for_handcrafted_marker(legacy._registry)
+944 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+945 |         intended = Message(
+    |                    ^^^^^^^
+946 |             sender="a", target="#all", body="response", type=MessageType.INFO, timestamp=42.5
+947 |         )
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:946:62
+    |
+944 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+945 |         intended = Message(
+946 |             sender="a", target="#all", body="response", type=MessageType.INFO, timestamp=42.5
+    |                                                              ^^^^^^^^^^^
+947 |         )
+948 |         key = canonical_publication_key("execution-1", "#all")
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:968:20
+    |
+966 |         original_bus = legacy._path.read_bytes()
+967 |         original_meta = sequence_path.read_bytes()
+968 |         reopened = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+    |                    ^^^^^^^^^^
+969 |         assert reopened.publish_keyed_response(response_intent(intended)) == stored
+970 |         assert legacy._path.read_bytes() == original_bus
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:972:28
+    |
+970 |         assert legacy._path.read_bytes() == original_bus
+971 |         assert sequence_path.read_bytes() == original_meta
+972 |         with pytest.raises(RelationViolationError, match="intent conflicts"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+973 |             reopened.publish_keyed_response(
+974 |                 response_intent(
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:975:21
+    |
+973 |             reopened.publish_keyed_response(
+974 |                 response_intent(
+975 |                     Message(
+    |                     ^^^^^^^
+976 |                         sender="a",
+977 |                         target="#all",
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:979:30
+    |
+977 |                         target="#all",
+978 |                         body="different",
+979 |                         type=MessageType.INFO,
+    |                              ^^^^^^^^^^^
+980 |                         timestamp=42.5,
+981 |                     )
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:984:28
+    |
+982 |                 )
+983 |             )
+984 |         with pytest.raises(RelationViolationError, match="Legacy append"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+985 |             legacy.send(
+986 |                 Message(sender="a", target="#all", body="old writer", type=MessageType.INFO)
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_declarations.py:986:17
+    |
+984 |         with pytest.raises(RelationViolationError, match="Legacy append"):
+985 |             legacy.send(
+986 |                 Message(sender="a", target="#all", body="old writer", type=MessageType.INFO)
+    |                 ^^^^^^^
+987 |             )
+988 |         with pytest.raises(RelationViolationError, match="Private bus protocol"):
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_declarations.py:986:76
+    |
+984 |         with pytest.raises(RelationViolationError, match="Legacy append"):
+985 |             legacy.send(
+986 |                 Message(sender="a", target="#all", body="old writer", type=MessageType.INFO)
+    |                                                                            ^^^^^^^^^^^
+987 |             )
+988 |         with pytest.raises(RelationViolationError, match="Private bus protocol"):
+    |
+
+F821 Undefined name `RelationViolationError`
+   --> tests/test_declarations.py:988:28
+    |
+986 |                 Message(sender="a", target="#all", body="old writer", type=MessageType.INFO)
+987 |             )
+988 |         with pytest.raises(RelationViolationError, match="Private bus protocol"):
+    |                            ^^^^^^^^^^^^^^^^^^^^^^
+989 |             legacy.remove_thread("b")
+990 |         assert legacy._path.read_bytes() == original_bus
+    |
+
+F821 Undefined name `MessageBus`
+   --> tests/test_declarations.py:992:26
+    |
+990 |         assert legacy._path.read_bytes() == original_bus
+991 |         legacy._registry.rename("a", "renamed")
+992 |         renamed_reopen = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+    |                          ^^^^^^^^^^
+993 |         assert renamed_reopen.publish_keyed_response(response_intent(intended)) == stored
+994 |         assert legacy._path.read_bytes() == original_bus
+    |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1011:17
+     |
+1009 |         sequence_path.chmod(0o600)
+1010 |         before = sequence_path.read_bytes()
+1011 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |                 ^^^^^^^^^^
+1012 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+1013 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1012:19
+     |
+1010 |         before = sequence_path.read_bytes()
+1011 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1012 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+     |                   ^^^^^^^
+1013 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+1014 |             keyed.publish_keyed_response(response_intent(message))
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1012:73
+     |
+1010 |         before = sequence_path.read_bytes()
+1011 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1012 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+     |                                                                         ^^^^^^^^^^^
+1013 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+1014 |             keyed.publish_keyed_response(response_intent(message))
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1013:28
+     |
+1011 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1012 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+1013 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1014 |             keyed.publish_keyed_response(response_intent(message))
+1015 |         assert not legacy._path.exists()
+     |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1027:17
+     |
+1025 |         )
+1026 |         sequence_path.chmod(0o600)
+1027 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |                 ^^^^^^^^^^
+1028 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+1029 |         before = sequence_path.read_bytes()
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1028:19
+     |
+1026 |         sequence_path.chmod(0o600)
+1027 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1028 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+     |                   ^^^^^^^
+1029 |         before = sequence_path.read_bytes()
+1030 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1028:73
+     |
+1026 |         sequence_path.chmod(0o600)
+1027 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1028 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+     |                                                                         ^^^^^^^^^^^
+1029 |         before = sequence_path.read_bytes()
+1030 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1030:28
+     |
+1028 |         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
+1029 |         before = sequence_path.read_bytes()
+1030 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1031 |             keyed.publish_keyed_response(response_intent(message))
+1032 |         assert sequence_path.read_bytes() == before
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1040:28
+     |
+1038 |         _test_only_guard_for_handcrafted_marker(legacy._registry)
+1039 |         before = sequence_path.read_bytes()
+1040 |         with pytest.raises(RelationViolationError, match="sequence is exhausted"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1041 |             keyed.publish_keyed_response(response_intent(message))
+1042 |         assert not legacy._path.exists()
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1054:20
+     |
+1052 |         sequence_path.chmod(0o600)
+1053 |         _test_only_guard_for_handcrafted_marker(legacy._registry)
+1054 |         intended = Message(sender="a", target="b", body="response", type=MessageType.INFO)
+     |                    ^^^^^^^
+1055 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1056 |         stored = keyed.publish_keyed_response(response_intent(intended))
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1054:74
+     |
+1052 |         sequence_path.chmod(0o600)
+1053 |         _test_only_guard_for_handcrafted_marker(legacy._registry)
+1054 |         intended = Message(sender="a", target="b", body="response", type=MessageType.INFO)
+     |                                                                          ^^^^^^^^^^^
+1055 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1056 |         stored = keyed.publish_keyed_response(response_intent(intended))
+     |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1055:17
+     |
+1053 |         _test_only_guard_for_handcrafted_marker(legacy._registry)
+1054 |         intended = Message(sender="a", target="b", body="response", type=MessageType.INFO)
+1055 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |                 ^^^^^^^^^^
+1056 |         stored = keyed.publish_keyed_response(response_intent(intended))
+1057 |         before = legacy._path.read_bytes(), sequence_path.read_bytes()
+     |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1059:20
+     |
+1057 |         before = legacy._path.read_bytes(), sequence_path.read_bytes()
+1058 |         legacy._registry.rename("b", "renamed")
+1059 |         reopened = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |                    ^^^^^^^^^^
+1060 |         assert reopened.publish_keyed_response(response_intent(intended)) == stored
+1061 |         assert (legacy._path.read_bytes(), sequence_path.read_bytes()) == before
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1066:20
+     |
+1064 |     def test_keyed_writer_is_disabled_and_rejects_unsafe_or_corrupt_roots(self, tmp_path: Path):
+1065 |         legacy = self._bus(tmp_path)
+1066 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                    ^^^^^^^
+1067 |         intent = response_intent(intended)
+1068 |         with pytest.raises(RelationViolationError, match="disabled"):
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1066:77
+     |
+1064 |     def test_keyed_writer_is_disabled_and_rejects_unsafe_or_corrupt_roots(self, tmp_path: Path):
+1065 |         legacy = self._bus(tmp_path)
+1066 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                                                                             ^^^^^^^^^^^
+1067 |         intent = response_intent(intended)
+1068 |         with pytest.raises(RelationViolationError, match="disabled"):
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1068:28
+     |
+1066 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+1067 |         intent = response_intent(intended)
+1068 |         with pytest.raises(RelationViolationError, match="disabled"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1069 |             legacy.publish_keyed_response(intent)
+1070 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1070:17
+     |
+1068 |         with pytest.raises(RelationViolationError, match="disabled"):
+1069 |             legacy.publish_keyed_response(intent)
+1070 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |                 ^^^^^^^^^^
+1071 |         with pytest.raises(TypeError, match="validated PublicationIntent"):
+1072 |             keyed.publish_keyed_response(intended)  # type: ignore[arg-type]
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1073:28
+     |
+1071 |         with pytest.raises(TypeError, match="validated PublicationIntent"):
+1072 |             keyed.publish_keyed_response(intended)  # type: ignore[arg-type]
+1073 |         with pytest.raises(RelationViolationError, match="protocol marker"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1074 |             keyed.publish_keyed_response(intent)
+1075 |         metadata = {"last_seq": 0, "writer_protocol_version": 1, "wire_root_id": "a" * 32}
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1082:28
+     |
+1080 |         original = legacy._path.read_bytes()
+1081 |         legacy._path.chmod(0o644)
+1082 |         with pytest.raises(RelationViolationError, match="owner-only"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1083 |             keyed.publish_keyed_response(intent)
+1084 |         assert legacy._path.read_bytes() == original
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1087:28
+     |
+1085 |         legacy._path.chmod(0o600)
+1086 |         legacy._path.write_bytes(original[:-1])
+1087 |         with pytest.raises(RelationViolationError, match="Incomplete bus row"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1088 |             keyed.publish_keyed_response(intent)
+1089 |         duplicated = original.replace(
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1100:28
+     |
+1098 |         record[PRIVATE_WIRE_FIELD]["response"]["envelope_digest"] = "0" * 64
+1099 |         legacy._path.write_text(json.dumps(record) + "\n")
+1100 |         with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1101 |             keyed.publish_keyed_response(intent)
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1112:13
+     |
+1110 |         legacy = self._bus(tmp_path)
+1111 |         legacy.send(
+1112 |             Message(sender="a", target="#all", body="@b first", type=MessageType.INFO, notice=True)
+     |             ^^^^^^^
+1113 |         )
+1114 |         legacy.send(Message(sender="a", target="#all", body="second", type=MessageType.INFO))
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1112:70
+     |
+1110 |         legacy = self._bus(tmp_path)
+1111 |         legacy.send(
+1112 |             Message(sender="a", target="#all", body="@b first", type=MessageType.INFO, notice=True)
+     |                                                                      ^^^^^^^^^^^
+1113 |         )
+1114 |         legacy.send(Message(sender="a", target="#all", body="second", type=MessageType.INFO))
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1114:21
+     |
+1112 |             Message(sender="a", target="#all", body="@b first", type=MessageType.INFO, notice=True)
+1113 |         )
+1114 |         legacy.send(Message(sender="a", target="#all", body="second", type=MessageType.INFO))
+     |                     ^^^^^^^
+1115 |         legacy._path.chmod(0o600)
+1116 |         rows = [json.loads(line) for line in legacy._path.read_text().splitlines()]
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1114:76
+     |
+1112 |             Message(sender="a", target="#all", body="@b first", type=MessageType.INFO, notice=True)
+1113 |         )
+1114 |         legacy.send(Message(sender="a", target="#all", body="second", type=MessageType.INFO))
+     |                                                                            ^^^^^^^^^^^
+1115 |         legacy._path.chmod(0o600)
+1116 |         rows = [json.loads(line) for line in legacy._path.read_text().splitlines()]
+     |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1131:17
+     |
+1129 |         sequence_path.write_text(json.dumps(metadata))
+1130 |         before_log, before_meta = legacy._path.read_bytes(), sequence_path.read_bytes()
+1131 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+     |                 ^^^^^^^^^^
+1132 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+1133 |         with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1132:20
+     |
+1130 |         before_log, before_meta = legacy._path.read_bytes(), sequence_path.read_bytes()
+1131 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1132 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                    ^^^^^^^
+1133 |         with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+1134 |             keyed.publish_keyed_response(response_intent(intended))
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1132:77
+     |
+1130 |         before_log, before_meta = legacy._path.read_bytes(), sequence_path.read_bytes()
+1131 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1132 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                                                                             ^^^^^^^^^^^
+1133 |         with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+1134 |             keyed.publish_keyed_response(response_intent(intended))
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1133:28
+     |
+1131 |         keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+1132 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+1133 |         with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1134 |             keyed.publish_keyed_response(response_intent(intended))
+1135 |         assert (legacy._path.read_bytes(), sequence_path.read_bytes()) == (before_log, before_meta)
+     |
+
+F821 Undefined name `MessageBus`
+    --> tests/test_declarations.py:1151:17
+     |
+1149 |         repair.write_text("old contents")
+1150 |         repair.chmod(0o644)
+1151 |         keyed = MessageBus(path, legacy._registry, private_response_writes=True)
+     |                 ^^^^^^^^^^
+1152 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+1153 |         with pytest.raises(RelationViolationError, match="owner-only"):
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1152:20
+     |
+1150 |         repair.chmod(0o644)
+1151 |         keyed = MessageBus(path, legacy._registry, private_response_writes=True)
+1152 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                    ^^^^^^^
+1153 |         with pytest.raises(RelationViolationError, match="owner-only"):
+1154 |             keyed.publish_keyed_response(response_intent(intended))
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1152:77
+     |
+1150 |         repair.chmod(0o644)
+1151 |         keyed = MessageBus(path, legacy._registry, private_response_writes=True)
+1152 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                                                                             ^^^^^^^^^^^
+1153 |         with pytest.raises(RelationViolationError, match="owner-only"):
+1154 |             keyed.publish_keyed_response(response_intent(intended))
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1153:28
+     |
+1151 |         keyed = MessageBus(path, legacy._registry, private_response_writes=True)
+1152 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+1153 |         with pytest.raises(RelationViolationError, match="owner-only"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1154 |             keyed.publish_keyed_response(response_intent(intended))
+1155 |         assert not path.exists()
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1159:20
+     |
+1158 |     def test_response_intent_rejects_negative_time_and_oversized_payload(self):
+1159 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                    ^^^^^^^
+1160 |         with pytest.raises(ValueError, match="non-negative"):
+1161 |             response_intent(replace(intended, timestamp=-1))
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1159:77
+     |
+1158 |     def test_response_intent_rejects_negative_time_and_oversized_payload(self):
+1159 |         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
+     |                                                                             ^^^^^^^^^^^
+1160 |         with pytest.raises(ValueError, match="non-negative"):
+1161 |             response_intent(replace(intended, timestamp=-1))
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1167:18
+     |
+1165 |     def test_direct_legacy_remove_cannot_erase_unrelated_private_sideband(self, tmp_path: Path):
+1166 |         bus = self._bus(tmp_path)
+1167 |         bus.send(Message(sender="a", target="b", body="purge", type=MessageType.INFO))
+     |                  ^^^^^^^
+1168 |         bus.send(Message(sender="a", target="#all", body="retain", type=MessageType.INFO))
+1169 |         lines = bus._path.read_bytes().splitlines(keepends=True)
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1167:69
+     |
+1165 |     def test_direct_legacy_remove_cannot_erase_unrelated_private_sideband(self, tmp_path: Path):
+1166 |         bus = self._bus(tmp_path)
+1167 |         bus.send(Message(sender="a", target="b", body="purge", type=MessageType.INFO))
+     |                                                                     ^^^^^^^^^^^
+1168 |         bus.send(Message(sender="a", target="#all", body="retain", type=MessageType.INFO))
+1169 |         lines = bus._path.read_bytes().splitlines(keepends=True)
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1168:18
+     |
+1166 |         bus = self._bus(tmp_path)
+1167 |         bus.send(Message(sender="a", target="b", body="purge", type=MessageType.INFO))
+1168 |         bus.send(Message(sender="a", target="#all", body="retain", type=MessageType.INFO))
+     |                  ^^^^^^^
+1169 |         lines = bus._path.read_bytes().splitlines(keepends=True)
+1170 |         retained = json.loads(lines[1])
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1168:73
+     |
+1166 |         bus = self._bus(tmp_path)
+1167 |         bus.send(Message(sender="a", target="b", body="purge", type=MessageType.INFO))
+1168 |         bus.send(Message(sender="a", target="#all", body="retain", type=MessageType.INFO))
+     |                                                                         ^^^^^^^^^^^
+1169 |         lines = bus._path.read_bytes().splitlines(keepends=True)
+1170 |         retained = json.loads(lines[1])
+     |
+
+F821 Undefined name `RelationViolationError`
+    --> tests/test_declarations.py:1178:28
+     |
+1176 |         before_meta = sequence_path.read_bytes()
+1177 |
+1178 |         with pytest.raises(RelationViolationError, match="Private bus authority"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^
+1179 |             bus.remove_thread("b")
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1187:18
+     |
+1185 |     def test_dm_history_page_handles_aliases_and_byte_budget(self, tmp_path: Path):
+1186 |         bus = self._bus(tmp_path)
+1187 |         bus.send(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO))
+     |                  ^^^^^^^
+1188 |         bus.send(Message(sender="b", target="a", body="small", type=MessageType.INFO))
+1189 |         bus._registry.rename("a", "renamed")
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1187:72
+     |
+1185 |     def test_dm_history_page_handles_aliases_and_byte_budget(self, tmp_path: Path):
+1186 |         bus = self._bus(tmp_path)
+1187 |         bus.send(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO))
+     |                                                                        ^^^^^^^^^^^
+1188 |         bus.send(Message(sender="b", target="a", body="small", type=MessageType.INFO))
+1189 |         bus._registry.rename("a", "renamed")
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1188:18
+     |
+1186 |         bus = self._bus(tmp_path)
+1187 |         bus.send(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO))
+1188 |         bus.send(Message(sender="b", target="a", body="small", type=MessageType.INFO))
+     |                  ^^^^^^^
+1189 |         bus._registry.rename("a", "renamed")
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1188:69
+     |
+1186 |         bus = self._bus(tmp_path)
+1187 |         bus.send(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO))
+1188 |         bus.send(Message(sender="b", target="a", body="small", type=MessageType.INFO))
+     |                                                                     ^^^^^^^^^^^
+1189 |         bus._registry.rename("a", "renamed")
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1204:22
+     |
+1202 |         bus = self._bus(tmp_path)
+1203 |         for index in range(5):
+1204 |             bus.send(Message(sender="a", target="#all", body=str(index), type=MessageType.INFO))
+     |                      ^^^^^^^
+1205 |
+1206 |         monkeypatch.setattr(
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1204:79
+     |
+1202 |         bus = self._bus(tmp_path)
+1203 |         for index in range(5):
+1204 |             bus.send(Message(sender="a", target="#all", body=str(index), type=MessageType.INFO))
+     |                                                                               ^^^^^^^^^^^
+1205 |
+1206 |         monkeypatch.setattr(
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1212:18
+     |
+1210 |         )
+1211 |         assert bus.channel_history_page("#all", limit=2).newest_seq == 5
+1212 |         bus.send(Message(sender="a", target="#all", body="next", type=MessageType.INFO))
+     |                  ^^^^^^^
+1213 |         assert bus.latest_sequence() == 6
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1212:71
+     |
+1210 |         )
+1211 |         assert bus.channel_history_page("#all", limit=2).newest_seq == 5
+1212 |         bus.send(Message(sender="a", target="#all", body="next", type=MessageType.INFO))
+     |                                                                       ^^^^^^^^^^^
+1213 |         assert bus.latest_sequence() == 6
+     |
+
+F821 Undefined name `Message`
+    --> tests/test_declarations.py:1220:22
+     |
+1218 |         bus = self._bus(tmp_path)
+1219 |         for index in range(5):
+1220 |             bus.send(Message(sender="a", target="b", body=str(index), type=MessageType.INFO))
+     |                      ^^^^^^^
+1221 |         monkeypatch.setattr(
+1222 |             bus,
+     |
+
+F821 Undefined name `MessageType`
+    --> tests/test_declarations.py:1220:76
+     |
+1218 |         bus = self._bus(tmp_path)
+1219 |         for index in range(5):
+1220 |             bus.send(Message(sender="a", target="b", body=str(index), type=MessageType.INFO))
+     |                                                                            ^^^^^^^^^^^
+1221 |         monkeypatch.setattr(
+1222 |             bus,
+     |
+
+F821 Undefined name `UnregisteredThreadError`
+    --> tests/test_declarations.py:1264:28
+     |
+1262 |     def test_fail_closed_without_env(self, monkeypatch: pytest.MonkeyPatch):
+1263 |         monkeypatch.delenv("PI_AGENT_ID", raising=False)
+1264 |         with pytest.raises(UnregisteredThreadError, match="PI_AGENT_ID"):
+     |                            ^^^^^^^^^^^^^^^^^^^^^^^
+1265 |             current_thread()
+     |
+
+F821 Undefined name `Thread`
+  --> tests/test_goal_nominal.py:43:28
+   |
+41 | def owner(tmp_path):
+42 |     comms = wire(tmp_path)
+43 |     comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+   |                            ^^^^^^
+44 |     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
+45 |     return comms, goal
+   |
+
+F821 Undefined name `Goal`
+  --> tests/test_goal_nominal.py:60:12
+   |
+58 | @pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), BlockedGoal(), CompletedGoal()])
+59 | def test_durable_goal_projection_roundtrip(state):
+60 |     goal = Goal("Work", "identity", state=state)
+   |            ^^^^
+61 |     record = goal.to_wire()
+62 |     assert record["status"] == state.declared_name
+   |
+
+F821 Undefined name `Goal`
+  --> tests/test_goal_nominal.py:64:12
+   |
+62 |     assert record["status"] == state.declared_name
+63 |     assert "state" not in record and "_state" not in record
+64 |     assert Goal.from_wire(record).to_wire() == record
+   |            ^^^^
+65 |     assert Goal.from_wire(record) == goal
+66 |     assert replace(goal, progress="new", revision=2).state == state
+   |
+
+F821 Undefined name `Goal`
+  --> tests/test_goal_nominal.py:65:12
+   |
+63 |     assert "state" not in record and "_state" not in record
+64 |     assert Goal.from_wire(record).to_wire() == record
+65 |     assert Goal.from_wire(record) == goal
+   |            ^^^^
+66 |     assert replace(goal, progress="new", revision=2).state == state
+   |
+
+F821 Undefined name `Goal`
+  --> tests/test_goal_nominal.py:85:12
+   |
+83 |     )
+84 |     raw = {"id": "identity", "text": "Work", "status": "paused", "revision": 2}
+85 |     goal = Goal.from_registry(raw, tmp_path)
+   |            ^^^^
+86 |     assert goal.state.source.declared_name == (source if matched else "owner")
+87 |     assert replace(goal, revision=3).state.source.declared_name == goal.state.source.declared_name
+   |
+
+F821 Undefined name `Goal`
+  --> tests/test_goal_nominal.py:91:12
+   |
+89 |     migrated = goal.to_wire()
+90 |     (tmp_path / "goal_pause_events.json").write_text("{}")
+91 |     assert Goal.from_registry(migrated, tmp_path) == goal
+   |            ^^^^
+   |
+
+F821 Undefined name `Goal`
+   --> tests/test_goal_nominal.py:260:12
+    |
+258 |     from agent_comms.goal_history import GoalHistoryStore
+259 |
+260 |     goal = Goal.from_wire(raw)
+    |            ^^^^
+261 |     comms = wire(tmp_path)
+262 |     thread = Thread("saved", frozenset(), str(tmp_path), goal=goal)
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_nominal.py:262:14
+    |
+260 |     goal = Goal.from_wire(raw)
+261 |     comms = wire(tmp_path)
+262 |     thread = Thread("saved", frozenset(), str(tmp_path), goal=goal)
+    |              ^^^^^^
+263 |     comms.threads.register(thread)
+264 |     restored = wire(tmp_path).registry.require("saved").goal
+    |
+
+F821 Undefined name `Goal`
+   --> tests/test_goal_nominal.py:283:9
+    |
+281 | def test_saved_goal_boundary_rejects_invalid_fields(extra):
+282 |     with pytest.raises((ValueError, TypeError)):
+283 |         Goal.from_wire({"text": "saved", "id": "g", **extra})
+    |         ^^^^
+    |
+
+F821 Undefined name `Thread`
+  --> tests/test_goal_standby.py:39:28
+   |
+37 |     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+38 |     await agent.new_session(str(tmp_path / "parent"))
+39 |     comms.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+   |                            ^^^^^^
+40 |     comms.agents.begin_turn("child", "child-review-in-flight")
+41 |     comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_goal_standby.py:41:28
+   |
+39 |     comms.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+40 |     comms.agents.begin_turn("child", "child-review-in-flight")
+41 |     comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
+   |                            ^^^^^^
+42 |     store = agent.turns.open_goal_store()
+43 |     goal = comms.goals.update_goal("parent", SetGoalAction(text="Review @child work"), owner_store=store)
+   |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:174:28
+    |
+172 | def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
+173 |     comms = wire(tmp_path)
+174 |     comms.threads.register(Thread("parent", frozenset(), str(tmp_path)))
+    |                            ^^^^^^
+175 |     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
+176 |     with pytest.raises(ValueError, match="wait_for"):
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:186:32
+    |
+184 |     comms = wire(tmp_path)
+185 |     for name in ("alice", "bob"):
+186 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+187 |         comms.agents.begin_turn(name, f"{name}-turn")
+188 |     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:212:32
+    |
+210 |     comms = wire(tmp_path)
+211 |     for name in ("alice", "bob", "carol"):
+212 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+213 |         comms.agents.begin_turn(name, f"{name}-turn")
+214 |     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:233:32
+    |
+231 |     comms = wire(tmp_path)
+232 |     for name in ("alice", "bob", "carol"):
+233 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+234 |     for name in ("alice", "bob"):
+235 |         comms.agents.begin_turn(name, f"{name}-turn")
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:257:32
+    |
+255 |     comms = wire(tmp_path)
+256 |     for name in ("alice", "bob"):
+257 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+258 |         comms.agents.begin_turn(name, f"{name}-turn")
+259 |     comms.threads.register(Thread("carol", frozenset(), str(tmp_path), pid=os.getpid()))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:259:28
+    |
+257 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+258 |         comms.agents.begin_turn(name, f"{name}-turn")
+259 |     comms.threads.register(Thread("carol", frozenset(), str(tmp_path), pid=os.getpid()))
+    |                            ^^^^^^
+260 |     comms.agents.begin_turn("carol", "carol-turn")
+261 |     carol_thread = comms.registry.require("carol")
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:289:32
+    |
+287 |     comms = wire(tmp_path)
+288 |     for name in ("alice", "bob"):
+289 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+290 |         comms.agents.begin_turn(name, f"{name}-turn")
+291 |     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:332:32
+    |
+330 |     comms = wire(tmp_path)
+331 |     for name in ("alice", "bob"):
+332 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+333 |         comms.agents.begin_turn(name, f"{name}-first")
+334 |     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:369:32
+    |
+367 |     comms = wire(tmp_path)
+368 |     for name in ("alice", "bob"):
+369 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+370 |         comms.agents.begin_turn(name, f"{name}-turn")
+371 |     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_goal_standby.py:414:28
+    |
+412 |     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+413 |     await agent.new_session(str(tmp_path / "parent"))
+414 |     comms.threads.register(Thread("child", frozenset(), str(tmp_path)))
+    |                            ^^^^^^
+415 |     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
+416 |     message = comms.messaging.send_message("child", "parent", "Finished immediately")
+    |
+
+F821 Undefined name `Thread`
+  --> tests/test_nk_foreground.py:53:28
+   |
+51 |     (root / "work").mkdir(mode=0o700)
+52 |     comms = Comms(root, private_initial_writes=True)
+53 |     comms.threads.register(Thread("sender", frozenset(), str(root / "work"), pid=os.getpid()))
+   |                            ^^^^^^
+54 |     return root, comms, comms.messaging.initialize_private_initial_protocol()
+   |
+
+F821 Undefined name `Thread`
+   --> tests/test_nk_foreground.py:200:32
+    |
+198 |             opt_in=True,
+199 |         )
+200 |         comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+    |                                ^^^^^^
+201 |         message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+202 |         _accept(root, root_id, comms, message)
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_nk_foreground.py:237:28
+    |
+235 | ) -> None:
+236 |     root, comms, root_id = _private_root(tmp_path)
+237 |     comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+    |                            ^^^^^^
+238 |     fake, calls = _fake_model()
+239 |     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+    |
+
+F821 Undefined name `Thread`
+  --> tests/test_ordinary_nk_delivery.py:44:28
+   |
+42 |     root = tmp_path / "wire"
+43 |     comms = Comms(root)
+44 |     comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+   |                            ^^^^^^
+45 |     alpha = Thread(
+46 |         "alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+   |
+
+F821 Undefined name `Thread`
+  --> tests/test_ordinary_nk_delivery.py:45:13
+   |
+43 |     comms = Comms(root)
+44 |     comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+45 |     alpha = Thread(
+   |             ^^^^^^
+46 |         "alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+47 |     )
+   |
+
+F821 Undefined name `Thread`
+   --> tests/test_ordinary_nk_delivery.py:114:32
+    |
+112 |     comms = Comms(tmp_path / "wire")
+113 |     for name in ("sender", "beta"):
+114 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+115 |     message = comms.messaging.send_message("sender", "beta", "legacy ordinary send")
+116 |     meta = json.loads((comms.root / "bus_meta.json").read_text())
+    |
+
+F821 Undefined name `Thread`
+   --> tests/test_ordinary_nk_delivery.py:125:32
+    |
+123 |     comms = Comms(tmp_path / "wire")
+124 |     for name in ("sender", "beta"):
+125 |         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    |                                ^^^^^^
+126 |     root_id = comms.messaging.initialize_private_initial_protocol()
+127 |     with pytest.raises(RelationViolationError, match="Legacy append"):
+    |
+
+F821 Undefined name `Message`
+   --> tests/test_ordinary_nk_delivery.py:129:13
+    |
+127 |     with pytest.raises(RelationViolationError, match="Legacy append"):
+128 |         comms.bus.publish(
+129 |             Message(sender="sender", target="beta", body="old writer", type=MessageType.INFO)
+    |             ^^^^^^^
+130 |         )
+131 |     disabled = Comms(comms.root, private_initial_writes=False)
+    |
+
+F821 Undefined name `MessageType`
+   --> tests/test_ordinary_nk_delivery.py:129:77
+    |
+127 |     with pytest.raises(RelationViolationError, match="Legacy append"):
+128 |         comms.bus.publish(
+129 |             Message(sender="sender", target="beta", body="old writer", type=MessageType.INFO)
+    |                                                                             ^^^^^^^^^^^
+130 |         )
+131 |     disabled = Comms(comms.root, private_initial_writes=False)
+    |
+
+F811 Redefinition of unused `invoke_tool` from line 8
+  --> tests/test_saved_view_boundary.py:16:5
+   |
+14 |     ViewMatch,
+15 |     ViewPredicate,
+16 |     invoke_tool,
+   |     ^^^^^^^^^^^ `invoke_tool` redefined here
+17 | )
+18 | from agent_comms.comms import wire
+   |
+  ::: tests/test_saved_view_boundary.py:8:25
+   |
+ 6 | import pytest
+ 7 |
+ 8 | from agent_comms import invoke_tool
+   |                         ----------- previous definition of `invoke_tool` here
+ 9 | from agent_comms.channels import (
+10 |     AllOfMatch,
+   |
+help: Remove definition: `invoke_tool`
+
+Found 468 errors (190 fixed, 278 remaining).

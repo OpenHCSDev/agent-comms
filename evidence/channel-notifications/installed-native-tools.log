@@ -1,0 +1,12 @@
+{
+  "verified": true,
+  "core": "/home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "provider": "loopback fixture only; no paid requests",
+  "tools": [
+    "read",
+    "edit",
+    "write",
+    "bash"
+  ],
+  "checks": "real native CLI, tool admission/effects, publication and release; fixtures removed"
+}

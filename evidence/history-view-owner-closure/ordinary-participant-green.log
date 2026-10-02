@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 6 items
+
+tests/test_history_view_declaration.py ..                                [ 33%]
+tests/test_message_notifications.py ....                                 [100%]
+
+============================== 6 passed in 1.19s ===============================

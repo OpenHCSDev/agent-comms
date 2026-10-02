@@ -1,0 +1,2 @@
+src/agent_comms/goal_failure_observation.py:255: error: Argument 1 to "FailedTurnProjection" has incompatible type "str"; expected "Literal['backend_suspended', 'owner_paused', 'paused_uncertain', 'unavailable']"  [arg-type]
+Found 1 error in 1 file (checked 9 source files)

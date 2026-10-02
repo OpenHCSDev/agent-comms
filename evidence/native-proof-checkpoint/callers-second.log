@@ -1,0 +1,12 @@
+..............................s...........s...sssssssss................. [ 38%]
+..........F
+=================================== FAILURES ===================================
+____ test_owner_change_between_reserve_and_bind_refuses_and_never_launches _____
+tests/test_native_prompt_binding.py:749: in test_owner_change_between_reserve_and_bind_refuses_and_never_launches
+    real_bind = runtime.bind_expected_prompt
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'agent_comms.coordinated_runtime' has no attribute 'bind_expected_prompt'
+=========================== short test summary info ============================
+FAILED tests/test_native_prompt_binding.py::test_owner_change_between_reserve_and_bind_refuses_and_never_launches
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 71 passed, 11 skipped in 17.33s

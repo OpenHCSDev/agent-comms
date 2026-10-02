@@ -1,0 +1,59 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, platformdirs-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 13 items / 11 deselected / 2 selected
+
+tests/test_thread_identity.py FF                                         [100%]
+
+=================================== FAILURES ===================================
+_________ test_restored_active_turn_has_no_admission_authority[finish] _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/baseline-tests/test_restored_active_turn_has_0')
+revocation = 'finish'
+
+    @pytest.mark.parametrize("revocation", ["finish", "stop"])
+    def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
+        registry = registry_with_owner(tmp_path)
+        saved, _ = registry.lease_local_turn("owner", "old")
+        if revocation == "stop":
+            registry.unregister("owner")
+        else:
+            registry.release_turn(registry.require("owner").turn_lease)[0]
+        registry.register(saved)
+        for read in (registry.live_owner_with_generation, registry.live_owner_with_admission):
+>           with pytest.raises(RelationViolationError, match="unavailable"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'unavailable'
+E             Actual message: 'live owner turn admission is no longer current'
+
+tests/test_thread_identity.py:115: AssertionError
+__________ test_restored_active_turn_has_no_admission_authority[stop] __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/baseline-tests/test_restored_active_turn_has_1')
+revocation = 'stop'
+
+    @pytest.mark.parametrize("revocation", ["finish", "stop"])
+    def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
+        registry = registry_with_owner(tmp_path)
+        saved, _ = registry.lease_local_turn("owner", "old")
+        if revocation == "stop":
+            registry.unregister("owner")
+        else:
+            registry.release_turn(registry.require("owner").turn_lease)[0]
+        registry.register(saved)
+        for read in (registry.live_owner_with_generation, registry.live_owner_with_admission):
+>           with pytest.raises(RelationViolationError, match="unavailable"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'unavailable'
+E             Actual message: 'live owner turn admission is no longer current'
+
+tests/test_thread_identity.py:115: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_thread_identity.py::test_restored_active_turn_has_no_admission_authority[finish]
+FAILED tests/test_thread_identity.py::test_restored_active_turn_has_no_admission_authority[stop]
+======================= 2 failed, 11 deselected in 0.10s =======================

@@ -1,0 +1,24 @@
+{
+  "retired_test_owners": [
+    {
+      "name": "retained",
+      "pid": 1348803,
+      "alive": false
+    }
+  ],
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/current-plan-nra-analysis",
+      "bytes": 7737181
+    },
+    {
+      "path": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/current-plan-nra-semantic_descent",
+      "bytes": 12549187
+    },
+    {
+      "path": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/cold-native-first",
+      "bytes": 144166792
+    }
+  ],
+  "scope": "Completed owned scan caches and cold native test copy; original histories preserved"
+}

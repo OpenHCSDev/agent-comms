@@ -1,0 +1,290 @@
+"""Real native Pi goal tool, localhost provider, and dependency-triggered owner turn."""
+
+import asyncio
+import json
+import os
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pytest
+
+from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
+from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_generation import CompletedGeneration
+from agent_comms.goal_presentation import GoalExecutionState
+from agent_comms.threads import Thread
+
+
+@pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
+async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, review_pending):
+    native = os.environ.get("AC_NATIVE_STACK_BIN")
+    if not native:
+        pytest.skip("Requires the prepared native Pi stack")
+    with TemporaryDirectory(prefix="ac-native-standby-", dir="/var/tmp") as directory:
+        root = Path(directory)
+        requests = []
+        failures = []
+        goal_id = None
+        pending_keys = []
+        offset = int(review_pending)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                try:
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    index = len(requests)
+                    assert index <= 4 + offset, "Standby must not schedule another provider turn"
+                    delta = {
+                        "content": (
+                            "Waiting for child." if index == 2 + offset else "Reviewed and done."
+                        )
+                    }
+                    finish = "stop"
+                    if index in {1 + offset, 3 + offset}:
+                        schema = next(
+                            t["function"]
+                            for t in request["tools"]
+                            if t["function"]["name"] == "comms_goal"
+                        )
+                        assert "standby" in schema["parameters"]["properties"]["status"]["enum"]
+                        arguments = {
+                            "goal_id": goal_id,
+                            "status": "standby" if index == 1 + offset else "completed",
+                            "progress": (
+                                "Waiting for child"
+                                if index == 1 + offset
+                                else "Verified child report"
+                            ),
+                        }
+                        if index == 1 + offset:
+                            arguments["wait_for"] = ["@child"]
+                            if review_pending:
+                                tool_messages = [
+                                    m for m in request["messages"] if m.get("role") == "tool"
+                                ]
+                                inspected = json.loads(tool_messages[-1]["content"])
+                                assert inspected["messages"] == []
+                                assert len(inspected["unresolved_inputs"]) == 9
+                                projection = inspected["standby_review"]
+                                assert len(projection["excluded_inputs"]) == 4
+                                assert projection["reviewed_inputs"] == pending_keys
+                                arguments["reviewed_inputs"] = projection["reviewed_inputs"]
+                        delta = {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": f"goal_{index}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "comms_goal",
+                                        "arguments": json.dumps(arguments),
+                                    },
+                                }
+                            ],
+                        }
+                        finish = "tool_calls"
+                    if review_pending and index == 1:
+                        delta = {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "inspect_inputs",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "comms_inbox",
+                                        "arguments": json.dumps(
+                                            {
+                                                "thread": "parent",
+                                                "goal_id": goal_id,
+                                                "wait_for": ["child"],
+                                            }
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                        finish = "tool_calls"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{index}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+                        "usage": {
+                            "prompt_tokens": 100,
+                            "completion_tokens": 10,
+                            "total_tokens": 110,
+                        },
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+                except Exception as error:
+                    failures.append(repr(error))
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        serving = threading.Thread(target=server.serve_forever, daemon=True)
+        serving.start()
+        config = root / "agent"
+        config.mkdir(mode=0o700)
+        auth_file = config / "auth.json"
+        auth_file.write_text("{}")
+        auth_file.chmod(0o600)
+        (config / "models.json").write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                    }
+                }
+            )
+        )
+        preload = root / "local-only.cjs"
+        preload.write_text(
+            "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+            "const link=url instanceof Request?url.url:String(url);"
+            f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+            "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+        )
+        for key, value in {
+            "PI_CODING_AGENT_DIR": str(config),
+            "OPENROUTER_API_KEY": "local-only",
+            "NODE_OPTIONS": f"--require={preload}",
+            "AGENT_COMMS_ROOT": str(root / "wire"),
+            "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+        }.items():
+            monkeypatch.setenv(key, value)
+        args = [
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--provider",
+            "openrouter",
+            "--model",
+            "z-ai/glm-5.3-flash",
+            "--thinking",
+            "off",
+            "--extension",
+            str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
+        ]
+        comms = wire(root / "wire")
+        agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        try:
+            project = root / "parent"
+            project.mkdir()
+            await agent.new_session(str(project))
+            comms.registry.declare(
+                Thread(
+                    "child",
+                    frozenset(),
+                    str(project),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn("child", "child-report-in-flight")
+            goal = comms.goals.update_goal(
+                "parent",
+                SetGoalAction(text="Review @child report"),
+                owner_store=agent.turns.goals.open_goal_store(),
+            )
+            goal_id = goal.id
+            if review_pending:
+                # Stage unresolved inputs without allowing an unrelated direct
+                # message to start a turn before the goal wake under test.
+                agent.inputs.auto_wake = False
+                for index in range(5):
+                    early = comms.messaging.send_message(
+                        "child", "parent", f"WAIT_INSTRUCTION_{index}"
+                    )
+                    pending_keys.append(f"bus:{early.seq}")
+                await agent.inputs.drain_inbox("parent")
+                agent.inputs.auto_wake = True
+                admission = comms.registry.snapshot().admission_generations["parent"]
+                for index in range(4):
+                    agent.inputs.dispositions.record(
+                        f"acp:owner-input-{index}",
+                        seq=None,
+                        owner="parent",
+                        admission=admission,
+                        target="parent",
+                        text=f"Uncertain owner input {index}",
+                    )
+            agent.turns.goals.schedule_goal("parent")
+            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
+            assert not failures, failures
+            assert comms.registry.require("parent").goal.state.active
+            assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
+            assert len(requests) == 2 + offset
+            first_proc = agent.turns.persistent_backends["parent"].custody.idle().child.proc
+            assert first_proc is not None and first_proc.returncode is None
+            agent.turns.goals.schedule_goal("parent")
+            assert not agent.inputs.pending_turns.get("parent")
+            assert agent.turns.goals.goal_store.snapshot(goal.id).number == 2
+            if restart:
+                # Wait intent survives reopening. The new executing owner may
+                # rotate only the unused READY grant at the send boundary.
+                await agent.shutdown()
+                comms = wire(root / "wire")
+                agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+                monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+                await agent.load_session(str(project), "parent")
+                agent.turns.goals.schedule_goal("parent")
+                assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
+                assert not agent.inputs.pending_turns.get("parent") and len(requests) == 2 + offset
+            message = comms.messaging.send_message(
+                "child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT"
+            )
+            await agent.inputs.drain_inbox("parent")
+            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
+            assert not failures, failures
+            assert len(requests) == 4 + offset
+            if not restart:
+                assert (
+                    agent.turns.persistent_backends["parent"].custody.idle().child.proc
+                    is first_proc
+                )
+            else:
+                assert first_proc.returncode is not None
+            assert (
+                agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name
+                == "started"
+            )
+            for key in pending_keys:
+                row = agent.inputs.dispositions.read().rows.get(key)
+                assert row.declared_name == "reserved" and not hasattr(row, "native_id")
+                assert row.reviewed_for_goal(goal.id)
+            assert comms.registry.require("parent").goal.state.declared_name == "completed"
+            assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()
+            session = Path(comms.registry.require("parent").session_file)
+            rows = [json.loads(line) for line in session.read_text().splitlines()]
+            users = [row["message"] for row in rows if row.get("message", {}).get("role") == "user"]
+            assert len(users) == 2 and users[1]["inputId"]
+            assert message.body in json.dumps(users[1]["content"])
+            tool_results = [
+                row["message"]
+                for row in rows
+                if row.get("message", {}).get("toolName") == "comms_goal"
+            ]
+            assert len(tool_results) == 2 and not any(row.get("isError") for row in tool_results)
+        finally:
+            await agent.shutdown()
+            server.shutdown()
+            server.server_close()
+            serving.join(timeout=2)

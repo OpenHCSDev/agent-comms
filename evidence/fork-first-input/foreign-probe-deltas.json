@@ -1,0 +1,7 @@
+{
+  "src/agent_comms/native_fork.py": 0,
+  "src/agent_comms/owned_turn.py": 0,
+  "src/agent_comms/owner_lifecycle.py": 0,
+  "src/agent_comms/thread_management.py": 0,
+  "src/agent_comms/worker.py": 0
+}

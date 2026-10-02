@@ -1,0 +1,53 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_trusted_load_recovers_after_real_flock_contention ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-445/test_trusted_load_recovers_aft0')
+
+    async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
+        comms = Comms(tmp_path / "wire")
+        owner = Thread(
+            "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+        comms.threads.register(owner)
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            store.register_participant(
+                stable_thread_lookup(owner.created_at), owner.name, owner.name, committed=True
+            )
+        agent = CommsAgent(
+            comms,
+            auto_wake=False,
+            private_nk_wire_root_id=root_id,
+            private_nk_native_package=tmp_path / "unused-native-package",
+        )
+        await agent.sessions.bind_owned(owner, owner.name)
+        await agent.inputs.drain_inbox(owner.name)
+>       reader, writer = await asyncio.open_unix_connection(agent._runtime.path)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cursor_load_recovery.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py:97: in open_unix_connection
+    transport, _ = await loop.create_unix_connection(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py:252: in create_unix_connection
+    await self.sock_connect(sock, path)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py:645: in sock_connect
+    return await fut
+           ^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+fut = None, sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>
+address = '/tmp/pytest-of-ts/pytest-445/test_trusted_load_recovers_aft0/wire/runtime/2456789.sock'
+
+    def _sock_connect(self, fut, sock, address):
+        fd = sock.fileno()
+        try:
+>           sock.connect(address)
+E           FileNotFoundError: [Errno 2] No such file or directory
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py:653: FileNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_cursor_load_recovery.py::test_trusted_load_recovers_after_real_flock_contention
+1 failed in 0.83s

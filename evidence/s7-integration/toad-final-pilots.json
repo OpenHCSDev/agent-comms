@@ -1,0 +1,10 @@
+[
+  {
+    "pilot": "goal_retry_pilot.py",
+    "exit_code": 0
+  },
+  {
+    "pilot": "queue_view_backend_pilot.py",
+    "exit_code": 1
+  }
+]

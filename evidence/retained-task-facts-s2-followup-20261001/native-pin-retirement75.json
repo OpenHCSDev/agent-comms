@@ -1,0 +1,11 @@
+{
+  "state": "POST_TERMINAL_OWNED_FIXTURE_REFERENCE_CENSUS",
+  "references": {
+    "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native70": [],
+    "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native71": [],
+    "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72": []
+  },
+  "signals_sent": 0,
+  "public_changes": [],
+  "strength": "Original actual70/71/72 are already terminal; original runner fixture.children was empty, so this independently checks the actual private Native/ACP roots."
+}

@@ -1,0 +1,383 @@
+{
+  "original_commit": "f9854ab",
+  "original_checks": 47,
+  "checks": [
+    {
+      "original_owner": "WakeClaim",
+      "original_line": 372,
+      "requirement": "wire_seq and revision must be positive",
+      "original_predicate": "self.wire_seq <= 0 or self.revision <= 0",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_assignment_positive_numbers_and_timestamps",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "WakeClaim",
+      "original_line": 374,
+      "requirement": "claim timestamps are inconsistent",
+      "original_predicate": "self.accepted_at_ms < 0 or self.updated_at_ms < self.accepted_at_ms",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_assignment_positive_numbers_and_timestamps",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "WakeClaim",
+      "original_line": 441,
+      "requirement": "claim decision relation is inconsistent",
+      "original_predicate": "not valid",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_assignment_decision_and_binding_owned_by_policy",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "WakeClaim",
+      "original_line": 443,
+      "requirement": "pre-engagement claim cannot freeze a target",
+      "original_predicate": "self.execution_id is None and self.exact_target is not None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_assignment_decision_and_binding_owned_by_policy",
+      "proof_kind": "current variant/load boundary; no nullable or legacy field restoration"
+    },
+    {
+      "original_owner": "WakeClaim",
+      "original_line": 445,
+      "requirement": "engaged claim requires an exact target",
+      "original_predicate": "self.execution_id is not None and self.exact_target is None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_assignment_decision_and_binding_owned_by_policy",
+      "proof_kind": "current variant/load boundary; no nullable or legacy field restoration"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 712,
+      "requirement": "revision and max_attempts must be positive",
+      "original_predicate": "self.revision <= 0 or self.max_attempts <= 0",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_numeric_time_and_route_boundaries",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 716,
+      "requirement": "current ordinal exceeds budget",
+      "original_predicate": "self.current_attempt_ordinal is not None and (not 1 <= self.current_attempt_ordinal <= self.max_attempts)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 721,
+      "requirement": "unstarted execution cannot reference an attempt",
+      "original_predicate": "self.status in {ExecutionStatus.QUEUED, ExecutionStatus.PENDING} and self.current_attempt_ordinal is not None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 726,
+      "requirement": "active/completed execution requires an attempt",
+      "original_predicate": "self.status in {ExecutionStatus.ACTIVE, ExecutionStatus.COMPLETED} and self.current_attempt_ordinal is None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 732,
+      "requirement": "post-attempt deferral requires retry budget",
+      "original_predicate": "self.status is ExecutionStatus.DEFERRED and self.current_attempt_ordinal is not None and (self.current_attempt_ordinal >= self.max_attempts)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 735,
+      "requirement": "execution timestamps are inconsistent",
+      "original_predicate": "self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_numeric_time_and_route_boundaries",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 738,
+      "requirement": "wire execution requires an exact target",
+      "original_predicate": "self.exact_target is None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_numeric_time_and_route_boundaries",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ExecutionRecord",
+      "original_line": 742,
+      "requirement": "claimless execution requires null target",
+      "original_predicate": "self.exact_target is not None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_execution_numeric_time_and_route_boundaries",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ReplayAssessment",
+      "original_line": 830,
+      "requirement": "replay revision must be positive",
+      "original_predicate": "self.revision <= 0",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_replay_bits_revision_and_ambiguity",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ReplayAssessment",
+      "original_line": 833,
+      "requirement": "unrecognized replay fact bits",
+      "original_predicate": "int(self.facts) < 0 or int(self.facts) & ~APPROVED_REPLAY_FACT_MASK",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_replay_bits_revision_and_ambiguity",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ReplayAssessment",
+      "original_line": 835,
+      "requirement": "an execution with ambiguity facts cannot be replay-safe",
+      "original_predicate": "self.facts != ReplayFact.NONE and self.replay_safe",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_replay_bits_revision_and_ambiguity",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ResponseObligation",
+      "original_line": 871,
+      "requirement": "revision must be positive",
+      "original_predicate": "self.revision <= 0",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ResponseObligation",
+      "original_line": 873,
+      "requirement": "obligation timestamps are inconsistent",
+      "original_predicate": "self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ResponseObligation",
+      "original_line": 875,
+      "requirement": "receipt id and sequence must be set together",
+      "original_predicate": "(self.receipt_message_id is None) != (self.receipt_seq is None)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "current variant/load boundary; no nullable or legacy field restoration"
+    },
+    {
+      "original_owner": "ResponseObligation",
+      "original_line": 878,
+      "requirement": "published obligations require a receipt",
+      "original_predicate": "self.state is ObligationState.PUBLISHED and (not has_receipt)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ResponseObligation",
+      "original_line": 880,
+      "requirement": "only published obligations may have a receipt",
+      "original_predicate": "self.state is not ObligationState.PUBLISHED and has_receipt",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "ResponseObligation",
+      "original_line": 882,
+      "requirement": "receipt_seq must be positive",
+      "original_predicate": "self.receipt_seq is not None and self.receipt_seq <= 0",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1067,
+      "requirement": "pointer_revision cannot be negative",
+      "original_predicate": "self.pointer_revision < 0",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1069,
+      "requirement": "unsupported snapshot version",
+      "original_predicate": "self.snapshot_version != COORDINATION_SNAPSHOT_VERSION",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1083,
+      "requirement": "snapshot records belong to another execution",
+      "original_predicate": "any((record is not None and record.execution_id != execution_id for record in related)) or any((claim.execution_id != execution_id for claim in self.claims))",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_membership_order_owner_and_disposition",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1090,
+      "requirement": "snapshot execution-claim links disagree with ordered claims",
+      "original_predicate": "tuple((link.claim_id for link in self.links)) != claim_ids or tuple((link.ordinal for link in self.links)) != tuple(range(len(self.claims))) or any((link.execution_id != execution_id for link in self.links))",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_membership_order_owner_and_disposition",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1096,
+      "requirement": "snapshot claims have duplicate IDs or wrong owner",
+      "original_predicate": "len(claim_ids) != len(set(claim_ids)) or any((claim.recipient_lookup != execution.owner_lookup for claim in self.claims))",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_membership_order_owner_and_disposition",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1104,
+      "requirement": "snapshot claims disagree with execution disposition",
+      "original_predicate": "any((claim.disposition is not claim_kind for claim in self.claims))",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_membership_order_owner_and_disposition",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1107,
+      "requirement": "snapshot attempt does not match execution reference",
+      "original_predicate": "(execution.current_attempt_ordinal is None) != (attempt is None)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1112,
+      "requirement": "snapshot attempt identity/owner mismatch",
+      "original_predicate": "attempt is not None and (attempt.execution_id, attempt.attempt_ordinal, attempt.owner_lookup) != (execution_id, execution.current_attempt_ordinal, execution.owner_lookup)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1122,
+      "requirement": "snapshot status/attempt phase mismatch",
+      "original_predicate": "attempt is not None and attempt.phase not in expected_kind.get(execution.status, frozenset())",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1124,
+      "requirement": "snapshot pointer tuple is incomplete",
+      "original_predicate": "(self.current_execution_id is None) != (self.current_attempt_ordinal is None)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1132,
+      "requirement": "snapshot current pointer is inconsistent",
+      "original_predicate": "self.is_current != (self.current_execution_id == execution_id and self.current_attempt_ordinal == execution.current_attempt_ordinal and (execution.status is ExecutionStatus.ACTIVE) and (attempt is not None) and (attempt.phase in ACTIVE_ATTEMPT_PHASES))",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1134,
+      "requirement": "active snapshot must carry exact owner pointer",
+      "original_predicate": "execution.status is ExecutionStatus.ACTIVE and (not self.is_current)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1151,
+      "requirement": "snapshot exact targets disagree",
+      "original_predicate": "any((record is not None and record.exact_target != expected_target for record in target_records))",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_wire_claimless_and_exact_routes",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1155,
+      "requirement": "post-attempt deferral requires authorized retry",
+      "original_predicate": "execution.status is ExecutionStatus.DEFERRED and attempt is not None and (not authorized)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_retry_terminal_coupling",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1157,
+      "requirement": "failed execution cannot erase a publication receipt",
+      "original_predicate": "execution.status is ExecutionStatus.FAILED and self.publication_receipt is not None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_publication_parent_receipt_and_frozen_envelope",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1159,
+      "requirement": "authorized retry cannot settle failed",
+      "original_predicate": "execution.status is ExecutionStatus.FAILED and attempt is not None and authorized",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_retry_terminal_coupling",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1168,
+      "requirement": "completed wire execution requires terminal obligation",
+      "original_predicate": "execution.status is ExecutionStatus.COMPLETED and execution.origin is ExecutionOrigin.WIRE and (obligation is None or obligation.state not in {ObligationState.PUBLISHED, ObligationState.SILENT})",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_retry_terminal_coupling",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1180,
+      "requirement": "publication intent is invalid for obligation state",
+      "original_predicate": "intent is not None and (obligation is None or obligation.state not in {ObligationState.PUBLISHING, ObligationState.PUBLISHED, ObligationState.FAILED})",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1190,
+      "requirement": "publishing and published obligations require intent",
+      "original_predicate": "obligation is not None and obligation.state in {ObligationState.PUBLISHING, ObligationState.PUBLISHED} and (intent is None)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1193,
+      "requirement": "publication receipt exists iff published",
+      "original_predicate": "(receipt is not None) != is_published",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1137,
+      "requirement": "wire snapshots require an obligation",
+      "original_predicate": "not self.claims or self.obligation is None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_wire_claimless_and_exact_routes",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1139,
+      "requirement": "claimless snapshots cannot have claims or obligation",
+      "original_predicate": "self.obligation is not None or self.claims",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_wire_claimless_and_exact_routes",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1196,
+      "requirement": "published receipt requires intent and obligation",
+      "original_predicate": "intent is None or obligation is None",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_publication_parent_receipt_and_frozen_envelope",
+      "proof_kind": "earlier route/parent implication: wire missing parent refused; claimless publication target refused; no invalid parentless publication can reach the later guard"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1201,
+      "requirement": "obligation receipt does not match publication",
+      "original_predicate": "(obligation.receipt_message_id, obligation.receipt_seq) != (receipt.message_id, receipt.seq)",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_publication_parent_receipt_and_frozen_envelope",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    },
+    {
+      "original_owner": "RecoverySnapshot",
+      "original_line": 1223,
+      "requirement": "receipt envelope does not match frozen intent",
+      "original_predicate": "actual_envelope != expected_envelope",
+      "executed_behavior_test": "tests/test_s3_legality_behavior.py::test_snapshot_publication_parent_receipt_and_frozen_envelope",
+      "proof_kind": "negative case rejected and valid control/family case executed"
+    }
+  ],
+  "qualification": "47 original predicates recovered from original AST and mapped to independently executed current behavior. This proves these legality requirements, not arbitrary equivalence of deleted transition tables or every historical stored value."
+}

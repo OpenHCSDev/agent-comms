@@ -1,0 +1,22 @@
+{
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "channels": {
+    "#comms": {
+      "mounted_historical_rows": 20,
+      "original_source": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+      "first_source_sequence": 1
+    },
+    "#nra": {
+      "mounted_historical_rows": 8,
+      "original_source": "/home/ts/.agent-comms",
+      "first_source_sequence": 6940
+    }
+  },
+  "saved_session": {
+    "thread": "agent-comms-ux",
+    "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl",
+    "pages_mounted": 1,
+    "visible_identity_count": 111
+  },
+  "live_sequence_unchanged": true
+}

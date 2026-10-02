@@ -1,0 +1,76 @@
+{
+  "ready": false,
+  "attempt": "u04",
+  "raw_root": "/home/ts/wt/g458g/u04",
+  "frozen_product": {
+    "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+    "sdk": "0.12.1",
+    "native": "593b978a717ae8f6"
+  },
+  "provider_posts": 0,
+  "native_inputs_sent": 0,
+  "public_effects": 0,
+  "paid_calls": 0,
+  "original_replay": false,
+  "exit_code": 143,
+  "cleanup": {
+    "remaining": [],
+    "exact_known_private_pids": [
+      60713,
+      60714,
+      60797
+    ],
+    "attempt_scope": "g458g-u04",
+    "private_root": "/home/ts/wt/g458g/u04/fixture/private-root/wire",
+    "manual_signals": [
+      {
+        "pid": 60714,
+        "birth": 1790811180.83,
+        "signal": "SIGTERM",
+        "basis": "direct child of original start-time verified private script; owned test cwd; actual acceptance failure and no input/provider attempt"
+      }
+    ],
+    "paid_calls": 0,
+    "public_effects": 0,
+    "original_replay": false,
+    "tool_handle_status": "old tool93880 not found after resumed context; no reattachment/relaunch",
+    "runtime_activation_unchanged": true
+  },
+  "teardown_negative": {
+    "site": "tests/runtime_fixture.py27 stop_test_owners -> psutil.Process.wait(timeout10)",
+    "pid": 60903,
+    "error": "psutil.TimeoutExpired",
+    "qualification": "Original terminal footer preserves failure; current final process census does not reconstruct worker state at wait instant."
+  },
+  "phase": "continuous-preseed-expanded-channel-empty-members-failed",
+  "actual_failure": {
+    "site": "saved_state_user_journey_pilot.py257 reveal_thread_row wait original member_container.children beta20s",
+    "physical": "Original136 LinuxDriver/nonheadless ANSI frames show expanded #team arrow but empty members, beta Ready visible under #any. No menu/pointer attestation or Enter reached.",
+    "canonical_source": "Post-failure after-owned-worker cleanup channel_views declares #team tags[team]/members[beta]; timing qualified, not captured at failure instant.",
+    "owner": "Heisenberg Sidebar preparation/publication source; Kepler original helper/event/control trace",
+    "no_waiver": "Do not call this a removed-property failure or add polling/caches/timers/source override to pass it. No unchanged whole run."
+  },
+  "original_frames": 136,
+  "submission_frames": 0,
+  "native_start_frames": 0,
+  "old_tool_handle": "93880 missing after resumed context, no reattachment or relaunch",
+  "sha256": {
+    "terminal.timing": "b0236c9858ce3bc8feb7b9f10ff766bae6be9f5df5fd1d3bc3a209ad58cea3ed",
+    "launch.json": "b5aac66307d021ba94d00617c1debefea3da0aed3562ae15367cf9d8a83a567b",
+    "terminal.ansi": "6b2aff92c0a1b191e08ebfdc95f5cbfc31e8fa89bb230f845b3a7d79e4404d36",
+    "provider-failures.json": "a6fc30eec065b4f634b270fb3d419d5b2f24c8bf11a5cff6e943ad02a6aa053d",
+    "Native_fixture_2026-09-30T19_33_04_506646.txt": "edb9d9b9cbbe0862088d3ad2f264b8f80bfb634eef28789111c2d77523bbc22f",
+    "owner-a48977eefef1ca7c09bac33bbbe4838e-8c7e5fb5f8f34c33ab76e37a020f295f.log": "632d1131e90aed1cd03587ef58c309c45fdc7862fed4e2826534c12d7ef37f48",
+    "owned-ui-retirement.json": "784ad2b01978e7b81ebff67c0b92732850f640afda94a87ca1d6b144534749da",
+    "acp-debug": "39453f25d9cfeb3616878cb051988ca4bccf3f1b901fca7518a8fc08a7c211b3",
+    "cleanup-review.json": "048ee3d2c5deab08003f737cc86c8e813fbf93ab006d6550a8711f51641f1f8c",
+    "toad-acp.log": "edb9d9b9cbbe0862088d3ad2f264b8f80bfb634eef28789111c2d77523bbc22f",
+    "acceptance-failure.txt": "2efe8a0467eed56cff753781140f857b61b9dee9286f6c08934f0ab979682114",
+    "last-emitted-terminal.txt": "66bc97e8256df077962ae6bac1f7cf8908579116466bdd18fbf6cea5690edfc4",
+    "acp-debug.log": "e58444c9b0697ab080d4c513e6256d92d259304bd0abd36995f0ec427edf976c",
+    "input-frames.jsonl": "4092b60b8d2d233b17347cb1b7944258b7832fa59b5d58987569cf72a37f9c0e",
+    "canonical-channel-source-after-failure.json": "e5a517741420a5734a21622d44186380dd40eea3f0084cb47b389122dac5921c"
+  }
+}

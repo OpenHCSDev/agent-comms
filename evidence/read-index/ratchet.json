@@ -1,0 +1,25 @@
+{
+  "base_revision": "13547ee0a855f9ecd9fc48701f0a5e0c109c44d8",
+  "head_revision": "2fcd8fbdfca422c0a1ce064b509b966a4be54fcd",
+  "paths": [
+    "src/agent_comms/history_views.py",
+    "src/agent_comms/presentation.py",
+    "src/agent_comms/read_ledger.py",
+    "src/agent_comms/view_unread.py"
+  ],
+  "base": {
+    "TypeIdentity": 2,
+    "LongBooleanChain": 6,
+    "StringSubscript": 3
+  },
+  "head": {
+    "TypeIdentity": 2,
+    "LongBooleanChain": 6,
+    "StringSubscript": 3
+  },
+  "delta": {
+    "TypeIdentity": 0,
+    "LongBooleanChain": 0,
+    "StringSubscript": 0
+  }
+}

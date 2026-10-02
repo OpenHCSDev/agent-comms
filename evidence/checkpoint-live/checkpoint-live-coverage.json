@@ -1,0 +1,9 @@
+{
+  "covered_seq": 1,
+  "blocked_seq": 3,
+  "injected_source_seqs": [
+    1
+  ],
+  "no_wake_seqs": [],
+  "certified_source": true
+}

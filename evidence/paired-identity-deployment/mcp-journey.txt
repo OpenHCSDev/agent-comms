@@ -1,0 +1,23 @@
+PASS actual-package boundary: typed fields, scope, policy, tuple lengths, unknown/duplicate fields, root and size rejection
+APP_MOUNTED
+PALETTE_OPEN
+PALETTE_QUERY_TYPED
+PALETTE_SELECTED
+INVENTORY_LOADED
+UNTRUSTED_VISIBLE
+PROJECT_TRUSTED
+PROJECT_ROW_SELECTED
+BEGIN actual clicked command approve
+PASS clicked installed package decision approve approved ask
+BEGIN actual clicked command deny
+PASS clicked installed package decision deny denied unavailable
+BEGIN actual clicked command ask
+PASS clicked installed package decision ask approved ask
+BEGIN actual clicked command allow
+PASS clicked installed package decision allow approved allow
+BEGIN actual clicked command approve_again
+PASS clicked installed package decision approve_again approved allow
+PASS declaration-only new command discovered/clicked/painted/applied without consumer roster
+PASS actual changed snapshot refused before child launch
+PASS focused-terminal Escape after resize cancels/reaps without changing ledger
+PASS continuous actual UI: trust/refusal, shadowing/redaction, all declared decision buttons, challenge keyboard/ledger/refresh, stale snapshot, resized cancel + child reaping

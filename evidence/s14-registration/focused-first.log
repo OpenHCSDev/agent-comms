@@ -1,0 +1,10 @@
+ImportError while loading conftest '/home/ts/wt/comms-remaining-plan-closure-20260929/tests/conftest.py'.
+tests/conftest.py:7: in <module>
+    from agent_comms.comms import Comms
+src/agent_comms/__init__.py:5: in <module>
+    from .exporting import (
+src/agent_comms/exporting.py:25: in <module>
+    from .registration import Registration
+E     File "/home/ts/wt/comms-remaining-plan-closure-20260929/src/agent_comms/registration.py", line 301
+E       with self.store.locked():
+E   IndentationError: unexpected indent

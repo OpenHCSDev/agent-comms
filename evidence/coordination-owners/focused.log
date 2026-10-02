@@ -1,0 +1,172 @@
+........................................................................ [ 42%]
+.................................................F.F.FF................. [ 84%]
+...F....................F.                                               [100%]
+=================================== FAILURES ===================================
+_______________ test_record_replacement_uses_only_nominal_state ________________
+
+    def test_record_replacement_uses_only_nominal_state():
+>       record = ExecutionRecord(
+                 ^^^^^^^^^^^^^^^
+            execution_id="e",
+            origin=ExecutionOrigin.ACP,
+            lifecycle=PendingExecution(),
+            owner_thread="t",
+            owner_lookup="o",
+            revision=1,
+            max_attempts=3,
+            reason_code=None,
+            created_at_ms=0,
+            updated_at_ms=0,
+        )
+E       NameError: name 'ExecutionRecord' is not defined
+
+tests/test_coordination_nominal.py:45: NameError
+_ test_response_extension_decodes_transitions_and_projects_without_catalog_edits _
+
+    def test_response_extension_decodes_transitions_and_projects_without_catalog_edits():
+        class ReviewedResponse(ResponseState):
+            @classmethod
+            def successors(cls):
+                return (SilentResponse,)
+
+        try:
+            state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
+            assert state.may_become(SilentResponse())
+            tag = ResponseState.decode("reviewed")
+            assert tag.publication() == "reviewed"
+            projection = ProjectedExecution(
+                PendingExecution,
+>               ExecutionOrigin.WIRE,
+                ^^^^^^^^^^^^^^^
+                False,
+                None,
+                False,
+                tag.publication(),
+            )
+E           NameError: name 'ExecutionOrigin' is not defined
+
+tests/test_coordination_nominal.py:89: NameError
+__________ test_durable_turn_records_native_phases_before_completion ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-coordination-owners-20260928/.test-coordination-final/test_durable_turn_records_nati0')
+
+    @pytest.mark.asyncio
+    async def test_durable_turn_records_native_phases_before_completion(tmp_path):
+        from agent_comms.coordination_store import MutationStore, prepare_fence_token
+        from agent_comms.durable_turn import DurableTurn
+        from agent_comms.pi_events import PiEvent
+
+        with MutationStore(tmp_path / "coordination.sqlite3") as store:
+            store.register_participant("owner", "owner", "owner", committed=True)
+>           created = store.create_execution("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
+                                                  ^^^^^^^^^^^^^^^
+E           NameError: name 'ExecutionOrigin' is not defined
+
+tests/test_coordination_nominal.py:156: NameError
+___________ test_new_response_state_roundtrips_real_store_and_socket ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-coordination-owners-20260928/.test-coordination-final/test_new_response_state_roundt0')
+
+    @pytest.mark.asyncio
+    async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
+        from agent_comms.coordination_store import MutationStore
+
+        class ReviewedResponse(ResponseState):
+            @classmethod
+            def successors(cls):
+                return (SilentResponse,)
+
+        try:
+            with MutationStore(tmp_path / "coordination.sqlite3") as store:
+                store.register_participant("p", "owner", "owner", committed=True)
+                with store._transaction() as db:
+                    db.execute(
+
+                            "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                            "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                            "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
+                            "1,2,NULL,0,0)"
+
+                    )
+                    db.execute(
+
+                            "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                            "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
+                            "','reviewed'),NULL,0,0,1)"
+
+                    )
+                    db.execute(
+
+                            "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+                            "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+                            "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
+                            "gaged','decision',json_object('kind','full','exact_target','requester','exec"
+                            "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
+
+                    )
+                    db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
+                obligation = store.snapshot("e").obligation
+                assert isinstance(obligation.lifecycle, ReviewedResponse)
+                assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
+                projection = AvailableRecoveryProjection(
+                    "owner",
+                    0,
+                    ProjectedExecution(
+                        QueuedExecution,
+>                       ExecutionOrigin.WIRE,
+                        ^^^^^^^^^^^^^^^
+                        False,
+                        None,
+                        False,
+                        obligation.lifecycle.publication(),
+                    ),
+                    None,
+                    None,
+                )
+E               NameError: name 'ExecutionOrigin' is not defined
+
+tests/test_coordination_nominal.py:267: NameError
+___________ test_corrupt_initial_and_wrong_root_rejected_before_sql ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-coordination-owners-20260928/.test-coordination-final/test_corrupt_initial_and_wrong0')
+
+    def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> None:
+        comms, store, root_id, _lookups = _root(tmp_path)
+        sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+        with pytest.raises(IdentityConflict, match="root"):
+            accept_initial_cohort(comms.bus, "a" * 32, sent.seq, store)
+        bus_path = tmp_path / "comms" / "bus.jsonl"
+        original = bus_path.read_bytes()
+        row = json.loads(original)
+        row[PRIVATE_WIRE_FIELD]["initial"]["decisions"][0]["recipient_lookup"] = "imposter"
+        bus_path.write_text(json.dumps(row) + "\n")
+>       with pytest.raises(RelationViolationError, match="initial"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'initial'
+E         Actual message: 'Private bus checkpoint root/inode/size changed.'
+
+tests/test_coordination_cohort.py:250: AssertionError
+___________ test_production_sqlite_access_uses_the_declared_boundary ___________
+
+    def test_production_sqlite_access_uses_the_declared_boundary():
+        from agent_comms import typed_table
+
+        owner = Path(typed_table.__file__).resolve()
+        failures = {
+            str(path.relative_to(SOURCE)): violations(ast.parse(path.read_text()))
+            for path in SOURCE.rglob("*.py")
+            if path.resolve() != owner
+        }
+>       assert not {name: hits for name, hits in failures.items() if hits}
+E       AssertionError: assert not {'typed_table.py': [(472, 'hand-written table DDL or write'), (409, 'hand-written table DDL or write')]}
+
+tests/round2/test_typed_table_guards.py:65: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_coordination_nominal.py::test_record_replacement_uses_only_nominal_state
+FAILED tests/test_coordination_nominal.py::test_response_extension_decodes_transitions_and_projects_without_catalog_edits
+FAILED tests/test_coordination_nominal.py::test_durable_turn_records_native_phases_before_completion
+FAILED tests/test_coordination_nominal.py::test_new_response_state_roundtrips_real_store_and_socket
+FAILED tests/test_coordination_cohort.py::test_corrupt_initial_and_wrong_root_rejected_before_sql
+FAILED tests/round2/test_typed_table_guards.py::test_production_sqlite_access_uses_the_declared_boundary
+6 failed, 164 passed in 28.77s

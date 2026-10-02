@@ -1,0 +1,1 @@
+Initial full JSON global-context scan: timeout 165 seconds, exit 124; no complete result emitted. Native/behavioral evidence is separate.

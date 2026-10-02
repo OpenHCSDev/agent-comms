@@ -1,0 +1,1 @@
+/var/tmp/agent-comms-pi-native-diagnostics-20260928/node_modules/@earendil-works/pi-coding-agent

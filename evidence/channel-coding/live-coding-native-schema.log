@@ -1,0 +1,45 @@
+{
+  "root": "/var/tmp/agent-comms-coding-check-e0cq34al",
+  "worktree": "/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/live-coding-native-schema",
+  "package": "/var/tmp/agent-comms-pi-native-coding-20260927-x_nsd3jh/node_modules/@earendil-works/pi-coding-agent",
+  "source_seq": 1,
+  "started_at": 1790553474.3482041,
+  "result": {
+    "claim_id": "cohort-v1:304a75d9dc564fd600bdafb55036f4e5994257ebffed0f416615fbd77adc6c50",
+    "disposition": "completed",
+    "input_id": "2b1b09c715cadc532229b81ff9d603ab",
+    "response_message_id": "073142119d19",
+    "exact_target": "#coding-check",
+    "cursor_status": "unavailable",
+    "fresh_session": null
+  },
+  "files": {
+    "input.txt": "reference=ORCHID-7301\nstate=AFTER\n",
+    "nested/result.txt": "reference=ORCHID-7301\nstate=AFTER\n"
+  },
+  "claims_remaining": [],
+  "messages": [
+    {
+      "seq": 1,
+      "body": "For the coding-check owner: use read to read input.txt; use edit to replace BEFORE with AFTER; use write to create nested/result.txt containing the full edited input text; use bash to run a Python assertion that both files have equal contents and state=AFTER. Use all four tools. Reply CODING_TOOLS_OK only after the checks pass. Work only in this worktree."
+    },
+    {
+      "seq": 2,
+      "body": "Resource claim admitted"
+    },
+    {
+      "seq": 3,
+      "body": "Resource claim admitted"
+    },
+    {
+      "seq": 4,
+      "body": "Completed coding tool claims released"
+    },
+    {
+      "seq": 5,
+      "body": "CODING_TOOLS_OK"
+    }
+  ],
+  "passed": true,
+  "finished_at": 1790553506.0961404
+}

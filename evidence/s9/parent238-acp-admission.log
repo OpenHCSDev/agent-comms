@@ -1,0 +1,89 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________ test_acp_final_boundary_consumes_exact_ack_at_native_id_bind _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_final_boundary_consum0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fba9cc6b950>
+
+    @pytest.mark.asyncio
+    async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path, monkeypatch):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        session = tmp_path / "saved.jsonl"
+        session.write_text("{}\n")
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        observed = []
+    
+        async def events(*args, **kwargs):
+            thread = comms.registry.snapshot().threads["project"]
+            key = agent.inputs.turn_original_input_keys["project"][0]
+            text = args[2]
+            digest = hashlib.sha256(text.encode()).hexdigest()
+            identity = SelectedAdmissionIdentity(
+                "project",
+                thread.pid,
+                float(thread.created_at).hex(),
+                agent.turns.active_turns["project"],
+                key,
+                comms.registry.snapshot().admission_generations["project"],
+                f"{comms.registry.snapshot().admission_generations['project']}:{digest}",
+                digest,
+                hashlib.sha256(
+                    agent.inputs.dispositions.read().rows.get(key).source_text.encode()
+                ).hexdigest(),
+                backend._session_revision(str(session)),
+                backend._session_revision(str(session)),
+            )
+            operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+            token = journal.decline_selected_summary_prestart(
+                operation_id, "split_turn", admission=identity
+            )
+            assert token is not None
+            agent.inputs.selected_summary_admissions["project"] = token  # fake owner only; no producer
+            with kwargs["send_boundary"](None, "c" * 32, text) as allowed:
+                observed.append(allowed)
+            with kwargs["send_boundary"](None, "d" * 32, text) as allowed:
+                observed.append(allowed)
+            yield ae.Done(ok=False, text="Provider-free fake")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.inputs.run_owned_input("project", "project", "original fake input")
+
+tests/test_selected_summary_admission.py:523: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/input_drain.py:679: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fba9cb37230>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_admission.py::test_acp_final_boundary_consumes_exact_ack_at_native_id_bind
+1 failed in 1.66s

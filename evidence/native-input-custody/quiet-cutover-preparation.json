@@ -1,0 +1,44 @@
+{
+  "state": "EXECUTED-PARENT-DEFAULT-ACCEPTED-EXECUTABLE-RETIRED",
+  "operator_sha256": "eebb84b981da9bdf308cae5d4bc05671a286b79f8e097f9ff66574176127a5e3",
+  "source_interpreter": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/python",
+  "current_defaults": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
+  "target": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+  "pins": {
+    "agent-comms": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+    "batrachian-toad": "1edd96c0cfa011a69782cdeb67138ceea98e227b",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "activation_sha256": "f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043",
+  "staging_sha256": "5a6a82b04d68ab1436a323eb7678c010d28925b22433a63402bff70330d94b82",
+  "package_ready_sha256": "19dcbaa6e5fb770828e908b8e9a130abba3545ff77f2ef26a90e2cba32ae2fad",
+  "actual_acceptance": {
+    "joint": {
+      "artifact": "/home/ts/wt/comms-c1-terminal-data-20260930/evidence/c1-terminal-data-20260930/installed34/ready-receipt.json",
+      "sha256": "a6031469f494fdaa4aac5e77497514f1638f9c66a27daed27abfab7a869b68f3",
+      "elapsed_seconds": 113.9394751819782,
+      "parent_accepted": true
+    },
+    "bus": {
+      "artifact": "/home/ts/wt/toad-native-applied-cohort-pair-20261001/evidence/native-applied-cohort-pair-20261001/bus-u09/receipt.json",
+      "sha256": "4f46d689436fa5f962d399b1c42dc148aa560405572255182bc513c39cb5091b",
+      "elapsed_seconds": 137.64,
+      "parent_accepted": true
+    }
+  },
+  "compaction_journal": "declared runtime reset; old compatibility/read-identical revoked",
+  "input_dispositions": "protected original bytes/UNKNOWN; version1 fields/discriminators unchanged",
+  "scope": "exact new target hashes/AST/trust and authorized readonly original typed owner/client census; not execution/admission; no public mutation",
+  "public_signals": 0,
+  "public_writes": 0,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "current_observation": "evidence/native-input-custody/applied-cohort-current-public-observation.json",
+  "prior_operator_sha256": "d8baaf37fa9a11dc5809fbe9a79c69cfd0eb139717f9b8ac96aaf5009f6327b8",
+  "prior_operator_commit": "a1d20a7115fefba37dad84da79b419bb4a94c70f",
+  "activation_authorized": "parent executed once after reviewed client closure; no ongoing authorization to rerun",
+  "next_requirement": "independent Goal254/472/performance remain",
+  "source_freeze_sha256": "67e9d7b65cdc5e26b21c707eb0a541d15a50e1e1f298605a5894e5bdc1e2a90c",
+  "current_blocker": "scoped release closed; no additional public action",
+  "closure_receipt": "evidence/native-input-custody/activation-closure.json"
+}

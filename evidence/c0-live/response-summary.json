@@ -1,0 +1,20 @@
+{
+  "started_at": 1790566058.479225,
+  "runtime": "runtime-c0-20260928",
+  "source_seq": 55,
+  "reply_seq": 56,
+  "reply": "C0_OK",
+  "elapsed": 17.90532875061035,
+  "native_tools": [
+    {
+      "name": "read",
+      "error": false
+    },
+    {
+      "name": "bash",
+      "error": false
+    }
+  ],
+  "verified_success": true,
+  "checkpoint_through_seq": 56
+}

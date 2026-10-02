@@ -1,0 +1,46 @@
+PARENT_NATIVE_EVENTS [Done(text='Pi native input-ID capability preflight ended before attestation. The prompt was not sent. Backend startup reported:\nnode: error while loading shared libraries: libada.so.3: cannot open shared object file: No such file or directory', ok=False, reason_code=<FailureReason.INPUT_ID_UNAVAILABLE: 'pi_input_id_unavailable'>, diagnostic={'elapsed_ms': 22, 'spawn_ms': 21, 'session_bytes': 159, 'reason': <FailureReason.PREFLIGHT_EXIT: 'native_preflight_exit'>, 'exit_code': 127})]
+F
+=================================== FAILURES ===================================
+_ test_underbudget_physical_native_owner_answers_without_compaction[ordinary_owner] _
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f6c876a2270>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f6c87637a80>
+case = <test_native_fork_first_input.OrdinaryOwnerCase object at 0x7f6c876a0ad0>
+
+    @pytest.mark.parametrize(
+        "case",
+        [member() for member in OwnerAdmissionCase.members_with(OwnerAdmissionCase)],
+        ids=lambda case: case.declared_name,
+    )
+    async def test_underbudget_physical_native_owner_answers_without_compaction(
+        native_backend, monkeypatch, case
+    ):
+        native = native_backend
+        # Select a normal bounded model before creating physical parent history.
+        config_path = native.config / "models.json"
+        config = json.loads(config_path.read_text())
+        config["providers"]["response-local"]["models"][0]["contextWindow"] = 32768
+        config_path.write_text(json.dumps(config))
+        (native.config / "settings.json").write_text(
+            json.dumps(
+                {
+                    "compaction": {"enabled": True, "reserveTokens": 2048, "keepRecentTokens": 1024},
+                    "retry": {"enabled": False, "maxRetries": 0},
+                }
+            )
+        )
+        parent_text = (
+            "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * case.repetitions
+        )
+        result = await native.run(parent_text)
+        print("PARENT_NATIVE_EVENTS", repr(result), flush=True)
+>       assert result[-1].ok, result[-1]
+E       AssertionError: Done(text='Pi native input-ID capability preflight ended before attestation. The prompt was not sent. Backend startup ...wn_ms': 21, 'session_bytes': 159, 'reason': <FailureReason.PREFLIGHT_EXIT: 'native_preflight_exit'>, 'exit_code': 127})
+E       assert False
+E        +  where False = Done(text='Pi native input-ID capability preflight ended before attestation. The prompt was not sent. Backend startup ...wn_ms': 21, 'session_bytes': 159, 'reason': <FailureReason.PREFLIGHT_EXIT: 'native_preflight_exit'>, 'exit_code': 127}).ok
+
+tests/test_native_fork_first_input.py:110: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_fork_first_input.py::test_underbudget_physical_native_owner_answers_without_compaction[ordinary_owner]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 deselected in 7.34s

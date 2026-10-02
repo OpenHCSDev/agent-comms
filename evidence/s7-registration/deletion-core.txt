@@ -1,0 +1,148 @@
+.........s.............................................................. [ 34%]
+........................................................................ [ 68%]
+..........................................F....F...................      [100%]
+=================================== FAILURES ===================================
+______ test_replaced_stopped_or_active_owner_has_no_projection[mutation1] ______
+
+bound = (<agent_comms.goal_attempts.GoalAttemptStore object at 0x7f0c43483550>, Thread(name='owner', tags=frozenset(), worktre...turn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', reason=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>))
+mutation = {'identity': TurnIdentity(incarnation=ThreadIncarnation(name='owner', created_at=11.0), generation=7)}
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            {"name": "replacement"},
+            {"identity": TurnIdentity(ThreadIncarnation("owner", 11.0), 7)},
+            {"worktree": "/changed"},
+            {"pid": 0},
+            {"goal": Goal("replacement", "replacement", status="blocked")},
+            {"goal": Goal("active", "goal")},
+            {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 8)},
+            {"last_finished_turn_id": "b" * 32},
+        ],
+    )
+    def test_replaced_stopped_or_active_owner_has_no_projection(bound, mutation):
+        store, owner, _, observation = bound
+        store.record_failed(observation.reservation, "failed", observation=observation)
+>       assert read(store, replace(blocked(owner), **mutation)).state == "unavailable"
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_failure_observation.py:243:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/lib/python3.14/dataclasses.py:1778: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = Thread(name='owner', tags=frozenset(), worktree='/private-worktree', parent=None, task=None, pid=123, session_file=Non...ort_turn=None, channel_scope_generation=0, turn_generation=7, last_finished_turn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+changes = {'identity': TurnIdentity(incarnation=ThreadIncarnation(name='owner', created_at=11.0), generation=7), 'name': 'owner', 'tags': frozenset(), 'worktree': '/private-worktree', ...}
+
+    def _replace(self, /, **changes):
+        # We're going to mutate 'changes', but that's okay because it's a
+        # new dict, even if called with 'replace(self, **my_changes)'.
+
+        # It's an error to have init=False fields in 'changes'.
+        # If a field is not in 'changes', read its value from the provided 'self'.
+
+        for f in getattr(self, _FIELDS).values():
+            # Only consider normal fields or InitVars.
+            if f._field_type is _FIELD_CLASSVAR:
+                continue
+
+            if not f.init:
+                # Error if this field is specified in changes.
+                if f.name in changes:
+                    raise TypeError(f'field {f.name} is declared with '
+                                    f'init=False, it cannot be specified with '
+                                    f'replace()')
+                continue
+
+            if f.name not in changes:
+                if f._field_type is _FIELD_INITVAR and f.default is MISSING:
+                    raise TypeError(f"InitVar {f.name!r} "
+                                    f'must be specified with replace()')
+                changes[f.name] = getattr(self, f.name)
+
+        # Create the new object, which calls __init__() and
+        # __post_init__() (if defined), using all of the init fields we've
+        # added and/or left in 'changes'.  If there are values supplied in
+        # changes that aren't fields, this will correctly raise a
+        # TypeError.
+>       return self.__class__(**changes)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'identity'
+
+/usr/lib/python3.14/dataclasses.py:1812: TypeError
+______ test_replaced_stopped_or_active_owner_has_no_projection[mutation6] ______
+
+bound = (<agent_comms.goal_attempts.GoalAttemptStore object at 0x7f0c434808d0>, Thread(name='owner', tags=frozenset(), worktre...turn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', reason=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>))
+mutation = {'identity': TurnIdentity(incarnation=ThreadIncarnation(name='owner', created_at=10.0), generation=8)}
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            {"name": "replacement"},
+            {"identity": TurnIdentity(ThreadIncarnation("owner", 11.0), 7)},
+            {"worktree": "/changed"},
+            {"pid": 0},
+            {"goal": Goal("replacement", "replacement", status="blocked")},
+            {"goal": Goal("active", "goal")},
+            {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 8)},
+            {"last_finished_turn_id": "b" * 32},
+        ],
+    )
+    def test_replaced_stopped_or_active_owner_has_no_projection(bound, mutation):
+        store, owner, _, observation = bound
+        store.record_failed(observation.reservation, "failed", observation=observation)
+>       assert read(store, replace(blocked(owner), **mutation)).state == "unavailable"
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_failure_observation.py:243:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/lib/python3.14/dataclasses.py:1778: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = Thread(name='owner', tags=frozenset(), worktree='/private-worktree', parent=None, task=None, pid=123, session_file=Non...ort_turn=None, channel_scope_generation=0, turn_generation=7, last_finished_turn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+changes = {'identity': TurnIdentity(incarnation=ThreadIncarnation(name='owner', created_at=10.0), generation=8), 'name': 'owner', 'tags': frozenset(), 'worktree': '/private-worktree', ...}
+
+    def _replace(self, /, **changes):
+        # We're going to mutate 'changes', but that's okay because it's a
+        # new dict, even if called with 'replace(self, **my_changes)'.
+
+        # It's an error to have init=False fields in 'changes'.
+        # If a field is not in 'changes', read its value from the provided 'self'.
+
+        for f in getattr(self, _FIELDS).values():
+            # Only consider normal fields or InitVars.
+            if f._field_type is _FIELD_CLASSVAR:
+                continue
+
+            if not f.init:
+                # Error if this field is specified in changes.
+                if f.name in changes:
+                    raise TypeError(f'field {f.name} is declared with '
+                                    f'init=False, it cannot be specified with '
+                                    f'replace()')
+                continue
+
+            if f.name not in changes:
+                if f._field_type is _FIELD_INITVAR and f.default is MISSING:
+                    raise TypeError(f"InitVar {f.name!r} "
+                                    f'must be specified with replace()')
+                changes[f.name] = getattr(self, f.name)
+
+        # Create the new object, which calls __init__() and
+        # __post_init__() (if defined), using all of the init fields we've
+        # added and/or left in 'changes'.  If there are values supplied in
+        # changes that aren't fields, this will correctly raise a
+        # TypeError.
+>       return self.__class__(**changes)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'identity'
+
+/usr/lib/python3.14/dataclasses.py:1812: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_goal_failure_observation.py::test_replaced_stopped_or_active_owner_has_no_projection[mutation1]
+FAILED tests/test_goal_failure_observation.py::test_replaced_stopped_or_active_owner_has_no_projection[mutation6]
+2 failed, 208 passed, 1 skipped in 18.79s

@@ -1,0 +1,170 @@
+{
+  "scope": "installed private bus/DM/IRC lifecycle continuous journey; controlled localhost provider; no original 41MB/performance/paid-provider claim",
+  "launch": {
+    "command": [
+      "timeout",
+      "--signal=INT",
+      "--kill-after=20s",
+      "240s",
+      "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python",
+      "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/source-publication-driver/tests/canonical_wire_conversation_installed_pilot.py"
+    ],
+    "fixture": "/home/ts/wt/g460b/u06",
+    "prefix": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+    "pins": {
+      "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+      "batrachian-toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+      "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+    },
+    "native_manifest": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+    "driver_sha256": "8c1a6d48279463d767d5aaca2c1d0f34b5bab585d8714e33cdbb0842195bb784",
+    "activation_sha256": "48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83",
+    "ready_receipt_sha256": "9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388",
+    "started_at": 1790813642.7978466,
+    "controlled_local_only": true,
+    "reused_original_inputs": false,
+    "failure_resource_witness": true
+  },
+  "terminal": {
+    "exit_code": 0,
+    "elapsed_seconds": 129.4672451019287,
+    "ended_at": 1790813772.2650933,
+    "fixture": "/home/ts/wt/g460b/u06",
+    "activation_unchanged": true
+  },
+  "scripted_journey_pass": true,
+  "whole_release_ready": false,
+  "whole_release_dependency": "Einstein/Kepler joint native/physical firstfork strict duplicate frame gate; Heisenberg publication owner",
+  "original": {
+    "seq": 1,
+    "message_id": "bb19d4ca3f69"
+  },
+  "reply": {
+    "seq": 7,
+    "message_id": "baad0faafc29"
+  },
+  "original_execution": {
+    "kind": "executions",
+    "execution_id": "wirev165b3ed80a9455f1fafe47f35b6503995dd881fa18c15ca3bd6c03ca5d781cd8e",
+    "origin": "wire",
+    "lifecycle": {
+      "kind": "completed",
+      "ordinal": 1
+    },
+    "owner_thread": "beta",
+    "owner_lookup": "e09e82193051eca604b4251c86812f79",
+    "revision": 4,
+    "max_attempts": 1,
+    "reason_code": null,
+    "created_at_ms": 1790813664077,
+    "updated_at_ms": 1790813668857,
+    "exact_target": "#team"
+  },
+  "original_attempt": {
+    "kind": "attempts",
+    "execution_id": "wirev165b3ed80a9455f1fafe47f35b6503995dd881fa18c15ca3bd6c03ca5d781cd8e",
+    "attempt_ordinal": 1,
+    "owner_lookup": "e09e82193051eca604b4251c86812f79",
+    "owner_thread": "beta",
+    "owner_generation": 1,
+    "owner_token_digest": "fc087b84abae92c2f3df8d0ea0805470603e280345f1c5efd004e23847d9cf8c",
+    "lifecycle": {
+      "kind": "succeeded"
+    },
+    "revision": 6,
+    "last_progress_at_ms": 1790813668679,
+    "reason_code": null,
+    "created_at_ms": 1790813664147,
+    "updated_at_ms": 1790813668856
+  },
+  "original_native_reply": {
+    "assignment_id": "cohort-v1:30e5cbff12add1c323c72c4e94a15dffb4b4b067b2a19b1d09ce10b7580df4ea",
+    "recipient_lookup": "e09e82193051eca604b4251c86812f79",
+    "native_input_id": "5a5fe9a42e2e81e2cb51da875cc5bd9c",
+    "execution_id": "wirev165b3ed80a9455f1fafe47f35b6503995dd881fa18c15ca3bd6c03ca5d781cd8e",
+    "native_entry_id": "f9d9f863",
+    "native_session_file": "/home/ts/wt/g460b/u06/private-root/wire/native-sessions/e09e82193051eca604b4251c86812f79/2026-10-01T00-14-25-840Z_01a0f4cf-fa2f-75b0-82aa-5960d4c97a10.jsonl"
+  },
+  "original_target_handling": "Responded",
+  "same_open_samples": 31,
+  "all_original_reply_counts_once": true,
+  "global_idle_after_samples": {
+    "name": "beta",
+    "tags": [
+      "team"
+    ],
+    "worktree": "/home/ts/wt/g460b/u06/application/project",
+    "parent": null,
+    "task": null,
+    "process_identity": {
+      "pid": 128706,
+      "start_time": 28928849
+    },
+    "session_file": null,
+    "model": "selected-offline/fixture",
+    "thinking_level": "off",
+    "goal": null,
+    "created_at": 1790813644.7612076,
+    "previous_worktrees": [],
+    "auto_title_pending": false,
+    "title": null,
+    "role": "agent",
+    "active_turn": null,
+    "channel_scope_generation": 0,
+    "turn_generation": 6,
+    "last_finished_turn_id": "265b828a780e9e6ae3fc1c7cc1c2f10b"
+  },
+  "physical_returns": [
+    {
+      "index": 0,
+      "thread": "beta",
+      "token": "CONTROLLED_RETURN_0",
+      "canonical_assistant_count": 1,
+      "canonical_user_native_id": "8f693fb2d0ef37c0dbf1aafed0494dd2",
+      "original_native_assistant_entry_ids": [
+        "e9186579"
+      ],
+      "original_svg_exact_answer_node_count": 1,
+      "reply_seconds": 9.24267724197125
+    },
+    {
+      "index": 1,
+      "thread": "alpha",
+      "token": "CONTROLLED_RETURN_1",
+      "canonical_assistant_count": 1,
+      "canonical_user_native_id": "dc1f08b70831a7f67a703c07665f0ae3",
+      "original_native_assistant_entry_ids": [
+        "ccaa53de"
+      ],
+      "original_svg_exact_answer_node_count": 1,
+      "reply_seconds": 12.919323696987703
+    },
+    {
+      "index": 2,
+      "thread": "beta",
+      "token": "CONTROLLED_RETURN_2",
+      "canonical_assistant_count": 1,
+      "canonical_user_native_id": "75ab734fe00dc96dab5b28bd89caf408",
+      "original_native_assistant_entry_ids": [
+        "d95f6861"
+      ],
+      "original_svg_exact_answer_node_count": 1,
+      "reply_seconds": 10.61042283399729
+    }
+  ],
+  "cold_user_native_id": "a700f11d5a44e35a127154bcc9b5171d",
+  "cold_original_user_once_and_compositor_text_in_viewport": true,
+  "original_source_read_unchanged": true,
+  "provider_requests": 12,
+  "paid_provider_requests": 0,
+  "public_mutations": 0,
+  "replayed_original_inputs": 0,
+  "cleanup_process_references": [],
+  "visual_disposition": "Text/coordinates and original compositor assertions support publication/geometry; black-on-black SVG/PNG does not establish physically readable colored UI. Physical color visibility unproven. Kepler owns recorder environment normalization; no altered artifact passed off as original.",
+  "remaining_limits": [
+    "No physically readable colored frame claim from black-on-black exports.",
+    "No source/resource reconstruction of original failed u05 missing/duplicate/offscreen count; preserved UNKNOWN.",
+    "B/A/B reply_seconds include native generation and are not render-only tab latency.",
+    "Independent joint-native strict physical firstchild duplicate failure remains owned; no global Ready."
+  ]
+}

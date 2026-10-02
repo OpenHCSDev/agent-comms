@@ -1,0 +1,86 @@
+........................................................................ [ 49%]
+..........................FFFFF
+=================================== FAILURES ===================================
+__ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[None] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fca91e83e30>, PosixPath('/home/ts/wt/.r3doc/journal-ty...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = None
+
+    @pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
+    
+        journal, session, inputs, source = continued
+>       inputs._write({"acp:new": inputs.read().rows.get("acp:new")})
+        ^^^^^^^^^^^^^
+E       AttributeError: 'InputDispositions' object has no attribute '_write'
+
+tests/test_continued_private_session.py:117: AttributeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[context] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fca91e81ae0>, PosixPath('/home/ts/wt/.r3doc/journal-ty...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = 'context'
+
+    @pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
+    
+        journal, session, inputs, source = continued
+>       inputs._write({"acp:new": inputs.read().rows.get("acp:new")})
+        ^^^^^^^^^^^^^
+E       AttributeError: 'InputDispositions' object has no attribute '_write'
+
+tests/test_continued_private_session.py:117: AttributeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[unsettled] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fca91f040f0>, PosixPath('/home/ts/wt/.r3doc/journal-ty...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = 'unsettled'
+
+    @pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
+    
+        journal, session, inputs, source = continued
+>       inputs._write({"acp:new": inputs.read().rows.get("acp:new")})
+        ^^^^^^^^^^^^^
+E       AttributeError: 'InputDispositions' object has no attribute '_write'
+
+tests/test_continued_private_session.py:117: AttributeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fca91f04eb0>, PosixPath('/home/ts/wt/.r3doc/journal-ty...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = 'foreign'
+
+    @pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
+    
+        journal, session, inputs, source = continued
+>       inputs._write({"acp:new": inputs.read().rows.get("acp:new")})
+        ^^^^^^^^^^^^^
+E       AttributeError: 'InputDispositions' object has no attribute '_write'
+
+tests/test_continued_private_session.py:117: AttributeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[no-marker] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fca91f051d0>, PosixPath('/home/ts/wt/.r3doc/journal-ty...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = 'no-marker'
+
+    @pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
+    
+        journal, session, inputs, source = continued
+>       inputs._write({"acp:new": inputs.read().rows.get("acp:new")})
+        ^^^^^^^^^^^^^
+E       AttributeError: 'InputDispositions' object has no attribute '_write'
+
+tests/test_continued_private_session.py:117: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[None]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[context]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[unsettled]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[no-marker]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+5 failed, 98 passed in 7.73s

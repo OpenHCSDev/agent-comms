@@ -1,0 +1,52 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/__main__.py", line 4, in <module>
+    raise SystemExit(process_main())
+                     ^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/cli.py", line 4270, in process_main
+    return main(hard_exit_on_deadline=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/cli.py", line 4259, in main
+    return _main_without_deadline(invocation)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/cli.py", line 3928, in _main_without_deadline
+    compact_result = analyze_compact_roots_with_cache(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/analysis.py", line 2291, in analyze_compact_roots_with_cache
+    build_results = worker_plan.map(
+                    ^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/analysis.py", line 288, in map
+    return [function(item) for item in items]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/analysis.py", line 288, in <listcomp>
+    return [function(item) for item in items]
+            ^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/analysis.py", line 1237, in build_compact_projection_shard
+    modules = (source.parsed_module(),)
+               ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/analysis.py", line 1013, in parsed_module
+    module = parser.parsed_source_path(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/ast_tools.py", line 2686, in parsed_source_path
+    return _parse_source_module(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/ast_tools.py", line 678, in _parse_source_module
+    module = ast.parse(source, filename=str(path))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/ast.py", line 50, in parse
+    return compile(source, filename, mode, flags,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/toad/widgets/conversation.py", line 977
+    def get_cursor_block[BlockType](
+                        ^
+SyntaxError: expected '('

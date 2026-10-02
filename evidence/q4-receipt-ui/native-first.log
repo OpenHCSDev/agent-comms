@@ -1,0 +1,80 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________ test_actual_saved_native_ui_receipt_and_controller_lifetime __________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f71601e2a50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7160055a70>
+
+    async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_backend, monkeypatch):
+        fixture = native_backend
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+        owner = canonical_agent(
+            Comms(fixture.root),
+            agent_bin="pi",
+            agent_args=[
+                "--provider",
+                "response-local",
+                "--model",
+                "fixture",
+                "--thinking",
+                "off",
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+            ],
+            runtime_enabled=True,
+            auto_wake=False,
+        )
+        updates, permissions = [], []
+    
+        class Attachment:
+            async def session_update(self, **kwargs):
+                updates.extend(decode_updates(kwargs["update"].field_meta))
+    
+            async def request_permission(self, **kwargs):
+                permissions.append(kwargs)
+                options = kwargs["options"]
+                choice = (
+                    "choice-1" if any(o["option_id"] == "choice-1" for o in options) else "allow-once"
+                )
+                return {"outcome": {"outcome": "selected", "optionId": choice}}
+    
+        proxy = None
+        try:
+            await owner.new_session(cwd=str(fixture.project), mcp_servers=[])
+            attached = SimpleNamespace(
+                _comms=owner._comms,
+                sessions=SimpleNamespace(
+                    transcript=SimpleNamespace(snapshots=False, diffs=False),
+                    client=Attachment(),
+                ),
+            )
+            proxy = RuntimeProxy(attached, "project", owner._runtime.path)
+>           await proxy.subscribe()
+
+tests/test_extension_ui_native.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/runtime.py:321: in subscribe
+    reader, metadata = await self._subscribe_once()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/runtime.py:352: in _subscribe_once
+    await self.update(data)
+src/agent_comms/runtime.py:360: in update
+    await self.agent.sessions.client.session_update(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <test_extension_ui_native.test_actual_saved_native_ui_receipt_and_controller_lifetime.<locals>.Attachment object at 0x7f715ff7d550>
+kwargs = {'session_id': 'project', 'update': {'content': {'text': '', 'type': 'text'}, '_meta': {'agentComms': {'updates': [{'k...}, {'kind': 'cursor_advanced', 'envelope': {...}, 'selected_status': None}]}}, 'sessionUpdate': 'agent_message_chunk'}}
+
+    async def session_update(self, **kwargs):
+>       updates.extend(decode_updates(kwargs["update"].field_meta))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'field_meta'
+
+tests/test_extension_ui_native.py:43: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_extension_ui_native.py::test_actual_saved_native_ui_receipt_and_controller_lifetime
+1 failed in 0.82s

@@ -1,0 +1,124 @@
+F
+=================================== FAILURES ===================================
+_________ test_large_physical_native_fork_compacts_before_first_input __________
+
+self = <agent_comms.session_lifecycle.AttachedSessionLifecycle object at 0x7f20636ecc20>
+thread = Thread(name='physical-child', tags=frozenset(), worktree='/tmp/pytest-of-ts/pytest-514/test_large_physical_native_for0...ctive_turn=None, last_goal_report_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+session_id = 'physical-child'
+
+    async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
+        proxy = self.effects._create_runtime_proxy(thread, session_id)
+        try:
+>           metadata = await proxy.subscribe()
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:198: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/runtime.py:321: in subscribe
+    reader, metadata = await self._subscribe_once()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/runtime.py:326: in _subscribe_once
+    reader, writer = await self._connect_current()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/runtime.py:302: in _connect_current
+    reader, writer = await asyncio.open_unix_connection(path, limit=8 * 1024 * 1024)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py:97: in open_unix_connection
+    transport, _ = await loop.create_unix_connection(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py:252: in create_unix_connection
+    await self.sock_connect(sock, path)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py:645: in sock_connect
+    return await fut
+           ^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+fut = None, sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>
+address = '/tmp/pytest-of-ts/pytest-514/test_large_physical_native_for0/wire/runtime/3511002.sock'
+
+    def _sock_connect(self, fut, sock, address):
+        fd = sock.fileno()
+        try:
+>           sock.connect(address)
+E           FileNotFoundError: [Errno 2] No such file or directory
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py:653: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f206397ee40>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f20638395b0>
+
+    async def test_large_physical_native_fork_compacts_before_first_input(native_backend, monkeypatch):
+        native = native_backend
+        # The actual native process writes this parent, including user/assistant IDs.
+        # This is bounded loopback context, not a hand-written journal/history fixture.
+        parent_text = "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * 12000
+        result = await native.run(parent_text)
+        assert result[-1].ok, result[-1]
+        assert native.provider.posts == 1
+        original = native.session.read_bytes()
+        await native.persistent.close()
+        config_path = native.config / "models.json"
+        config = json.loads(config_path.read_text())
+        config["providers"]["response-local"]["models"][0]["contextWindow"] = 32768
+        config_path.write_text(json.dumps(config))
+        (native.config / "settings.json").write_text(json.dumps({
+            "compaction": {"enabled": True, "reserveTokens": 2048, "keepRecentTokens": 1024},
+            "retry": {"enabled": False, "maxRetries": 0},
+        }))
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--offline --no-extensions --no-skills --no-context-files")
+        monkeypatch.setenv("PATH", str(Path(os.sys.executable).parent) + os.pathsep + os.environ["PATH"])
+        comms = Comms(native.root)
+        comms.threads.register(Thread("physical-parent", frozenset(), str(native.project),
+                                     session_file=str(native.session), model="response-local/fixture",
+                                     thinking_level="off"))
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
+        comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+        attachment = CommsClient(comms, runtime_enabled=True, private_nk_native_package=package,
+                                 private_nk_wire_root_id=root_id)
+        facts = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                facts.extend(decode_updates(kwargs["update"].get("_meta")))
+    
+        attachment.on_connect(Client())
+        child = None
+        try:
+            child = await asyncio.to_thread(comms.threads.fork,
+                ForkSpec(name="physical-child", parent="physical-parent", task="Continue retained architecture"))
+>           await attachment.load_session(cwd=str(native.project), session_id=child.name)
+
+tests/test_native_fork_first_input.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:202: in load_session
+    return await self.sessions.load_session(cwd, session_id, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:313: in load_session
+    return await self.attach_owner(owner, session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.session_lifecycle.AttachedSessionLifecycle object at 0x7f20636ecc20>
+thread = Thread(name='physical-child', tags=frozenset(), worktree='/tmp/pytest-of-ts/pytest-514/test_large_physical_native_for0...ctive_turn=None, last_goal_report_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+session_id = 'physical-child'
+
+    async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
+        proxy = self.effects._create_runtime_proxy(thread, session_id)
+        try:
+            metadata = await proxy.subscribe()
+        except (OSError, RuntimeError) as error:
+            await proxy.close()
+>           raise RequestError.invalid_params(
+                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
+            ) from error
+E           acp.exceptions.RequestError: Invalid params
+
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:201: RequestError
+=========================== short test summary info ============================
+FAILED tests/test_native_fork_first_input.py::test_large_physical_native_fork_compacts_before_first_input
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 9.15s

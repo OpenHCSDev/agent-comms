@@ -1,0 +1,39 @@
+{
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-r1-pi-payloads-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-r1-pi-payloads-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-r1-pi-payloads-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-r1-pi-payloads-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-r1-pi-payloads-20260928/bin/agent-comms-nk-foreground"
+  },
+  "owners": {
+    "agent-comms-ux": {
+      "status": "running",
+      "alive": true,
+      "local": true,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "high",
+      "active_turn": false
+    },
+    "pr95-selected-pi-summary-owner": {
+      "status": "running",
+      "alive": true,
+      "local": true,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "medium",
+      "active_turn": false
+    }
+  },
+  "compaction_overrides": {
+    "agent-comms-ux": {},
+    "pr95-selected-pi-summary-owner": {},
+    "global": {}
+  },
+  "checkpoint": {
+    "version": 1,
+    "through_seq": 60,
+    "latest_seq": 60
+  },
+  "roster_count": 103
+}

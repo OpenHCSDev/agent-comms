@@ -1,0 +1,266 @@
+--- a/src/agent_comms/comms.py
++++ b/src/agent_comms/comms.py
+@@ -8,7 +8,7 @@
+ from .agent_activity import AgentActivity
+ from .channel_management import ChannelManagement
+ from .collaboration_ledger import CollaborationLedger
+-from .declarations import MessageBus
++from .message_bus import MessageBus
+ from .goal_management import Goals
+ from .history_views import HistoryViews
+ from .messaging import Messaging
+--- a/src/agent_comms/messaging.py
++++ b/src/agent_comms/messaging.py
+@@ -14,17 +14,13 @@
+ 
+ if TYPE_CHECKING:
+     pass
+-from .declarations import (
+-    BuiltinChannel,
+-    Message,
+-    MessageBus,
+-    MessageType,
+-    RelationViolationError,
+-    Thread,
+-    ThreadRole,
+-    UnregisteredThreadError,
+-    _store_lock,
+-)
++from .channel_targets import BuiltinChannel
++from .messages import Message, MessageType
++from .message_bus import MessageBus
++from .errors import RelationViolationError, UnregisteredThreadError
++from .threads import Thread
++from .thread_identity import ThreadRole
++from .store_files import _store_lock
+ 
+ _LOG = logging.getLogger(__name__)
+ 
+@@ -175,7 +171,7 @@
+ 
+     def send_user_message(self, target: str, body: str, *, worktree: str) -> Message:
+         """Cooperative local UI send, not cryptographic same-UID authentication."""
+-        from .declarations import HumanOrigin
++        from .bus_publication import HumanOrigin
+ 
+         # The PR116 legacy retirement fence precedes identity creation and
+         # remains held through the actual bus publication on an old root.
+--- a/src/agent_comms/agent_activity.py
++++ b/src/agent_comms/agent_activity.py
+@@ -11,17 +11,11 @@
+ 
+ if TYPE_CHECKING:
+     pass
+-from .declarations import (
+-    Activity,
+-    ActivityLog,
+-    ActivityState,
+-    AgentRuntimeInfo,
+-    FinishedTurnFence,
+-    RuntimeInfoStore,
+-    TurnLeaseFence,
+-    TurnRouting,
+-    _store_lock,
+-)
++from .activity import Activity, ActivityLog, ActivityState
++from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
++from .turn_lease import FinishedTurnFence, TurnLeaseFence
++from .routing import TurnRouting
++from .store_files import _store_lock
+ 
+ _LOG = logging.getLogger(__name__)
+ 
+--- a/src/agent_comms/channel_management.py
++++ b/src/agent_comms/channel_management.py
+@@ -17,20 +17,13 @@
+ 
+ if TYPE_CHECKING:
+     pass
+-from .declarations import (
+-    BuiltinChannel,
+-    Channel,
+-    ChannelSort,
+-    MembershipChange,
+-    Message,
+-    MessageBus,
+-    MessageType,
+-    SavedView,
+-    Tag,
+-    Thread,
+-    ThreadSort,
+-    _store_lock,
+-)
++from .channel_targets import BuiltinChannel, Tag
++from .channels import Channel, SavedView
++from .display_order import ChannelSort, ThreadSort
++from .messages import MembershipChange, Message, MessageType
++from .message_bus import MessageBus
++from .threads import Thread
++from .store_files import _store_lock
+ 
+ _LOG = logging.getLogger(__name__)
+ 
+--- a/src/agent_comms/goal_management.py
++++ b/src/agent_comms/goal_management.py
+@@ -21,16 +21,13 @@
+ if TYPE_CHECKING:
+     from .agent_events import GoalChanged
+     from .goal_attempts import GoalAttemptStore
+-from .declarations import (
+-    FinishedTurnFence,
+-    Goal,
+-    GoalExecution,
+-    GoalWaitTarget,
+-    Message,
+-    MessageBus,
+-    Thread,
+-    _store_lock,
+-)
++from .turn_lease import FinishedTurnFence
++from .goals import Goal
++from .goal_presentation import GoalExecution, GoalWaitTarget
++from .messages import Message
++from .message_bus import MessageBus
++from .threads import Thread
++from .store_files import _store_lock
+ from .owner_lifecycle import OwnerLifecycle
+ 
+ _LOG = logging.getLogger(__name__)
+--- a/src/agent_comms/owner_lifecycle.py
++++ b/src/agent_comms/owner_lifecycle.py
+@@ -24,14 +24,11 @@
+ 
+ if TYPE_CHECKING:
+     pass
+-from .declarations import (
+-    MessageBus,
+-    RegistrySnapshot,
+-    RelationViolationError,
+-    Thread,
+-    _atomic_write_text,
+-    _store_lock,
+-)
++from .message_bus import MessageBus
++from .registry_document import RegistrySnapshot
++from .errors import RelationViolationError
++from .threads import Thread
++from .store_files import _atomic_write_text, _store_lock
+ from .maintenance_barrier import MaintenanceBarrier
+ 
+ _LOG = logging.getLogger(__name__)
+--- a/src/agent_comms/thread_management.py
++++ b/src/agent_comms/thread_management.py
+@@ -21,17 +21,12 @@
+ from .agent_activity import AgentActivity
+ from .channel_management import ChannelManagement
+ from .collaboration_ledger import CollaborationLedger
+-from .declarations import (
+-    PRIVATE_OWNER_RENAME_PENDING,
+-    MessageBus,
+-    RegistrySnapshot,
+-    RelationViolationError,
+-    Thread,
+-    _atomic_write_text,
+-    _require_no_private_owner_rename,
+-    _store_lock,
+-    current_thread,
+-)
++from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
++from .message_bus import MessageBus
++from .registry_document import RegistrySnapshot
++from .errors import RelationViolationError
++from .threads import Thread, current_thread
++from .store_files import _atomic_write_text, _store_lock
+ from .importing import ImportFormat, ImportLimits, ImportReceipt
+ from .owner_lifecycle import OwnerLifecycle
+ from .transcripts import _reverse_lines
+--- a/src/agent_comms/transcripts.py
++++ b/src/agent_comms/transcripts.py
+@@ -14,15 +14,12 @@
+ 
+ if TYPE_CHECKING:
+     pass
+-from .declarations import (
+-    Message,
+-    MessageBus,
+-    MessageRoute,
+-    RelationViolationError,
+-    Thread,
+-    TurnRouting,
+-    is_channel_target,
+-)
++from .messages import Message
++from .message_bus import MessageBus
++from .routing import MessageRoute, TurnRouting
++from .errors import RelationViolationError
++from .threads import Thread
++from .channel_targets import is_channel_target
+ from .messaging import Messaging
+ from .tool_results import ToolDiff
+ from .transcript_routes import InputDisplay, TranscriptRoutes
+@@ -545,7 +542,7 @@
+         bindings. A prompt prefix or a matching body alone is not evidence.
+         No transcript, input disposition, delivery/read cursor, or model is changed.
+         """
+-        from .declarations import ScheduledTurn
++        from .routing import ScheduledTurn
+         from .input_disposition import InputDispositions
+ 
+         rows = InputDispositions(self.root).bound_bus_inputs()
+--- a/src/agent_comms/history_views.py
++++ b/src/agent_comms/history_views.py
+@@ -20,28 +20,19 @@
+ from .agent_activity import AgentActivity
+ from .channel_management import ChannelManagement
+ from .collaboration_ledger import CollaborationLedger
+-from .declarations import (
+-    Activity,
+-    ActivityState,
+-    BuiltinChannel,
+-    Channel,
+-    ChannelActivity,
+-    ChannelDisplayScope,
+-    ChannelSort,
+-    ChannelView,
+-    CoordinationSnapshot,
+-    DMDisplayBasis,
+-    Message,
+-    MessageBus,
+-    MessagePage,
+-    RegistrySnapshot,
+-    ThreadView,
+-    WireRevision,
+-    _store_lock,
+-    current_thread,
+-    file_revision,
+-    is_channel_target,
+-)
++from .activity import Activity, ActivityState
++from .channel_targets import BuiltinChannel, is_channel_target
++from .channels import Channel
++from .bus_activity_index import ChannelActivity
++from .read_basis import ChannelDisplayScope, DMDisplayBasis
++from .display_order import ChannelSort
++from .presentation import ChannelView, CoordinationSnapshot, ThreadView, WireRevision
++from .messages import Message
++from .message_bus import MessageBus
++from .message_page import MessagePage
++from .registry_document import RegistrySnapshot
++from .store_files import _store_lock, file_revision
++from .threads import current_thread
+ from .exporting import (
+     WireExportBoundary,
+     WireExportFormat,
+--- a/src/agent_comms/collaboration_ledger.py
++++ b/src/agent_comms/collaboration_ledger.py
+@@ -3,7 +3,9 @@
+ from collections.abc import Mapping
+ from pathlib import Path
+ 
+-from .declarations import SharedLedger, UnregisteredThreadError, _store_lock
++from .shared_ledger import SharedLedger
++from .errors import UnregisteredThreadError
++from .store_files import _store_lock
+ from .registration import Registration
+ 
+ 

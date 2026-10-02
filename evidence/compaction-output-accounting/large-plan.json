@@ -1,0 +1,25 @@
+{
+  "raw_saved_bytes": 42817440,
+  "context_window": 272000,
+  "estimated_context_tokens": 399463,
+  "previous_compaction": true,
+  "is_split_turn": true,
+  "first_kept_entry_id": "db931bd7",
+  "selected_sources": [
+    {
+      "phase": "history",
+      "bytes": 538709,
+      "planned_map_segments": 5
+    },
+    {
+      "phase": "current_turn",
+      "bytes": 164741,
+      "planned_map_segments": 2
+    }
+  ],
+  "input_bytes": 191712,
+  "chunk_bytes": 134198,
+  "workers": 4,
+  "planned_summary_output_tokens": 4096,
+  "offline_plan_seconds": 0.7204943880000001
+}

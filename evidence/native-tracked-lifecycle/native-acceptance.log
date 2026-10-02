@@ -1,0 +1,5 @@
+{"outcome": "complete", "elapsed_seconds": 98.0063877220091, "provider_posts": 2, "saved_inputs": 1, "native_children_retired": true, "no_replay": true}
+.{"outcome": "cancel", "elapsed_seconds": 2.507861218007747, "provider_posts": 1, "saved_inputs": 1, "native_children_retired": true, "no_replay": true}
+.{"outcome": "exit", "elapsed_seconds": 2.651508590002777, "provider_posts": 1, "saved_inputs": 1, "native_children_retired": true, "no_replay": true}
+.
+3 passed in 106.04s (0:01:46)

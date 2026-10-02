@@ -1,0 +1,12 @@
+{
+  "root": "/home/ts/.agent-comms",
+  "timestamp": "2026-09-28T02:26:50.261513+00:00",
+  "schema": 2,
+  "relationships": 17,
+  "orders": 2,
+  "all_original_relationships_preserved": true,
+  "historical_records": 1,
+  "passive_rows": 85,
+  "passive_bytes_unchanged": true,
+  "rollback_file": "/home/ts/.local/state/agent-comms/before-relationship-migration-20260928/relationships.json"
+}

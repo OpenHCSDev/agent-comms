@@ -1,0 +1,58 @@
+...F......................................                               [100%]
+=================================== FAILURES ===================================
+_________ test_new_thread_field_has_no_second_registry_decoder_roster __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/component-closure/test_new_thread_field_has_no_s0')
+
+    def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path):
+        @dataclass(frozen=True, slots=True)
+        class ExtendedThread(Thread):
+            external_reference: str = "default"
+
+        raw = owner(tmp_path).to_wire() | {"external_reference": "declared here"}
+>       loaded = ExtendedThread.from_registry("owner", raw, tmp_path)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registration_components.py:78:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/declarations.py:1582: in from_registry
+    else FieldCodec.decode(hints[declaration.name], data[declaration.name])
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:105: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>, target = tuple[str, ...]
+data = ()
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError):
+                    pass
+            raise ValueError(f"Value does not match {target}")
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+>               raise ValueError("Expected a JSON array.")
+E               ValueError: Expected a JSON array.
+
+src/agent_comms/field_codec.py:160: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_registration_components.py::test_new_thread_field_has_no_second_registry_decoder_roster
+1 failed, 41 passed in 20.81s

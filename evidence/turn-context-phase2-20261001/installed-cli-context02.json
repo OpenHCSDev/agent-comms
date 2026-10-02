@@ -1,0 +1,43 @@
+{
+  "kind": "retained",
+  "text": "<exact-task-source>\n{\"facts\": [{\"kind\": \"user_source\", \"source\": {\"from\": \"user\", \"id\": \"86c56aced2a5\", \"sender_role\": \"user\", \"seq\": 1, \"text\": \"Never replay UNKNOWN.\\nPreserve exact \u03bb /source/owned bytes.\", \"to\": \"recipient\", \"ts\": 1790867564.8069847, \"type\": \"info\"}}, {\"kind\": \"historical_human_constraint\", \"source\": {\"from\": \"user\", \"id\": \"556cbc1bb2d1\", \"notice\": true, \"sender_role\": \"user\", \"seq\": 2, \"task\": {\"kind\": \"human_constraint_pin\", \"recipient\": {\"created_at\": 1790867564.7766702, \"name\": \"recipient\"}, \"scope\": {\"kind\": \"project\", \"project\": \"/home/ts/wt/comms-turn-context-phase2-20261001/.artifacts/installed-cli-workflow02/test_original_human_pin_revisi0/comms\"}, \"source_user\": {\"created_at\": 1790867564.8004258, \"name\": \"user\"}, \"subject\": {\"message_id\": \"86c56aced2a5\", \"seq\": 1}}, \"text\": \"Pinned constraint from original message 1:86c56aced2a5\", \"to\": \"recipient\", \"ts\": 1790867564.858435, \"type\": \"info\"}}, {\"kind\": \"historical_user_correction\", \"source\": {\"from\": \"user\", \"id\": \"9771e8fa835f\", \"sender_role\": \"user\", \"seq\": 3, \"task\": {\"change\": {\"kind\": \"correction\", \"original\": {\"message_id\": \"556cbc1bb2d1\", \"seq\": 2}}, \"kind\": \"user_supersession\"}, \"text\": \"Keep only the human's corrected /source/new instruction.\", \"to\": \"recipient\", \"ts\": 1790867565.000514, \"type\": \"info\"}}, {\"kind\": \"historical_user_correction\", \"source\": {\"from\": \"user\", \"id\": \"c1f82ce67691\", \"sender_role\": \"user\", \"seq\": 4, \"task\": {\"change\": {\"kind\": \"correction\", \"original\": {\"message_id\": \"556cbc1bb2d1\", \"seq\": 2}}, \"kind\": \"user_task_drop\"}, \"text\": \"Dropped constraint 2:556cbc1bb2d1\", \"to\": \"recipient\", \"ts\": 1790867565.0741844, \"type\": \"info\"}}]}\n</exact-task-source>",
+  "provenance": [
+    {
+      "kind": "owner",
+      "owner": {
+        "name": "recipient",
+        "created_at": 1790867564.7766702
+      },
+      "revision": "6b956372c83534fe94769b0da1214bae7bec0c90c3e99d39c68fab10d61085a4"
+    },
+    {
+      "kind": "wire",
+      "source": {
+        "seq": 1,
+        "message_id": "86c56aced2a5"
+      }
+    },
+    {
+      "kind": "wire",
+      "source": {
+        "seq": 2,
+        "message_id": "556cbc1bb2d1"
+      }
+    },
+    {
+      "kind": "wire",
+      "source": {
+        "seq": 3,
+        "message_id": "9771e8fa835f"
+      }
+    },
+    {
+      "kind": "wire",
+      "source": {
+        "seq": 4,
+        "message_id": "c1f82ce67691"
+      }
+    }
+  ],
+  "input_supplied": false
+}

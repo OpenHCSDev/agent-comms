@@ -1,0 +1,885 @@
+{
+  "scope": "added production None lines, including moved existing semantics and merged peer declarations; unit return annotations are not absence state",
+  "entries": [
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 191,
+      "added_text": "        if obligation is not None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 311,
+      "added_text": "        if obligation is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_snapshot.py",
+      "line_at_commit": 248,
+      "added_text": "            attempt=self.attempt.lifecycle if self.attempt is not None else None,"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line_at_commit": 45,
+      "added_text": "    def require_selected_source(self, initial, owner) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line_at_commit": 67,
+      "added_text": "    def require_initial_decision(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line_at_commit": 83,
+      "added_text": "    def require_same_acceptance(self, candidate: WakeAssignment) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 123,
+      "added_text": "    def retry_authorized(self, replay: ReplayAssessments | None, obligation) -> bool:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 126,
+      "added_text": "        if replay is None or not replay.allows_retry:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 129,
+      "added_text": "            obligation is not None and obligation.lifecycle.retryable"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line_at_commit": 134,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line_at_commit": 274,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line_at_commit": 282,
+      "added_text": "        if self.admission is not None and type(self.admission) is not WakeAdmission:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/execution_states.py",
+      "line_at_commit": 59,
+      "added_text": "        return ordinal is not None and ordinal < maximum"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/execution_states.py",
+      "line_at_commit": 206,
+      "added_text": "        if self.ordinal is None or attempt is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_attempt.py",
+      "line_at_commit": 285,
+      "added_text": "            else None"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/thread_identity.py",
+      "line_at_commit": 26,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 163,
+      "added_text": "            return cls.build(mode, None, None)"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 167,
+      "added_text": "        if self.execution_id is not None or disposition not in self.successors():"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 124,
+      "added_text": "        if replay is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 131,
+      "added_text": "                or (obligation is not None and obligation.lifecycle.retryable)"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/thread_identity.py",
+      "line_at_commit": 34,
+      "added_text": "    def require_recorded(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 83,
+      "added_text": "    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 86,
+      "added_text": "    def require_successor(self, proposed: Assignment, current: Todo) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 108,
+      "added_text": "            assignment=None,"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 119,
+      "added_text": "                assignment=None,"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 143,
+      "added_text": "        current.require_assignment(None)"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 189,
+      "added_text": "        if current.assignment is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 193,
+      "added_text": "        return replace(current, state=cls, assignment=None, revision=current.revision + 1)"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 200,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 224,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 259,
+      "added_text": "    generation: str | None"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 290,
+      "added_text": "    last_transition: type[AssignmentChange] | None = field("
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 291,
+      "added_text": "        default=None,"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 311,
+      "added_text": "    def require_result(self, result: Todo) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 315,
+      "added_text": "    def require_revision(self, expected: int) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 319,
+      "added_text": "    def require_assignment(self, expected: Assignment | None) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 323,
+      "added_text": "    def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 324,
+      "added_text": "        if self.assignment is None or not self.assignment.owned_by(actor, generation):"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 327,
+      "added_text": "    def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 331,
+      "added_text": "    def require_same_creation(self, proposed: Todo) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 477,
+      "added_text": "            assignment=None,"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 98,
+      "added_text": "                if (retained := item.after_clear()) is not None"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 447,
+      "added_text": "        if input_id is None and original.notice_keys:"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 450,
+      "added_text": "        text = item.text if item else original.notice_text if input_id == row.public_id else None"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 458,
+      "added_text": "        self.queued_inputs.get(session_id, {}).pop(input_id or \"\", None)"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 505,
+      "added_text": "                    if (restored := item.restore_after_turn()) is not None"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 518,
+      "added_text": "        input_id: str | None = None,"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 99,
+      "added_text": "        input_id: str | None = None,"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 114,
+      "added_text": "            ACPInputIdText.new() if input_id is None else ACPInputIdText.decode(input_id),"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 206,
+      "added_text": "    def after_clear(self) -> QueuedInput | None:"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 207,
+      "added_text": "        return None"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 209,
+      "added_text": "    def restore_after_turn(self) -> QueuedInput | None:"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 210,
+      "added_text": "        return self.immediate() if self.echo else None"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 221,
+      "added_text": "    def restore_after_turn(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 222,
+      "added_text": "        return None  # Its original terminal disposition owns cancellation/UNKNOWN."
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_runner.py",
+      "line_at_commit": 208,
+      "added_text": "        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_runner.py",
+      "line_at_commit": 209,
+      "added_text": "        input_id: str | None = None,"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line_at_commit": 82,
+      "added_text": "            if source is None or source.owner_identity != attempt.owner_identity:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/cursor_owner.py",
+      "line_at_commit": 60,
+      "added_text": "    def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/cursor_owner.py",
+      "line_at_commit": 61,
+      "added_text": "        if row is None or row.owner_identity != self.participant_identity:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 25,
+      "added_text": "        if re.fullmatch(r\"[0-9a-f]{32}\", value) is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 54,
+      "added_text": "    execution_id: str | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 55,
+      "added_text": "    attempt_ordinal: int | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 98,
+      "added_text": "    input_id: str | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 99,
+      "added_text": "    assignment_id: str | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 100,
+      "added_text": "    stage: str | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 101,
+      "added_text": "    session_id: str | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 102,
+      "added_text": "    request_generation: int | None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 105,
+      "added_text": "    def reference(self) -> NativeInputReference | None:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 106,
+      "added_text": "        if self.input_id is None or self.session_id is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_input_record.py",
+      "line_at_commit": 107,
+      "added_text": "            return None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_pi.py",
+      "line_at_commit": 192,
+      "added_text": "        if _DIGEST.fullmatch(self.llm_context_digest) is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line_at_commit": 49,
+      "added_text": "        committed_input_id = FieldCodec.decode(str | None, committed_input_id)"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line_at_commit": 214,
+      "added_text": "        expected = proof.reference if proof is not None else None"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line_at_commit": 217,
+      "added_text": "        if proof is not None and proof.owner_identity != owner.participant_identity:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line_at_commit": 302,
+      "added_text": "        if row is None or row.identity != expected:"
+    },
+    {
+      "pr": 457,
+      "commit": "b39d705f",
+      "owner": "Arendt native builder",
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line_at_commit": 306,
+      "added_text": "        if row.session_id is not None or row.verdict is not None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_activity_index.py",
+      "line_at_commit": 38,
+      "added_text": "    def snapshot(self, revision: tuple[int, int, int, int] | None,"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_activity_index.py",
+      "line_at_commit": 39,
+      "added_text": "                 parse: Callable[[Mapping[str, Any]], ActivityFields]) -> ActivitySnapshot | None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_activity_index.py",
+      "line_at_commit": 45,
+      "added_text": "                return None"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_display_index.py",
+      "line_at_commit": 31,
+      "added_text": "    def observe(self, message: Message, metrics: DisplayMetrics) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_display_index.py",
+      "line_at_commit": 54,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_display_index.py",
+      "line_at_commit": 78,
+      "added_text": "    def snapshot(self, revision: tuple[int, int, int, int] | None,"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_display_index.py",
+      "line_at_commit": 80,
+      "added_text": "                 apply: Callable[[Mapping, DisplayMetrics], None]) -> DisplayCheckpoint | None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_display_index.py",
+      "line_at_commit": 96,
+      "added_text": "            if checkpoint is None or checkpoint.semantics != semantics:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_projection.py",
+      "line_at_commit": 44,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_projection.py",
+      "line_at_commit": 85,
+      "added_text": "            return None"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_projection.py",
+      "line_at_commit": 86,
+      "added_text": "        return record if record.accepts(revision, stream) else None"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_projection.py",
+      "line_at_commit": 88,
+      "added_text": "    def write(self, record: AppendCheckpoint, *, fsync_parent: bool = False) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_publication.py",
+      "line_at_commit": 40,
+      "added_text": "        if _HEX32.fullmatch(value) is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_source_page.py",
+      "line_at_commit": 17,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_source_page.py",
+      "line_at_commit": 40,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/bus_source_page.py",
+      "line_at_commit": 53,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/presentation.py",
+      "line_at_commit": 328,
+      "added_text": "        if bus_revision is not None and cached is not None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/presentation.py",
+      "line_at_commit": 337,
+      "added_text": "        if projected is None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/presentation.py",
+      "line_at_commit": 343,
+      "added_text": "            if bus_revision is not None and file_revision(self._path) == bus_revision:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line_at_commit": 69,
+      "added_text": "                       offset: int, sequence: int) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line_at_commit": 66,
+      "added_text": "    def require_source(self, stream, info: os.stat_result, root_id: str) -> None:"
+    },
+    {
+      "pr": 457,
+      "commit": "4b54a8d2",
+      "owner": "Sch bus/index builder",
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line_at_commit": 110,
+      "added_text": "    def __post_init__(self) -> None:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/goal_management.py",
+      "line_at_commit": 344,
+      "added_text": "            if goal is None or captured is None or goal.id != captured.id:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/goal_management.py",
+      "line_at_commit": 347,
+      "added_text": "            if wait is None or wait.owner_created_at != current.created_at:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/selected_participant.py",
+      "line_at_commit": 53,
+      "added_text": "    def consume_reply_wait(self) -> None:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 38,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool: ..."
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 61,
+      "added_text": "    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool: ..."
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 71,
+      "added_text": "    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 85,
+      "added_text": "    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 86,
+      "added_text": "        if wait is None:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 150,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 168,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 180,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:"
+    }
+  ]
+}

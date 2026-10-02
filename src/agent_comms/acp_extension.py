@@ -1,0 +1,593 @@
+"""Declared Comms facts carried by the external ACP metadata envelope.
+
+These records are shared with the paired Toad client. They describe observations;
+they never authorize a native send, restore a queue, or replay an UNKNOWN input.
+"""
+
+from __future__ import annotations
+
+import json
+from abc import abstractmethod
+from dataclasses import dataclass, field, replace
+from hashlib import sha256
+from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
+
+from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
+from .agent_events import CompactionEvent
+from .compaction_states import CompactionPublishedMetadata
+from .declared_family import DeclaredFamily
+from .input_attempt import ACPInputIdText, InputAttempt
+from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
+from .field_codec import FieldCodec
+from .goal_presentation import GoalExecution
+from .goals import Goal
+from .native_runtime_input import CurrentNativeCursor
+from .pi_payloads import McpLiveReceipt
+from .routing import MessageRoute
+from .thread_identity import AdmissionIdentity, ThreadIncarnation
+from .turn_lease import TurnState
+from .wire_metadata import WireRootIdText
+from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+
+if TYPE_CHECKING:
+    import asyncio
+    from typing import Any
+    from .input_drain import InputDrain
+    from .queued_input import QueuedInput
+    from .threads import Thread
+
+
+class AgentCommsUpdate(DeclaredFamily, affix="Update"):
+    """One declared fact; member identity supplies its wire discriminator."""
+
+    def for_session(self, session_id: str) -> AgentCommsUpdate:
+        return self
+
+
+@dataclass(frozen=True)
+class TurnChangedUpdate(AgentCommsUpdate):
+    state: TurnState
+
+
+@dataclass(frozen=True)
+class TextRouteUpdate(AgentCommsUpdate):
+    route: MessageRoute | None
+
+
+@dataclass(frozen=True)
+class TranscriptChangedUpdate(AgentCommsUpdate):
+    cursor: TranscriptCursor | None
+
+
+@dataclass(frozen=True)
+class UnknownDeliveryFailure(BackendDeliveryFailure):
+    wire_root_id: str
+    wire_seq: int
+    message_id: str
+
+    def present(self, receiver, body: str) -> None:
+        receiver.delivery_unknown(self, body)
+
+
+class AdmissionBlockedFailure(BackendDeliveryFailure):
+    def present(self, receiver, body: str) -> None:
+        receiver.delivery_blocked(self.description, body)
+
+
+@dataclass(frozen=True)
+class InputFailedUpdate(AgentCommsUpdate):
+    text: str
+    failure: DeliveryFailure
+
+
+@dataclass(frozen=True)
+class UpdateBatch:
+    updates: tuple[AgentCommsUpdate, ...]
+
+
+def encode_updates(*updates: AgentCommsUpdate) -> dict:
+    return {"agentComms": FieldCodec.encode(UpdateBatch(updates))}
+
+
+def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
+    """Decode facts once at ACP ingress, rejecting unknown kinds and fields."""
+    if metadata is None:
+        return ()
+    if not isinstance(metadata, dict):
+        raise ValueError("ACP metadata must be an object")
+    if "agentComms" not in metadata:
+        return ()
+    extension = metadata["agentComms"]
+    if not isinstance(extension, dict):
+        raise ValueError("Comms metadata must be an object")
+    return FieldCodec.decode(UpdateBatch, extension).updates
+
+
+class AttachmentScope:
+    """Logical ACP attachment and executor evidence have separate identities."""
+    session_id: str
+    admission: AdmissionIdentity
+    owner_pid: int
+
+    @property
+    @abstractmethod
+    def logical_key(self) -> tuple[str, ...]: ...
+
+    @property
+    def owner_created_at(self):
+        return self.admission.incarnation.created_at
+
+    @property
+    def admission_generation(self):
+        return self.admission.admission_generation
+
+    def relation(self, other: AttachmentScope) -> AttachmentRelation:
+        return AttachmentRelation(self, other)
+
+
+@dataclass(frozen=True)
+class AttachmentRelation:
+    """Compare original scope witnesses once; no state or alias registry."""
+    original: AttachmentScope
+    received: AttachmentScope
+
+    @property
+    def foreign(self):
+        return self.original.logical_key != self.received.logical_key
+
+    @property
+    def same_incarnation(self):
+        return (not self.foreign and self.original.owner_created_at == self.received.owner_created_at)
+
+    @property
+    def ambiguous(self):
+        return (not self.same_incarnation or
+                (self.original.admission_generation == self.received.admission_generation
+                 and self.original.owner_pid != self.received.owner_pid))
+
+    @property
+    def newer(self):
+        return self.same_incarnation and self.received.admission_generation > self.original.admission_generation
+
+    @property
+    def older(self):
+        return self.same_incarnation and self.received.admission_generation < self.original.admission_generation
+
+    @property
+    def current(self):
+        return (self.same_incarnation
+                and self.original.admission_generation == self.received.admission_generation
+                and self.original.owner_pid == self.received.owner_pid)
+
+
+@dataclass(frozen=True)
+class CursorScope(AttachmentScope):
+    session_id: str
+    wire_root_id: str
+    admission: AdmissionIdentity
+    owner_pid: int
+
+    def __post_init__(self):
+        WireRootIdText.decode(self.wire_root_id)
+        if (
+            not self.session_id
+            or self.owner_pid <= 0
+            or self.admission.admission_generation <= 0
+            or self.admission.incarnation.created_at <= 0
+        ):
+            raise ValueError("Invalid native cursor scope")
+
+    @property
+    def logical_key(self):
+        return self.session_id, self.wire_root_id
+
+
+
+class CursorObservation(DeclaredFamily, affix="CursorObservation"):
+    """Read-only history evidence, never an input/send capability."""
+
+    @property
+    @abstractmethod
+    def status(self) -> str: ...
+
+    def validate_scope(self, scope: CursorScope | None) -> None:
+        pass
+
+    @property
+    def needs_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class UnavailableCursorObservation(CursorObservation):
+    @property
+    def needs_refresh(self) -> bool:
+        return True
+
+    @property
+    def status(self) -> str:
+        return "unavailable"
+
+
+@dataclass(frozen=True)
+class EmptyCursorObservation(CursorObservation):
+    @property
+    def status(self) -> str:
+        return "none"
+
+
+@dataclass(frozen=True)
+class VerifiedCursorObservation(CursorObservation):
+    cursor: CurrentNativeCursor
+
+    @property
+    def status(self) -> str:
+        return "proven" if self.cursor.injected_seq else "coverage_only"
+
+    def validate_scope(self, scope: CursorScope | None) -> None:
+        cursor = self.cursor
+        if (
+            scope is None
+            or cursor.wire_root_id != scope.wire_root_id
+            or cursor.owner_thread != scope.admission.incarnation.name
+            or cursor.owner_admission_generation != scope.admission_generation
+            or not 0 <= cursor.injected_seq <= cursor.covered_seq
+        ):
+            raise ValueError("Cursor observation does not belong to its scope")
+
+
+@dataclass(frozen=True)
+class CursorEnvelope:
+    scope: CursorScope | None
+    revision: int
+    observation: CursorObservation
+
+    def __post_init__(self):
+        if self.revision <= 0:
+            raise ValueError("A cursor observation requires a positive revision")
+        self.observation.validate_scope(self.scope)
+
+    @property
+    def status(self) -> str:
+        return self.observation.status
+
+    def same_observation(self, other: CursorEnvelope) -> bool:
+        """Publication equality excludes only the local observation revision."""
+        return self.scope == other.scope and self.observation == other.observation
+
+    @property
+    def digest(self) -> str:
+        return sha256(
+            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+
+@dataclass(frozen=True)
+class CursorAdvancedUpdate(AgentCommsUpdate):
+    envelope: CursorEnvelope
+    selected_status: str | None = None
+
+    def for_session(self, session_id: str) -> CursorAdvancedUpdate:
+        if self.envelope.scope is None:
+            return self
+        return replace(
+            self,
+            envelope=replace(
+                self.envelope, scope=replace(self.envelope.scope, session_id=session_id)
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class QueueScope(AttachmentScope):
+    session_id: str
+    admission: AdmissionIdentity
+    owner_pid: int
+
+    @property
+    def logical_key(self):
+        return (self.session_id,)
+
+
+
+@dataclass(frozen=True)
+class QueueItem:
+    input_id: str
+    text: str
+
+
+class QueueProjection(DeclaredFamily, affix="QueueProjection"):
+    items: ClassVar[tuple[QueueItem, ...]] = ()
+    restored: ClassVar[tuple[QueueItem, ...]] = ()
+
+    @property
+    @abstractmethod
+    def status(self) -> str | None: ...
+
+    @abstractmethod
+    def feedback(self, supported: bool) -> str: ...
+
+    def validate_scope(self, scope: QueueScope | None) -> None:
+        """Pending/unavailable wire observations may have no scope."""
+
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
+        """Pending/unavailable observations cannot certify original ingress."""
+        raise ValueError(self.feedback(True))
+
+
+@dataclass(frozen=True)
+class PendingQueueProjection(QueueProjection):
+    @property
+    def status(self) -> None:
+        return None
+
+    def feedback(self, supported: bool) -> str:
+        return "Checking input queue…" if supported else ""
+
+
+@dataclass(frozen=True)
+class UnavailableQueueProjection(QueueProjection):
+    @property
+    def status(self) -> str:
+        return "unavailable"
+
+    def feedback(self, supported: bool) -> str:
+        return "Remote queue unavailable (input status unchanged)"
+
+
+@dataclass(frozen=True)
+class AvailableQueueProjection(QueueProjection):
+    items: tuple[QueueItem, ...] = ()
+    restored: tuple[QueueItem, ...] = ()
+
+    @property
+    def status(self) -> str:
+        return "available"
+
+    def feedback(self, supported: bool) -> str:
+        return ""
+
+    def validate_scope(self, scope: QueueScope | None) -> None:
+        # Null is admitted by the external observation envelope for unavailable
+        # queues. An available observation without its scope is malformed, not
+        # another waiting state or permission to infer a different admission.
+        if scope is None:
+            raise ValueError('Available input queue has no original attachment scope.')
+
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
+        return HumanInputOrigin.capture(comms, acquire_scope().admission)
+
+
+@dataclass(frozen=True)
+class QueueChangedUpdate(AgentCommsUpdate):
+    scope: QueueScope | None
+    revision: int
+    projection: QueueProjection
+
+    def __post_init__(self):
+        self.projection.validate_scope(self.scope)
+
+    def for_session(self, session_id: str) -> QueueChangedUpdate:
+        return (
+            self
+            if self.scope is None
+            else replace(self, scope=replace(self.scope, session_id=session_id))
+        )
+
+    @property
+    def status(self) -> str | None:
+        return self.projection.status
+
+    @property
+    def digest(self) -> str:
+        return sha256(
+            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+
+@dataclass(frozen=True)
+class InputStartedUpdate(AgentCommsUpdate):
+    input_id: str | None
+    text: str | None
+    scope: QueueScope | None
+    revision: int | None
+    native_id: str | None
+
+    def for_session(self, session_id: str) -> InputStartedUpdate:
+        return (
+            self
+            if self.scope is None
+            else replace(self, scope=replace(self.scope, session_id=session_id))
+        )
+
+
+@dataclass(frozen=True)
+class ContextUsage:
+    used: int
+    size: int
+
+
+@dataclass(frozen=True)
+class CoordinationChangedUpdate(AgentCommsUpdate):
+    thread: ThreadIncarnation
+    wire_root: str
+    owner_pid: int
+    worktree: str
+    model: str | None
+    thinking_level: str | None
+    title: str
+    context_usage: ContextUsage | None
+
+    @property
+    def persistence(self) -> str:
+        return "shared on-disk wire"
+
+    @property
+    def transport(self) -> str:
+        return "per-session stdio ACP"
+
+
+@dataclass(frozen=True)
+class GoalChangedUpdate(AgentCommsUpdate):
+    goal: Goal | None
+    execution: GoalExecution | None
+
+    def __post_init__(self):
+        if self.execution is not None and (
+            self.goal is None or self.execution.goal_id != self.goal.id
+        ):
+            raise ValueError("Goal execution identity does not match its declaration")
+
+
+@dataclass(frozen=True)
+class CompactionChangedUpdate(AgentCommsUpdate):
+    event: CompactionEvent
+
+
+@dataclass(frozen=True)
+class CompactionCommittedUpdate(AgentCommsUpdate):
+    commit_id: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class TranscriptSnapshotUpdate(AgentCommsUpdate):
+    page: TranscriptPage
+    identity: TranscriptReadIdentity
+
+    @classmethod
+    def capture(cls, transcripts, name):
+        """Publish the page together with the source witness that read it."""
+        read = transcripts.capture_page_read(name)
+        return cls(read.read(), read.identity)
+
+
+@dataclass(frozen=True)
+class InputDeliveryChangedUpdate(AgentCommsUpdate):
+    input_id: str | None = None
+
+
+@dataclass(frozen=True)
+class CompactionPublishedUpdate(AgentCommsUpdate):
+    publication: CompactionPublishedMetadata
+
+
+@dataclass(frozen=True)
+class McpClientReceiptUpdate(AgentCommsUpdate):
+    turn_id: str
+    receipt: McpLiveReceipt
+
+
+class CommsRequest(DeclaredFamily, affix="Request"):
+    """One owner command decoded at ACP ingress, never a bag of control flags."""
+
+    @property
+    def draft_text(self) -> str | None:
+        return None
+
+
+@dataclass(frozen=True)
+class PromptRequest(CommsRequest):
+    user_text: str | None = None
+    defer_display: bool = False
+    input_id: Annotated[str, ACPInputIdText] = field(default_factory=ACPInputIdText.new)
+    origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
+                               metadata={"wire_omit_default": True})
+
+    def __post_init__(self):
+        ACPInputIdText.decode(self.input_id)
+
+    @property
+    def draft_text(self) -> str | None:
+        return self.user_text
+
+    @abstractmethod
+    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput: ...
+
+    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
+        pass
+
+    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
+        await inputs.emit_queue_state(session_id)
+
+
+class QueuePromptRequest(PromptRequest):
+    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
+        return item.deferred(row, owner)
+
+class SteerPromptRequest(PromptRequest):
+    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
+        return item
+
+    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
+        inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
+
+
+@dataclass(frozen=True)
+class ClearQueueRequest(CommsRequest):
+    pass
+
+
+@dataclass(frozen=True)
+class SendNowRequest(CommsRequest):
+    pass
+
+
+@dataclass(frozen=True)
+class CompactRequest(CommsRequest):
+    instructions: str | None = None
+
+    def __post_init__(self):
+        if self.instructions is not None and len(self.instructions.strip()) > 2000:
+            raise ValueError("Compaction instructions are too long")
+
+
+@dataclass(frozen=True)
+class SelectedWriteRequest(CommsRequest):
+    source_seq: int
+    source_message_id: str
+    resource: str
+    contents: str
+
+    def __post_init__(self):
+        if self.source_seq <= 0 or not self.source_message_id or not self.resource:
+            raise ValueError("Selected write requires actual source and resource identity")
+
+
+@dataclass(frozen=True)
+class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
+    operation_id: str
+    source_seq: int
+    claim_id: str
+
+
+def encode_request(request: CommsRequest) -> dict:
+    return {"agentComms": {"request": FieldCodec.encode(request)}}
+
+
+def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+    """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+    if metadata is None:
+        metadata = {}
+    if not isinstance(metadata, dict):
+        raise ValueError("ACP metadata must be an object")
+    extension = expanded.get("agentComms", metadata.get("agentComms"))
+    if extension is None:
+        return QueuePromptRequest()
+    if not isinstance(extension, dict) or set(extension) != {"request"}:
+        raise ValueError("Comms metadata requires one declared request")
+    return FieldCodec.decode(CommsRequest, extension["request"])
+
+
+@dataclass(frozen=True)
+class RequestFailedUpdate(AgentCommsUpdate):
+    failure: ACPFailure
+
+
+@dataclass(frozen=True)
+class PromptCancelledUpdate(AgentCommsUpdate):
+    input_state: type[InputAttempt] | None
+
+    @property
+    def feedback(self):
+        return (self.input_state or InputAttempt).cancellation_feedback

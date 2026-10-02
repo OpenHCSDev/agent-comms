@@ -1,0 +1,214 @@
+.......F
+=================================== FAILURES ===================================
+_ TestNativeInputBinding.test_queued_steer_needs_its_own_user_start_before_success[accepted_without_start-queued_input_start_missing] _
+
+self = <test_backend.TestNativeInputBinding object at 0x7f782a276250>
+tmp_path = PosixPath('/var/tmp/l0b-native-first-failure/test_queued_steer_needs_its_ow0')
+case = 'accepted_without_start', expected_reason = 'queued_input_start_missing'
+
+            assert events[-1].reason_code == "pi_input_id_unavailable"
+            assert "preflight" in events[-1].text
+    
+        @pytest.mark.parametrize(
+            ("case", "expected_reason"),
+            [
+                ("accepted_without_start", "queued_input_start_missing"),
+                ("accepted_then_started", None),
+                ("rejected_without_start", "queued_input_start_missing"),
+                ("unacknowledged", "queued_input_start_missing"),
+                ("accepted_then_duplicate", "unrecognized_followup_input"),
+                ("trimmed_start", "unrecognized_followup_input"),
+            ],
+        )
+        async def test_queued_steer_needs_its_own_user_start_before_success(
+            self, tmp_path, case, expected_reason
+        ):
+            """An original-only final/stats cannot settle an ACP-acknowledged queued input."""
+            stub = _stub(
+                tmp_path,
+                f"#!{sys.executable}\n"
+                + f"""
+    import json, sys
+    send = lambda event: print(json.dumps(event), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({{"type":"response", "command":"get_state", "id":state["id"],
+           "success":True, "data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
+    prompt = json.loads(sys.stdin.readline())
+    send({{"type":"response", "command":"prompt", "id":prompt["id"], "success":True}})
+    send({{"type":"message_start", "message":{{"role":"user", "content":prompt["message"],
+           "inputId":prompt["inputId"]}}}})
+    steer = json.loads(sys.stdin.readline())
+    assert steer["streamingBehavior"] == "steer" and steer["message"] == "inbox update"
+    case = {case!r}
+    if case != "unacknowledged":
+        send({{"type":"response", "command":"prompt", "id":steer["id"],
+               "success":case != "rejected_without_start"}})
+    if case in ("accepted_then_started", "accepted_then_duplicate", "trimmed_start"):
+        event = {{"type":"message_start", "message":{{"role":"user",
+                 "content":steer["message"] + (" " if case == "trimmed_start" else ""),
+                 "inputId":steer["inputId"]}}}}
+        send(event)
+        if case == "accepted_then_duplicate": send(event)
+    send({{"type":"message_update", "assistantMessageEvent":
+           {{"type":"text_delta", "delta":"original only"}}}})
+    send({{"type":"message_end", "message":{{"role":"assistant", "stopReason":"stop"}}}})
+    send({{"type":"agent_settled"}})
+    sys.stdin.readline()  # postturn get_state
+    sys.stdin.readline()  # get_session_stats
+    send({{"type":"response", "command":"get_session_stats", "success":True,
+           "data":{{"contextUsage":{{"tokens":33}}}}}})
+    """,
+            )
+>           queue: asyncio.Queue[str] = asyncio.Queue()
+
+tests/test_backend.py:2211: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/backend.py:624: in stream_agent_events
+    async for event in stream:
+src/agent_comms/backend.py:831: in run
+    async for event in self.receive_record():
+src/agent_comms/backend.py:916: in receive_record
+    self.line = await self.read_rpc_line(self.read_timeout)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/backend.py:719: in read_rpc_line
+    done, _ = await asyncio.wait(
+/usr/lib/python3.14/asyncio/tasks.py:432: in wait
+    return await _wait(fs, timeout, return_when, loop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+fs = {<Task cancelled name='Task-87' coro=<Event.wait() done, defined at /usr/lib/python3.14/asyncio/locks.py:200>>, <Task ...ro=<PiRpcChannel.readline() done, defined at /home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_rpc.py:37>>}
+timeout = 359.99997147600516, return_when = 'FIRST_COMPLETED'
+loop = <_UnixSelectorEventLoop running=False closed=False debug=False>
+
+    async def _wait(fs, timeout, return_when, loop):
+        """Internal helper for wait().
+    
+        The fs argument must be a collection of Futures.
+        """
+        assert fs, 'Set of Futures is empty.'
+        waiter = loop.create_future()
+        timeout_handle = None
+        if timeout is not None:
+            timeout_handle = loop.call_later(timeout, _release_waiter, waiter)
+        counter = len(fs)
+        cur_task = current_task()
+    
+        def _on_completion(f):
+            nonlocal counter
+            counter -= 1
+            if (counter <= 0 or
+                return_when == FIRST_COMPLETED or
+                return_when == FIRST_EXCEPTION and (not f.cancelled() and
+                                                    f.exception() is not None)):
+                if timeout_handle is not None:
+                    timeout_handle.cancel()
+                if not waiter.done():
+                    waiter.set_result(None)
+            futures.future_discard_from_awaited_by(f, cur_task)
+    
+        for f in fs:
+            f.add_done_callback(_on_completion)
+            futures.future_add_to_awaited_by(f, cur_task)
+    
+        try:
+>           await waiter
+E           asyncio.exceptions.CancelledError
+
+/usr/lib/python3.14/asyncio/tasks.py:521: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_backend.TestNativeInputBinding object at 0x7f782a276250>
+tmp_path = PosixPath('/var/tmp/l0b-native-first-failure/test_queued_steer_needs_its_ow0')
+case = 'accepted_without_start', expected_reason = 'queued_input_start_missing'
+
+            assert events[-1].reason_code == "pi_input_id_unavailable"
+            assert "preflight" in events[-1].text
+    
+        @pytest.mark.parametrize(
+            ("case", "expected_reason"),
+            [
+                ("accepted_without_start", "queued_input_start_missing"),
+                ("accepted_then_started", None),
+                ("rejected_without_start", "queued_input_start_missing"),
+                ("unacknowledged", "queued_input_start_missing"),
+                ("accepted_then_duplicate", "unrecognized_followup_input"),
+                ("trimmed_start", "unrecognized_followup_input"),
+            ],
+        )
+        async def test_queued_steer_needs_its_own_user_start_before_success(
+            self, tmp_path, case, expected_reason
+        ):
+            """An original-only final/stats cannot settle an ACP-acknowledged queued input."""
+            stub = _stub(
+                tmp_path,
+                f"#!{sys.executable}\n"
+                + f"""
+    import json, sys
+    send = lambda event: print(json.dumps(event), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({{"type":"response", "command":"get_state", "id":state["id"],
+           "success":True, "data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
+    prompt = json.loads(sys.stdin.readline())
+    send({{"type":"response", "command":"prompt", "id":prompt["id"], "success":True}})
+    send({{"type":"message_start", "message":{{"role":"user", "content":prompt["message"],
+           "inputId":prompt["inputId"]}}}})
+    steer = json.loads(sys.stdin.readline())
+    assert steer["streamingBehavior"] == "steer" and steer["message"] == "inbox update"
+    case = {case!r}
+    if case != "unacknowledged":
+        send({{"type":"response", "command":"prompt", "id":steer["id"],
+               "success":case != "rejected_without_start"}})
+    if case in ("accepted_then_started", "accepted_then_duplicate", "trimmed_start"):
+        event = {{"type":"message_start", "message":{{"role":"user",
+                 "content":steer["message"] + (" " if case == "trimmed_start" else ""),
+                 "inputId":steer["inputId"]}}}}
+        send(event)
+        if case == "accepted_then_duplicate": send(event)
+    send({{"type":"message_update", "assistantMessageEvent":
+           {{"type":"text_delta", "delta":"original only"}}}})
+    send({{"type":"message_end", "message":{{"role":"assistant", "stopReason":"stop"}}}})
+    send({{"type":"agent_settled"}})
+    sys.stdin.readline()  # postturn get_state
+    sys.stdin.readline()  # get_session_stats
+    send({{"type":"response", "command":"get_session_stats", "success":True,
+           "data":{{"contextUsage":{{"tokens":33}}}}}})
+    """,
+>           )
+              
+
+tests/test_backend.py:2210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f78297cbb80>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+/usr/lib/python3.14/asyncio/timeouts.py:115: TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_backend.py::TestNativeInputBinding::test_queued_steer_needs_its_own_user_start_before_success[accepted_without_start-queued_input_start_missing]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 7 passed in 10.92s

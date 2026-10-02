@@ -1,0 +1,301 @@
+...s.......................................F....FFFF.................... [ 45%]
+........................................................................ [ 90%]
+...............                                                          [100%]
+=================================== FAILURES ===================================
+_ TestThreadRegistry.test_private_guard_faults_never_promote_an_unfsynced_owner[directory] _
+
+fd = 12
+
+    def fsync(fd: int) -> None:
+        nonlocal guard_calls
+        name = os.readlink(f"/proc/self/fd/{fd}")
+        if name.endswith(".registry-owner-guard"):
+            guard_calls += 1
+            if (fail_at == "pending" and guard_calls == 1) or (
+                fail_at == "commit" and guard_calls == 2
+            ):
+                raise OSError("injected guard fsync failure")
+        if fail_at == "directory" and name == str(root):
+>           raise OSError("injected directory fsync failure")
+E           OSError: injected directory fsync failure
+
+tests/test_declarations.py:462: OSError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_declarations.TestThreadRegistry object at 0x7f460d1c12e0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/first/test_private_guard_faults_neve2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f460d1e5400>
+fail_at = 'directory'
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
+    @pytest.mark.parametrize("fail_at", ["pending", "replacement", "directory", "commit"])
+    def test_private_guard_faults_never_promote_an_unfsynced_owner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_at: str
+    ) -> None:
+        import agent_comms.declarations as declarations
+
+        root = tmp_path / "isolated-private-root"
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        root_id = comms.initialize_private_initial_protocol()
+        assert len(root_id) == 32
+        cold = ThreadRegistry(root / "registry.json")
+        assert cold.require("a").name == "a"  # cache the old revision
+        original_fsync = os.fsync
+        original_write = declarations._atomic_write_text
+        guard_calls = 0
+
+        def fsync(fd: int) -> None:
+            nonlocal guard_calls
+            name = os.readlink(f"/proc/self/fd/{fd}")
+            if name.endswith(".registry-owner-guard"):
+                guard_calls += 1
+                if (fail_at == "pending" and guard_calls == 1) or (
+                    fail_at == "commit" and guard_calls == 2
+                ):
+                    raise OSError("injected guard fsync failure")
+            if fail_at == "directory" and name == str(root):
+                raise OSError("injected directory fsync failure")
+            original_fsync(fd)
+
+        def write(path: Path, text: str, **kwargs) -> None:
+            if fail_at == "replacement" and path == root / "registry.json":
+                raise OSError("injected replacement failure")
+            original_write(path, text, **kwargs)
+
+        monkeypatch.setattr(os, "fsync", fsync)
+        monkeypatch.setattr(declarations, "_atomic_write_text", write)
+        with pytest.raises((OSError, RelationViolationError), match="injected|guard"):
+>           comms.registry.register(
+                Thread(name="b", tags=frozenset(), worktree="/wt", pid=os.getpid())
+            )
+
+tests/test_declarations.py:473:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/registration.py:66: in register
+    history = GoalHistoryStore(self._path)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/goal_history.py:45: in __init__
+    self._initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.goal_history.GoalHistoryStore object at 0x7f460d2def20>
+
+    def _initialize(self) -> None:
+        try:
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        except FileExistsError:
+            pass
+        except OSError as error:
+            raise GoalHistoryError("Cannot create goal history database.") from error
+        else:
+            os.close(descriptor)
+        if os.name == "posix" and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
+            raise GoalHistoryError("Goal history database must be owner-only.")
+        try:
+            with closing(self._connect()) as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS metadata "
+                    "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS entries ("
+                    "sequence INTEGER PRIMARY KEY, owner_created_at REAL NOT NULL, "
+                    "kind TEXT NOT NULL CHECK(kind IN ('transition','baseline','observed_gap')), "
+                    "state TEXT NOT NULL "
+                    "CHECK(state IN ('pending','committed','aborted','uncertain')), "
+                    "observed_at REAL NOT NULL, before_goal TEXT, after_goal TEXT)"
+                )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS entries_owner_sequence "
+                    "ON entries(owner_created_at,sequence)"
+                )
+                version = connection.execute(
+                    "SELECT value FROM metadata WHERE key='schema_version'"
+                ).fetchone()
+                if version is None:
+                    connection.execute(
+                        "INSERT INTO metadata(key,value) VALUES('schema_version','1')"
+                    )
+                elif version != ("1",):
+                    raise GoalHistoryError("Unsupported goal history schema.")
+                connection.commit()
+            self._sync()
+        except (OSError, sqlite3.Error) as error:
+>           raise GoalHistoryError("Goal history initialization is uncertain.") from error
+E           agent_comms.goal_history.GoalHistoryError: Goal history initialization is uncertain.
+
+src/agent_comms/goal_history.py:121: GoalHistoryError
+_ TestThreadRegistry.test_private_guard_rejects_disk_downgrade_even_with_cached_revision[missing] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7f460d1c9fd0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/first/test_private_guard_rejects_dis0')
+damage = 'missing'
+
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
+    @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
+    def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
+        self, tmp_path: Path, damage: str
+    ) -> None:
+        root = tmp_path / "guarded"
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        comms.initialize_private_initial_protocol()
+        cold = ThreadRegistry(root / "registry.json")
+        assert cold.require("a").name == "a"
+        guard = root / ".registry-owner-guard"
+        if damage == "missing":
+            guard.unlink()
+        elif damage == "corrupt":
+            raw = bytearray(guard.read_bytes())
+            raw[0] ^= 1
+            guard.write_bytes(raw)
+        elif damage == "truncated":
+            guard.write_bytes(guard.read_bytes()[:-1])
+        else:
+            path = root / "registry.json"
+            data = json.loads(path.read_text())
+            data.pop("owner_epochs")
+            data.pop("owner_epoch_counter")
+            path.write_text(json.dumps(data))  # simulated old writer ignores marker
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            cold.require("a")
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+>       assert "registry_guard" not in comms.registry._threads["a"].to_wire()
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'a'
+
+tests/test_declarations.py:593: KeyError
+_ TestThreadRegistry.test_private_guard_rejects_disk_downgrade_even_with_cached_revision[corrupt] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7f460d1ca0d0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/first/test_private_guard_rejects_dis1')
+damage = 'corrupt'
+
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
+    @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
+    def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
+        self, tmp_path: Path, damage: str
+    ) -> None:
+        root = tmp_path / "guarded"
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        comms.initialize_private_initial_protocol()
+        cold = ThreadRegistry(root / "registry.json")
+        assert cold.require("a").name == "a"
+        guard = root / ".registry-owner-guard"
+        if damage == "missing":
+            guard.unlink()
+        elif damage == "corrupt":
+            raw = bytearray(guard.read_bytes())
+            raw[0] ^= 1
+            guard.write_bytes(raw)
+        elif damage == "truncated":
+            guard.write_bytes(guard.read_bytes()[:-1])
+        else:
+            path = root / "registry.json"
+            data = json.loads(path.read_text())
+            data.pop("owner_epochs")
+            data.pop("owner_epoch_counter")
+            path.write_text(json.dumps(data))  # simulated old writer ignores marker
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            cold.require("a")
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+>       assert "registry_guard" not in comms.registry._threads["a"].to_wire()
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'a'
+
+tests/test_declarations.py:593: KeyError
+_ TestThreadRegistry.test_private_guard_rejects_disk_downgrade_even_with_cached_revision[truncated] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7f460d19f0e0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/first/test_private_guard_rejects_dis2')
+damage = 'truncated'
+
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
+    @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
+    def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
+        self, tmp_path: Path, damage: str
+    ) -> None:
+        root = tmp_path / "guarded"
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        comms.initialize_private_initial_protocol()
+        cold = ThreadRegistry(root / "registry.json")
+        assert cold.require("a").name == "a"
+        guard = root / ".registry-owner-guard"
+        if damage == "missing":
+            guard.unlink()
+        elif damage == "corrupt":
+            raw = bytearray(guard.read_bytes())
+            raw[0] ^= 1
+            guard.write_bytes(raw)
+        elif damage == "truncated":
+            guard.write_bytes(guard.read_bytes()[:-1])
+        else:
+            path = root / "registry.json"
+            data = json.loads(path.read_text())
+            data.pop("owner_epochs")
+            data.pop("owner_epoch_counter")
+            path.write_text(json.dumps(data))  # simulated old writer ignores marker
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            cold.require("a")
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+>       assert "registry_guard" not in comms.registry._threads["a"].to_wire()
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'a'
+
+tests/test_declarations.py:593: KeyError
+_ TestThreadRegistry.test_private_guard_rejects_disk_downgrade_even_with_cached_revision[strip_epochs] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7f460d19f1c0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/first/test_private_guard_rejects_dis3')
+damage = 'strip_epochs'
+
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
+    @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
+    def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
+        self, tmp_path: Path, damage: str
+    ) -> None:
+        root = tmp_path / "guarded"
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        comms.initialize_private_initial_protocol()
+        cold = ThreadRegistry(root / "registry.json")
+        assert cold.require("a").name == "a"
+        guard = root / ".registry-owner-guard"
+        if damage == "missing":
+            guard.unlink()
+        elif damage == "corrupt":
+            raw = bytearray(guard.read_bytes())
+            raw[0] ^= 1
+            guard.write_bytes(raw)
+        elif damage == "truncated":
+            guard.write_bytes(guard.read_bytes()[:-1])
+        else:
+            path = root / "registry.json"
+            data = json.loads(path.read_text())
+            data.pop("owner_epochs")
+            data.pop("owner_epoch_counter")
+            path.write_text(json.dumps(data))  # simulated old writer ignores marker
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            cold.require("a")
+        with pytest.raises(RelationViolationError, match="Private registry guard"):
+            comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+>       assert "registry_guard" not in comms.registry._threads["a"].to_wire()
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'a'
+
+tests/test_declarations.py:593: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_guard_faults_never_promote_an_unfsynced_owner[directory]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_guard_rejects_disk_downgrade_even_with_cached_revision[missing]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_guard_rejects_disk_downgrade_even_with_cached_revision[corrupt]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_guard_rejects_disk_downgrade_even_with_cached_revision[truncated]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_guard_rejects_disk_downgrade_even_with_cached_revision[strip_epochs]
+5 failed, 153 passed, 1 skipped in 6.97s

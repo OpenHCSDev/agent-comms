@@ -1,0 +1,318 @@
+{
+  "AgentEvent": {
+    "abstract": true,
+    "bases": [
+      "ABC"
+    ],
+    "fields": {}
+  },
+  "InputDisposition": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "id": "str | None"
+    }
+  },
+  "InputStarted": {
+    "abstract": false,
+    "bases": [
+      "InputDisposition"
+    ],
+    "fields": {
+      "id": "str | None"
+    }
+  },
+  "InputRefused": {
+    "abstract": false,
+    "bases": [
+      "InputDisposition"
+    ],
+    "fields": {
+      "id": "str | None"
+    }
+  },
+  "SettingChangeResult": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "id": "str | None",
+      "ok": "bool",
+      "error": "str | None"
+    }
+  },
+  "ModelChanged": {
+    "abstract": false,
+    "bases": [
+      "SettingChangeResult"
+    ],
+    "fields": {
+      "id": "str | None",
+      "ok": "bool",
+      "error": "str | None"
+    }
+  },
+  "ThinkingChanged": {
+    "abstract": false,
+    "bases": [
+      "SettingChangeResult"
+    ],
+    "fields": {
+      "id": "str | None",
+      "ok": "bool",
+      "error": "str | None"
+    }
+  },
+  "ActivityEvent": {
+    "abstract": true,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {}
+  },
+  "ToolEvent": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "id": "str",
+      "name": "str"
+    }
+  },
+  "ToolStart": {
+    "abstract": false,
+    "bases": [
+      "ToolEvent",
+      "ActivityEvent"
+    ],
+    "fields": {
+      "id": "str",
+      "name": "str",
+      "title": "str",
+      "args": "dict[str, Any] | None"
+    }
+  },
+  "ToolProgress": {
+    "abstract": false,
+    "bases": [
+      "ToolEvent"
+    ],
+    "fields": {
+      "id": "str",
+      "name": "str",
+      "output": "str"
+    }
+  },
+  "ToolEnd": {
+    "abstract": false,
+    "bases": [
+      "ToolEvent"
+    ],
+    "fields": {
+      "id": "str",
+      "name": "str",
+      "ok": "bool",
+      "output": "str",
+      "diff": "ToolDiff | None"
+    }
+  },
+  "CompactionEvent": {
+    "abstract": true,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "reason": "str"
+    }
+  },
+  "CompactionStart": {
+    "abstract": false,
+    "bases": [
+      "CompactionEvent"
+    ],
+    "fields": {
+      "reason": "str"
+    }
+  },
+  "CompactionEnd": {
+    "abstract": false,
+    "bases": [
+      "CompactionEvent"
+    ],
+    "fields": {
+      "reason": "str",
+      "aborted": "bool",
+      "summary": "str | None",
+      "context_used": "int | None",
+      "will_retry": "bool"
+    }
+  },
+  "ManualCompactionEnd": {
+    "abstract": false,
+    "bases": [
+      "CompactionEnd"
+    ],
+    "fields": {
+      "reason": "str",
+      "aborted": "bool",
+      "summary": "str | None",
+      "context_used": "int | None",
+      "will_retry": "bool"
+    }
+  },
+  "CompactionProgress": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "chunk_index": "int",
+      "source_bytes_done": "int | None",
+      "source_bytes_total": "int | None",
+      "summary_phase": "str | None"
+    }
+  },
+  "Done": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "text": "str",
+      "ok": "bool",
+      "reason_code": "str | None",
+      "diagnostic": "dict[str, Any] | None"
+    }
+  },
+  "StreamSettled": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {}
+  },
+  "Chunk": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "text": "str"
+    }
+  },
+  "CommittedProgress": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "text": "str"
+    }
+  },
+  "Thinking": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "text": "str"
+    }
+  },
+  "Notice": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "text": "str"
+    }
+  },
+  "Error": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "text": "str",
+      "reason_code": "str | None",
+      "command": "str | None",
+      "id": "str | None"
+    }
+  },
+  "AgentInfo": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "model": "str | None",
+      "session_name": "str | None",
+      "session_file": "str | None",
+      "context_used": "int | None",
+      "context_size": "int | None",
+      "thinking_level": "str | None"
+    }
+  },
+  "ProviderUsage": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "response_id": "str",
+      "usage": "dict[str, Any]"
+    }
+  },
+  "SteeringInterrupted": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {}
+  },
+  "McpLiveStatus": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "receipt": "dict[str, Any]"
+    }
+  },
+  "TurnState": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "state": "str",
+      "reason_code": "str",
+      "elapsed_ms": "int",
+      "phase": "str",
+      "retryable": "bool",
+      "replay_safe": "bool",
+      "side_effects_possible": "bool",
+      "attempt": "dict[str, int | None] | None"
+    }
+  },
+  "TurnSettled": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {
+      "turn_id": "str"
+    }
+  },
+  "NoActiveTurn": {
+    "abstract": false,
+    "bases": [
+      "AgentEvent"
+    ],
+    "fields": {}
+  }
+}

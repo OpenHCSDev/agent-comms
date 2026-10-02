@@ -1,0 +1,16 @@
+{
+  "owner": "agent-comms-ux",
+  "original_pid": 3632763,
+  "model": "openai-codex/gpt-6-sol",
+  "replayed_inputs": 0,
+  "verified": false,
+  "phase": "fresh_prompt",
+  "elapsed_seconds": 6.7379496740031755,
+  "response": {
+    "stopReason": "end_turn"
+  },
+  "update_count": 7,
+  "reply_received": false,
+  "same_owner_pid": true,
+  "invalidated_reason": "Matched echoed user prompt, not assistant response. Native startup failed."
+}

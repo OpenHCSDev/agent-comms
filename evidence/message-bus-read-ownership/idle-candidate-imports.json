@@ -1,0 +1,44 @@
+{
+  "candidate": "7d411d56e38a53014be4e43ad0b76087922d1ffd",
+  "core_base": "13d92f80",
+  "toad_base": "262e3a9b",
+  "toad_import": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/toad/__init__.py",
+  "native_package": "/home/ts/wt/comms-field-representation-owner-20260929/stack/.pi-native-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "# agent-comms-native-tree-v1 00cd527d8a39b47a9ef5d64f501a868b3decd774de991996607e9816d6d79972",
+  "modules_exact_source": {
+    "message_bus": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/message_bus.py",
+    "message_page": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/message_page.py",
+    "historical_views": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/historical_views.py",
+    "routing": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/routing.py",
+    "goal_waits": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/goal_waits.py",
+    "goal_management": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/goal_management.py",
+    "history_views": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/history_views.py",
+    "transcripts": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed/lib/python3.14/site-packages/agent_comms/transcripts.py"
+  },
+  "control_exit": 0,
+  "candidate_exit": 0,
+  "control_idle": {
+    "before": [
+      66,
+      3
+    ],
+    "after": [
+      66,
+      3
+    ],
+    "work": [],
+    "pending": 0
+  },
+  "candidate_idle": {
+    "before": [
+      66,
+      3
+    ],
+    "after": [
+      66,
+      3
+    ],
+    "work": [],
+    "pending": 0
+  }
+}

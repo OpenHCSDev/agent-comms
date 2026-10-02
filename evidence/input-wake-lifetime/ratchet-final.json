@@ -1,0 +1,25 @@
+{
+  "root": "src/agent_comms/",
+  "base_revision": "e8865563d8315c0c361eca0cec640aa5a879fa0e",
+  "head_revision": "17376df3c9f5b54800f33527d3af66c6fdd85653",
+  "paths": [
+    "src/agent_comms/goal_scheduler.py",
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/routing.py",
+    "src/agent_comms/runtime.py",
+    "src/agent_comms/schedule_rules.py",
+    "src/agent_comms/wire_watch.py"
+  ],
+  "base": {
+    "GodClassExcess:src/agent_comms/input_drain.py::InputDrain": 43,
+    "ForeignAbsenceProbe:src/agent_comms/input_drain.py": 11
+  },
+  "head": {
+    "GodClassExcess:src/agent_comms/input_drain.py::InputDrain": 0,
+    "ForeignAbsenceProbe:src/agent_comms/input_drain.py": 6
+  },
+  "delta": {
+    "GodClassExcess:src/agent_comms/input_drain.py::InputDrain": -43,
+    "ForeignAbsenceProbe:src/agent_comms/input_drain.py": -5
+  }
+}

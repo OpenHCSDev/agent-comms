@@ -1,0 +1,76 @@
+...............................FF
+=================================== FAILURES ===================================
+_____________ test_v2_claimed_attempt_migrates_without_regranting ______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-29/test_v2_claimed_attempt_migrat0')
+
+    def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
+        root = tmp_path / "old-owner"
+        root.mkdir(mode=0o700)
+        path = root / "goal_attempts.sqlite3"
+        with sqlite3.connect(path) as conn:
+            conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+            conn.execute("INSERT INTO metadata VALUES('schema_version','2')")
+            conn.execute(
+                "CREATE TABLE goals (goal_id TEXT PRIMARY KEY,generation INTEGER NOT NULL,"
+                "state TEXT NOT NULL CHECK(state IN ('ready','reserved','blocked')) ,"
+                "attempt_id TEXT,ready_digest TEXT NOT NULL)"
+            )
+            conn.execute(
+                "CREATE TABLE attempts (attempt_id TEXT PRIMARY KEY,goal_id TEXT NOT NULL,"
+                "generation INTEGER NOT NULL,token TEXT NOT NULL,phase TEXT NOT NULL,"
+                "progress_witness TEXT,resolution TEXT,FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
+            )
+            conn.execute(
+                "CREATE TABLE human_decisions (goal_id TEXT,decision_id TEXT,generation INTEGER,"
+                "FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
+            )
+            conn.execute("INSERT INTO goals VALUES('goal',1,'reserved','attempt','')")
+            conn.execute("INSERT INTO attempts VALUES('attempt','goal',1,'token','claimed',NULL,NULL)")
+        path.chmod(0o600)
+    
+>       migrated = GoalAttemptStore(root)
+                   ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_attempts.py:608: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/goal_attempts.py:234: in __init__
+    assert_goal_attempt_schema(conn)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+conn = <sqlite3.Connection object at 0x7f84c8cbbb50>
+
+    def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
+        schema = {
+            name: sql
+            for table in _goal_attempt_tables()
+            for name, sql in table.schema_objects().items()
+        }
+        actual = SQLiteSchemaObject.read(
+            conn.execute(
+                "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
+            )
+        )
+        if {row.name: row.sql for row in actual} != schema:
+>           raise StorageUncertainError("Unsupported goal attempt schema; one-shot cutover required.")
+E           agent_comms.goal_attempts.StorageUncertainError: Unsupported goal attempt schema; one-shot cutover required.
+
+src/agent_comms/goal_attempts.py:188: StorageUncertainError
+_____ test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting ______
+
+store = <agent_comms.goal_attempts.GoalAttemptStore object at 0x7f84c8d929e0>
+
+    def test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting(store):
+        store.create_goal("goal")
+        reservation = store.reserve("goal", 1)
+        store.claim_launch(reservation)
+        with sqlite3.connect(store.path) as conn:
+>           conn.execute("DROP TABLE provider_usage")
+E           sqlite3.OperationalError: no such table: provider_usage
+
+tests/test_goal_attempts.py:626: OperationalError
+=========================== short test summary info ============================
+FAILED tests/test_goal_attempts.py::test_v2_claimed_attempt_migrates_without_regranting
+FAILED tests/test_goal_attempts.py::test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 2 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+2 failed, 31 passed in 2.81s

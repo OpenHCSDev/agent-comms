@@ -1,0 +1,175 @@
+.....F......F....                                                        [100%]
+=================================== FAILURES ===================================
+_________ test_strict_native_reopen_preserves_bytes_and_strips_preload _________
+
+launcher = '/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'
+session_file = '/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-2/test_strict_native_reopen_pres0/sessions/2026-09-28T14-55-16-384Z_01a0e883-559f-7741-878e-e33ef3d42a3c.jsonl'
+expected_session_id = '01a0e883-559f-7741-878e-e33ef3d42a3c'
+
+    def validate_native_reopen(
+        launcher: str, session_file: str, *, expected_session_id: str | None = None
+    ) -> str:
+        """Return the strict saved session ID; never mutate/recover an invalid file."""
+        try:
+>           package = package_for_launcher(launcher)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/native_session_reopen.py:77: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/native_session_reopen.py:68: in package_for_launcher
+    verify_native_package(package)
+src/agent_comms/native_package.py:124: in verify_native_package
+    if package_tree_digest(root) != pins[0]:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_package.py:109: in package_tree_digest
+    visit(root, ".", 0)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e477b6db64167e/node_modules/@earendil-works/pi-coding-agent')
+relative = '.', depth = 0
+
+    def visit(path: Path, relative: str, depth: int) -> None:
+        nonlocal count, total
+        if count > MAX_ENTRIES or depth > MAX_DEPTH:
+            raise NativePackageError("Native package inventory limit exceeded")
+        before = path.lstat()
+        if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:
+>           raise NativePackageError("Native package is not owner-controlled")
+E           agent_comms.native_package.NativePackageError: Native package is not owner-controlled
+
+src/agent_comms/native_package.py:68: NativePackageError
+
+The above exception was the direct cause of the following exception:
+
+saved = (PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'), PosixPath('/home/ts/wt/comms-refactor2-s9-2...sessions/2026-09-28T14-55-16-384Z_01a0e883-559f-7741-878e-e33ef3d42a3c.jsonl'), '01a0e883-559f-7741-878e-e33ef3d42a3c')
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-2/test_strict_native_reopen_pres0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1069460750>
+
+    def test_strict_native_reopen_preserves_bytes_and_strips_preload(saved, tmp_path, monkeypatch):
+        launcher, file, identity = saved
+        before = file.read_bytes()
+        marker = tmp_path / "ambient-marker"
+        preload = tmp_path / "ambient.mjs"
+        preload.write_text(
+            "import {writeFileSync} from 'node:fs';"
+            f"writeFileSync({json.dumps(str(marker))},'unsafe');"
+        )
+        monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
+        assert (
+>           validate_native_reopen(str(launcher), str(file), expected_session_id=identity) == identity
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+
+tests/test_native_session_reopen.py:141: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'
+session_file = '/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-2/test_strict_native_reopen_pres0/sessions/2026-09-28T14-55-16-384Z_01a0e883-559f-7741-878e-e33ef3d42a3c.jsonl'
+expected_session_id = '01a0e883-559f-7741-878e-e33ef3d42a3c'
+
+    def validate_native_reopen(
+        launcher: str, session_file: str, *, expected_session_id: str | None = None
+    ) -> str:
+        """Return the strict saved session ID; never mutate/recover an invalid file."""
+        try:
+            package = package_for_launcher(launcher)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativeReopenError("Saved native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or not 0 < before.st_size <= 256 * 1024 * 1024
+            ):
+                raise NativeReopenError("Saved native session is not a bounded regular file")
+            node = shutil.which("node")
+            if node is None:
+                raise NativeReopenError("Native session validator unavailable")
+            environment = dict(os.environ)
+            for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+                environment.pop(key, None)
+            environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+            environment["PI_OFFLINE"] = "1"
+            result = subprocess.run(
+                [
+                    node,
+                    "--no-global-search-paths",
+                    "--import",
+                    str(package / "dist/agent-comms-import-fence.mjs"),
+                    "--input-type=module",
+                    "--eval",
+                    _READ_ONLY_SESSION_SCRIPT.read_text(),
+                    str(package),
+                    str(file),
+                ],
+                env=environment,
+                cwd=file.parent,
+                capture_output=True,
+                timeout=10,
+            )
+            after = file.stat()
+    
+            def revision(info: os.stat_result) -> tuple[int, ...]:
+                return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    
+            if result.returncode or revision(before) != revision(after) or len(result.stdout) > 4096:
+                raise NativeReopenError("Saved native session validation failed or changed")
+            identity = FieldCodec.decode(NativeSessionIdentity, json.loads(result.stdout))
+            if identity.session_file != str(file) or (
+                expected_session_id is not None and identity.session_id != expected_session_id
+            ):
+                raise NativeReopenError("Saved native session identity changed")
+            return identity.session_id
+        except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as error:
+            if isinstance(error, NativeReopenError):
+                raise
+>           raise NativeReopenError("Saved native session cannot be validated") from error
+E           agent_comms.native_session_reopen.NativeReopenError: Saved native session cannot be validated
+
+src/agent_comms/native_session_reopen.py:130: NativeReopenError
+____ test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route ____
+
+saved = (PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'), PosixPath('/home/ts/wt/comms-refactor2-s9-2...sessions/2026-09-28T14-55-17-792Z_01a0e883-5b20-707a-8348-ffbf8a1e5137.jsonl'), '01a0e883-5b20-707a-8348-ffbf8a1e5137')
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-2/test_renamed_symlink_to_verifi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1068337ac0>
+
+    @pytest.mark.asyncio
+    async def test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route(
+        saved, tmp_path, monkeypatch
+    ):
+        launcher, _file, _identity = saved
+        alias = tmp_path / "renamed-native"
+        alias.symlink_to(launcher)
+>       assert native_session_reopen.package_for_launcher(str(alias)) == Path(PACKAGE)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_session_reopen.py:206: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/native_session_reopen.py:68: in package_for_launcher
+    verify_native_package(package)
+src/agent_comms/native_package.py:124: in verify_native_package
+    if package_tree_digest(root) != pins[0]:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_package.py:109: in package_tree_digest
+    visit(root, ".", 0)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e477b6db64167e/node_modules/@earendil-works/pi-coding-agent')
+relative = '.', depth = 0
+
+    def visit(path: Path, relative: str, depth: int) -> None:
+        nonlocal count, total
+        if count > MAX_ENTRIES or depth > MAX_DEPTH:
+            raise NativePackageError("Native package inventory limit exceeded")
+        before = path.lstat()
+        if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:
+>           raise NativePackageError("Native package is not owner-controlled")
+E           agent_comms.native_package.NativePackageError: Native package is not owner-controlled
+
+src/agent_comms/native_package.py:68: NativePackageError
+=========================== short test summary info ============================
+FAILED tests/test_native_session_reopen.py::test_strict_native_reopen_preserves_bytes_and_strips_preload
+FAILED tests/test_native_session_reopen.py::test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route
+2 failed, 15 passed in 9.96s

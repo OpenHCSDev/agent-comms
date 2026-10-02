@@ -1,0 +1,156 @@
+F...F                                                                    [100%]
+=================================== FAILURES ===================================
+E   AssertionError: Traceback (most recent call last):
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_pi.py", line 808, in run_native_pi_turn
+          await send_fenced_prompt(
+          ...<8 lines>...
+          )
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_prompt_send.py", line 123, in send_fenced_prompt
+          await asyncio.shield(done)
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_prompt_send.py", line 106, in worker
+          _write_fenced(fd, payload, boundary, cancelled, deadline)
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_prompt_send.py", line 42, in _write_fenced
+          raise PromptSendUnknown(
+              "Native prompt send is UNKNOWN after cancellation/deadline"
+          )
+      agent_comms.native_prompt_send.PromptSendUnknown: Native prompt send is UNKNOWN after cancellation/deadline
+      
+      The above exception was the direct cause of the following exception:
+      
+      Traceback (most recent call last):
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 1387, in run_one_sealed_claim
+          result = await run_native_pi_turn(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+          ...<27 lines>...
+          )
+          ^
+        File "/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+          return await native_turn(*args, **kwargs, timeout=0.35)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_pi.py", line 958, in run_native_pi_turn
+          raise NativePiUnavailable("Native Pi prompt send is UNKNOWN; no retry") from error
+      agent_comms.native_pi.NativePiUnavailable: Native Pi prompt send is UNKNOWN; no retry
+      
+      During handling of the above exception, another exception occurred:
+      
+      Traceback (most recent call last):
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 266, in _require_registry_owner
+          actual, actual_epoch = comms.registry.live_owner_with_admission(owner.name)
+                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/declarations.py", line 2739, in live_owner_with_admission
+          raise RelationViolationError("live owner is stopped or unavailable")
+      agent_comms.declarations.RelationViolationError: live owner is stopped or unavailable
+      
+      The above exception was the direct cause of the following exception:
+      
+      Traceback (most recent call last):
+        File "<string>", line 1, in <module>
+          import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+                                                                                                                             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+          return runner.run(main)
+                 ~~~~~~~~~~^^^^^^
+        File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+          return self._loop.run_until_complete(task)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+          return future.result()
+                 ~~~~~~~~~~~~~^^
+        File "/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+          await asyncio.wait_for(task, timeout=3)
+        File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+          return await fut
+                 ^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 1544, in run_one_sealed_claim
+          _require_registry_owner(comms, owner, owner_epoch)
+          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 268, in _require_registry_owner
+          raise StaleFence("recipient registry owner stopped or changed") from error
+      agent_comms.coordination_store.StaleFence: recipient registry owner stopped or changed
+      
+    assert 1 == 0
+     +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...ped or changed") from error\nagent_comms.coordination_store.StaleFence: recipient registry owner stopped or changed\n').returncode
+/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py:310: AssertionError: Traceback (most recent call last):
+E   AssertionError: Traceback (most recent call last):
+        File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+          return await fut
+                 ^^^^^^^^^
+        File "/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py", line 201, in drain
+          await asyncio.Future()
+      asyncio.exceptions.CancelledError
+      
+      The above exception was the direct cause of the following exception:
+      
+      Traceback (most recent call last):
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_pi.py", line 759, in run_native_pi_turn
+          await send({"type": "get_state", "id": "native-capability"})
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_pi.py", line 756, in send
+          await asyncio.wait_for(stdin.drain(), timeout=remaining)
+        File "/usr/lib/python3.14/asyncio/tasks.py", line 487, in wait_for
+          async with timeouts.timeout(timeout):
+                     ~~~~~~~~~~~~~~~~^^^^^^^^^
+        File "/usr/lib/python3.14/asyncio/timeouts.py", line 115, in __aexit__
+          raise TimeoutError from exc_val
+      TimeoutError
+      
+      The above exception was the direct cause of the following exception:
+      
+      Traceback (most recent call last):
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 1387, in run_one_sealed_claim
+          result = await run_native_pi_turn(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+          ...<27 lines>...
+          )
+          ^
+        File "/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+          return await native_turn(*args, **kwargs, timeout=0.35)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/native_pi.py", line 960, in run_native_pi_turn
+          raise NativePiUnavailable("Native Pi tracked turn failed; send may be UNKNOWN") from error
+      agent_comms.native_pi.NativePiUnavailable: Native Pi tracked turn failed; send may be UNKNOWN
+      
+      During handling of the above exception, another exception occurred:
+      
+      Traceback (most recent call last):
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 266, in _require_registry_owner
+          actual, actual_epoch = comms.registry.live_owner_with_admission(owner.name)
+                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/declarations.py", line 2739, in live_owner_with_admission
+          raise RelationViolationError("live owner is stopped or unavailable")
+      agent_comms.declarations.RelationViolationError: live owner is stopped or unavailable
+      
+      The above exception was the direct cause of the following exception:
+      
+      Traceback (most recent call last):
+        File "<string>", line 1, in <module>
+          import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+                                                                                                                             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+          return runner.run(main)
+                 ~~~~~~~~~~^^^^^^
+        File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+          return self._loop.run_until_complete(task)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+          return future.result()
+                 ~~~~~~~~~~~~~^^
+        File "/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+          await asyncio.wait_for(task, timeout=3)
+        File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+          return await fut
+                 ^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 1544, in run_one_sealed_claim
+          _require_registry_owner(comms, owner, owner_epoch)
+          ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/home/ts/wt/comms-refactor-integration-20260927/src/agent_comms/coordinated_runtime.py", line 268, in _require_registry_owner
+          raise StaleFence("recipient registry owner stopped or changed") from error
+      agent_comms.coordination_store.StaleFence: recipient registry owner stopped or changed
+      
+    assert 1 == 0
+     +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...ped or changed") from error\nagent_comms.coordination_store.StaleFence: recipient registry owner stopped or changed\n').returncode
+/home/ts/wt/comms-native-admission-contention-20260927/tests/test_native_send_admission.py:310: AssertionError: Traceback (most recent call last):
+=========================== short test summary info ============================
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[lifecycle]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[preflight-drain]
+2 failed, 3 passed, 15 deselected in 3.90s

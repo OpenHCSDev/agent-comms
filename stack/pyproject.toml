@@ -1,0 +1,20 @@
+[project]
+name = "agent-comms-stack"
+version = "0.1.0"
+description = "Pinned local agent-comms, Toad, and Textual runtime"
+requires-python = ">=3.14"
+dependencies = [
+    "agent-comms[acp]",
+    "batrachian-toad==0.6.20",
+    "textual[syntax]==8.2.8",
+]
+
+[tool.uv]
+package = false
+# This stack owns the paired core and framework pins, including Toad's requirements.
+override-dependencies = ["agent-comms[acp]", "textual[syntax]==8.2.8"]
+
+[tool.uv.sources]
+agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "c1d2849b90023acf5206c35b7da4664407d6dce5" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "8616aee5f91f8e200c982e02f0ee56d0f49d6c48" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "412b5a2b5da8875dc2f3dc5be2365abddce0537b" }

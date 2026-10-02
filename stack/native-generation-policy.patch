@@ -1,0 +1,221 @@
+--- a/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+@@ -1,11 +1,6 @@
+-import { estimateContextTokens } from "../utils/estimate.js";
+-const CONTEXT_SAFETY_TOKENS = 4096;
+-const MIN_MAX_TOKENS = 1;
++import { ContextBudget } from "./agent-comms-context-budget.js";
+ export function clampMaxTokensToContext(model, context, maxTokens) {
+-    if (model.contextWindow <= 0)
+-        return Math.max(MIN_MAX_TOKENS, maxTokens);
+-    const available = model.contextWindow - estimateContextTokens(context).tokens - CONTEXT_SAFETY_TOKENS;
+-    return Math.min(maxTokens, Math.max(MIN_MAX_TOKENS, available));
++    return new ContextBudget(model, context).allowance(maxTokens);
+ }
+ export function buildBaseOptions(model, context, options, apiKey) {
+     const samplingParams = model.samplingParams || options?.samplingParams
+@@ -14,7 +9,7 @@
+     return {
+         temperature: options?.temperature,
+         samplingParams,
+-        maxTokens: clampMaxTokensToContext(model, context, options?.maxTokens ?? model.maxTokens),
++        maxTokens: clampMaxTokensToContext(model, context, options?.maxTokens),
+         signal: options?.signal,
+         telemetryContext: options?.telemetryContext,
+         apiKey: apiKey || options?.apiKey,
+--- a/node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
++++ b/node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
+@@ -113,4 +113,12 @@
+         lastUsageIndex: estimate.lastUsageIndex,
+     };
+ }
+-//# sourceMappingURL=estimate.js.map
+\ No newline at end of file
++//# sourceMappingURL=estimate.js.map
++/** The existing heuristic applied to the actual semantic final input after hooks.
++ * Measured native prefix usage remains a lower bound; neither figure claims to
++ * be the provider's tokenizer. Tool schemas, transformed text, and the original image owner are included.
++ */
++export function estimateSerializedRequestTokens(context, input) {
++    return Math.max(estimateContextTokens(context).tokens,
++        estimateContextTokens(input).tokens);
++}
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import OpenAI from "openai";
+ import { clampThinkingLevel } from "../models.js";
+ import { splitDeferredTools } from "../utils/deferred-tools.js";
+@@ -115,6 +117,8 @@
+             if (nextParams !== undefined) {
+                 params = nextParams;
+             }
++            new ContextBudget(model, context, responsesInput(params))
++                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS);
+             const requestOptions = {
+                 ...(options?.signal ? { signal: options.signal } : {}),
+                 ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+--- a/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import { AzureOpenAI } from "openai";
+ import { clampThinkingLevel } from "../models.js";
+ import { formatProviderError, normalizeProviderError } from "../utils/error-body.js";
+@@ -77,6 +79,8 @@
+             if (nextParams !== undefined) {
+                 params = nextParams;
+             }
++            new ContextBudget(model, context, responsesInput(params))
++                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS);
+             const requestOptions = {
+                 ...(options?.signal ? { signal: options.signal } : {}),
+                 ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import { clampThinkingLevel } from "../models.js";
+ import { registerSessionResourceCleanup } from "../session-resources.js";
+ import { combineAbortSignals } from "../utils/abort-signals.js";
+@@ -176,6 +178,8 @@
+             const websocketRequestId = codexSessionId || uuidv7();
+             const sseHeaders = buildSSEHeaders(model.headers, options?.headers, accountId, apiKey, codexSessionId);
+             const websocketHeaders = buildWebSocketHeaders(model.headers, options?.headers, accountId, apiKey, websocketRequestId);
++            new ContextBudget(model, context, responsesInput(body))
++                .admit(body, "max_output_tokens");
+             const bodyJson = JSON.stringify(body);
+             const httpTimeoutMs = normalizeTimeoutMs(options?.timeoutMs);
+             const websocketConnectTimeoutMs = normalizeTimeoutMs(options?.websocketConnectTimeoutMs);
+--- a/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import { GoogleGenAI, } from "@google/genai";
+ import { calculateCost, clampThinkingLevel } from "../models.js";
+ import { formatProviderError, normalizeProviderError } from "../utils/error-body.js";
+@@ -43,6 +45,8 @@
+             if (nextParams !== undefined) {
+                 params = nextParams;
+             }
++            new ContextBudget(model, context, googleInput(params))
++                .admit(params.config ?? {}, "maxOutputTokens");
+             const googleStream = await retryGoogleRequest(() => client.models.generateContentStream(params), options);
+             stream.push({ type: "start", partial: output });
+             let currentBlock = null;
+--- a/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import { GoogleGenAI, ResourceScope, ThinkingLevel, } from "@google/genai";
+ import { calculateCost, clampThinkingLevel } from "../models.js";
+ import { formatProviderError, normalizeProviderError } from "../utils/error-body.js";
+@@ -53,6 +55,8 @@
+             if (nextParams !== undefined) {
+                 params = nextParams;
+             }
++            new ContextBudget(model, context, googleInput(params))
++                .admit(params.config ?? {}, "maxOutputTokens");
+             const googleStream = await retryGoogleRequest(() => client.models.generateContentStream(params), options);
+             stream.push({ type: "start", partial: output });
+             let currentBlock = null;
+--- a/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import Anthropic from "@anthropic-ai/sdk";
+ import { calculateCost } from "../models.js";
+ import { splitDeferredTools } from "../utils/deferred-tools.js";
+@@ -379,6 +381,11 @@
+             const nextParams = await options?.onPayload?.(params, model);
+             if (nextParams !== undefined) {
+                 params = { ...nextParams, stream: true };
++            }
++            new ContextBudget(model, context, anthropicInput(params))
++                .admit(params, "max_tokens");
++            if (params.thinking?.type === "enabled" && params.thinking.budget_tokens >= params.max_tokens) {
++                throw new BudgetAdmissionError("Thinking budget leaves no answer room after final request admission");
+             }
+             const requestOptions = {
+                 ...(options?.signal ? { signal: options.signal } : {}),
+--- a/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import { BedrockRuntimeClient, BedrockRuntimeServiceException, StopReason as BedrockStopReason, CachePointType, CacheTTL, ConversationRole, ConverseStreamCommand, ImageFormat, ToolResultStatus, } from "@aws-sdk/client-bedrock-runtime";
+ import { NodeHttpHandler } from "@smithy/node-http-handler";
+ import { HttpProxyAgent } from "http-proxy-agent";
+@@ -152,6 +154,8 @@
+             if (nextCommandInput !== undefined) {
+                 commandInput = nextCommandInput;
+             }
++            new ContextBudget(model, context, bedrockInput(commandInput))
++                .admit(commandInput.inferenceConfig ?? {}, "maxTokens");
+             const command = new ConverseStreamCommand(commandInput);
+             const response = await client.send(command, { abortSignal: options.signal });
+             responseRequestId = normalizeDiagnosticValue(response.$metadata.requestId);
+--- a/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ import { calculateCost, clampThinkingLevel } from "../models.js";
+ import { AssistantMessageEventStream } from "../utils/event-stream.js";
+ import { shortHash } from "../utils/hash.js";
+@@ -29,7 +31,7 @@
+             if (nextPayload !== undefined) {
+                 payload = nextPayload;
+             }
+-            const mistralStream = await requestMistralStream(model, payload, apiKey, options);
++            const mistralStream = await requestMistralStream(model, context, payload, apiKey, options);
+             stream.push({ type: "start", partial: output });
+             await consumeChatStream(model, output, stream, mistralStream);
+             if (options?.signal?.aborted) {
+@@ -155,17 +157,20 @@
+         return String(value);
+     }
+ }
+-async function requestMistralStream(model, payload, apiKey, options) {
++async function requestMistralStream(model, context, payload, apiKey, options) {
+     const baseUrl = new URL(model.baseUrl);
+     baseUrl.pathname = `${baseUrl.pathname.replace(/\/+$/u, "")}/`;
+     const url = new URL("v1/chat/completions", baseUrl);
+     const headers = buildMistralHeaders(model, apiKey, options);
+     const timeoutSignal = AbortSignal.timeout(options?.timeoutMs ?? 60_000);
+     const signal = options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
++    const wirePayload = toMistralWirePayload(payload);
++    new ContextBudget(model, context, chatInput(wirePayload))
++        .admit(wirePayload, "max_tokens");
+     const response = await (options?.fetch ?? globalThis.fetch)(url, {
+         method: "POST",
+         headers,
+-        body: JSON.stringify(toMistralWirePayload(payload)),
++        body: JSON.stringify(wirePayload),
+         signal,
+     });
+     await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
+--- a/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
+@@ -1,3 +1,5 @@
++import { ContextBudget, BudgetAdmissionError } from "./agent-comms-context-budget.js";
++import { chatInput, responsesInput, anthropicInput, googleInput, bedrockInput } from "./agent-comms-request-input.js";
+ /**
+  * pi-messages API implementation.
+  *
+@@ -267,6 +269,8 @@
+             if (nextPayload !== undefined) {
+                 payload = nextPayload;
+             }
++            new ContextBudget(model, payload.context, payload.context)
++                .admit(payload.options ?? {}, "maxTokens");
+             const response = await (options?.fetch ?? globalThis.fetch)(url, {
+                 method: "POST",
+                 headers: {

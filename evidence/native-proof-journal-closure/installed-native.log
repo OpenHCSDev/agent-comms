@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 58 items / 56 deselected / 2 selected
+
+tests/test_native_pi.py ..                                               [100%]
+
+======================= 2 passed, 56 deselected in 8.55s =======================

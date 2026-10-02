@@ -1,0 +1,43 @@
+{
+  "pr": 462,
+  "status": "source_ready_private_installed_native_acp_verified",
+  "base": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+  "source_head": "c53449cb6fdefac52152f79f23d66ba6ba6c9340",
+  "production_added_lines": 121,
+  "production_deleted_lines": 108,
+  "native_result": {
+    "test": "test_goal_wait_certified_reply.py::test_native",
+    "passed": 1,
+    "elapsed_seconds": 11.19,
+    "provider": "existing localhost controlled endpoint",
+    "provider_posts": 3,
+    "physical_ui_gate": false,
+    "unknown_input_replayed": false,
+    "goal_changed": false,
+    "native_journal_prefix_preserved": true,
+    "native_owned_children_alive_after": false
+  },
+  "durable_schema_change": false,
+  "reset_required": false,
+  "public_input_or_activation": false,
+  "source_py_files_installed_byte_match": 294,
+  "limits": [
+    "No physical Toad acceptance",
+    "Separately owned empty/source-awareness cursor/Pilot defects not claimed resolved"
+  ],
+  "protected_scratch": [
+    "/home/ts/.cache/agent-scratch/gw462",
+    "/home/ts/.cache/agent-scratch/comms-goal-wait-certified-reply-20260930"
+  ],
+  "next_owner": "parent merge and activation; Arendt cutover custody",
+  "item5_review": {
+    "receipt": "NONE-REVIEW.md",
+    "source_changed_by_review": false,
+    "own_nullable_state_defects_found": 0,
+    "confirmed_imported_builder_defect": "CurrentNativeCursor accepts NULL request_generation; NativeInputContext.reference returns incomplete acquired reference",
+    "receiving_owner": "Arendt",
+    "dependency": "canonical complete native reference construction and all consumers; acknowledged by owner, pending source checkpoint",
+    "authority_bypass_proven": false,
+    "original_proofs_unchanged": true
+  }
+}

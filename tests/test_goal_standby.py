@@ -1,0 +1,379 @@
+"""Declared goal dependencies control scheduling without changing legacy registry rows."""
+
+import os
+from contextlib import nullcontext
+from dataclasses import replace
+
+import pytest
+
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
+from agent_comms.goal_actions import (
+    EditGoalAction,
+    GoalPrecondition,
+    OwnerInvocable,
+    PausedGoalAction,
+    SetGoalAction,
+    StandbyGoalAction,
+)
+from agent_comms.goal_attempts import GoalAttemptStore, StaleAttemptError
+from agent_comms.goal_presentation import GoalExecutionState, GoalWaitTarget
+from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
+
+
+@pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+    tmp_path, monkeypatch, changed
+):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    comms = wire(tmp_path / "wire")
+    agent = canonical_agent(comms, agent_bin="pi")
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+    await agent.new_session(str(tmp_path / "parent"))
+    store = agent.turns.goals.open_goal_store()
+    goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"), owner_store=store)
+    owner = comms.registry.require("parent")
+    admission = comms.registry.snapshot().admission_generations["parent"]
+    if changed == "admission":
+        admission += 1
+    elif changed == "pid":
+        owner = replace(owner, process_identity=ProcessIdentity(owner.pid + 1, owner.process_identity.start_time))
+    elif changed == "process_birth":
+        owner = replace(owner, process_identity=ProcessIdentity(owner.pid, owner.process_identity.start_time + 1))
+    else:
+        comms.registry.rename("parent", "renamed")
+    old_grant = store.ready_grant(goal.id, 1)
+    try:
+        with (
+            _store_lock(comms._wire_lock_path),
+            pytest.raises(StaleAttemptError, match="owner changed") if changed != "rename" else nullcontext(),
+        ):
+            agent.turns.goals.ready_goal_grant_locked(
+                owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
+            )
+        if changed != "rename":
+            assert store.ready_grant(goal.id, 1) == old_grant
+        else:
+            assert store.snapshot(goal.id).lifecycle.ready
+    finally:
+        await agent.shutdown()
+
+
+def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("parent", frozenset(), str(tmp_path)))
+    goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
+    with pytest.raises(ValueError, match="wait_for"):
+        comms.goals.update_goal(
+            "parent", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+        )
+    comms.goals.update_goal("parent", PausedGoalAction(), actor=OwnerInvocable)
+    comms.goals.update_goal("parent", EditGoalAction(text="Edited @mention"))
+    assert comms.registry.require("parent").goal.state.pause_source.declared_name == "owner"
+
+
+def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn(name, f"{name}-turn")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    assert alice is not None and bob is not None
+
+    comms.goals.update_goal(
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+    )
+    alice_wait = comms.goals.goal_wait("alice")
+    assert alice_wait is not None
+    assert alice_wait.report_turn_id == "alice-turn"
+    assert alice_wait.report_turn_generation == comms.registry.require("alice").turn_generation
+    with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
+        comms.goals.update_goal(
+            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+        )
+
+    assert comms.goals.goal_wait("alice") is not None
+    assert comms.goals.goal_wait("bob") is None
+    assert comms.registry.require("bob").goal == bob
+
+
+def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob", "carol"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn(name, f"{name}-turn")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    assert alice is not None and bob is not None
+
+    comms.goals.update_goal(
+        "alice",
+        StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+    )
+    comms.goals.update_goal(
+        "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+    )
+
+    assert comms.goals.goal_wait("alice") is not None
+    assert comms.goals.goal_wait("bob") is not None
+
+
+def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob", "carol"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+    for name in ("alice", "bob"):
+        comms.agents.begin_turn(name, f"{name}-turn")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    carol = comms.goals.update_goal("carol", SetGoalAction(text="Idle goal"))
+    assert alice is not None and bob is not None and carol is not None
+
+    comms.goals.update_goal(
+        "alice",
+        StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+    )
+    with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
+        comms.goals.update_goal(
+            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+        )
+
+    assert comms.goals.goal_wait("bob") is None
+    assert comms.registry.require("bob").goal == bob
+
+
+def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn(name, f"{name}-turn")
+    comms.registry.declare(
+        Thread(
+            "carol",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    comms.agents.begin_turn("carol", "carol-turn")
+    carol_thread = comms.registry.require("carol")
+    assert carol_thread.active_turn is not None
+    comms.registry.register(
+        replace(
+            carol_thread,
+            process_identity=ProcessIdentity(999999999, 1),
+            active_turn=replace(carol_thread.active_turn, owner_pid=999999999),
+        ),
+        comms.registry.status("carol"),
+    )
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    assert alice is not None and bob is not None
+
+    comms.goals.update_goal(
+        "alice",
+        StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+    )
+    with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
+        comms.goals.update_goal(
+            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+        )
+
+
+@pytest.mark.parametrize("pending_reply", [False, True])
+def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn(name, f"{name}-turn")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    assert alice is not None and bob is not None
+    comms.goals.update_goal(
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+    )
+
+    # Represent a wait recorded by an older owner before cycle admission was
+    # enforced. Both turns subsequently finish without any dependency reply.
+    owner = comms.registry.require("bob")
+    peer = comms.registry.require("alice")
+    GoalWaits(tmp_path / "goal_waits.json").record(
+        GoalWait(
+            bob.id,
+            "bob-wait",
+            bob.revision,
+            0,
+            (GoalWaitTarget("alice", peer.created_at),),
+            owner_created_at=owner.created_at,
+            target_turn_generations=(peer.turn_generation,),
+            report_turn_id=owner.active_turn.id,
+            report_turn_generation=owner.turn_generation,
+        )
+    )
+    comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
+
+    if pending_reply:
+        comms.messaging.send_message("bob", "alice", "The work is finished")
+        assert comms.goals.recover_closed_goal_wait("alice") == ()
+        assert comms.goals.goal_wait("alice") is not None
+        return
+
+    assert comms.goals.recover_closed_goal_wait("alice") == ("alice", "bob")
+    assert comms.goals.goal_wait("alice") is None
+    assert comms.goals.goal_execution("alice").state is GoalExecutionState.RUNNABLE
+    assert "Standby was released" in comms.registry.require("alice").goal.progress
+    assert comms.goals.recover_closed_goal_wait("alice") == ()
+
+
+@pytest.mark.parametrize("bound_old_turn", [False, True])
+def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn(name, f"{name}-first")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    assert alice is not None and bob is not None
+    comms.goals.update_goal(
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+    )
+    owner = comms.registry.require("bob")
+    peer = comms.registry.require("alice")
+    GoalWaits(tmp_path / "goal_waits.json").record(
+        GoalWait(
+            bob.id,
+            "bob-wait",
+            bob.revision,
+            0,
+            (GoalWaitTarget("alice", peer.created_at),),
+            owner_created_at=owner.created_at,
+            target_turn_generations=(peer.turn_generation,),
+            report_turn_id="bob-first" if bound_old_turn else None,
+            report_turn_generation=owner.turn_generation if bound_old_turn else None,
+        )
+    )
+    comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
+    comms.agents.begin_turn("bob", "bob-independent-new")
+    wait = comms.goals.goal_wait("alice")
+    assert wait is not None
+    assert comms.goals.recover_closed_goal_wait("alice") == ()
+    assert comms.goals.goal_wait("alice") == wait
+    assert comms.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
+    comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
+    assert comms.goals.recover_closed_goal_wait("alice") == ("alice", "bob")
+
+
+def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn(name, f"{name}-turn")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+    assert alice is not None and bob is not None
+    comms.goals.update_goal(
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+    )
+    GoalWaits(tmp_path / "goal_waits.json").record(
+        GoalWait(
+            bob.id,
+            "bob-wait",
+            bob.revision,
+            0,
+            (GoalWaitTarget("alice", comms.registry.require("alice").created_at),),
+            owner_created_at=comms.registry.require("bob").created_at,
+            target_turn_generations=(comms.registry.require("alice").turn_generation,),
+            report_turn_id="bob-turn",
+            report_turn_generation=comms.registry.require("bob").turn_generation,
+        )
+    )
+    comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
+    original_clear = GoalWaits.clear
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("injected wait-clear failure")
+
+    monkeypatch.setattr(GoalWaits, "clear", unavailable)
+    with pytest.raises(OSError, match="wait-clear failure"):
+        comms.goals.recover_closed_goal_wait("alice")
+    reopened = wire(tmp_path)
+    assert reopened.registry.require("alice").goal.state.active
+    assert reopened.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
+    monkeypatch.setattr(GoalWaits, "clear", original_clear)
+    assert reopened.goals.recover_closed_goal_wait("alice") == ("alice", "bob")
+    assert reopened.goals.goal_execution("alice").state is GoalExecutionState.RUNNABLE
+
+
+@pytest.mark.parametrize("acknowledged", [False, True])
+def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, acknowledged):
+    comms = wire(tmp_path)
+    for name in ("parent", "child"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
+    message = comms.messaging.send_message("child", "parent", "Finished immediately")
+    if acknowledged:
+        comms.messaging.acknowledge("parent")
+    with pytest.raises(ValueError, match=f"Dependency reply {message.seq}.*pending or UNKNOWN"):
+        comms.goals.update_goal(
+            "parent",
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
+        )
+    assert comms.goals.goal_wait("parent") is None
+    assert comms.registry.require("parent").goal == goal
+    assert not (tmp_path / "input_dispositions.json").exists()

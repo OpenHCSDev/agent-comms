@@ -1,0 +1,5 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-goal-controls-20260928
+  × Failed to resolve dependencies for `batrachian-toad` (v0.6.20)
+  ╰─▶ Requirements contain conflicting URLs for package `agent-comms`:
+      - git+https://github.com/OpenHCSDev/agent-comms.git@b77db612325ab0aee46d198b4639c949e9ade0a1
+      - git+https://github.com/OpenHCSDev/agent-comms.git@c338e8abccd099b1778d71a3d894671759e3c11c

@@ -1,0 +1,43 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-native-custody-terminal-20260928",
+  "installed": {
+    "agent-comms": "6bd8c423acc8d6cf3c4a004c8fdaa672dbae3bc8",
+    "batrachian-toad": "b5a40ce4895c718a5572e3739a32dac362628b52",
+    "textual": "c9743801c98dc570f82f82e25915ecce89800f4b"
+  },
+  "owners": {
+    "agent-comms-ux": {
+      "pid_before": 3153829,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "high",
+      "native_session_preserved": true,
+      "restart": "verified live process",
+      "pid_after": 3269498
+    },
+    "pr95-selected-pi-summary-owner": {
+      "pid_before": 3153830,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "medium",
+      "native_session_preserved": true,
+      "restart": "verified live process",
+      "pid_after": 3269546
+    },
+    "nra-architecture": {
+      "pid_before": 3153831,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "high",
+      "native_session_preserved": true,
+      "restart": "verified live process",
+      "pid_after": 3269664
+    },
+    "nra-domain-mapping": {
+      "pid_before": 3153838,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "xhigh",
+      "native_session_preserved": true,
+      "restart": "verified live process",
+      "pid_after": 3269766
+    }
+  },
+  "no_input_replay": true
+}

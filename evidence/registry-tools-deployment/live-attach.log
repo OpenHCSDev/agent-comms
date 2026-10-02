@@ -1,0 +1,26 @@
+[
+  {
+    "name": "agent-comms-ux",
+    "attached": true,
+    "updates": 4,
+    "prompts_sent": 0
+  },
+  {
+    "name": "pr95-selected-pi-summary-owner",
+    "attached": true,
+    "updates": 4,
+    "prompts_sent": 0
+  },
+  {
+    "name": "nra-architecture",
+    "attached": true,
+    "updates": 4,
+    "prompts_sent": 0
+  },
+  {
+    "name": "nra-domain-mapping",
+    "attached": true,
+    "updates": 4,
+    "prompts_sent": 0
+  }
+]

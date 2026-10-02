@@ -1,0 +1,131 @@
+{
+  "state": "installed-operator-carry-controls-passed",
+  "seed": {
+    "source_package": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "root": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/final-controls07/original/wire",
+    "triage_id": "738307f568f452eec2b6830b5e5e6779",
+    "full_id": "acba9044d8d17ec50c5145418a89548f",
+    "seed_strength": "authentic installed4 producers and representative typed proof fixture; no native execution/provider call"
+  },
+  "source_python": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/bin/python",
+  "target_python": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/target/bin/python",
+  "target_package": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/target/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "installation": {
+    "classification": "runtime/native-schema4-to5-preserve",
+    "stores": [
+      {
+        "name": "coordination.sqlite3",
+        "original_sha256": "2c704e90d4ba81dfb54bbb44ba81123adb183781f9e5dd94fe1b69c4f781848b",
+        "candidate_sha256": "d0692fc5fe52667bbf0f7693495c9112d307eecf667f4a7afee0535ab29d02e6",
+        "evidence": {
+          "original_rows": {
+            "wake_claims": 3,
+            "execution_claims": 2,
+            "participants": 3,
+            "participant_aliases": 3,
+            "owner_generations": 3,
+            "attempts": 1,
+            "replay_assessments": 0,
+            "current_executions": 3,
+            "executions": 1,
+            "schema_meta": 1,
+            "publication_intents": 0,
+            "publication_receipts": 0,
+            "connectivity": 0,
+            "recovery_audit": 0,
+            "obligations": 1,
+            "native_runtime_schema_meta": 1,
+            "native_runtime_input": 2,
+            "current_native_cursor": 1,
+            "cohort_schema_meta": 1,
+            "claim_batch_receipts": 2,
+            "claim_batch_members": 3,
+            "cohort_delivery_receipts": 4,
+            "awareness_schema_meta": 1,
+            "awareness_claim_generations": 3,
+            "response_schema_meta": 1,
+            "publication_append_dispatches": 0
+          },
+          "carried_rows": {
+            "wake_claims": 3,
+            "execution_claims": 2,
+            "participants": 3,
+            "participant_aliases": 3,
+            "owner_generations": 3,
+            "attempts": 1,
+            "replay_assessments": 0,
+            "current_executions": 3,
+            "executions": 1,
+            "schema_meta": 1,
+            "publication_intents": 0,
+            "publication_receipts": 0,
+            "connectivity": 0,
+            "recovery_audit": 0,
+            "obligations": 1,
+            "cohort_schema_meta": 1,
+            "claim_batch_receipts": 2,
+            "claim_batch_members": 3,
+            "cohort_delivery_receipts": 4,
+            "awareness_schema_meta": 1,
+            "awareness_claim_generations": 3,
+            "response_schema_meta": 1,
+            "publication_append_dispatches": 0,
+            "native_runtime_schema_meta": 1,
+            "native_runtime_input": 2,
+            "current_native_cursor": 1,
+            "native_runtime_triage_sources": 1
+          },
+          "unchanged_rows_sha256": "387a8e43224024028677fe8107a3a99929c7766504f5a46cd2f2014f4ea8102d",
+          "native_projection_sha256": "08d29b9374bf3f58de383991ecdbb0b559d6480d74d99c4cd6481559b211ea5c",
+          "triage_originals": 1
+        }
+      },
+      {
+        "name": "native_prompt_bindings.sqlite3",
+        "original_sha256": "6e32b564e1272a1213bbc832ec5c8e412d3c036f70f6bfd60b4c4a6658cc7e36",
+        "candidate_sha256": "ecc33931cdb893c23f7b315cca43efc4c08ab025d8041294057c7873e02557ca",
+        "evidence": {
+          "original_bindings": 2,
+          "remaining_columns_sha256": "85c297b9ca92b976a7a0dabe847c9f8ecc0c335cd4ce19fd5a4a6fbb25fb9389"
+        }
+      }
+    ],
+    "original_preimages": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/final-controls07/originals/native",
+    "retired": [],
+    "reconstructed_proofs": 0,
+    "input_replays": 0,
+    "compaction": {
+      "classification": "runtime/preserve",
+      "original_files": [
+        {
+          "path": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/final-controls07/original/wire/compaction-commits.sqlite3",
+          "sha256": "60eb401f3fed11f5dd1ac993c15282558b17f844ec3068950edfc7af8e7cb3d4",
+          "revision": {
+            "identity": {
+              "device": 2084,
+              "inode": 17335003
+            },
+            "size": 57344,
+            "mtime_ns": 1790887209297624101,
+            "ctime_ns": 1790887209297624101
+          }
+        }
+      ],
+      "retired": [],
+      "copied_bytes": 0
+    }
+  },
+  "unchanged_protected_files": 24,
+  "refusals": [
+    "candidate-change",
+    "source-change",
+    "existing-attempt",
+    "companion",
+    "unknown-snapshot"
+  ],
+  "public_mutations": 0,
+  "owner_stops": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "strength": "installed4 producer fixture -> matched candidate -> existing RuntimeInstallation member -> installed5 schema/binding/cursor readers; not public activation or whole stopped-owner publication"
+}

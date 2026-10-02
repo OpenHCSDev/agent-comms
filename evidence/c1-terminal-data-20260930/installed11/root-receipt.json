@@ -1,0 +1,13 @@
+{
+  "root": "/home/ts/wt/g458f/meta/wire",
+  "root_id": "ca049ad77a7445378dd8fa66f9de3d1d",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "python": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/bin/python",
+  "core_pin": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+  "production_origin": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "purpose": "Fresh owned canonical initialize_private_initial_protocol producer for joint input visibility candidate metadata",
+  "owner_starts": 0,
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "native_inputs": 0
+}

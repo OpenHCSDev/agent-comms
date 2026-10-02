@@ -1,0 +1,221 @@
+Timeout (0:00:25)!
+Thread 0x00007fb1434ff6c0 [asyncio_3] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb154cfc6c0 [asyncio_2] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 149 in counts
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 801 in viewer_snapshot
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb155bfd6c0 [asyncio_1] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb156cfe6c0 [DirectoryWatche] (most recent call first):
+  File "<frozen os>", line 378 in walk
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 406 in _add_dir_watch
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 185 in __init__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_buffer.py", line 30 in __init__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify.py", line 119 in on_thread_start
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/utils/__init__.py", line 75 in start
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/api.py", line 264 in start
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/directory_watcher.py", line 136 in register
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/directory_watcher.py", line 229 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb1575ff6c0 [asyncio-waitpid] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 931 in _do_waitpid
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb15c80f6c0 [toad] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line ??? in __forward_code__
+  <invalid frame>
+
+Thread 0x00007fb16065c780 [python] (most recent call first):
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/css/styles.py", line 963 in set_rule
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/css/_style_properties.py", line 591 in __set__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/css/stylesheet.py", line 905 in replace_rules
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/css/stylesheet.py", line 679 in apply
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/app.py", line 3671 in _register
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/widget.py", line 1515 in mount
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/widget.py", line 1573 in mount_all
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/widget.py", line 4813 in mount_composed_widgets
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/widget.py", line 4800 in _compose
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/widget.py", line 4786 in _on_compose
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/_callback.py", line 58 in _invoke
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/_callback.py", line 96 in invoke
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/message_pump.py", line 874 in _on_message
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/message_pump.py", line 853 in on_event
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/message_pump.py", line 772 in _dispatch_message
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/message_pump.py", line 637 in _pre_process
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/textual/message_pump.py", line 599 in _process_messages
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94 in _run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 2046 in _run_once
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 677 in run_forever
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 706 in run_until_complete
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204 in run
+  File "/home/ts/wt/comms-c0-integration-20260928/evidence/r6-integration/installed_history_ui.py", line 58 in <module>
+Timeout (0:00:25)!
+Thread 0x00007fb1425136c0 [asyncio_4] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb1434ff6c0 [asyncio_3] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/bus_page_index.py", line 125 in sync
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/message_bus.py", line 815 in _history_page
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/message_bus.py", line 189 in historical_page
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 170 in _integrated_display_page
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 281 in channel_display_page
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/channel_preparation.py", line 72 in page
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/channel_preparation.py", line 86 in read
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb154cfc6c0 [asyncio_2] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 149 in counts
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 801 in viewer_snapshot
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb155bfd6c0 [asyncio_1] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 149 in counts
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 801 in viewer_snapshot
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb156cfe6c0 [DirectoryWatche] (most recent call first):
+  File "<frozen genericpath>", line 63 in islink
+  File "<frozen os>", line 426 in walk
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 406 in _add_dir_watch
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 185 in __init__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_buffer.py", line 30 in __init__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify.py", line 119 in on_thread_start
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/utils/__init__.py", line 75 in start
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/api.py", line 264 in start
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/directory_watcher.py", line 136 in register
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/directory_watcher.py", line 229 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb1575ff6c0 [asyncio-waitpid] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 931 in _do_waitpid
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb15c80f6c0 [toad] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 126 in _index
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 162 in _counts_locked
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 151 in counts
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 801 in viewer_snapshot
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb16065c780 [python] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line ??? in __forward_code__
+  <invalid frame>
+Timeout (0:00:25)!
+Thread 0x00007fb1425136c0 [asyncio_4] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb1434ff6c0 [asyncio_3] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/bus_page_index.py", line 125 in sync
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/message_bus.py", line 815 in _history_page
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/message_bus.py", line 189 in historical_page
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 170 in _integrated_display_page
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 281 in channel_display_page
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/channel_preparation.py", line 72 in page
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/channel_preparation.py", line 86 in read
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb154cfc6c0 [asyncio_2] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 149 in counts
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 801 in viewer_snapshot
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb155bfd6c0 [asyncio_1] (most recent call first):
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/view_unread.py", line 149 in counts
+  File "/home/ts/wt/comms-refactor-r6-transcripts-20260928/src/agent_comms/history_views.py", line 801 in viewer_snapshot
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb156cfe6c0 [DirectoryWatche] (most recent call first):
+  File "<frozen os>", line 377 in walk
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 406 in _add_dir_watch
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 185 in __init__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_buffer.py", line 30 in __init__
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/inotify.py", line 119 in on_thread_start
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/utils/__init__.py", line 75 in start
+  File "/home/ts/.local/share/agent-comms/runtime-r3-input-documents-20260928/lib/python3.14/site-packages/watchdog/observers/api.py", line 264 in start
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/directory_watcher.py", line 136 in register
+  File "/home/ts/wt/toad-refactor-r6-transcripts-20260928/src/toad/directory_watcher.py", line 229 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb1575ff6c0 [asyncio-waitpid] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 931 in _do_waitpid
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007fb15c80f6c0 [toad] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line ??? in __forward_code__
+  <invalid frame>
+
+Thread 0x00007fb16065c780 [python] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/selectors.py", line 452 in select
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 2008 in _run_once
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 677 in run_forever
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 706 in run_until_complete
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204 in run
+  File "/home/ts/wt/comms-c0-integration-20260928/evidence/r6-integration/installed_history_ui.py", line 58 in <module>

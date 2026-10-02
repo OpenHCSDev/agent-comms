@@ -1,0 +1,17 @@
+.....actual native clocks=[1790653951.573, 1790653951.716]; ACP snapshot + rebuild exact; native history/proof unchanged
+...........F..........
+=================================== FAILURES ===================================
+_____ test_new_stream_declaration_inherits_merge_without_dispatch_changes ______
+
+    def test_new_stream_declaration_inherits_merge_without_dispatch_changes():
+        class TestStreamTranscript(LiveTextTranscript):
+            def replay_update(self):
+                return None
+>       first, continued = TestStreamTranscript('start'), TestStreamTranscript('continued')
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Can't instantiate abstract class TestStreamTranscript without an implementation for abstract method 'routed'
+
+tests/test_transcript_merge.py:16: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_transcript_merge.py::test_new_stream_declaration_inherits_merge_without_dispatch_changes
+1 failed, 26 passed in 4.98s

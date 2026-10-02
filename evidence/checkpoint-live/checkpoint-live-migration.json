@@ -1,0 +1,4 @@
+{
+  "success": false,
+  "error": "OperationalError('no such column: rowid')"
+}

@@ -1,0 +1,18 @@
+{"package": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent", "session_bytes": 143686055, "tokens_before": 312227, "readiness": "ready", "summary_status": "unknown", "reason": "Summary completion invalid or state changed", "provider_calls": 7, "requests": [{"bytes": 139240, "max_tokens": null}, {"bytes": 140455, "max_tokens": null}, {"bytes": 140149, "max_tokens": null}, {"bytes": 144865, "max_tokens": null}, {"bytes": 146342, "max_tokens": null}, {"bytes": 148135, "max_tokens": null}, {"bytes": 2381, "max_tokens": null}], "transport": "loopback only", "native_commit_exercised": false}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-compaction-live-fix-20260928/evidence/compaction-live-fix/retained_session_rpc.py", line 106, in <module>
+    asyncio.run(run(Path(sys.argv[1]).resolve(),Path(sys.argv[2]).resolve(),sys.argv[3]))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-compaction-live-fix-20260928/evidence/compaction-live-fix/retained_session_rpc.py", line 93, in run
+    assert data.get('status')==expected,response
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'id': 'summary', 'type': 'response', 'command': 'agent_comms_summarize_compaction', 'success': True, 'data': {'version': 1, 'status': 'unknown', 'operationId': 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'reason': 'Summary completion invalid or state changed'}}

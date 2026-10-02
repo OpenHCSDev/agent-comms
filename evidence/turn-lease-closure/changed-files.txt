@@ -1,0 +1,17 @@
+src/agent_comms/coordinated_runtime.py
+src/agent_comms/declarations.py
+src/agent_comms/operations.py
+src/agent_comms/registration.py
+src/agent_comms/registry_document.py
+src/agent_comms/turn_runner.py
+tests/test_acp.py
+tests/test_acp_private_nk_delivery.py
+tests/test_active_turn.py
+tests/test_coordinated_runtime.py
+tests/test_declarations.py
+tests/test_goal_standby.py
+tests/test_goal_standby_liveness.py
+tests/test_maintenance_barrier.py
+tests/test_registration_components.py
+tests/test_thread_identity.py
+tests/test_turn_lease_release.py

@@ -1,0 +1,530 @@
+{
+  "scope": "Read-only original native request/journal metadata; no provider/input/restart calls.",
+  "request_id": "1765eb2b-87c1-4012-8e2a-6b0884b10df6",
+  "turn": {
+    "identity": {
+      "incarnation": {
+        "name": "comms428",
+        "created_at": 1790725198.0008519
+      },
+      "generation": 18
+    },
+    "turn_id": "e0d099f88971427c9519681c1d3436d8",
+    "admission_generation": 1089
+  },
+  "native_process": {
+    "pid": 3842768,
+    "start_time": 27211835
+  },
+  "native_session_id": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+  "native_input_id": "82405fdf251b8b9f0b734bed94c82159",
+  "started_at_ms": 1790796610431,
+  "diagnostic_snapshot_sha256": "22457533b644992c1094d3976931382ab33d9937e76136d9471199d8a57fec56",
+  "native_stages": [
+    {
+      "stage": "preparing",
+      "elapsedMs": 0.008967,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 0,
+      "callbackCount": 0,
+      "callbackMaxMs": 0
+    },
+    {
+      "stage": "callback",
+      "elapsedMs": 49.715217,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "before_provider_request",
+      "callbackMs": 0,
+      "callbackCount": 0,
+      "callbackMaxMs": 0
+    },
+    {
+      "stage": "callback_end",
+      "elapsedMs": 49.763989,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "before_provider_request",
+      "callbackMs": 0.049714,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.049714
+    },
+    {
+      "stage": "connecting",
+      "elapsedMs": 53.204474,
+      "transport": "websocket",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 0.049714,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.049714
+    },
+    {
+      "stage": "connected",
+      "elapsedMs": 58.916059,
+      "transport": "websocket",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 0.049714,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.049714
+    },
+    {
+      "stage": "dispatch",
+      "elapsedMs": 58.982675,
+      "transport": "websocket",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 0.049714,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.049714
+    },
+    {
+      "stage": "first_event",
+      "elapsedMs": 347.437229,
+      "transport": "websocket",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 0.049714,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.049714
+    },
+    {
+      "stage": "callback",
+      "elapsedMs": 347.557296,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "message_start",
+      "callbackMs": 0.049714,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.049714
+    },
+    {
+      "stage": "callback_end",
+      "elapsedMs": 347.614004,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "message_start",
+      "callbackMs": 0.106522,
+      "callbackCount": 2,
+      "callbackMaxMs": 0.056808
+    },
+    {
+      "stage": "first_delta_consumed",
+      "elapsedMs": 36422.565966,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 0.412131,
+      "callbackCount": 5,
+      "callbackMaxMs": 0.118615
+    },
+    {
+      "stage": "stream_end",
+      "elapsedMs": 120926.957549,
+      "transport": "websocket",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 137.841311,
+      "callbackCount": 1426,
+      "callbackMaxMs": 0.34874
+    },
+    {
+      "stage": "callback",
+      "elapsedMs": 120927.207983,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "message_end",
+      "callbackMs": 137.841311,
+      "callbackCount": 1426,
+      "callbackMaxMs": 0.34874
+    },
+    {
+      "stage": "callback_end",
+      "elapsedMs": 120935.121838,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "message_end",
+      "callbackMs": 145.753022,
+      "callbackCount": 1427,
+      "callbackMaxMs": 7.911711
+    },
+    {
+      "stage": "finished",
+      "elapsedMs": 120935.154079,
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "callback": "",
+      "callbackMs": 145.753022,
+      "callbackCount": 1427,
+      "callbackMaxMs": 7.911711
+    }
+  ],
+  "native_elapsed_segments_ms": {
+    "prepare_to_dispatch": 58.982675,
+    "websocket_connect": 5.7115849999999995,
+    "dispatch_to_first_transport_event": 288.45455400000003,
+    "first_transport_event_to_first_consumed_delta": 36075.128737,
+    "first_consumed_delta_to_stream_end": 84504.39158299999,
+    "stream_end_to_finished_cleanup": 8.196530000001076
+  },
+  "native_callbacks": {
+    "count": 1427,
+    "total_ms": 145.753022,
+    "maximum_ms": 7.911711
+  },
+  "python_publication_completed_between_first_last_progress_receipts": {
+    "count": 28,
+    "total_ms": 15.847421,
+    "python_receipt_span_ms": 120636.579686,
+    "scope": "TurnProgress.transition phase notification AND TurnProgress.consume event emission through existing effects._emit_event measurement; completed spans only, cumulative difference, not all durable publication/render time.",
+    "recorded_max_precedes_request_receipt_interval": true
+  },
+  "same_native_producer_wall_clock_seams_ms": {
+    "last_three_read_result_journal_to_long_request_preparing": 33,
+    "long_assistant_journal_to_write_result_journal": 774,
+    "write_result_journal_to_next_request_preparing": 3,
+    "precision_ms": 1,
+    "scope": "Same native session/process and original journal parent chain; aggregate wall-clock seam observations, not isolated IO or callback duration."
+  },
+  "journal_metadata": [
+    {
+      "entry_id": "e186d85e",
+      "parent_id": "00d55e96",
+      "journal_timestamp": "2026-09-30T19:30:08.050Z",
+      "role": "assistant",
+      "message_created_at_ms": 1790796590044,
+      "content_types": {
+        "thinking": 1,
+        "toolCall": 3
+      },
+      "stopReason": "toolUse",
+      "usage": {
+        "input": 1520,
+        "cacheRead": 156928,
+        "output": 252,
+        "reasoning": 169,
+        "totalTokens": 158700
+      },
+      "tool_calls": [
+        {
+          "id": "call_eJym4j0WBaFb9RkqhGL2NUTM|fc_0869806902d4e442016abd633fcd3c87d29c4e0c9b7970d54e",
+          "name": "read"
+        },
+        {
+          "id": "call_ONiD3dcLUO2uxcKW6jbQq9Z5|fc_0869806902d4e442016abd633fcf8087d2b32fae6c865a0e84",
+          "name": "read"
+        },
+        {
+          "id": "call_yJJs8PZQ8GA11XwSPJLj899N|fc_0869806902d4e442016abd633fcf9087d29ea12958c01a7a0c",
+          "name": "read"
+        }
+      ]
+    },
+    {
+      "entry_id": "a8a8515f",
+      "parent_id": "e186d85e",
+      "journal_timestamp": "2026-09-30T19:30:10.310Z",
+      "role": "toolResult",
+      "message_created_at_ms": 1790796610310,
+      "content_types": {
+        "text": 1
+      },
+      "toolCallId": "call_eJym4j0WBaFb9RkqhGL2NUTM|fc_0869806902d4e442016abd633fcd3c87d29c4e0c9b7970d54e",
+      "toolName": "read",
+      "isError": false,
+      "tool_calls": []
+    },
+    {
+      "entry_id": "b988547a",
+      "parent_id": "a8a8515f",
+      "journal_timestamp": "2026-09-30T19:30:10.395Z",
+      "role": "toolResult",
+      "message_created_at_ms": 1790796610395,
+      "content_types": {
+        "text": 1
+      },
+      "toolCallId": "call_ONiD3dcLUO2uxcKW6jbQq9Z5|fc_0869806902d4e442016abd633fcf8087d2b32fae6c865a0e84",
+      "toolName": "read",
+      "isError": false,
+      "tool_calls": []
+    },
+    {
+      "entry_id": "d73d6d34",
+      "parent_id": "b988547a",
+      "journal_timestamp": "2026-09-30T19:30:10.398Z",
+      "role": "toolResult",
+      "message_created_at_ms": 1790796610398,
+      "content_types": {
+        "text": 1
+      },
+      "toolCallId": "call_yJJs8PZQ8GA11XwSPJLj899N|fc_0869806902d4e442016abd633fcf9087d29ea12958c01a7a0c",
+      "toolName": "read",
+      "isError": false,
+      "tool_calls": []
+    },
+    {
+      "entry_id": "ad51f984",
+      "parent_id": "d73d6d34",
+      "journal_timestamp": "2026-09-30T19:32:11.358Z",
+      "role": "assistant",
+      "message_created_at_ms": 1790796610479,
+      "content_types": {
+        "thinking": 1,
+        "toolCall": 1
+      },
+      "stopReason": "toolUse",
+      "usage": {
+        "input": 7434,
+        "cacheRead": 158336,
+        "output": 1950,
+        "reasoning": 516,
+        "totalTokens": 167720
+      },
+      "tool_calls": [
+        {
+          "id": "call_Hqy8ESRc9R2ZAb7qseTx5SKS|fc_0869806902d4e442016abd6366d2bc87d297a5fbfb2e7ce8e3",
+          "name": "write"
+        }
+      ]
+    },
+    {
+      "entry_id": "2b91cf80",
+      "parent_id": "ad51f984",
+      "journal_timestamp": "2026-09-30T19:32:12.132Z",
+      "role": "toolResult",
+      "message_created_at_ms": 1790796732132,
+      "content_types": {
+        "text": 1
+      },
+      "toolCallId": "call_Hqy8ESRc9R2ZAb7qseTx5SKS|fc_0869806902d4e442016abd6366d2bc87d297a5fbfb2e7ce8e3",
+      "toolName": "write",
+      "isError": false,
+      "tool_calls": []
+    }
+  ],
+  "usage": {
+    "input": 7434,
+    "cacheRead": 158336,
+    "output": 1950,
+    "reasoning": 516,
+    "totalTokens": 167720
+  },
+  "prompt_cache_fraction": 0.9551547324606382,
+  "same_original_turn_and_process_nearby_requests": [
+    {
+      "id": "ecc4ed5f-b7a5-40b5-8daa-088fdd91a219",
+      "started_at_ms": 1790796589995,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.00549
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 50.517526
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 50.555257
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 54.561643
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 60.913671
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 60.96566
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 305.169864
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 305.425739
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 305.545045
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 17919.482953
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 18053.875637
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 18054.098019
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 18056.845381
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 18056.907338
+        }
+      ],
+      "last_stage": "finished"
+    },
+    {
+      "id": "1765eb2b-87c1-4012-8e2a-6b0884b10df6",
+      "started_at_ms": 1790796610431,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.008967
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 49.715217
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 49.763989
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 53.204474
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 58.916059
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 58.982675
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 347.437229
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 347.557296
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 347.614004
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 36422.565966
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 120926.957549
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 120927.207983
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 120935.121838
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 120935.154079
+        }
+      ],
+      "last_stage": "finished"
+    },
+    {
+      "id": "083a9e5a-9258-41b9-b282-632961ce498c",
+      "started_at_ms": 1790796732135,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.002144
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 49.909345
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 49.964609
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 53.840248
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 59.44439
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 59.484846
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 311.808026
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 311.908817
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 311.966546
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 6708.204313
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 39974.310801
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 39974.587485
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 39977.396644
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 39977.430959
+        }
+      ],
+      "last_stage": "finished"
+    }
+  ],
+  "limits": [
+    "Native elapsed, Python monotonic and wall clocks are not subtracted across producers.",
+    "First delta is any provider delta (thinking/text/toolcall); first visible text timestamp is not retained.",
+    "No HTTP header boundary on this WebSocket path; first transport event is not token text.",
+    "Stream-end and finished are cleanup observations, not admission/completion witnesses; assistant journal stopReason is original result evidence.",
+    "Callbacks include awaited native publication/extension/journal listeners; they exclude tool execution and prepareNextTurn outside this request.",
+    "No provider-side queue/compute/reasoning allocation or capacity diagnosis is present.",
+    "Historical journal assistant-to-tool-result gaps are not pure IO duration or native ToolExecutionStart/End."
+  ]
+}

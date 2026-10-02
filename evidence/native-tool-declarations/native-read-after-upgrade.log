@@ -1,0 +1,112 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_actual_native_read_tool_reaches_official_acp_with_declared_presentation _
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7efd02ee6a50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efd0190ad70>
+acp_tools = (<agent_comms.acp.CommsAgent object at 0x7efd018ab770>, <Queue at 0x7efd017f81a0 maxsize=0>)
+
+    async def test_actual_native_read_tool_reaches_official_acp_with_declared_presentation(
+        native_backend, monkeypatch, acp_tools
+    ):
+        native = native_backend
+        source = native.project / "owned.txt"
+        source.write_text("ACTUAL_READ_CONTENT\n")
+        ordinary = native.provider.handle
+    
+        async def request_read(reader, writer):
+            if native.provider.posts:
+                await ordinary(reader, writer)
+                return
+            try:
+                header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
+                length = next(
+                    int(line.split(b":", 1)[1])
+                    for line in header.split(b"\r\n")
+                    if line.lower().startswith(b"content-length:")
+                )
+                request = json.loads(await reader.readexactly(length))
+                assert any(tool["function"]["name"] == "read" for tool in request["tools"])
+                native.provider.posts += 1
+                chunk = {
+                    "id": "native-tool",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "fixture",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "tool_calls",
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "read-proof",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "read",
+                                            "arguments": json.dumps({"path": str(source)}),
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+                body = b"data: " + json.dumps(chunk).encode() + b"\n\ndata: [DONE]\n\n"
+                writer.write(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
+                    + str(len(body)).encode()
+                    + b"\r\nConnection: close\r\n\r\n"
+                    + body
+                )
+                await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+    
+        monkeypatch.setattr(native.provider, "handle", request_read)
+        async with asyncio.timeout(25):
+            records = [
+                event
+                async for event in backend.stream_agent_events(
+                    "pi",
+                    [
+                        "--provider",
+                        "response-local",
+                        "--model",
+                        "fixture",
+                        "--thinking",
+                        "off",
+                        "--offline",
+                        "--no-extensions",
+                        "--no-skills",
+                        "--no-context-files",
+                        "--no-prompt-templates",
+                        "--tools",
+                        "read",
+                    ],
+                    "Read owned.txt once and answer",
+                    str(native.project),
+                    session_file=str(native.session),
+                    persistent_session=native.persistent,
+                    native_start=native.started,
+                )
+            ]
+        assert records[-1].ok, records[-1]
+        starts = [event for event in records if isinstance(event, events.ToolStart)]
+        ends = [event for event in records if isinstance(event, events.ToolEnd)]
+        assert len(starts) == len(ends) == 1
+>       assert starts[0].kind == "read" and starts[0].title == f"Read {source}"
+E       AssertionError: assert ('read' == 'read'
+E         
+E           read and 'Read /home/t...fter-upgrade…' == 'Read /home/t...ect/owned.txt'
+E         
+E         Skipping 115 identical leading characters in diff, use -v to show
+E         - er-upgrade/test_actual_native_read_tool_r0/project/owned.txt
+E         + er-upgrade…)
+
+tests/test_native_tool_declarations.py:145: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_tool_declarations.py::test_actual_native_read_tool_reaches_official_acp_with_declared_presentation
+1 failed in 4.00s

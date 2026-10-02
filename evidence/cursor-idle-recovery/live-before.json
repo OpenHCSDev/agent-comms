@@ -1,0 +1,42 @@
+[
+  {
+    "owner": "nra-architecture",
+    "events": [
+      {
+        "seconds": 0.039,
+        "trusted": false,
+        "scope": "CursorScope(session_id='nra-architecture', wire_root_id='e206f3766e60451a989ca34df0e2a94b', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='nra-architecture', created_at=1790049182.3907015), generation=373), owner_pid=2390158)",
+        "revision": 21,
+        "status": "none"
+      },
+      {
+        "seconds": 0.057,
+        "trusted": true,
+        "scope": "CursorScope(session_id='nra-architecture', wire_root_id='e206f3766e60451a989ca34df0e2a94b', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='nra-architecture', created_at=1790049182.3907015), generation=373), owner_pid=2390158)",
+        "revision": 22,
+        "status": "unavailable"
+      }
+    ],
+    "prompts_sent": 0
+  },
+  {
+    "owner": "pr95-selected-pi-summary-owner",
+    "events": [
+      {
+        "seconds": 0.021,
+        "trusted": false,
+        "scope": "CursorScope(session_id='pr95-selected-pi-summary-owner', wire_root_id='e206f3766e60451a989ca34df0e2a94b', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='pr95-selected-pi-summary-owner', created_at=1790527362.8176258), generation=372), owner_pid=2390157)",
+        "revision": 11,
+        "status": "none"
+      },
+      {
+        "seconds": 0.042,
+        "trusted": true,
+        "scope": "CursorScope(session_id='pr95-selected-pi-summary-owner', wire_root_id='e206f3766e60451a989ca34df0e2a94b', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='pr95-selected-pi-summary-owner', created_at=1790527362.8176258), generation=372), owner_pid=2390157)",
+        "revision": 12,
+        "status": "none"
+      }
+    ],
+    "prompts_sent": 0
+  }
+]

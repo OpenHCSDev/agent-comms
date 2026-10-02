@@ -1,0 +1,47 @@
+command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_acp_private_nk_delivery.py', '-k', 'rename']
+FF......                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_private_owner_rename_migrates_generation_before_canonical_selected_send[False] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-fid3i4js')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0417563100>
+managed = False
+
+    @pytest.mark.parametrize("managed", [False, True])
+    async def test_private_owner_rename_migrates_generation_before_canonical_selected_send(
+        tmp_path, monkeypatch, managed
+    ):
+        comms, agent, _ = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            before = store.participant(lookup)
+>       assert before.owner_thread == "beta" and before.generation == 1
+                                                 ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ParticipantSnapshot' object has no attribute 'generation'
+
+tests/test_acp_private_nk_delivery.py:371: AttributeError
+_ test_private_owner_rename_migrates_generation_before_canonical_selected_send[True] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-305g1ayn')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0417618ef0>
+managed = True
+
+    @pytest.mark.parametrize("managed", [False, True])
+    async def test_private_owner_rename_migrates_generation_before_canonical_selected_send(
+        tmp_path, monkeypatch, managed
+    ):
+        comms, agent, _ = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            before = store.participant(lookup)
+>       assert before.owner_thread == "beta" and before.generation == 1
+                                                 ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ParticipantSnapshot' object has no attribute 'generation'
+
+tests/test_acp_private_nk_delivery.py:371: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_private_owner_rename_migrates_generation_before_canonical_selected_send[False]
+FAILED tests/test_acp_private_nk_delivery.py::test_private_owner_rename_migrates_generation_before_canonical_selected_send[True]
+2 failed, 6 passed, 20 deselected in 4.98s
+
+exit: 1

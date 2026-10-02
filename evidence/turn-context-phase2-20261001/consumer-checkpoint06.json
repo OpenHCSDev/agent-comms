@@ -1,0 +1,59 @@
+{
+  "source_head": "aaf16f6dab97953d4a7788ccf59838ecfc77a728",
+  "producer": "08c20bcb / 55d2e6ae",
+  "main_473": "3d537977",
+  "installed_cli": "/home/ts/.cache/agent-scratch/comms-s5-phase2-cli-20261001/venv/bin/agent-comms",
+  "import_path": "/home/ts/.cache/agent-scratch/comms-s5-phase2-cli-20261001/venv/lib/python3.14/site-packages/agent_comms/cli_commands.py",
+  "wheel_sha256": "8f6c0d0472c5fbbfc4c7644b7116d1eeddc4bd407bc5b6f21ca8c36a4dc8261e",
+  "source_byte_pins": {
+    "src/agent_comms/cli_commands.py": "0819bb8b633a75d7102656f49bd21e90a27fdc19c576f39e119304b99fe53e54",
+    "src/agent_comms/exporting.py": "19ef1fd310845e72291c0083ae407125db01e7fde60202846f79f9c4a65040bd",
+    "src/agent_comms/retained_context.py": "d821bcc4fa89f956f1d07c79f01d25436df902b7ee95986e27e2c603c6f539d5",
+    "src/agent_comms/wire_log.py": "393039a6d3b1a1b592172897bab21f1a67a2f7e16d1ddd60d7832e7eb0227bc8"
+  },
+  "production_delta": {
+    "added": 182,
+    "deleted": 4,
+    "base": "c3975ee053571d6d214a177c338f38dbba97213f"
+  },
+  "accepted": {
+    "existing_source_checks": "54 PASS / 3.27s",
+    "final_owned_source": "1 continuous workflow PASS / .42s",
+    "installed_workflow": ".                                                                        [100%]\n1 passed in 0.65s",
+    "actual_console_argv": [
+      "/home/ts/.cache/agent-scratch/comms-s5-phase2-cli-20261001/venv/bin/agent-comms",
+      "--root",
+      "/home/ts/wt/comms-turn-context-phase2-20261001/.artifacts/installed-cli-workflow06/test_original_human_pin_revisi0/comms",
+      "retained-context",
+      "recipient"
+    ],
+    "console_exit": 0,
+    "stderr": "",
+    "retained_text_bytes": 1689,
+    "original_fixture_read_hashes": {
+      "/home/ts/wt/comms-turn-context-phase2-20261001/.artifacts/installed-cli-workflow06/test_original_human_pin_revisi0/comms/bus.jsonl": "42d1346bdba76b971693d3e27ce4a1b36f78367b4920086f788ea19072e390a1",
+      "/home/ts/wt/comms-turn-context-phase2-20261001/.artifacts/installed-cli-workflow06/test_original_human_pin_revisi0/comms/registry.json": "4047e876b39a4c761b3e95d9163a624c17094e8bd041394dd6264e100156d4b3"
+    }
+  },
+  "structural_positive_deltas": {},
+  "source_owner": "Message.body/task/reference + original certified WireLog read; human admission on HumanConstraintPin; exporter file effects unchanged",
+  "new_stores": 0,
+  "agent_leases": 0,
+  "wording_authorities_added": 0,
+  "native_provider_calls": 0,
+  "public_changes": [],
+  "receiving_gates_repeated": 0,
+  "scope": "installed core CLI / original wire / atomic artifact; NOT native compact/export/model or ACP/UI Ready",
+  "scratch": {
+    "path": "/home/ts/.cache/agent-scratch/comms-s5-phase2-cli-20261001",
+    "purpose": "owned wheel CLI install and accepted donor dependency path",
+    "owner": "Einstein474",
+    "retire_after": "matched Phase2 source/foundation/native handoff; keep receipts/raw private wire fixtures"
+  },
+  "remaining": [
+    "actual pin -> original native compaction -> original author/verbatim source survives",
+    "export -> fresh native thread -> actual input source intact",
+    "matched foundation/source carry with Sch481/Arendt483; no full481 hold on independent source"
+  ],
+  "peer_controls": "multi_agent_v1 not exposed in restarted available tool catalog; no delivery claimed"
+}

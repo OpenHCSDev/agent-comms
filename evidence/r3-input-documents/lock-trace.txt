@@ -1,0 +1,65 @@
+Timeout (0:00:15)!
+Thread 0x00007f9840e286c0 [owner-native-co] (most recent call first):
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/store_files.py", line 58 in _store_lock
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141 in __enter__
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 71 in locked
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141 in __enter__
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 77 in reading
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141 in __enter__
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 81 in read
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/compaction_journal.py", line 618 in _blocking_selected_summary
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/compaction_journal.py", line 318 in begin
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/owner_compaction_commit.py", line 479 in commit
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f983bfff6c0 [asyncio_0] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f9844d06780 [python] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/selectors.py", line 452 in select
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 2008 in _run_once
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 677 in run_forever
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 706 in run_until_complete
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127 in run
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py", line 905 in inner
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/python.py", line 167 in pytest_pyfunc_call
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/python.py", line 1707 in runtest
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py", line 569 in runtest
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/runner.py", line 250 in <lambda>
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/runner.py", line 361 in from_call
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/runner.py", line 249 in call_and_report
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/runner.py", line 139 in runtestprotocol
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/main.py", line 408 in pytest_runtestloop
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/main.py", line 384 in _main
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/main.py", line 330 in wrap_session
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/main.py", line 377 in pytest_cmdline_main
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/config/__init__.py", line 229 in _main
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/_pytest/config/__init__.py", line 253 in _console_main
+  File "/home/ts/wt/comms-historical-views-20260927/.test-venv/lib/python3.14/site-packages/pytest/__main__.py", line 9 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 198 in _run_module_as_main

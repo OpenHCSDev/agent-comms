@@ -1,0 +1,288 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+___________ test_reopened_viewer_snapshot_decodes_only_appended_rows ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-read-index-20260928/.artifacts/pytest-baseline/test_reopened_viewer_snapshot_0')
+
+    def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
+        comms = wire(tmp_path)
+        comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+        for number in range(100):
+            comms.messaging.send("bob", "#team", f"message {number}")
+        expected = comms.views.viewer_snapshot(str(tmp_path))
+        assert expected.channel_unread["#team"] == 100
+    
+        fresh = wire(tmp_path)
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+            assert fresh.views.viewer_snapshot(str(tmp_path)) == expected
+            assert decode.call_count == 0
+    
+        comms.messaging.send("bob", "#team", "one new message")
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+            latest = fresh.views.viewer_snapshot(str(tmp_path))
+            assert latest.channel_unread["#team"] == 101
+            # The activity and display projections each validate the new row.
+>           assert decode.call_count <= 2
+E           AssertionError: assert 3 <= 2
+E            +  where 3 = <MagicMock name='from_wire' id='140110412762816'>.call_count
+
+tests/test_viewer_snapshot_index.py:33: AssertionError
+__________ test_display_checkpoint_damage_and_bus_replacement_rebuild __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-read-index-20260928/.artifacts/pytest-baseline/test_display_checkpoint_damage0')
+
+    def test_display_checkpoint_damage_and_bus_replacement_rebuild(tmp_path):
+        comms = wire(tmp_path)
+        comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+        comms.messaging.send("bob", "#team", "first")
+        comms.messaging.send("bob", "#team", "second")
+        assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    
+        checkpoint = BusDisplayIndex(comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name).path
+        cached = json.loads(checkpoint.read_text())
+        cached["counts"]["#team"] = 0
+        checkpoint.write_text(json.dumps(cached))
+        assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    
+        bus_path = comms.bus.log.path
+        replacement = bus_path.with_name("replacement.jsonl")
+        replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
+        os.replace(replacement, bus_path)
+>       assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_viewer_snapshot_index.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/baseline/src/agent_comms/history_views.py:870: in viewer_snapshot
+    with self._display_snapshot(viewer=viewer) as (basis, records, bus_revision):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.artifacts/baseline/src/agent_comms/history_views.py:617: in _display_snapshot
+    _, records = stack.enter_context(
+/usr/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.artifacts/baseline/src/agent_comms/wire_log.py:396: in _record_snapshot
+    self._private_marker_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f6dff3d1d60>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+>               raise RelationViolationError("Private bus files require regular owner-only mode.")
+E               agent_comms.errors.RelationViolationError: Private bus files require regular owner-only mode.
+
+.artifacts/baseline/src/agent_comms/wire_log.py:115: RelationViolationError
+__ test_append_between_revision_and_opened_bus_boundary_uses_captured_records __
+
+tmp_path = PosixPath('/home/ts/wt/comms-read-index-20260928/.artifacts/pytest-baseline/test_append_between_revision_a0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f6dff5328d0>
+
+    def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
+        tmp_path, monkeypatch
+    ):
+        comms = wire(tmp_path)
+        comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+        comms.messaging.send("bob", "#team", "first")
+        bus_path = comms.bus.log.path
+        first = json.loads(bus_path.read_text().splitlines()[0])
+        raced_timestamp = first["ts"] + 10
+        original = comms.bus.log._record_snapshot
+    
+        @contextmanager
+        def append_before_open(*args, **kwargs):
+            row = dict(first, seq=2, ts=raced_timestamp, text="raced append")
+            with bus_path.open("a") as stream:
+                stream.write(json.dumps(row) + "\n")
+            with original(*args, **kwargs) as boundary:
+                yield boundary
+    
+        monkeypatch.setattr(comms.bus.log, '_record_snapshot', append_before_open)
+>       snapshot = comms.views.viewer_snapshot(str(tmp_path))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_viewer_snapshot_index.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/baseline/src/agent_comms/history_views.py:893: in viewer_snapshot
+    self.bus.pending_counts(captured_viewer),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/baseline/src/agent_comms/message_bus.py:357: in pending_counts
+    return self._pending_projection([name])[name]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/baseline/src/agent_comms/message_bus.py:415: in _pending_projection
+    if index.sync(self._delivery_decoder()):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/baseline/src/agent_comms/bus_route_counts.py:143: in sync
+    delivery = decode(json.loads(raw))
+               ^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/baseline/src/agent_comms/routing.py:117: in from_wire
+    initial = validate_initial_record(record, root_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+record = {'seq': 2, 'id': '006eff603d57', 'from': 'bob', 'to': '#team', ...}
+wire_root_id = 'a20972cc5ef74cb5bf4de9aaea774a39'
+
+    def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> CommittedInitial:
+        """Strictly reconstruct and independently recompute all N from raw committed bytes.
+    
+        This alone is not authority: only MessageBus.read_initial_cohort calls it
+        after checking the owner-only marker and scanning the original bus inode.
+        """
+        from .audience_manifest import FrozenRecipient, freeze_audience
+        from .coordination import POLICY_VERSION, RESOLVER_VERSION
+        from .messages import Message
+        from .wake import ControlClassification, resolve_wake_cohort
+    
+        if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {PRIVATE_WIRE_FIELD}:
+            raise ValueError("Unknown private bus namespace.")
+        private = record[PRIVATE_WIRE_FIELD]
+        if (
+            not isinstance(private, dict)
+            or set(private) != {"version", "initial"}
+            or type(private["version"]) is not int
+            or private["version"] != 1
+        ):
+            raise ValueError("Unsupported initial bus sideband version.")
+        raw = private["initial"]
+        if not isinstance(raw, dict) or set(raw) != {
+            "wire_root_id",
+            "manifest_codec",
+            "resolver_version",
+            "policy_version",
+            "control",
+            "audience",
+            "decisions",
+            "decisions_digest",
+        }:
+            raise ValueError("Malformed private initial bus sideband.")
+        if (
+            raw["wire_root_id"] != wire_root_id
+            or raw["manifest_codec"] != INITIAL_CODEC
+            or raw["resolver_version"] != RESOLVER_VERSION
+            or raw["policy_version"] != POLICY_VERSION
+            or type(raw["control"]) is not str
+        ):
+            raise ValueError("Unsupported or wrong-root initial sideband.")
+        control = ControlClassification(raw["control"])
+        if not control.supports_initial:
+            raise ValueError("Unsupported initial control issuer in codec v1.")
+        audience_raw = raw["audience"]
+        if not isinstance(audience_raw, dict) or set(audience_raw) != {
+            "version",
+            "wire_seq",
+            "message_id",
+            "exact_target",
+            "sender_lookup",
+            "sender_name",
+            "source_revision",
+            "recipients",
+            "wire_envelope_digest",
+            "digest",
+        }:
+            raise ValueError("Malformed initial audience.")
+        member_rows = audience_raw["recipients"]
+        if not isinstance(member_rows, list) or len(member_rows) > 4096:
+            raise ValueError("Initial audience has invalid member list.")
+        if any(
+            not isinstance(item, dict)
+            or set(item) != {"recipient_lookup", "canonical_thread"}
+            or type(item["recipient_lookup"]) is not str
+            or type(item["canonical_thread"]) is not str
+            for item in member_rows
+        ):
+            raise ValueError("Malformed initial audience member.")
+        if (
+            type(audience_raw["source_revision"]) is not str
+            or _HEX64.fullmatch(audience_raw["source_revision"]) is None
+            or type(audience_raw["sender_lookup"]) is not str
+            or _HEX32.fullmatch(audience_raw["sender_lookup"]) is None
+            or any(_HEX32.fullmatch(member["recipient_lookup"]) is None for member in member_rows)
+        ):
+            raise ValueError("Initial creator lookup or source revision is invalid.")
+        recipients = tuple(FrozenRecipient(**member) for member in member_rows)
+        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
+        message = Message.from_wire(public)
+        if (
+            type(public.get("seq")) is not int
+            or any(
+                type(public.get(field)) is not str
+                for field in ("id", "from", "to", "text", "type", "sender_role")
+            )
+            or _canonical(public) != _canonical(message.to_wire())
+            or public_envelope_digest(public) != public_envelope_digest(message.to_wire())
+        ):
+>           raise ValueError("Initial public envelope is not canonical.")
+E           ValueError: Initial public envelope is not canonical.
+
+.artifacts/baseline/src/agent_comms/bus_publication.py:240: ValueError
+__ test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-read-index-20260928/.artifacts/pytest-baseline/test_reopened_human_pending_ro0')
+
+    def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tmp_path):
+        import sqlite3
+        from collections import Counter
+    
+        from agent_comms.bus_route_counts import BusRouteCounts
+    
+        comms = wire(tmp_path)
+        comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        comms.threads.register(Thread("bob", frozenset(), str(tmp_path / "bob")))
+        viewer = comms.messaging.user_identity(str(tmp_path)).name
+        messages = [
+            comms.messaging.send_message("bob", viewer if number % 2 else "#team", f"message {number}")
+            for number in range(6)
+        ]
+        comms.messaging.send_user_message("bob", "own outgoing message", worktree=str(tmp_path))
+        comms.views.viewer_snapshot(str(tmp_path))
+        comms.bus.reads.mark_displayed(
+            viewer,
+            comms.bus.reads.capture(
+                viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus.log.path
+            ),
+        )
+        assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}
+        comms.registry.rename("bob", "renamed-bob")
+        delivery = comms.bus._delivery_scope(viewer)
+        expected = Counter(
+            delivery.conversation(message.sender, message.target) for message in comms.bus.inbox(viewer)
+        )
+        # The untagged human inbox excludes channel rows. Renaming invalidates
+        # its old DM conversation evidence exactly as the authoritative inbox does.
+>       assert expected == {"renamed-bob": 3}
+E       AssertionError: assert Counter({'renamed-bob': 2}) == {'renamed-bob': 3}
+E         
+E         Differing items:
+E         {'renamed-bob': 2} != {'renamed-bob': 3}
+E         Use -v to get more diff
+
+tests/test_viewer_snapshot_index.py:117: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_viewer_snapshot_index.py::test_reopened_viewer_snapshot_decodes_only_appended_rows
+FAILED tests/test_viewer_snapshot_index.py::test_display_checkpoint_damage_and_bus_replacement_rebuild
+FAILED tests/test_viewer_snapshot_index.py::test_append_between_revision_and_opened_bus_boundary_uses_captured_records
+FAILED tests/test_viewer_snapshot_index.py::test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback
+4 failed in 3.89s

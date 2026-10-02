@@ -1,0 +1,34 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "82f4c98bbc621760bd5c8b6cdb65e6a22399d232",
+  "paths": [
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/compaction_journal.py",
+    "src/agent_comms/compaction_states.py",
+    "src/agent_comms/manual_compaction_bridge.py",
+    "src/agent_comms/native_pi.py",
+    "src/agent_comms/owner_compaction_commit.py",
+    "src/agent_comms/owner_compaction_manual.py",
+    "src/agent_comms/pi_commands.py",
+    "src/agent_comms/pi_events.py",
+    "src/agent_comms/pi_summary_payloads.py",
+    "src/agent_comms/selected_pi_summary_rpc.py",
+    "src/agent_comms/selected_source_snapshot.py",
+    "src/agent_comms/wire_log.py"
+  ],
+  "base": {
+    "TypeIdentity": 62,
+    "LongBooleanChain": 40,
+    "StringSubscript": 145
+  },
+  "head": {
+    "TypeIdentity": 45,
+    "LongBooleanChain": 33,
+    "StringSubscript": 96
+  },
+  "delta": {
+    "TypeIdentity": -17,
+    "LongBooleanChain": -7,
+    "StringSubscript": -49
+  }
+}

@@ -1,0 +1,273 @@
+........................................................................ [ 37%]
+........................................................................ [ 75%]
+.......F
+=================================== FAILURES ===================================
+_ TestNativeInputBinding.test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts _
+
+self = <test_backend.TestNativeInputBinding object at 0x7fa08005c7d0>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-reusable-lifecycle/backend-callers-two/test_persistent_pi_reuses_one_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa080055b00>
+
+        async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(
+            self, tmp_path, monkeypatch
+        ):
+            session_file = tmp_path / "session.jsonl"
+            session_file.write_text("session\n")
+            proof_file = tmp_path / "session.jsonl.input-proof"
+            proof_file.write_text("proof\n")
+            ids_file = tmp_path / "prompt-ids"
+            stats_marker = tmp_path / "stats-delayed"
+            stub = _stub(
+                tmp_path,
+                f"#!{sys.executable}\n"
+                + f"""
+    import json, os, sys, time
+    send = lambda event: print(json.dumps(event), flush=True)
+    delayed_stats = False
+    for line in sys.stdin:
+        command = json.loads(line)
+        kind = command["type"]
+        if kind == "get_state":
+            send({{"type":"response","command":kind,"id":command.get("id"),
+                   "success":True,"data":{{"nativeInputProofCapability":
+                   "pi-native-input-v1-live-only","sessionId":"fixed-session",
+                   "sessionFile":{str(session_file)!r}}}}})
+        elif kind == "prompt":
+            with open({str(ids_file)!r}, "a") as output:
+                output.write(command["id"] + " " + command["inputId"] + "\\n")
+            if command["message"] == "cancel":
+                time.sleep(5)
+                continue
+            if command.get("images"):
+                sys.stderr.write(command["images"][0]["data"] + "\\n")
+                sys.stderr.flush()
+            if command["message"] == "fail after image":
+                sys.stderr.write("nonimage failure\\n")
+                sys.stderr.flush()
+                sys.exit(1)
+            delayed_stats = command["message"] == "delayed stats"
+            send({{"type":"response","command":kind,"id":command["id"],"success":True}})
+            send({{"type":"message_start","message":{{"role":"user",
+                   "content":command["message"],"inputId":command["inputId"]}}}})
+            send({{"type":"message_update","assistantMessageEvent":{{
+                   "type":"text_delta","delta":"ok"}}}})
+            send({{"type":"message_end","message":{{"role":"assistant",
+                   "stopReason":"stop"}}}})
+            send({{"type":"agent_settled"}})
+        elif kind == "get_session_stats":
+            if delayed_stats:
+                open({str(stats_marker)!r}, "w").write("waiting")
+                time.sleep(0.3)
+            send({{"type":"response","command":kind,"id":command.get("id"),
+                   "success":True,"data":{{"contextUsage":{{"tokens":10}}}}}})
+    """,
+            )
+            persistent = backend.PersistentPiSession()
+            try:
+                first = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "first",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                first_proc = persistent.custody.child.proc
+                second = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "second",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert first[-1].ok is True and second[-1].ok is True
+                assert persistent.custody.child.proc is first_proc and first_proc is not None
+                assert first_proc.returncode is None
+                ids = [line.split() for line in ids_file.read_text().splitlines()]
+                assert len(ids) == 2
+                assert ids[0][0] != ids[1][0] and ids[0][1] != ids[1][1]
+                session_file.write_text("outside writer changed the saved branch\n")
+                third = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "third",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert third[-1].ok is True
+                assert persistent.custody.child.proc is not first_proc
+                assert first_proc.returncode is not None
+                third_proc = persistent.custody.child.proc
+                proof_file.write_text("outside writer changed the proof\n")
+                proof_changed = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "proof changed",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert proof_changed[-1].ok is True
+                assert persistent.custody.child.proc is not third_proc
+                assert third_proc is not None and third_proc.returncode is not None
+                fourth_proc = persistent.custody.child.proc
+    
+                async def cancelled_turn():
+                    return [
+                        event
+                        async for event in backend.stream_agent_events(
+                            stub,
+                            [],
+                            "cancel",
+                            str(tmp_path),
+                            session_file=str(session_file),
+                            persistent_session=persistent,
+                        )
+                    ]
+    
+                cancelled_task = asyncio.create_task(cancelled_turn())
+                async with asyncio.timeout(2):
+                    while len(ids_file.read_text().splitlines()) < 5:
+                        await asyncio.sleep(0.01)
+                cancelled_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await cancelled_task
+                assert fourth_proc is not None and fourth_proc.returncode is not None
+                after = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "after",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert after[-1].ok is True
+                assert len(ids_file.read_text().splitlines()) == 6
+    
+                @contextmanager
+                def revoked_goal(public_id, native_id, text):
+                    assert public_id is None and len(native_id) == 32 and text == "denied"
+                    yield False
+    
+                denied = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "denied",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                        send_boundary=revoked_goal,
+                    )
+                ]
+                assert denied[-1].ok is False
+                assert len(ids_file.read_text().splitlines()) == 6
+                revived = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "revive",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert revived[-1].ok is True
+                before_image_proc = persistent.custody.child.proc
+                image = ImageInput("U0VDUkVUX0lNQUdFX0JZVEVT", "image/png")
+                image_turn = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "image turn",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                        images=(image,),
+                    )
+                ]
+                assert image_turn[-1].ok is True
+                assert persistent.custody.child.proc is before_image_proc and before_image_proc is not None
+                failed = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "fail after image",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert failed[-1].ok is False
+                assert "diagnostics withheld" in failed[-1].text
+                assert image.data not in failed[-1].text
+                revived = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "revive again",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+                assert revived[-1].ok is True
+                # The real pinned strict validator is exercised separately against
+                # a valid native JSONL. This stub tests the transport lifecycle:
+                # discard injected manager; a different process and matching
+                # get_state identity precede a distinct new input's provider work.
+                from agent_comms import native_session_reopen
+    
+                calls = []
+    
+                def validated(_launcher, file, *, expected_session_id):
+                    calls.append((file, expected_session_id))
+                    return "fixed-session"
+    
+                monkeypatch.setattr(native_session_reopen, "validate_native_reopen", validated)
+                retired = persistent.custody.child.proc
+                await persistent.discard_for_external_write(str(session_file))
+                assert retired is not None and retired.returncode is not None
+                assert not persistent.available and persistent.custody.session_id == "fixed-session"
+                reopened = [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "fresh after discarded manager",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+>               assert reopened[-1].ok is True
+E               AssertionError: assert False is True
+E                +  where False = Done(text='Saved native session failed strict reopen validation.', ok=False, reason_code='compaction_reopen_invalid', diagnostic=None).ok
+
+tests/test_backend.py:2690: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_backend.py::TestNativeInputBinding::test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 151 passed in 23.65s

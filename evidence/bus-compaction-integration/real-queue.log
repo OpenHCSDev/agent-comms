@@ -1,0 +1,56 @@
+{"receipt": "/home/ts/wt/comms-c0-integration-20260928/.artifacts/bus-compaction-real-queue-20260928/result.json", "verified_success": false, "error": "PublicationActivationBlocked('foreground cohort requires a private /var/tmp root')"}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-c0-integration-20260928/evidence/bus-compaction-integration/real_queue_acceptance.py", line 224, in <module>
+    asyncio.run(run(parser.parse_args()))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-c0-integration-20260928/evidence/bus-compaction-integration/real_queue_acceptance.py", line 111, in run
+    await prompt(
+    ...<4 lines>...
+    )
+  File "/home/ts/wt/comms-c0-integration-20260928/evidence/bus-compaction-integration/real_queue_acceptance.py", line 95, in prompt
+    response = await agent.prompt(name, [{"type": "text", "text": text}])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/acp.py", line 340, in prompt
+    return await self.turns.prompt_owned(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        session_id, prompt, display_text=display_text if defer_display else None
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/turn_runner.py", line 184, in prompt_owned
+    await self.inputs.run_owned_input(
+        session_id, thread_name, agent_task, display_text=display_text
+    )
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/input_drain.py", line 913, in run_owned_input
+    await self.effects.turns.run_agent_turn(
+    ...<8 lines>...
+    )
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/turn_runner.py", line 699, in run_agent_turn
+    await OwnedTurn(
+    ...<18 lines>...
+    ).run()
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/owned_turn.py", line 833, in run
+    await self.prepare_native()
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/owned_turn.py", line 660, in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/input_drain.py", line 357, in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/input_drain.py", line 363, in drain_owned_inbox
+    return await self.effects._drain_private_nk(session_id, private_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/acp.py", line 612, in _drain_private_nk
+    _preflight(self._comms.root, wire_root_id, package, True)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/lib/python3.14/site-packages/agent_comms/cohort_foreground.py", line 61, in _preflight
+    raise PublicationActivationBlocked("foreground cohort requires a private /var/tmp root")
+agent_comms.coordination_store.PublicationActivationBlocked: foreground cohort requires a private /var/tmp root

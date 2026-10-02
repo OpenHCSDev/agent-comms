@@ -1,0 +1,78 @@
+{
+  "verified": true,
+  "messages_sent": 0,
+  "views": {
+    "agent-comms-ux": {
+      "status": "Ready",
+      "rendered": "Ready\nRecent incoming messages:\n#comms \u00b7 user: @agent-comms-ux did u get this? \u2014 Pending\n#comms \u00b7 user: testing, if u see thes reply bsck in channel \u2014 Pending\n#comms \u00b7 user: New independent installed Toad feedback check (not a retry of message71) for the Comms UX owner: reply TOAD\u2026 \u2014 Pending\n#comms \u00b7 pr95-selected-pi-summary-owner: Message processing failed: Native Pi prompt send is UNKNOWN; no retry; the input is uncertain. No automatic\u2026 \u2014 Passive\n#comms \u00b7 user: New independent installed Toad feedback check (not a retry of message71) for the Comms UX owner: reply TOAD\u2026 \u2014 Pending",
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "target": "#comms",
+          "outcome": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "target": "#comms",
+          "outcome": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "target": "#comms",
+          "outcome": "Pending"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "target": "#comms",
+          "outcome": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "target": "#comms",
+          "outcome": "Pending"
+        }
+      ]
+    },
+    "pr95-selected-pi-summary-owner": {
+      "status": "Ready",
+      "rendered": "Ready\nRecent incoming messages:\n#comms \u00b7 user: testing, if u see thes reply bsck in channel \u2014 Responded\n#comms \u00b7 user: New independent installed Toad feedback check (not a retry of message71) for the Comms UX owner: reply TOAD\u2026 \u2014 Checked \u2014 no response\n#comms \u00b7 user: New independent installed Toad feedback check (not a retry of message71) for the Comms UX owner: reply TOAD\u2026 \u2014 Outcome uncertain\n#comms \u00b7 agent-comms-ux: Message processing failed: Native Pi prompt send is UNKNOWN; no retry; the input is uncertain. No automatic\u2026 \u2014 Passive\n#comms \u00b7 user: Installed Toad feedback verification for the Comms UX owner: reply TOAD_CHANNEL_FEEDBACK_OK in this channel\u2026 \u2014 Outcome uncertain",
+      "receipts": [
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "target": "#comms",
+          "outcome": "Responded"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "target": "#comms",
+          "outcome": "Checked \u2014 no response"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "target": "#comms",
+          "outcome": "Outcome uncertain"
+        },
+        {
+          "seq": 73,
+          "id": "e5e6cfac212f",
+          "target": "#comms",
+          "outcome": "Passive"
+        },
+        {
+          "seq": 71,
+          "id": "70cabcc918ca",
+          "target": "#comms",
+          "outcome": "Outcome uncertain"
+        }
+      ]
+    }
+  }
+}

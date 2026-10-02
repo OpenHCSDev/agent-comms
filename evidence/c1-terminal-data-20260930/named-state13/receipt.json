@@ -1,0 +1,103 @@
+{
+  "baseline": "166c97a80b964eb7e213a46a12fe8bb9b7142256",
+  "frozen_installed_cohort": {
+    "core": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+    "toad": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+    "unchanged": true
+  },
+  "production_delta": {
+    "files": [
+      {
+        "file": "src/agent_comms/native_attestation.py",
+        "added": 8,
+        "deleted": 2
+      },
+      {
+        "file": "src/agent_comms/native_tools.py",
+        "added": 1,
+        "deleted": 5
+      },
+      {
+        "file": "src/agent_comms/pi_commands.py",
+        "added": 8,
+        "deleted": 9
+      },
+      {
+        "file": "src/agent_comms/pi_events.py",
+        "added": 17,
+        "deleted": 11
+      },
+      {
+        "file": "src/agent_comms/pi_payloads.py",
+        "added": 95,
+        "deleted": 12
+      },
+      {
+        "file": "src/agent_comms/pi_vocabulary.py",
+        "added": 1,
+        "deleted": 1
+      },
+      {
+        "file": "src/agent_comms/turn_runner.py",
+        "added": 1,
+        "deleted": 2
+      },
+      {
+        "file": "src/agent_comms/turn_stats.py",
+        "added": 0,
+        "deleted": 1
+      }
+    ],
+    "added": 131,
+    "deleted": 43
+  },
+  "source_check": {
+    "passed": 53,
+    "seconds": 1.54,
+    "log": "source-focus16.log",
+    "scope": "existing real JSON-line decoder/stream + saved/ACP tool diff projection and family guard; FreshRuntimeRule/selected-summary crossing checks; not newly installed native/UI acceptance"
+  },
+  "states": {
+    "response_data": [
+      "MissingData",
+      "existing PiResponseData members"
+    ],
+    "model": [
+      "UnreportedModel",
+      "ReportedModel"
+    ],
+    "tool_result": [
+      "MissingToolResult",
+      "ProvidedToolResult"
+    ],
+    "assistant_content": "required native array decoded once; missing/null/string refused"
+  },
+  "remaining_shared_owner": {
+    "SelectedModel.from_runtime": "Arendt closes manual/adaptive callers through original prepared native model observation; no local observation wrapper"
+  },
+  "preserved": [
+    "native raw journals and external discriminators",
+    "original input UNKNOWN/dispositions",
+    "frozen candidate prefix and all gate proofs",
+    "default packages/routes/public owners"
+  ],
+  "ready": false,
+  "new_installed_gate": "one meaningful new paired native/ACP/UI cohort after shared item5/252/460 correction, not replay of u01/u02",
+  "prior_actual_results": "installed12 all five functional localhost controls PASS; offline region observer failure and cursor unavailable classification remain explicit; whole BUS not Ready",
+  "native_contract_files": {
+    "dist/modes/rpc/rpc-types.d.ts": "c6e90c36ed4567e30e2318cd1a8d11984b7dd4d1760335be34b6cbd492438fe5",
+    "node_modules/@earendil-works/pi-ai/dist/types.d.ts": "845edb9a4509f79bf973310a37dafa7adb1110dd77e88bfbe5e1c00292dbac68",
+    "node_modules/@earendil-works/pi-agent-core/dist/types.d.ts": "07bae37d12469f43b003c9e874263f40c1e3e7584d45b44e8ce1a25c2139c54f"
+  },
+  "tracked_nullable_review": {
+    "new_nullable_evidence": false,
+    "baseline": "6feb634b",
+    "existing_internal_state_debt": [
+      "input_event/context_event protocol milestones",
+      "terminal_error failure/outcome slot",
+      "fresh_selected/selected_revision selected-start pairing"
+    ],
+    "current_change": "FileRevision replaces five-int tuple; mandatory when selected, no newly None-initialized acquired evidence",
+    "owner": "Einstein tracked data; Arendt original custody/admission integration; do not classify pre-existing internal None as external metadata"
+  }
+}

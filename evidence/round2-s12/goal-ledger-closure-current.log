@@ -1,0 +1,80 @@
+.........................................F..................E
+==================================== ERRORS ====================================
+_ ERROR at setup of test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done] _
+
+self = <Coroutine test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:558: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+comms = <agent_comms.comms.Comms object at 0x7f125948cec0>
+
+    @pytest.fixture
+    def wired(comms: Comms) -> Comms:
+        """A wire with PR111 (parent) and fixer (child) registered."""
+        comms.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
+        comms.threads.register(
+>           Thread(
+                name="fixer",
+                tags=frozenset({"auth"}),
+                worktree="/tmp/wt1",
+                parent="PR111",
+                task="fix auth",
+                pid=0,
+            )
+        )
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+tests/conftest.py:38: TypeError
+=================================== FAILURES ===================================
+________ test_observation_insert_error_does_not_rollback_failure_fence _________
+
+bound = (<agent_comms.goal_attempts.GoalAttemptStore object at 0x7f12593d4360>, Thread(name='owner', tags=frozenset(), worktre...urn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', reason=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>)))
+
+    def test_observation_insert_error_does_not_rollback_failure_fence(bound):
+        store, owner, _, observation = bound
+        with sqlite3.connect(store.path) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_evidence "
+                "BEGIN SELECT RAISE(ABORT,'injected observation failure'); END"
+            )
+        store.record_failed(observation.reservation, "failed", observation=observation)
+        assert store.snapshot("goal").lifecycle == BlockedGeneration()
+>       assert rows(store, "attempts")[0][4] == "failed"
+               ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_failure_observation.py:182: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <agent_comms.goal_attempts.GoalAttemptStore object at 0x7f12593d4360>
+table = 'attempts'
+
+    def rows(store, table):
+        with sqlite3.connect(store.path) as conn:
+>           return conn.execute(f"SELECT * FROM {table}").fetchall()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           sqlite3.OperationalError: no such table: attempts
+
+tests/test_goal_failure_observation.py:78: OperationalError
+=========================== short test summary info ============================
+FAILED tests/test_goal_failure_observation.py::test_observation_insert_error_does_not_rollback_failure_fence
+ERROR tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 2 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 59 passed, 1 error in 4.22s

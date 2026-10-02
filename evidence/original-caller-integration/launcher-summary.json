@@ -1,0 +1,8 @@
+{
+  "normal_launcher": "toad-comms agent-comms-ux",
+  "observation_seconds": 12,
+  "inner_exit_zero": true,
+  "owner_visible": true,
+  "traceback": false,
+  "import_error": false
+}

@@ -1,0 +1,51 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_released_process_surviving_grace_is_stopped_before_replacement[restart] _
+
+releasing_owner = (<agent_comms.comms.Comms object at 0x7ff8bad50590>, <Popen: returncode: None args: ['/home/ts/wt/comms-historical-views-20260927...>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff8bad55350>
+mode = 'restart'
+
+    @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])
+    def test_released_process_surviving_grace_is_stopped_before_replacement(
+        releasing_owner, monkeypatch, mode
+    ):
+        comms, process = releasing_owner
+        original = comms.registry.require("worker")
+        arguments = restart_arguments(comms, mode)
+        signals, launches = observe_signals_and_launch(comms, process, monkeypatch)
+        if mode == "stop":
+            comms.owners.stop("worker")
+        else:
+>           (result,) = comms.owners.restart_owners(["worker"], **arguments)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_owner_release_restart.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-c0-integration-20260928/src/agent_comms/owner_lifecycle.py:386: in restart_owners
+    self._require_same_stop_owner(thread, epoch)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owner_lifecycle.OwnerLifecycle object at 0x7ff8bad51550>
+thread = Thread(name='worker', tags=frozenset({'team'}), worktree='/home/ts/wt/.ors28/baseline/test_released_process_survivin0/...ctive_turn=None, last_goal_report_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+epoch = 1
+
+    def _require_same_stop_owner(self, thread: Thread, epoch: int) -> None:
+        snapshot = self.registry.snapshot()
+        current = snapshot.threads.get(thread.name)
+        if (
+            current is None
+            or (current.name, current.pid, current.created_at)
+            != (thread.name, thread.pid, thread.created_at)
+            or snapshot.admission_generations.get(thread.name) != epoch
+            or not snapshot.statuses[thread.name].active
+        ):
+>           raise RelationViolationError(
+                f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
+            )
+E           agent_comms.errors.RelationViolationError: Owner changed while stopping 'worker'; refusing a stale signal.
+
+../comms-c0-integration-20260928/src/agent_comms/owner_lifecycle.py:670: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_owner_release_restart.py::test_released_process_surviving_grace_is_stopped_before_replacement[restart]
+1 failed in 3.28s

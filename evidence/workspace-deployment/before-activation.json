@@ -1,0 +1,15 @@
+{
+  "previous_links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms-nk-foreground"
+  },
+  "owners": [
+    "agent-comms-ux",
+    "pr95-selected-pi-summary-owner",
+    "nra-architecture",
+    "nra-domain-mapping"
+  ]
+}

@@ -1,0 +1,41 @@
+src/agent_comms/__init__.py:35:    ThreadStatus,
+src/agent_comms/__init__.py:149:    "ThreadStatus",
+src/agent_comms/supervised_cutover.py:30:from .declarations import RelationViolationError, Thread, ThreadStatus, _store_lock
+src/agent_comms/supervised_cutover.py:470:            or snapshot.statuses[name] is not ThreadStatus.STOPPED
+src/agent_comms/supervised_cutover.py:548:            private.registry.register(thread, ThreadStatus.STOPPED)
+src/agent_comms/operations.py:86:    ThreadStatus,
+src/agent_comms/operations.py:2258:                self.registry.register(thread, ThreadStatus.STOPPED)
+src/agent_comms/operations.py:3223:                    or not current.statuses.get(canonical, ThreadStatus.STOPPED).visible
+src/agent_comms/operations.py:3343:                        or not fresh.statuses.get(thread.name, ThreadStatus.STOPPED).active
+src/agent_comms/operations.py:3397:                            or stop_snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
+src/agent_comms/operations.py:3429:                        or final.statuses.get(thread.name) is not ThreadStatus.STOPPED
+src/agent_comms/operations.py:3618:                    or not current.statuses.get(canonical, ThreadStatus.STOPPED).active
+src/agent_comms/operations.py:3697:            or not snapshot.statuses.get(thread.name, ThreadStatus.STOPPED).active
+src/agent_comms/operations.py:3736:            snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
+src/agent_comms/operations.py:3754:            if status is ThreadStatus.STOPPED and self._released_same_owner(
+src/agent_comms/registration.py:16:    ThreadStatus,
+src/agent_comms/registration.py:38:        status: ThreadStatus = ThreadStatus.RUNNING,
+src/agent_comms/registration.py:491:    def status(self, name: str) -> ThreadStatus:
+src/agent_comms/registry_document.py:17:    ThreadStatus,
+src/agent_comms/registry_document.py:29:    previous_status: ThreadStatus | None
+src/agent_comms/registry_document.py:31:    status: ThreadStatus
+src/agent_comms/registry_document.py:67:    statuses: dict[str, ThreadStatus] = field(default_factory=dict)
+src/agent_comms/registry_document.py:147:            document.statuses[name] = ThreadStatus(data.get("status", "running"))
+src/agent_comms/registry_document.py:167:                    "status": self.statuses.get(name, ThreadStatus.RUNNING).value,
+src/agent_comms/registry_document.py:181:        self, thread: Thread, status: ThreadStatus, *, new_owner: bool
+src/agent_comms/registry_document.py:187:        if not self.statuses.get(thread.name, ThreadStatus.RUNNING).mutable:
+src/agent_comms/registry_document.py:290:                ThreadStatus.ARCHIVED
+src/agent_comms/registry_document.py:291:                if source.statuses[thread.name] is ThreadStatus.ARCHIVED
+src/agent_comms/registry_document.py:292:                else ThreadStatus.STOPPED
+src/agent_comms/registry_document.py:351:        self.statuses[expected.name] = ThreadStatus.STOPPED
+src/agent_comms/registry_document.py:362:        self.statuses[name] = ThreadStatus.STOPPED
+src/agent_comms/registry_document.py:372:        self.statuses[name] = ThreadStatus.ARCHIVED
+src/agent_comms/registry_document.py:382:        self.statuses[name] = ThreadStatus.DELETING
+src/agent_comms/registry_document.py:408:        if not self.statuses.get(name, ThreadStatus.RUNNING).mutable:
+src/agent_comms/registry_document.py:413:        self.statuses[name] = ThreadStatus.RUNNING
+src/agent_comms/goal_failure_observation.py:17:from .declarations import Goal, Thread, ThreadStatus, TurnLeaseFence
+src/agent_comms/goal_failure_observation.py:169:    owner_status: ThreadStatus,
+src/agent_comms/goal_failure_observation.py:185:        not isinstance(owner_status, ThreadStatus)
+src/agent_comms/declarations.py:482:class ThreadStatus(Enum):
+src/agent_comms/declarations.py:1558:    status: ThreadStatus
+src/agent_comms/declarations.py:2262:    statuses: Mapping[str, ThreadStatus]

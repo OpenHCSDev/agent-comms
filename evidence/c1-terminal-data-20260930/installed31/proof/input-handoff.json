@@ -1,0 +1,31 @@
+[
+  {
+    "phase": "accepted_pending",
+    "input_id": "18761c5fff9d4835a8b05d7eeb05a2c7",
+    "queue": {
+      "kind": "available",
+      "items": [
+        {
+          "input_id": "18761c5fff9d4835a8b05d7eeb05a2c7",
+          "text": "VISIBILITY_QUEUED_FOLLOWUP"
+        }
+      ],
+      "restored": []
+    }
+  },
+  {
+    "phase": "native_started",
+    "input_id": "18761c5fff9d4835a8b05d7eeb05a2c7",
+    "native_id": "b1c5dbd1b96d93d9bdf46a2e01e60742"
+  },
+  {
+    "phase": "cancelled_after_native_start",
+    "delivery": {
+      "inputs": [],
+      "historicalCount": 0,
+      "dismissedHistoricalCount": 0,
+      "historicalInputs": [],
+      "currentScope": "owner_queue"
+    }
+  }
+]

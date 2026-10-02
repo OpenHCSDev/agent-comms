@@ -1,0 +1,44 @@
+{
+  "source_head": "d7c2cf3d45f8be0b7181e3a198edfabe8b119182",
+  "capture": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/fresh-unverified05/node_modules/@earendil-works/pi-coding-agent",
+  "stock_recipe_exit": 0,
+  "old_manifest_sha256": "4519164ef97bb5ece65f98544179e544e0ac0b486d8976023b610f2397d937f8",
+  "native_manifest_sha256": "f1178500e5154c38152aeb5d1133ab9fbd84774e2a8bc6b6233ba9b490b4eb4c",
+  "tree_sha256": "53c34d888755517eceb50bb46a667b48add88e916c802dc0ea096bd390c58bd4",
+  "diagnostic_paths": 49,
+  "changed_diagnostic_paths": [
+    {
+      "path": "dist/core/agent-session.js",
+      "before": "f22bce669fad6f4cfe853dbcd606a3e3f4b60d225636b7d7603fbfcc7d933b17",
+      "after": "709bcbf952a648587e3f1961b79cf1e7a95095758018bd1f956b416784bfa06f"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "before": "0d0e0118253c8c721555e3154f14ca394700e1d3c589866d7129a78a35607b64",
+      "after": "2077e5a2c54b072fa46a124ebe469bd478ee885abae83a7315f5c3c867260c50"
+    },
+    {
+      "path": "dist/core/agent-session.d.ts",
+      "before": "7ce29f9d380239cc84c0501bd2d282e5884d318b94f061c127e7aab07c65cbb9",
+      "after": "39c0b4203c25509f64089bbff3a9dceec9281cfc80a205d7c49d64a73fc09e16"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-types.d.ts",
+      "before": "5937d70149822f9f27781d66b765199479a08d2c6e1edeeeb3ae17e1bbec3dfe",
+      "after": "88bce628eb358af08ec861e7596f507c9bb3dfd3f3ed38051b3296273d8165c9"
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "before": "2e98f07933048e7067e9d14248ec9752ec58d85ba76bff0e54b90610f9bc2ef6",
+      "after": "9a561f196f974b2be654a9bf5387e42309795658573865a5c3f5711f1552371e"
+    },
+    {
+      "path": "dist/core/turn-context.d.ts",
+      "before": "16b42a11dd7f7a0e9847e168eb9a9e27acb158504c41bb3a10a7119a704c39e8",
+      "after": "df2ebb8371c88bff73253bad57fb485965360fb959187d84a7267e2d41b618b9"
+    }
+  ],
+  "provider_calls": 0,
+  "public_changes": [],
+  "acceptance": "candidate pins from fresh stock recipe; canonical prepare full trust pending"
+}

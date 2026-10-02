@@ -1,0 +1,31 @@
+.F
+=================================== FAILURES ===================================
+_____________ test_unvalidated_configuration_refuses_before_child ______________
+
+tmp_path = PosixPath('/var/tmp/l0b-launch-tests/test_unvalidated_configuration0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2dba493820>
+
+    async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypatch):
+        from agent_comms.child_process import AttachedChild
+    
+        async def forbidden(*args, **kwargs):
+            raise AssertionError("Unvalidated configuration reached child execution")
+    
+        monkeypatch.setattr(AttachedChild, "start", forbidden)
+        result = [
+            item
+            async for item in stream_agent_events(
+                str(tmp_path / "missing-native"), (), "must not send", str(tmp_path)
+            )
+        ]
+        assert len(result) == 1 and isinstance(result[0], events.Done)
+        assert not result[0].ok and result[0].reason_code == "native_launch_invalid"
+>       assert "missing-native" in result[0].text
+E       AssertionError: assert 'missing-native' in 'Bus protocol marker is invalid: Missing required fields for WireMetadata'
+E        +  where 'Bus protocol marker is invalid: Missing required fields for WireMetadata' = Done(text='Bus protocol marker is invalid: Missing required fields for WireMetadata', ok=False, reason_code='native_launch_invalid', diagnostic=None).text
+
+tests/test_native_only_execution.py:71: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_only_execution.py::test_unvalidated_configuration_refuses_before_child
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 passed, 2 deselected in 0.86s

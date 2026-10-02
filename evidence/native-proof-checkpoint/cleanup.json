@@ -1,0 +1,11 @@
+{
+  "references": {
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/q4-installed": [],
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/q4-current": []
+  },
+  "removed_completed_q4_derivatives": [
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/q4-installed",
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/q4-current"
+  ],
+  "preserved": "source/evidence/367current candidate/globald396/live"
+}

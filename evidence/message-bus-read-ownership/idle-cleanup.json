@@ -1,0 +1,29 @@
+{
+  "references": [],
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-baseline",
+      "removed_bytes": 3254326
+    },
+    {
+      "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-candidate-wheel",
+      "removed_bytes": 694371
+    },
+    {
+      "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-installed",
+      "removed_bytes": 57713370
+    },
+    {
+      "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/idle-tmp",
+      "removed_bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/toad-registration-authority-callers-20260929/.artifacts/idle-wheels",
+      "removed_bytes": 2183964
+    }
+  ],
+  "resource_free_bytes": {
+    "/": 6918610944,
+    "/home": 13157867520
+  }
+}

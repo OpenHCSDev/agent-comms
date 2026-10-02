@@ -1,0 +1,63 @@
+{
+  "modules": [
+    {
+      "module": "agent_events.py",
+      "sha256": "73c2049c69442f8e9dfe4de8b23ffbe1ee4bcb0d5594872249294b0a32480f05",
+      "installed_matches": true
+    },
+    {
+      "module": "backend.py",
+      "sha256": "f9b541a9c2049de764ec5835ca213ebdca2b2bf96d0b4031d0a10bc840e99576",
+      "installed_matches": true
+    },
+    {
+      "module": "diagnostics.py",
+      "sha256": "044cd27e2cb9ae65e127f00e6a39054d3e29ca8254f110fba67a10d3ce53e55d",
+      "installed_matches": true
+    },
+    {
+      "module": "pi_events.py",
+      "sha256": "1a474c08544f27d364ac402af9935863b7bcce7b68954372415ae49a74f94be4",
+      "installed_matches": true
+    },
+    {
+      "module": "request_progress.py",
+      "sha256": "7e7deed6dd3c952e4cd54e846b4ed81716ffb3629d9049b869ccbf065692d6e3",
+      "installed_matches": true
+    },
+    {
+      "module": "runtime.py",
+      "sha256": "817f660be72622f1957c97483c6a1e4f5fa91c1dbcd75f22837e3c5e87079242",
+      "installed_matches": true
+    },
+    {
+      "module": "runtime_requests.py",
+      "sha256": "e3abbd6a5f9f2297330f3f030b8508a05718654b9461520c1540368a5634011f",
+      "installed_matches": true
+    },
+    {
+      "module": "selected_participant.py",
+      "sha256": "141cc3229d716e8a0c958a60c4a2d62a473f716e1d19ce80454492271e505a42",
+      "installed_matches": true
+    },
+    {
+      "module": "turn_phase.py",
+      "sha256": "a681aeeb87c9852a6ec4aa47132f41ab217880d64b62140502dc2e62ac86d28c",
+      "installed_matches": true
+    },
+    {
+      "module": "turn_progress.py",
+      "sha256": "a9f57794795eccfffb686c0bc87deb091829917f5da9ff40dc8e95679f986248",
+      "installed_matches": true
+    },
+    {
+      "module": "turn_watchdog.py",
+      "sha256": "61834449d737fae0dd65f79ef929dd3733bb8ac76c7b0ae0bb18c8135fb59fee",
+      "installed_matches": true
+    }
+  ],
+  "core_installed_path": "/home/ts/wt/comms-native-request-wait-observation-20260930/.observations/runtime/lib/python3.14/site-packages/agent_comms",
+  "source_fallback": false,
+  "native_manifest_sha256": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "wheel_sha256": "5055f71acf6e8ff60fa49c1c1de4e1c1887f16d0a3d846bea9bc936229c2dece"
+}

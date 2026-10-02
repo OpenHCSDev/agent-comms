@@ -1,0 +1,4 @@
+{"name": "pr95-selected-pi-summary-owner", "ready": true, "history_widgets": 1, "contents_children": 2, "loading_overlay": false, "prompts_sent": 0, "exception": "None"}
+STATE True 1
+SESSION_TASK <Task finished name='Task-32' coro=<Agent.run() done, defined at /home/ts/.local/share/agent-comms/runtime-history-ready-20260928/lib/python3.14/site-packages/toad/acp/agent.py:737> result=None>
+SESSION_ERROR None

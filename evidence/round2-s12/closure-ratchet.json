@@ -1,0 +1,46 @@
+{
+  "base_revision": "720316afa84e87c09e9ee69af419e120061deaa0",
+  "head_revision": "dd4cbe18bff53abc588ba76c0fb8df8a29d7a283",
+  "paths": [
+    "src/agent_comms/assignment_states.py",
+    "src/agent_comms/claim_admission.py",
+    "src/agent_comms/cohort_foreground.py",
+    "src/agent_comms/cohort_schema.py",
+    "src/agent_comms/coordinated_runtime.py",
+    "src/agent_comms/coordination.py",
+    "src/agent_comms/coordination_cohort.py",
+    "src/agent_comms/coordination_response.py",
+    "src/agent_comms/coordination_store.py",
+    "src/agent_comms/goal_attempts.py",
+    "src/agent_comms/goal_failure_observation.py",
+    "src/agent_comms/historical_native_inputs.py",
+    "src/agent_comms/history_views.py",
+    "src/agent_comms/importing.py",
+    "src/agent_comms/native_prompt_binding.py",
+    "src/agent_comms/native_runtime_input.py",
+    "src/agent_comms/optional_awareness_projection.py",
+    "src/agent_comms/private_bus_checkpoint.py",
+    "src/agent_comms/proven_source_coverage.py",
+    "src/agent_comms/recovery_gateway.py",
+    "src/agent_comms/recovery_projection.py",
+    "src/agent_comms/typed_table.py",
+    "src/agent_comms/view_unread.py",
+    "src/agent_comms/wake_candidate_index.py",
+    "src/agent_comms/wake_policy.py"
+  ],
+  "base": {
+    "TypeIdentity": 138,
+    "LongBooleanChain": 72,
+    "StringSubscript": 113
+  },
+  "head": {
+    "TypeIdentity": 131,
+    "LongBooleanChain": 70,
+    "StringSubscript": 22
+  },
+  "delta": {
+    "TypeIdentity": -7,
+    "LongBooleanChain": -2,
+    "StringSubscript": -91
+  }
+}

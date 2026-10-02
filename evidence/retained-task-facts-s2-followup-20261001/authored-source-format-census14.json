@@ -1,0 +1,46 @@
+{
+  "read_only": true,
+  "public_mutations": 0,
+  "roots": [
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/bus.jsonl",
+      "counts": {
+        "rows": 266,
+        "decision_fields": 0,
+        "constraints_fields": 0
+      },
+      "source_sha256": "d8a17ef9e75ea427910724f739d1b99ba5aa475431a5c384d243d245593f1938",
+      "original_task_identities": []
+    },
+    {
+      "path": "/home/ts/wt/s5final01/wire/bus.jsonl",
+      "source_sha256": "94cb3daddde2e9a85b9372e8bc29254fe76f0770cb781a129e632bf6cdc72b57",
+      "counts": {
+        "rows": 7,
+        "decision_fields": 3
+      },
+      "original_task_identities": [
+        {
+          "seq": 1,
+          "id": "75762766597b",
+          "kind": "choice",
+          "private": true
+        },
+        {
+          "seq": 2,
+          "id": "cb113bcb6b7f",
+          "kind": "user_supersession",
+          "private": true
+        },
+        {
+          "seq": 3,
+          "id": "aea7fe4100ac",
+          "kind": "choice",
+          "private": true
+        }
+      ],
+      "preserve_original": true,
+      "private_annotation": "namespace membership from existing bus_publication.has_private_wire_fields; not a private-attestation proof"
+    }
+  ]
+}

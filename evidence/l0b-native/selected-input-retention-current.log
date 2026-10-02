@@ -1,0 +1,179 @@
+..................sF............                                         [100%]
+=================================== FAILURES ===================================
+___ test_selected_handoff_keeps_images_controller_and_future_input_receipts ____
+
+fut = <coroutine object Event.wait at 0x7ff21cfbcd60>, timeout = 5
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+/usr/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7ff21af5ce30 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+/usr/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-byrj4rhy')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff21d0a1080>
+
+    async def test_selected_handoff_keeps_images_controller_and_future_input_receipts(
+        tmp_path, monkeypatch
+    ):
+        from types import SimpleNamespace
+    
+        comms, agent, _ = _session(tmp_path)
+        agent.turns.adaptive_compaction_enabled = False
+        controller = SimpleNamespace()
+        agent.sessions.client = controller
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        started = []
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            execution = kwargs["send_boundary"].__self__
+            assert execution.controller is controller
+            assert kwargs["images"][0].data == "eA=="
+            owner = comms.registry.require("beta")
+            receipts = agent.inputs.future_inputs(owner, execution.original_keys[0])
+            assert len(receipts) == 2
+            # The adaptive compaction owner accepts the same live queued receipts.
+            agent.inputs.dispositions.read().compaction_rows(
+                owner, execution.original_keys[0], agent.inputs
+            )
+            first_id = execution.accepted_input_id
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            started.append(first_id)
+            yield events.InputStarted(id=None)
+            command = kwargs["steering_queue"].get_nowait()
+            second_id = command["_input_id"]
+            with kwargs["send_boundary"](second_id, "b" * 32, command["message"]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](second_id, "b" * 32, command["message"])
+            started.append(second_id)
+            yield events.InputStarted(id=second_id)
+            with kwargs["send_boundary"](second_id, "c" * 32, command["message"]) as allowed:
+                assert allowed is False
+            yield events.StreamSettled()
+            yield events.Done(ok=True, text="Both fresh inputs handled")
+    
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+>           await asyncio.wait_for(entered.wait(), 5)
+
+tests/test_selected_owner_followup.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7ff21af3ff00>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+/usr/lib/python3.14/asyncio/timeouts.py:115: TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_keeps_images_controller_and_future_input_receipts
+1 failed, 30 passed, 1 skipped in 12.91s

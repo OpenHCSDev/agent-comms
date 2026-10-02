@@ -1,0 +1,15 @@
+{
+  "commit": "6cc7fd4cf96068565db0b576b1ae1f396980e361",
+  "python": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/optional-awareness-identity/installed/bin/python",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/optional-awareness-identity/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "changed_helpers": {
+    "agent_comms.optional_awareness_projection": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/optional-awareness-identity/installed/lib/python3.14/site-packages/agent_comms/optional_awareness_projection.py"
+  },
+  "boundary": "noneditable wheel with actual persisted wire and SQLite awareness lifecycle; no provider/native/UI claim"
+}
+actual complete wire projection: 0.009152s
+.
+1 passed in 0.50s

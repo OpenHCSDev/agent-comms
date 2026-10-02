@@ -1,0 +1,24 @@
+{
+  "finding_count": 0,
+  "finding_counts": {
+    "by_pattern": [],
+    "by_detector": []
+  },
+  "timing": {
+    "parse_seconds": 0.811,
+    "analysis_seconds": 7.123,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.519,
+    "analysis_cache_status": "partial",
+    "total_seconds": 8.453
+  },
+  "active_finding_surface": "raw_findings",
+  "supporting_raw_findings": null,
+  "observation_count": 2845,
+  "coverage_limit": "CLI supplied complete package context but emitted no analyzed/omitted detector inventory or scan_status; no global-clean claim.",
+  "r1_raw_record_leads": {
+    "mapping_read": 0,
+    "unmodeled_record_shape": 0,
+    "redundant_type_check": 0
+  }
+}

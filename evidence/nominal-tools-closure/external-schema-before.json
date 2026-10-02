@@ -1,0 +1,765 @@
+[
+  {
+    "name": "comms_pin_channel",
+    "label": "Pin Channel",
+    "description": "Persist whether a channel is pinned. Pinned channels sort before unpinned channels; the selected channel sort remains the secondary order.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Channel name"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "True to pin; false to unpin"
+        }
+      },
+      "required": [
+        "name",
+        "pinned"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_pin_thread",
+    "label": "Pin Thread in Channel",
+    "description": "Persist whether a member is pinned within one channel. Pins do not change membership or ordering in other channels. The selected member sort remains the secondary order.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "description": "Channel containing the thread"
+        },
+        "name": {
+          "type": "string",
+          "description": "Member thread name"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "True to pin; false to unpin"
+        }
+      },
+      "required": [
+        "channel",
+        "name",
+        "pinned"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_model",
+    "label": "Change Thread Model",
+    "description": "Change this thread's model, or another thread's model, for its future turns. Optionally change its thinking level too. Applies from that thread's next turn.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string",
+          "description": "Thread to change (defaults to the executing thread)"
+        },
+        "model": {
+          "type": "string",
+          "description": "Provider/model identifier"
+        },
+        "thinking_level": {
+          "type": "string",
+          "description": "Optional Pi thinking level",
+          "enum": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "default": ""
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_sort_channels",
+    "label": "Sort Channels",
+    "description": "Persist channel-list ordering independently of member ordering. Pinned channels stay first, with built-in channels first within each pin group.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "type": "string",
+          "description": "Channel list order",
+          "enum": [
+            "name",
+            "created_at",
+            "last_activity",
+            "last_user_input"
+          ]
+        }
+      },
+      "required": [
+        "order"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_tags",
+    "label": "Manage tags",
+    "description": "List, create, rename, or delete tags. Renaming/deleting updates thread assignments and channel filters. Uncovered tags automatically have a channel.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "create",
+            "rename",
+            "delete"
+          ],
+          "default": "list"
+        },
+        "name": {
+          "type": "string",
+          "description": "Tag name",
+          "default": ""
+        },
+        "new_name": {
+          "type": "string",
+          "description": "Replacement tag for rename",
+          "default": ""
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_thread_tags",
+    "label": "Assign thread tags",
+    "description": "Add/remove tags on a thread. Omit thread to manage your own tags. Channel membership and routing update immediately without restarting or creating an executor.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string",
+          "description": "Thread name or alias",
+          "default": ""
+        },
+        "add": {
+          "type": "string",
+          "description": "Comma-separated tags to add",
+          "default": ""
+        },
+        "remove": {
+          "type": "string",
+          "description": "Comma-separated tags to remove",
+          "default": ""
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_channels",
+    "label": "List channels",
+    "description": "List named tag views and their current member threads; #any includes everyone.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_set_channel_metadata",
+    "label": "Set channel presentation",
+    "description": "Set presentation-only parent and archive state. These fields never alter routing, membership, history, unread state, or delivery.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Exact channel name"
+        },
+        "parent": {
+          "type": "string",
+          "description": "Parent channel; empty clears the parent"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Whether to hide from active presentation"
+        }
+      },
+      "required": [
+        "name",
+        "parent",
+        "archived"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_set_view",
+    "label": "Set non-routable view",
+    "description": "Create/update a typed participant or activity projection. Views cannot receive messages and never own channel history.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "View name without #"
+        },
+        "kind": {
+          "type": "string",
+          "description": "Projection kind",
+          "enum": [
+            "participants",
+            "activity"
+          ]
+        },
+        "match": {
+          "type": "string",
+          "description": "Tag predicate",
+          "enum": [
+            "any_of",
+            "all_of"
+          ]
+        },
+        "tags": {
+          "type": "string",
+          "description": "One or more comma-separated tags"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "match",
+        "tags"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_delete_view",
+    "label": "Delete non-routable view",
+    "description": "Delete a saved projection without changing tags, channels, messages, or threads.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Saved view name"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_sort_channel",
+    "label": "Sort channel members",
+    "description": "Persist one channel's member ordering, shared by all attached views.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Channel name"
+        },
+        "order": {
+          "type": "string",
+          "description": "Member ordering",
+          "enum": [
+            "last_message_sent",
+            "created_at",
+            "last_activity"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "order"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_set_project",
+    "label": "Change Project",
+    "description": "Change your own persistent project directory and synchronize attached clients. Accepts an existing absolute path, ~ path, or path relative to your current project. Preserves this thread and its conversation. After changing, end your turn; the runtime automatically continues in the new project.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "New project directory"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_set_goal",
+    "label": "Set persistent goal",
+    "description": "Set or replace your own persistent goal. Use this when the user asks you to start, set, or pursue a goal autonomously.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Persistent objective to pursue"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_goal",
+    "label": "Goal progress",
+    "description": "Update goal progress; complete it or block it when user input is needed. Use standby with explicit wait_for thread names when waiting for delegated work. The goal remains active, but only a direct message from a named dependency or a user follow-up starts its next turn. Do not repeatedly announce waiting or return empty output. If existing dependency replies block standby, inspect comms_inbox with this goal_id and wait_for. Read standby_review.messages and copy only standby_review.reviewed_inputs into reviewed_inputs; this records your decision to wait for a later reply without replaying uncertain inputs.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "goal_id": {
+          "type": "string",
+          "description": "Goal identity provided in the turn context"
+        },
+        "status": {
+          "type": "string",
+          "description": "Goal state",
+          "enum": [
+            "active",
+            "standby",
+            "completed",
+            "blocked"
+          ]
+        },
+        "progress": {
+          "type": "string",
+          "description": "Progress summary; blocked requires a nonempty explicit reason"
+        },
+        "wait_for": {
+          "type": "array",
+          "description": "Explicit thread names or @names; required for standby",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewed_inputs": {
+          "type": "array",
+          "description": "Exact unresolved inputId keys inspected and handled for this goal; standby only",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "goal_id",
+        "status",
+        "progress"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_resume_goal",
+    "label": "Resume paused goal",
+    "description": "Resume your own paused goal with the same ID only after an explicit user request. This does not replace the goal or resume blocked/completed goals.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "goal_id": {
+          "type": "string",
+          "description": "Identity of the paused goal to resume"
+        },
+        "progress": {
+          "type": "string",
+          "description": "Progress summary for the resumed goal"
+        }
+      },
+      "required": [
+        "goal_id",
+        "progress"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_edit_goal",
+    "label": "Edit goal text",
+    "description": "Edit your existing goal text while keeping its identity, status, and progress. Use comms_set_goal only to replace the objective with a fresh goal ID.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "goal_id": {
+          "type": "string",
+          "description": "Identity of the existing goal to edit"
+        },
+        "text": {
+          "type": "string",
+          "description": "Revised objective text, including any @mentions"
+        }
+      },
+      "required": [
+        "goal_id",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_goal_history",
+    "label": "Goal history",
+    "description": "Read recorded goal revisions and recorded provenance and observation gaps.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "goal_id": {
+          "type": "string",
+          "description": "Optional goal ID; omit for this thread's full history",
+          "default": ""
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_threads",
+    "label": "Comms Threads",
+    "description": "List agent threads on the coordination wire with status and pending counts.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "active_only": {
+          "type": "boolean",
+          "description": "Exclude stopped threads",
+          "default": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_collaboration",
+    "label": "Manage mutual collaboration",
+    "description": "Create, update or end one mutual contact with another agent. Either participant can add, change its shared note, or remove it from both collaboration lists. This persistent metadata does not message, wake or fork either agent.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Relationship change",
+          "enum": [
+            "add",
+            "update",
+            "remove"
+          ]
+        },
+        "peer": {
+          "type": "string",
+          "description": "Collaborating agent thread name or alias"
+        },
+        "note": {
+          "type": "string",
+          "description": "Short description of ongoing work",
+          "default": ""
+        }
+      },
+      "required": [
+        "action",
+        "peer"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_collaborations",
+    "label": "List collaborations",
+    "description": "Read explicit contacts and goal-derived awareness with provenance, without changing delivery, work acceptance or owners.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_rename_self",
+    "label": "Rename Comms Thread",
+    "description": "Rename your own persistent thread identity; old names remain routing aliases.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "new_name": {
+          "type": "string",
+          "description": "Your new thread name"
+        }
+      },
+      "required": [
+        "new_name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_send",
+    "label": "Comms Send",
+    "description": "Send a message to another thread or channel. Address specific threads with @thread-name in the body: the named threads are told they are the intended readers, and others dismiss quietly. Unknown names stay plain text.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Sender thread name"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target thread name or channel"
+        },
+        "body": {
+          "type": "string",
+          "description": "Message text"
+        },
+        "type": {
+          "type": "string",
+          "description": "Message type",
+          "enum": [
+            "info",
+            "question",
+            "ack",
+            "handoff",
+            "alert"
+          ],
+          "default": "info"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_inbox",
+    "label": "Comms Inbox",
+    "description": "Fetch undelivered messages and unresolved native input attempts for a thread. Optional ACK changes only the inbox marker; unresolved_inputs remain UNKNOWN. Oversized results return complete=false, counts, and a complete result_file; ACK is deferred. Read that file selectively, never dump it into context. For standby, supply goal_id and wait_for to get standby_review: exact eligible keys and messages, already reviewed entries, and excluded owner/other-dependency inputs.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string",
+          "description": "Thread name"
+        },
+        "ack": {
+          "type": "boolean",
+          "description": "Mark delivered after reading",
+          "default": true
+        },
+        "goal_id": {
+          "type": "string",
+          "description": "Current goal for scoped standby review"
+        },
+        "wait_for": {
+          "type": "array",
+          "description": "Declared dependencies for standby review",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "thread"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_fork",
+    "label": "Comms Fork",
+    "description": "Fork a child agent thread from a registered parent's persistent session.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Child thread name"
+        },
+        "parent": {
+          "type": "string",
+          "description": "Parent thread name"
+        },
+        "task": {
+          "type": "string",
+          "description": "Task for the child"
+        },
+        "tags": {
+          "type": "string",
+          "description": "Comma-separated tags",
+          "default": ""
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Initial prompt override"
+        }
+      },
+      "required": [
+        "name",
+        "parent",
+        "task"
+      ],
+      "additionalProperties": false
+    },
+    "context": "thread",
+    "action_label": "Fork from this thread",
+    "action_order": 10,
+    "context_bindings": {
+      "parent": "subject"
+    }
+  },
+  {
+    "name": "comms_stop",
+    "label": "Stop Comms Thread",
+    "description": "Stop a thread after verifying that its process owns the registered identity.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Thread name"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "context": "thread",
+    "action_label": "Stop process",
+    "action_order": 20,
+    "context_bindings": {
+      "name": "subject"
+    }
+  },
+  {
+    "name": "comms_start",
+    "label": "Start Comms Thread",
+    "description": "Start a stopped agent thread with its saved conversation and configuration. Reuses an already-running owner without interrupting it. The returned PID is reserved; startup may still be in progress. Does not send a new task.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Thread to start"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "context": "thread",
+    "action_label": "Start thread",
+    "action_order": 21,
+    "context_bindings": {
+      "name": "subject"
+    }
+  },
+  {
+    "name": "comms_archive",
+    "label": "Archive Comms Thread",
+    "description": "Archive a stopped thread while retaining its messages.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Stopped thread name"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "context": "thread",
+    "action_label": "Archive stopped thread",
+    "action_order": 30,
+    "context_bindings": {
+      "name": "subject"
+    }
+  },
+  {
+    "name": "comms_dismiss",
+    "label": "Dismiss Unaddressed Channel Pings",
+    "description": "End this turn quietly when a channel message is not addressed to you. Reports which threads were mentioned, advances only your own delivery cursor for that channel, and never wakes or notifies anyone else.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string",
+          "description": "Thread dismissing its own pings (defaults to the executing thread)"
+        },
+        "target": {
+          "type": "string",
+          "description": "Channel the ping arrived on"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "comms_ack",
+    "label": "Acknowledge Comms Messages",
+    "description": "Mark a thread inbox or one of its conversations delivered.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string",
+          "description": "Thread whose delivery cursor advances"
+        },
+        "target": {
+          "type": "string",
+          "description": "Optional conversation target"
+        }
+      },
+      "required": [
+        "thread"
+      ],
+      "additionalProperties": false
+    },
+    "context": "thread",
+    "action_label": "Mark inbox read",
+    "action_order": 50,
+    "context_bindings": {
+      "thread": "actor",
+      "target": "subject"
+    }
+  }
+]

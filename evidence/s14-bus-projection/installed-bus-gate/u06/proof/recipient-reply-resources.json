@@ -1,0 +1,37 @@
+[
+  {
+    "source": "@beta HOT_ORIGINAL_WIRE_BODY",
+    "attached": true,
+    "parent": "IncomingMessage"
+  },
+  {
+    "source": "AMBIENT_AFTER_ORIGINAL_0",
+    "attached": true,
+    "parent": "IncomingMessage"
+  },
+  {
+    "source": "AMBIENT_AFTER_ORIGINAL_1",
+    "attached": true,
+    "parent": "IncomingMessage"
+  },
+  {
+    "source": "AMBIENT_AFTER_ORIGINAL_2",
+    "attached": true,
+    "parent": "IncomingMessage"
+  },
+  {
+    "source": "AMBIENT_AFTER_ORIGINAL_3",
+    "attached": true,
+    "parent": "IncomingMessage"
+  },
+  {
+    "source": "AMBIENT_AFTER_ORIGINAL_4",
+    "attached": true,
+    "parent": "IncomingMessage"
+  },
+  {
+    "source": "RECIPIENT_RESPONSE_PROOF",
+    "attached": true,
+    "parent": "OutgoingMessage"
+  }
+]

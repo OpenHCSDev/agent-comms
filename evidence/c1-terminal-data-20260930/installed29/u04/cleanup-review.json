@@ -1,0 +1,23 @@
+{
+  "remaining": [],
+  "exact_known_private_pids": [
+    60713,
+    60714,
+    60797
+  ],
+  "attempt_scope": "g458g-u04",
+  "private_root": "/home/ts/wt/g458g/u04/fixture/private-root/wire",
+  "manual_signals": [
+    {
+      "pid": 60714,
+      "birth": 1790811180.83,
+      "signal": "SIGTERM",
+      "basis": "direct child of original start-time verified private script; owned test cwd; actual acceptance failure and no input/provider attempt"
+    }
+  ],
+  "paid_calls": 0,
+  "public_effects": 0,
+  "original_replay": false,
+  "tool_handle_status": "old tool93880 not found after resumed context; no reattachment/relaunch",
+  "runtime_activation_unchanged": true
+}

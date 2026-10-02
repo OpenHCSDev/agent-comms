@@ -1,0 +1,81 @@
+{
+  "head": "46b729cf16812620cf9d419aa30d95450a87687e",
+  "method": "static current committed source inventory; no behavior or complete NRA claim",
+  "additional_retired_modules_present": [],
+  "executed_cutover_tools_present": [],
+  "process_calls": [
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 226,
+      "call": "os.kill"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1094,
+      "call": "subprocess.Popen"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 835,
+      "call": "asyncio.create_subprocess_exec"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 959,
+      "call": "subprocess.Popen"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 975,
+      "call": "subprocess.Popen"
+    }
+  ],
+  "lexical_markers": [
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 201,
+      "text": "fallback = None"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 230,
+      "text": "fallback = value.strip()"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 231,
+      "text": "return fallback"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 267,
+      "text": "fallback_transport: str | None = wire_field(\"fallbackTransport\")"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 285,
+      "text": "if self.fallback_transport is not None:"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 286,
+      "text": "parts.append(f\"reported fallback transport: {self.fallback_transport}\")"
+    }
+  ],
+  "unowned_boundary_review_sites": [
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 124,
+      "owner": "NativeContextProof.from_journal",
+      "requirement": "S10 complete boundary decoding, shared A2 owner",
+      "finding": "hand-written key-set/envelope/field extraction still duplicates FieldCodec boundary; current-format live proof reader, not dead code"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 42,
+      "owner": "run_native_pi_turn/_MAX_LINE",
+      "requirement": "existing native capacity followthrough; no cap-only bandaid",
+      "finding": "fixed 1MiB complete RPC record rejection remains beside uncapped canonical PiRpcChannel; recorded proof remains required, no resend permission"
+    }
+  ]
+}

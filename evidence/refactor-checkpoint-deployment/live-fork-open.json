@@ -1,0 +1,12 @@
+{
+  "matching_saved_five_word_phrases": 13,
+  "name": "openhcs-pr159-viewer-bind-owner",
+  "actual_installed_app_attachment": true,
+  "agent_ready": true,
+  "delivery_error": "",
+  "app_exception": "None",
+  "prompts_sent": 0,
+  "owners_stopped": 0,
+  "native_history_status": "coverage_only",
+  "prior_native_session_missing": false
+}

@@ -1,0 +1,16 @@
+Resolved 71 packages in 0.91ms
+   Building agent-comms @ git+https://github.com/OpenHCSDev/agent-comms.git@b3a9c06a50a32c73efa3f2a83bed5dcf1cbbc0ae
+   Building batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@43e57c91e9643cfab053630e1d5aaadd12cffad9
+   Building textual @ git+https://github.com/OpenHCSDev/textual.git@16ede007c34bec893b2dbedb3999223381129678
+      Built agent-comms @ git+https://github.com/OpenHCSDev/agent-comms.git@b3a9c06a50a32c73efa3f2a83bed5dcf1cbbc0ae
+      Built batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@43e57c91e9643cfab053630e1d5aaadd12cffad9
+      Built textual @ git+https://github.com/OpenHCSDev/textual.git@16ede007c34bec893b2dbedb3999223381129678
+Prepared 3 packages in 612ms
+Uninstalled 3 packages in 35ms
+Installed 3 packages in 7ms
+ - agent-comms==0.1.0 (from file:///home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl)
+ + agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@b3a9c06a50a32c73efa3f2a83bed5dcf1cbbc0ae)
+ - batrachian-toad==0.6.20 (from file:///home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/toad-wheels/batrachian_toad-0.6.20-py3-none-any.whl)
+ + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@43e57c91e9643cfab053630e1d5aaadd12cffad9)
+ - textual==8.2.8 (from git+https://github.com/OpenHCSDev/textual.git@6ac3cdd919b1bfb3333091c9ac94df6c114d9fa9)
+ + textual==8.2.8 (from git+https://github.com/OpenHCSDev/textual.git@16ede007c34bec893b2dbedb3999223381129678)

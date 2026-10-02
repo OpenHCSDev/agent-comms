@@ -1,0 +1,3066 @@
+--- a/dist/core/session-manager.js
++++ b/dist/core/session-manager.js
+@@ -1,6 +1,10 @@
++import { DiskEntryStore, MemoryEntryStore } from "./session-entry-store.js";
+ import { uuidv7 } from "@earendil-works/pi-ai";
+ import { randomUUID } from "crypto";
+ import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
++import { fstatSync, realpathSync, unlinkSync } from "fs";
++import { createHash } from "crypto";
++import { basename } from "path";
+ import { readdir, stat } from "fs/promises";
+ import { dirname, join, resolve } from "path";
+ import { createInterface } from "readline";
+@@ -18,146 +22,14 @@
+     }
+ }
+ /** Generate a unique short ID (8 hex chars, collision-checked) */
+-function generateId(byId) {
++function generateId(store) {
+     for (let i = 0; i < 100; i++) {
+         const id = randomUUID().slice(0, 8);
+-        if (!byId.has(id))
++        if (!store.has(id))
+             return id;
+     }
+     // Fallback to full UUID if somehow we have collisions
+     return randomUUID();
+-}
+-/** Migrate v1 → v2: add id/parentId tree structure. Mutates in place. */
+-function migrateV1ToV2(entries) {
+-    const ids = new Set();
+-    let prevId = null;
+-    for (const entry of entries) {
+-        if (entry.type === "session") {
+-            entry.version = 2;
+-            continue;
+-        }
+-        entry.id = generateId(ids);
+-        entry.parentId = prevId;
+-        prevId = entry.id;
+-        // Convert firstKeptEntryIndex to firstKeptEntryId for compaction
+-        if (entry.type === "compaction") {
+-            const comp = entry;
+-            if (typeof comp.firstKeptEntryIndex === "number") {
+-                const targetEntry = entries[comp.firstKeptEntryIndex];
+-                if (targetEntry && targetEntry.type !== "session") {
+-                    comp.firstKeptEntryId = targetEntry.id;
+-                }
+-                delete comp.firstKeptEntryIndex;
+-            }
+-        }
+-    }
+-}
+-/** Migrate v2 → v3: rename hookMessage role to custom. Mutates in place. */
+-function migrateV2ToV3(entries) {
+-    for (const entry of entries) {
+-        if (entry.type === "session") {
+-            entry.version = 3;
+-            continue;
+-        }
+-        // Update message entries with hookMessage role
+-        if (entry.type === "message") {
+-            const msgEntry = entry;
+-            if (msgEntry.message && msgEntry.message.role === "hookMessage") {
+-                msgEntry.message.role = "custom";
+-            }
+-        }
+-    }
+-}
+-/**
+- * Run all necessary migrations to bring entries to current version.
+- * Mutates entries in place. Returns true if any migration was applied.
+- */
+-function migrateToCurrentVersion(entries) {
+-    const header = entries.find((e) => e.type === "session");
+-    const version = header?.version ?? 1;
+-    if (version >= CURRENT_SESSION_VERSION)
+-        return false;
+-    if (version < 2)
+-        migrateV1ToV2(entries);
+-    if (version < 3)
+-        migrateV2ToV3(entries);
+-    return true;
+-}
+-/** Exported for testing */
+-export function migrateSessionEntries(entries) {
+-    migrateToCurrentVersion(entries);
+-}
+-/** Exported for compaction.test.ts */
+-export function parseSessionEntries(content) {
+-    const entries = [];
+-    const lines = content.trim().split("\n");
+-    for (const line of lines) {
+-        if (!line.trim())
+-            continue;
+-        try {
+-            const entry = JSON.parse(line);
+-            entries.push(entry);
+-        }
+-        catch {
+-            // Skip malformed lines
+-        }
+-    }
+-    return entries;
+-}
+-export function getLatestCompactionEntry(entries) {
+-    for (let i = entries.length - 1; i >= 0; i--) {
+-        if (entries[i].type === "compaction") {
+-            return entries[i];
+-        }
+-    }
+-    return null;
+-}
+-function buildEntryIndex(entries, byId) {
+-    if (byId)
+-        return byId;
+-    const index = new Map();
+-    for (const entry of entries) {
+-        index.set(entry.id, entry);
+-    }
+-    return index;
+-}
+-function buildSessionPath(entries, leafId, byId) {
+-    const index = buildEntryIndex(entries, byId);
+-    let leaf;
+-    if (leafId === null) {
+-        return [];
+-    }
+-    if (leafId) {
+-        leaf = index.get(leafId);
+-    }
+-    leaf ??= entries[entries.length - 1];
+-    if (!leaf) {
+-        return [];
+-    }
+-    const path = [];
+-    let current = leaf;
+-    while (current) {
+-        path.push(current);
+-        current = current.parentId ? index.get(current.parentId) : undefined;
+-    }
+-    path.reverse();
+-    return path;
+-}
+-function getSessionContextSettings(path) {
+-    let thinkingLevel = "off";
+-    let model = null;
+-    for (const entry of path) {
+-        if (entry.type === "thinking_level_change") {
+-            thinkingLevel = entry.thinkingLevel;
+-        }
+-        else if (entry.type === "model_change") {
+-            model = { provider: entry.provider, modelId: entry.modelId };
+-        }
+-        else if (entry.type === "message" && entry.message.role === "assistant") {
+-            model = { provider: entry.message.provider, modelId: entry.message.model };
+-        }
+-    }
+-    return { thinkingLevel, model };
+ }
+ /**
+  * Project one selected session entry into LLM/runtime messages.
+@@ -195,46 +67,11 @@
+  * by the kept entries starting at firstKeptEntryId and all entries after the
+  * compaction entry. Older summarized entries are omitted.
+  */
+-export function buildContextEntries(entries, leafId, byId) {
+-    const path = buildSessionPath(entries, leafId, byId);
+-    let compaction = null;
+-    for (const entry of path) {
+-        if (entry.type === "compaction") {
+-            compaction = entry;
+-        }
+-    }
+-    if (!compaction) {
+-        return path;
+-    }
+-    const compactionIdx = path.findIndex((entry) => entry.id === compaction.id);
+-    if (compactionIdx < 0) {
+-        return path;
+-    }
+-    const contextEntries = [compaction];
+-    let foundFirstKept = false;
+-    for (let i = 0; i < compactionIdx; i++) {
+-        const entry = path[i];
+-        if (entry.id === compaction.firstKeptEntryId) {
+-            foundFirstKept = true;
+-        }
+-        if (foundFirstKept) {
+-            contextEntries.push(entry);
+-        }
+-    }
+-    contextEntries.push(...path.slice(compactionIdx + 1));
+-    return contextEntries;
+-}
+ /**
+  * Build the session context from entries using tree traversal.
+  * If leafId is provided, walks from that entry to root.
+  * Handles compaction and branch summaries along the path.
+  */
+-export function buildSessionContext(entries, leafId, byId) {
+-    const path = buildSessionPath(entries, leafId, byId);
+-    const { thinkingLevel, model } = getSessionContextSettings(path);
+-    const messages = buildContextEntries(entries, leafId, byId).flatMap(sessionEntryToContextMessages);
+-    return { messages, thinkingLevel, model };
+-}
+ /**
+  * Compute the default session directory for a cwd.
+  * Encodes cwd into a safe directory name under ~/.pi/agent/sessions/.
+@@ -274,51 +111,6 @@
+     }
+ }
+ /** Exported for testing */
+-export function loadEntriesFromFile(filePath) {
+-    const resolvedFilePath = normalizePath(filePath);
+-    if (!existsSync(resolvedFilePath))
+-        return [];
+-    const entries = [];
+-    let pending = "";
+-    const fd = openSync(resolvedFilePath, "r");
+-    try {
+-        const decoder = new StringDecoder("utf8");
+-        const buffer = Buffer.allocUnsafe(SESSION_READ_BUFFER_SIZE);
+-        while (true) {
+-            const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+-            if (bytesRead === 0)
+-                break;
+-            pending += decoder.write(buffer.subarray(0, bytesRead));
+-            let lineStart = 0;
+-            let newlineIndex = pending.indexOf("\n", lineStart);
+-            while (newlineIndex !== -1) {
+-                const entry = parseSessionEntryLine(pending.slice(lineStart, newlineIndex));
+-                if (entry)
+-                    entries.push(entry);
+-                lineStart = newlineIndex + 1;
+-                newlineIndex = pending.indexOf("\n", lineStart);
+-            }
+-            pending = pending.slice(lineStart);
+-        }
+-        pending += decoder.end();
+-        const finalEntry = parseSessionEntryLine(pending);
+-        if (finalEntry)
+-            entries.push(finalEntry);
+-    }
+-    finally {
+-        closeSync(fd);
+-    }
+-    // Validate session header before repairing the file.
+-    if (entries.length === 0)
+-        return entries;
+-    const header = entries[0];
+-    if (header.type !== "session" || typeof header.id !== "string") {
+-        return [];
+-    }
+-    if (pending)
+-        appendFileSync(resolvedFilePath, "\n");
+-    return entries;
+-}
+ /**
+  * Inspect a physical line while searching for the first parsed session entry.
+  * Blank and malformed lines are skipped to match loadEntriesFromFile().
+@@ -580,22 +372,133 @@
+  * Branching moves the leaf to an earlier entry, allowing new branches without
+  * modifying history.
+  *
+- * Use buildSessionContext() to get the resolved message list for the LLM, which
++ * Use entryStore.contextEntries() to get the resolved message list for the LLM, which
+  * handles compaction summaries and follows the path from root to current leaf.
+  */
++// PR48 local-only prototype: no automatic stale-lock stealing after a crash.
++function pr48DiskRevision(file) {
++    if (!file || !existsSync(file)) return null;
++    const s = lstatSync(file, { bigint: true });
++    if (!s.isFile() || s.nlink !== 1n)
++        throw new Error("Native session file is not a regular file");
++    return [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].map(String).join(":");
++}
++function pr48WriterLock(file, write) {
++    if (!file) return write();
++    const canonical = existsSync(file) ? realpathSync(file) :
++        join(realpathSync(dirname(file)), basename(file));
++    const lock = `${canonical}.pr48-writer.lock`;
++    let fd;
++    try { fd = openSync(lock, "wx", 0o600); }
++    catch { throw new Error("Native session writer lock unavailable; no replay"); }
++    try {
++        writeFileSync(fd, `${process.pid}\n`);
++        fsyncSync(fd);
++        return write();
++    } finally {
++        try { closeSync(fd); } finally { unlinkSync(lock); }
++    }
++}
++
++
++// Cross-language v1 metadata encoding: UTF-8 path bytes and IEEE-754 cost
++// bytes are hex, counters are safe integers, optional fields have fixed slots.
++// No JS/Python floating-point JSON formatting or object insertion order enters
++// the digest. The marker contains only the hash, never redundant metadata.
++function acMetadataDetails(details) {
++    if (details == null) return null;
++    const keys = Object.keys(details).filter(key => key !== "agentCommsCommit").sort();
++    if (keys.length === 0) return null;
++    if (keys.join(",") !== "modifiedFiles,readFiles" ||
++        [details.readFiles, details.modifiedFiles].some(paths =>
++            !Array.isArray(paths) || paths.some(path =>
++                typeof path !== "string" || !path || !path.isWellFormed() ||
++                Buffer.byteLength(path, "utf8") > 4096 || path.includes("\0"))))
++        throw new Error("Invalid native compaction metadata details");
++    return details;
++}
++function acMetadataDigest(details, usage) {
++    const operations = acMetadataDetails(details);
++    const paths = operations === null ? null :
++        [operations.readFiles, operations.modifiedFiles].map(values =>
++            values.map(value => Buffer.from(value, "utf8").toString("hex")));
++    let metrics = null;
++    if (usage != null) {
++        const counters = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
++        const costs = ["input", "output", "cacheRead", "cacheWrite", "total"];
++        const safe = value => Number.isSafeInteger(value) && value >= 0;
++        const price = value => typeof value === "number" && Number.isFinite(value) &&
++            value >= 0 && value <= Number.MAX_SAFE_INTEGER;
++        if (typeof usage !== "object" || Array.isArray(usage) ||
++            Object.keys(usage).some(key => ![...counters, "reasoning", "cacheWrite1h", "cost"].includes(key)) ||
++            counters.some(key => !safe(usage[key])) ||
++            ["reasoning", "cacheWrite1h"].some(key => usage[key] !== undefined && !safe(usage[key])) ||
++            !usage.cost || typeof usage.cost !== "object" || Array.isArray(usage.cost) ||
++            Object.keys(usage.cost).sort().join(",") !== costs.slice().sort().join(",") ||
++            costs.some(key => !price(usage.cost[key])))
++            throw new Error("Invalid native compaction metadata usage");
++        const doubleHex = number => {
++            const bytes = Buffer.alloc(8);
++            bytes.writeDoubleBE(number);
++            return bytes.toString("hex");
++        };
++        metrics = [...counters.map(key => usage[key]), usage.reasoning ?? null,
++            usage.cacheWrite1h ?? null, ...costs.map(key => doubleHex(usage.cost[key]))];
++    }
++    return createHash("sha256").update("agent-comms-metadata-v1\n")
++        .update(JSON.stringify([paths, metrics])).digest("hex");
++}
++
++function acValidateCommit(commit) {
++    if (!commit || typeof commit !== "object" ||
++        !/^[0-9a-f]{32}$/.test(commit.commitId) ||
++        !/^[0-9a-f]{64}$/.test(commit.payloadDigest) ||
++        Object.keys(commit).some(key => !["commitId", "payloadDigest", "metadataDigest"].includes(key)) ||
++        (commit.metadataDigest !== undefined && !/^[0-9a-f]{64}$/.test(commit.metadataDigest)))
++        throw new Error("Invalid native compaction commit identity");
++}
++function acPayloadDigest(summary, firstKeptEntryId, tokensBefore) {
++    return createHash("sha256").update(JSON.stringify([
++        summary, firstKeptEntryId, tokensBefore,
++    ])).digest("hex");
++}
++
++function acSyncParents(directory) {
++    for (let current = directory; ; current = dirname(current)) {
++        const fd = openSync(current, "r");
++        try { fsyncSync(fd); } finally { closeSync(fd); }
++        if (dirname(current) === current) break;
++    }
++}
++
+ export class SessionManager {
++    // Irreversible for this instance. Never reset by newSession or setSessionFile.
++    #acAssertUsable() {
++        this.entryStore?.assertUsable();
++    }
++    #acMutation(action) {
++        this.#acAssertUsable();
++        try {
++            const result = action();
++            this.#acAssertUsable();
++            return result;
++        } catch (error) {
++            this.entryStore?.invalidate(error);
++            try { this.entryStore?.close(); }
++            catch (cleanup) { throw new AggregateError([error, cleanup], error.message, {cause:error}); }
++            throw error;
++        }
++    }
+     sessionId = "";
+     sessionFile;
+     sessionDir;
+     cwd;
+     persist;
+     flushed = false;
+-    fileEntries = [];
+-    byId = new Map();
+-    labelsById = new Map();
+-    labelTimestampsById = new Map();
++    entryStore;
+     leafId = null;
+-    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions, preloadedFileEntries) {
++    _pr48LoadedRevision = null;
++    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions) {
+         this.cwd = resolvePath(cwd);
+         this.sessionDir = normalizePath(sessionDir);
+         this.persist = persist;
+@@ -603,46 +506,48 @@
+             mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
+         }
+         if (sessionFile) {
+-            this._setSessionFile(sessionFile, preloadedFileEntries);
+-        }
+-        else if (preloadedFileEntries?.length) {
+-            this._loadEntries(preloadedFileEntries, newSessionOptions);
++            this._setSessionFile(sessionFile);
+         }
+         else {
+             this.newSession(newSessionOptions);
+         }
++        this._assertLoadedRevision();
++    }
++    _assertLoadedRevision() {
++        return this.#acMutation(() => {
++        if (this.persist && pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
++            throw new Error("Native session changed during load; no replay");
++        });
+     }
+     /** Switch to a different session file (used for resume and branching) */
+     setSessionFile(sessionFile) {
++        return this.#acMutation(() => {
+         this._setSessionFile(sessionFile);
+-    }
+-    _setSessionFile(sessionFile, preloadedFileEntries) {
+-        this.sessionFile = resolvePath(sessionFile);
+-        if (existsSync(this.sessionFile)) {
+-            const entries = preloadedFileEntries ?? loadEntriesFromFile(this.sessionFile);
+-            // If file was empty, initialize it with a valid session header. If it was
+-            // non-empty but did not parse as a pi session, fail without modifying it.
+-            if (entries.length === 0) {
++        this._assertLoadedRevision();
++        });
++    }
++    _setSessionFile(sessionFile) {
++        return this.#acMutation(() => {
++            this.sessionFile = resolvePath(sessionFile);
++            const observedRevision = pr48DiskRevision(this.sessionFile);
++            if (existsSync(this.sessionFile) && statSync(this.sessionFile).size) {
++                const next = new DiskEntryStore(this.sessionFile);
++                this.entryStore?.close();
++                this.entryStore = next;
++                this._pr48LoadedRevision = this.entryStore.revision;
++                this.sessionId = this.entryStore.header.id;
++                this.leafId = this.entryStore.lastId;
++                this.flushed = true;
++            } else {
+                 const explicitPath = this.sessionFile;
+-                if (statSync(explicitPath).size > 0) {
+-                    throw new Error(`Session file is not a valid ${APP_NAME} session: ${explicitPath}`);
+-                }
+                 this.newSession();
+                 this.sessionFile = explicitPath;
+-                this._rewriteFile();
+-                this.flushed = true;
+-                return;
+-            }
+-            this._loadEntries(entries);
+-            this.flushed = true;
+-        }
+-        else {
+-            const explicitPath = this.sessionFile;
+-            this.newSession();
+-            this.sessionFile = explicitPath; // preserve explicit path from --session flag
+-        }
++                this._pr48LoadedRevision = observedRevision;
++            }
++        });
+     }
+     newSession(options) {
++        return this.#acMutation(() => {
+         if (options?.id !== undefined) {
+             assertValidSessionId(options.id);
+         }
+@@ -656,68 +561,20 @@
+             cwd: this.cwd,
+             parentSession: options?.parentSession,
+         };
+-        this.fileEntries = [header];
+-        this.byId.clear();
+-        this.labelsById.clear();
+-        this.labelTimestampsById.clear();
++        this.entryStore?.close();
++        this.entryStore = new MemoryEntryStore(header);
+         this.leafId = null;
+         this.flushed = false;
+         if (this.persist) {
+             const fileTimestamp = timestamp.replace(/[:.]/g, "-");
+             this.sessionFile = join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+         }
++        this._pr48LoadedRevision = null;
+         return this.sessionFile;
+-    }
+-    _loadEntries(entries, options) {
+-        const header = entries.find((e) => e.type === "session");
+-        if (header) {
+-            this.fileEntries = entries;
+-            this.sessionId = header.id;
+-            if (migrateToCurrentVersion(this.fileEntries)) {
+-                this._rewriteFile();
+-            }
+-        }
+-        else {
+-            this.newSession(options);
+-            this.fileEntries = this.fileEntries.concat(entries);
+-        }
+-        this._buildIndex();
+-    }
+-    _buildIndex() {
+-        this.byId.clear();
+-        this.labelsById.clear();
+-        this.labelTimestampsById.clear();
+-        this.leafId = null;
+-        for (const entry of this.fileEntries) {
+-            if (entry.type === "session")
+-                continue;
+-            this.byId.set(entry.id, entry);
+-            this.leafId = entry.id;
+-            if (entry.type === "label") {
+-                if (entry.label) {
+-                    this.labelsById.set(entry.targetId, entry.label);
+-                    this.labelTimestampsById.set(entry.targetId, entry.timestamp);
+-                }
+-                else {
+-                    this.labelsById.delete(entry.targetId);
+-                    this.labelTimestampsById.delete(entry.targetId);
+-                }
+-            }
+-        }
+-    }
+-    _rewriteFile() {
+-        if (!this.persist || !this.sessionFile)
+-            return;
+-        const fd = openSync(this.sessionFile, "w", 0o600);
+-        try {
+-            for (const entry of this.fileEntries) {
+-                writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+-            }
+-        }
+-        finally {
+-            closeSync(fd);
+-        }
+-    }
++        });
++    }
++
++
+     isPersisted() {
+         return this.persist;
+     }
+@@ -737,43 +594,40 @@
+         return this.sessionFile;
+     }
+     _persist(entry) {
+-        if (!this.persist || !this.sessionFile)
+-            return;
+-        const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message.role === "assistant");
+-        if (!hasAssistant) {
+-            if (this.flushed) {
+-                appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+-            }
+-            else {
+-                // Mark as not flushed so when assistant arrives, all entries get written
+-                this.flushed = false;
+-            }
+-            return;
+-        }
++        if (!this.persist || !this.sessionFile) return;
++        let hasAssistant = entry.type === 'message' && entry.message.role === 'assistant';
++        if (!hasAssistant) for (const meta of this.entryStore.metadataEntries()) {
++            if (meta.role === 'assistant') { hasAssistant = true; break; }
++        }
++        if (!this.flushed && !hasAssistant) return;
+         if (!this.flushed) {
+-            const fd = openSync(this.sessionFile, "wx", 0o600);
++            const fd = openSync(this.sessionFile, existsSync(this.sessionFile) ? 'w' : 'wx', 0o600);
+             try {
+-                for (const e of this.fileEntries) {
+-                    writeFileSync(fd, `${JSON.stringify(e)}\n`);
+-                }
+-            }
+-            finally {
+-                closeSync(fd);
+-            }
++                for (const item of this.entryStore.fileEntries()) writeFileSync(fd, JSON.stringify(item) + '\n');
++                writeFileSync(fd, JSON.stringify(entry) + '\n');
++            } finally { closeSync(fd); }
+             this.flushed = true;
+-        }
+-        else {
+-            appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+-        }
++        } else appendFileSync(this.sessionFile, JSON.stringify(entry) + '\n');
+     }
+     _appendEntry(entry) {
+-        this.fileEntries.push(entry);
+-        this.byId.set(entry.id, entry);
+-        this.leafId = entry.id;
+-        this._persist(entry);
++        return this.#acMutation(() => {
++        return pr48WriterLock(this.persist ? this.sessionFile : undefined, () => {
++            // Every native append uses the same per-session cross-process lock.
++            // A stale in-memory manager must not attach a sibling after another
++            // process advanced the file, even for non-compaction writes.
++            if (this.persist && pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
++                throw new Error("Native session writer changed; no replay");
++            try { this._persist(entry); }
++            catch { throw new Error("Native session write outcome unknown; no replay"); }
++            this.entryStore = this.entryStore.committedAppend(entry, this.flushed ? this.sessionFile : undefined);
++            this.leafId = entry.id;
++            this._pr48LoadedRevision = this.persist ? pr48DiskRevision(this.sessionFile) : null;
++        });
++        });
+     }
+     /** Tracked metadata is private even if this Pi session began with an untracked turn. */
+     assertNativeInputSafe() {
++        this.#acAssertUsable();
+         if (!this.persist || !this.sessionFile || typeof process.getuid !== "function") {
+             throw new Error("Native input proof requires a persisted owner-controlled session");
+         }
+@@ -812,22 +666,21 @@
+     }
+     /** Find exactly one durable or pending native tracked input, including old branches. */
+     getTrackedInput(inputId) {
+-        const rows = this.fileEntries.filter((entry) => entry.type === "message" &&
+-            entry.message?.role === "user" && entry.message.inputId === inputId);
+-        if (rows.length > 1) {
+-            throw new Error("Duplicate native input ID in session");
+-        }
+-        return rows[0];
++        this.#acAssertUsable();
++        return this.entryStore.trackedInput(inputId);
+     }
+     /**
+      * Tracked input durability is explicit: ordinary session autosave behavior is unchanged.
+      * A caller must use the returned entry ID only after file+new-parent fsync succeed.
+      */
+     flushInputDurably(inputId) {
++        return this.#acMutation(() => {
+         this.assertNativeInputSafe();
++        return pr48WriterLock(this.sessionFile, () => {
++            if (pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
++                throw new Error("Native session writer changed; no replay");
+         if (inputId === undefined) {
+-            const tracked = this.fileEntries.filter((entry) => entry.type === "message" &&
+-                entry.message?.role === "user" && entry.message.inputId);
++            const tracked = this.entryStore.trackedInputs().take(2).toArray();
+             if (tracked.length !== 1) throw new Error("Explicit native input ID required");
+             inputId = tracked[0].message.inputId;
+         }
+@@ -841,7 +694,7 @@
+         if (!this.flushed) {
+             const fd = openSync(this.sessionFile, "wx", 0o600);
+             try {
+-                for (const item of this.fileEntries) {
++                for (const item of this.entryStore.fileEntries()) {
+                     writeFileSync(fd, `${JSON.stringify(item)}\n`);
+                 }
+                 fsyncSync(fd);
+@@ -867,7 +720,11 @@
+                 closeSync(fd);
+             }
+         }
++        this.entryStore = this.entryStore.storedAt(this.sessionFile);
++        this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
+         return entry.id;
++        });
++        });
+     }
+     /** Append a message as child of current leaf, then advance leaf. Returns entry id.
+      * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
+@@ -876,36 +733,41 @@
+      * These need to be appended via appendCompaction() and appendBranchSummary() methods.
+      */
+     appendMessage(message) {
++        return this.#acMutation(() => {
+         if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
+             throw new Error("Native input ID is already present in this session");
+         }
+         const entry = {
+             type: "message",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+             message,
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */
+     appendThinkingLevelChange(thinkingLevel) {
++        return this.#acMutation(() => {
+         const entry = {
+             type: "thinking_level_change",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+             thinkingLevel,
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a model change as child of current leaf, then advance leaf. Returns entry id. */
+     appendModelChange(provider, modelId) {
++        return this.#acMutation(() => {
+         const entry = {
+             type: "model_change",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+             provider,
+@@ -913,12 +775,157 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
++    }
++    /** File evidence only. Caller must retain registry authority and never replay. */
++    reconcileCompactionCommit(commit, witness) {
++        return this.#acMutation(() => {
++        acValidateCommit(commit);
++        if (!this.persist || !this.sessionFile || witness?.sessionFile !== this.sessionFile ||
++            typeof witness.revision !== "string" || witness.sessionId !== this.sessionId)
++            throw new Error("Invalid native reconciliation witness");
++        return pr48WriterLock(this.sessionFile, () => {
++            const revision = pr48DiskRevision(this.sessionFile);
++            const disk = this.entryStore;
++            disk.assertCurrent();
++            if (disk.header.id !== witness.sessionId)
++                return { status: "unknown", reason: "session-replaced" };
++            const matches = disk.commits(commit.commitId).take(2).toArray();
++            if (matches.length === 1) {
++                const entry = matches[0];
++                if (entry.type !== "compaction" ||
++                    entry.details.agentCommsCommit.payloadDigest !== commit.payloadDigest ||
++                    (commit.metadataDigest !== undefined &&
++                        (entry.details.agentCommsCommit.metadataDigest !== commit.metadataDigest ||
++                         acMetadataDigest(entry.details, entry.usage) !== commit.metadataDigest)) ||
++                    acPayloadDigest(entry.summary, entry.firstKeptEntryId, entry.tokensBefore) !==
++                        commit.payloadDigest || entry.parentId !== witness.leafId ||
++                    entry.firstKeptEntryId !== witness.firstKeptEntryId)
++                    return { status: "unknown", reason: "commit-mismatch" };
++                // A visible entry after an uncertain append is not yet proof of
++                // durability. Sync it while still holding the writer fence.
++                const fd = openSync(this.sessionFile, "r");
++                try { fsyncSync(fd); } finally { closeSync(fd); }
++                return { status: "committed", entryId: entry.id, revision,
++                    leafId: disk.lastId,
++                    ...(commit.metadataDigest !== undefined ?
++                        { metadataDigest: entry.details.agentCommsCommit.metadataDigest } : {}) };
++            }
++            if (matches.length === 0 && revision === witness.revision)
++                return { status: "aborted-no-write", revision, leafId: disk.lastId };
++            return { status: "unknown", reason: "changed-or-duplicate" };
++        });
++        });
++    }
++    /** Native-only observation; never a registry/goal/correction attestation. */
++    captureCompactionWitness(firstKeptEntryId) {
++        this.#acAssertUsable();
++        if (!this.persist || !this.flushed || !this.sessionFile)
++            throw new Error("Persisted native compaction witness required");
++        if (!this.entryStore.branchContains(this.leafId, firstKeptEntryId))
++            throw new Error("First kept entry is not on the active branch");
++        const revision = pr48DiskRevision(this.sessionFile);
++        if (revision !== this._pr48LoadedRevision)
++            throw new Error("Native session changed before witness capture");
++        return Object.freeze({ sessionId: this.sessionId, sessionFile: this.sessionFile,
++            leafId: this.leafId, firstKeptEntryId, revision });
++    }
++    /** Prototype only: owner attestation is Python-issued evidence, not self-asserted. */
++    appendCompactionIfCurrent(witness, summary, tokensBefore, details, usage, options = {}) {
++        return this.#acMutation(() => {
++        // Blocker-2 bridge: `options.attestation` must be a Python
++        // OwnerCompactionAttestation from ThreadRegistry.attest_owner_compaction.
++        // JS binds it to this witness's session fence at handoff. JS cannot
++        // recheck the registry after handoff; Python must re-attest at commit
++        // time (blocker-1 recheck design). This check NEVER proves registry
++        // currency by itself and never bypasses the writer CAS below.
++        if (options.ownerRequired === true) {
++            const denial = "Canonical Python owner commit attestation unavailable";
++            const attestation = options.attestation;
++            if (!attestation || typeof attestation !== "object" || Array.isArray(attestation))
++                throw new Error(denial);
++            const valid =
++                typeof attestation.thread === "string" && attestation.thread.length > 0 &&
++                Number.isInteger(attestation.owner_epoch) && attestation.owner_epoch >= 1 &&
++                typeof attestation.turn_id === "string" && attestation.turn_id.length > 0 &&
++                typeof attestation.goal_id === "string" && attestation.goal_id.length > 0 &&
++                Number.isInteger(attestation.goal_revision) && attestation.goal_revision >= 0 &&
++                Number.isInteger(attestation.correction_revision) &&
++                attestation.correction_revision >= 0 &&
++                attestation.session_file === witness.sessionFile &&
++                attestation.session_leaf === witness.leafId &&
++                attestation.session_revision === witness.revision &&
++                (attestation.registry_revision === null ||
++                    (Array.isArray(attestation.registry_revision) &&
++                        attestation.registry_revision.length === 4 &&
++                        attestation.registry_revision.every(Number.isInteger)));
++            if (!valid) throw new Error(denial);
++        }
++        if (Object.keys(options).some(key => key !== "ownerRequired" && key !== "attestation") ||
++            !this.persist || !this.flushed || !this.sessionFile ||
++            !witness || witness.sessionId !== this.sessionId ||
++            witness.sessionFile !== this.sessionFile || witness.leafId !== this.leafId ||
++            typeof witness.revision !== "string" ||
++            typeof witness.firstKeptEntryId !== "string")
++            throw new Error("Invalid native compaction witness");
++        return pr48WriterLock(this.sessionFile, () => {
++            const revision = pr48DiskRevision(this.sessionFile);
++            // Re-read the actual authoritative file *under the writer lock*;
++            // an independent SessionManager may have appended since capture.
++            const disk = this.entryStore;
++            disk.assertCurrent();
++            const diskHeader = disk.header;
++            const diskLeaf = disk.lastId;
++            if (revision !== witness.revision || revision !== this._pr48LoadedRevision ||
++                diskHeader?.id !== this.sessionId || diskLeaf !== witness.leafId ||
++                !disk.branchContains(diskLeaf, witness.firstKeptEntryId) ||
++                !this.entryStore.branchContains(this.leafId, witness.firstKeptEntryId))
++                throw new Error("Native compaction source changed; no replay");
++            const commit = details?.agentCommsCommit;
++            if (commit !== undefined) {
++                acValidateCommit(commit);
++                if (typeof summary !== "string" || !summary.isWellFormed() ||
++                    !Number.isSafeInteger(tokensBefore) || tokensBefore < 0 ||
++                    acPayloadDigest(summary, witness.firstKeptEntryId, tokensBefore) !==
++                        commit.payloadDigest)
++                    throw new Error("Native commit payload mismatch; no replay");
++                if (commit.metadataDigest !== undefined &&
++                    acMetadataDigest(details, usage) !== commit.metadataDigest)
++                    throw new Error("Native commit metadata mismatch; no replay");
++                if (!disk.commits(commit.commitId).next().done)
++                    throw new Error("Native commit ID already present; no replay");
++            }
++            const entry = { type: "compaction", id: generateId(this.entryStore),
++                parentId: this.leafId, timestamp: new Date().toISOString(), summary,
++                firstKeptEntryId: witness.firstKeptEntryId, tokensBefore, details, usage,
++                fromHook: false };
++            let fd;
++            try {
++                fd = openSync(this.sessionFile, "a", 0o600);
++                const opened = fstatSync(fd, { bigint: true });
++                if (`${opened.dev}:${opened.ino}` !== revision.split(":").slice(0, 2).join(":"))
++                    throw new Error("Native session file replaced during commit");
++                writeFileSync(fd, `${JSON.stringify(entry)}\n`);
++                fsyncSync(fd);
++            } catch {
++                // Bytes may have been sent to disk before an error. Never replay.
++                throw new Error("Native compaction commit outcome unknown; no replay");
++            } finally {
++                if (fd !== undefined) closeSync(fd);
++            }
++            this.entryStore = this.entryStore.committedAppend(entry, this.flushed ? this.sessionFile : undefined);
++            this.leafId = entry.id;
++            this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
++            return entry.id;
++        });
++        });
+     }
+     /** Append a compaction summary as child of current leaf, then advance leaf. Returns entry id. */
+     appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromHook, usage) {
++        return this.#acMutation(() => {
+         const entry = {
+             type: "compaction",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+             summary,
+@@ -930,45 +937,44 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a custom entry (for extensions) as child of current leaf, then advance leaf. Returns entry id. */
+     appendCustomEntry(customType, data) {
++        return this.#acMutation(() => {
+         const entry = {
+             type: "custom",
+             customType,
+             data,
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a session info entry (e.g., display name). Returns entry id. */
+     appendSessionInfo(name) {
++        return this.#acMutation(() => {
+         const sanitizedName = name.replace(/[\r\n]+/g, " ").trim();
+         const entry = {
+             type: "session_info",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+             name: sanitizedName,
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Get the current session name from the latest session_info entry, if any. */
+     getSessionName() {
+-        // Walk entries in reverse to find the latest session_info entry.
+-        // Empty names explicitly clear the session title.
+-        const entries = this.getEntries();
+-        for (let i = entries.length - 1; i >= 0; i--) {
+-            const entry = entries[i];
+-            if (entry.type === "session_info") {
+-                return entry.name?.trim() || undefined;
+-            }
+-        }
+-        return undefined;
++        this.#acAssertUsable();
++        let id;
++        for (const meta of this.entryStore.metadataEntries()) if (meta.type === 'session_info') id = meta.id;
++        return id ? this.entryStore.get(id).name?.trim() || undefined : undefined;
+     }
+     /**
+      * Append a custom message entry (for extensions) that participates in LLM context.
+@@ -979,18 +985,20 @@
+      * @returns Entry id
+      */
+     appendCustomMessageEntry(customType, content, display, details) {
++        return this.#acMutation(() => {
+         const entry = {
+             type: "custom_message",
+             customType,
+             content,
+             display,
+             details,
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     // =========================================================================
+     // Tree Traversal
+@@ -999,28 +1007,26 @@
+         return this.leafId;
+     }
+     getLeafEntry() {
+-        return this.leafId ? this.byId.get(this.leafId) : undefined;
++        this.#acAssertUsable();
++        return this.leafId ? this.entryStore.get(this.leafId) : undefined;
+     }
+     getEntry(id) {
+-        return this.byId.get(id);
++        this.#acAssertUsable();
++        return this.entryStore.get(id);
+     }
+     /**
+      * Get all direct children of an entry.
+      */
+     getChildren(parentId) {
+-        const children = [];
+-        for (const entry of this.byId.values()) {
+-            if (entry.parentId === parentId) {
+-                children.push(entry);
+-            }
+-        }
+-        return children;
++        this.#acAssertUsable();
++        return this.entryStore.children(parentId);
+     }
+     /**
+      * Get the label for an entry, if any.
+      */
+     getLabel(id) {
+-        return this.labelsById.get(id);
++        this.#acAssertUsable();
++        return this.entryStore.label(id)?.label;
+     }
+     /**
+      * Set or clear a label on an entry.
+@@ -1028,90 +1034,68 @@
+      * Pass undefined or empty string to clear the label.
+      */
+     appendLabelChange(targetId, label) {
+-        if (!this.byId.has(targetId)) {
++        return this.#acMutation(() => {
++        if (!this.entryStore.has(targetId)) {
+             throw new Error(`Entry ${targetId} not found`);
+         }
+         const entry = {
+             type: "label",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: this.leafId,
+             timestamp: new Date().toISOString(),
+             targetId,
+             label,
+         };
+         this._appendEntry(entry);
+-        if (label) {
+-            this.labelsById.set(targetId, label);
+-            this.labelTimestampsById.set(targetId, entry.timestamp);
+-        }
+-        else {
+-            this.labelsById.delete(targetId);
+-            this.labelTimestampsById.delete(targetId);
+-        }
+         return entry.id;
++        });
+     }
+     /**
+      * Walk from entry to root, returning all entries in path order.
+      * Includes all entry types (messages, compaction, model changes, etc.).
+-     * Use buildSessionContext() to get the resolved messages for the LLM.
+-     */
+-    getBranch(fromId) {
+-        const path = [];
+-        const startId = fromId ?? this.leafId;
+-        let current = startId ? this.byId.get(startId) : undefined;
+-        while (current) {
+-            path.push(current);
+-            current = current.parentId ? this.byId.get(current.parentId) : undefined;
+-        }
+-        path.reverse();
+-        return path;
+-    }
++     * Use entryStore.contextEntries() to get the resolved messages for the LLM.
++     */
++
+     /**
+      * Build the active, compaction-aware entry list for context/rendering.
+      * Uses tree traversal from current leaf.
+      */
+-    buildContextEntries() {
+-        return buildContextEntries(this.getEntries(), this.leafId, this.byId);
++    *buildContextEntries() {
++        this.#acAssertUsable();
++        yield* this.entryStore.contextEntries(this.leafId);
+     }
+     /**
+      * Build the session context (what gets sent to the LLM).
+      * Uses tree traversal from current leaf.
+      */
+-    buildSessionContext() {
+-        return buildSessionContext(this.getEntries(), this.leafId, this.byId);
+-    }
+     /**
+      * Get session header.
+      */
+-    getHeader() {
+-        const h = this.fileEntries.find((e) => e.type === "session");
+-        return h ? h : null;
+-    }
++    getHeader() { return this.entryStore.header; }
+     /**
+      * Get all session entries (excludes header). Returns a shallow copy.
+      * The session is append-only: use appendXXX() to add entries, branch() to
+      * change the leaf pointer. Entries cannot be modified or deleted.
+      */
+-    getEntries() {
+-        return this.fileEntries.filter((e) => e.type !== "session");
+-    }
++
+     /**
+      * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
+      * A well-formed session has exactly one root (first entry with parentId === null).
+      * Orphaned entries (broken parent chain) are also returned as roots.
+      */
+     getTree() {
+-        const entries = this.getEntries();
++        this.#acAssertUsable();
++        const entries = this.entryStore;
+         const nodeMap = new Map();
+         const roots = [];
+         // Create nodes with resolved labels
+-        for (const entry of entries) {
+-            const label = this.labelsById.get(entry.id);
+-            const labelTimestamp = this.labelTimestampsById.get(entry.id);
++        for (const entry of entries.entries()) {
++            const label = this.entryStore.label(entry.id)?.label;
++            const labelTimestamp = this.entryStore.label(entry.id)?.timestamp;
+             nodeMap.set(entry.id, { entry, children: [], label, labelTimestamp });
+         }
+         // Build tree
+-        for (const entry of entries) {
++        for (const entry of entries.entries()) {
+             const node = nodeMap.get(entry.id);
+             if (entry.parentId === null || entry.parentId === entry.id) {
+                 roots.push(node);
+@@ -1147,10 +1131,12 @@
+      * are not modified or deleted.
+      */
+     branch(branchFromId) {
+-        if (!this.byId.has(branchFromId)) {
++        return this.#acMutation(() => {
++        if (!this.entryStore.has(branchFromId)) {
+             throw new Error(`Entry ${branchFromId} not found`);
+         }
+         this.leafId = branchFromId;
++        });
+     }
+     /**
+      * Reset the leaf pointer to null (before any entries).
+@@ -1158,7 +1144,9 @@
+      * Use this when navigating to re-edit the first user message.
+      */
+     resetLeaf() {
++        return this.#acMutation(() => {
+         this.leafId = null;
++        });
+     }
+     /**
+      * Start a new branch with a summary of the abandoned path.
+@@ -1166,14 +1154,15 @@
+      * context from the abandoned conversation path.
+      */
+     branchWithSummary(branchFromId, summary, details, fromHook, usage) {
+-        if (branchFromId !== null && !this.byId.has(branchFromId)) {
++        return this.#acMutation(() => {
++        if (branchFromId !== null && !this.entryStore.has(branchFromId)) {
+             throw new Error(`Entry ${branchFromId} not found`);
+         }
+         const fromId = this.leafId ?? "root";
+         this.leafId = branchFromId;
+         const entry = {
+             type: "branch_summary",
+-            id: generateId(this.byId),
++            id: generateId(this.entryStore),
+             parentId: branchFromId,
+             timestamp: new Date().toISOString(),
+             fromId,
+@@ -1184,6 +1173,7 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /**
+      * Create a new session file containing only the path from root to the specified leaf.
+@@ -1191,112 +1181,43 @@
+      * Returns the new session file path, or undefined if not persisting.
+      */
+     createBranchedSession(leafId) {
+-        const previousSessionFile = this.sessionFile;
+-        const path = this.getBranch(leafId);
+-        if (path.length === 0) {
+-            throw new Error(`Entry ${leafId} not found`);
+-        }
+-        // Filter out LabelEntry from path - we'll recreate them from the resolved map.
+-        // Because labels are real tree entries, later entries can be children of labels;
+-        // removing labels requires re-chaining the retained path to avoid orphaned subtrees.
+-        const pathWithoutLabels = [];
+-        const replacementByLabelId = new Map();
+-        const pendingLabelIds = [];
+-        let pathParentId = null;
+-        for (const entry of path) {
+-            if (entry.type === "label") {
+-                pendingLabelIds.push(entry.id);
+-                continue;
+-            }
+-            for (const labelId of pendingLabelIds) {
+-                replacementByLabelId.set(labelId, entry.id);
+-            }
+-            pendingLabelIds.length = 0;
+-            pathWithoutLabels.push(entry.type === "compaction"
+-                ? {
+-                    ...entry,
+-                    parentId: pathParentId,
+-                    firstKeptEntryId: replacementByLabelId.get(entry.firstKeptEntryId) ?? entry.firstKeptEntryId,
++        return this.#acMutation(() => pr48WriterLock(this.persist ? this.sessionFile : undefined, () => {
++            this._assertLoadedRevision();
++            if (!this.entryStore.has(leafId)) throw new Error(`Entry ${leafId} not found`);
++            const source = this.entryStore;
++            const timestamp = new Date().toISOString();
++            const header = { type: 'session', version: CURRENT_SESSION_VERSION, id: createSessionId(),
++                timestamp, cwd: this.cwd, parentSession: this.sessionFile };
++            const file = this.persist ? join(this.sessionDir, `${timestamp.replace(/[:.]/g, '-')}_${header.id}.jsonl`) : undefined;
++            let next;
++            if (file) {
++                pr48WriterLock(file, () => {
++                    const fd = openSync(file, 'wx', 0o600);
++                    try {
++                        writeFileSync(fd, JSON.stringify(header) + '\n');
++                        for (const entry of source.branch(leafId)) writeFileSync(fd, JSON.stringify(entry) + '\n');
++                        fsyncSync(fd);
++                        acSyncParents(dirname(file));
++                    } catch (cause) { throw new Error("Native branch outcome unknown; no replay", {cause}); }
++                    finally { closeSync(fd); }
++                });
++                next = new DiskEntryStore(file);
++            } else next = new MemoryEntryStore(header, source.branch(leafId));
++            // Labels may have been changed on another branch after this leaf.
++            this.entryStore = next;
++            this.sessionId = header.id;
++            this.sessionFile = file;
++            this.flushed = Boolean(file);
++            this._pr48LoadedRevision = file ? next.revision : null;
++            this.leafId = next.lastId;
++            try {
++                for (const meta of source.branchMetadata(leafId)) {
++                    const label = source.label(meta.id)?.label;
++                    if (label !== next.label(meta.id)?.label) this.appendLabelChange(meta.id, label);
+                 }
+-                : { ...entry, parentId: pathParentId });
+-            pathParentId = entry.id;
+-        }
+-        const newSessionId = createSessionId();
+-        const timestamp = new Date().toISOString();
+-        const fileTimestamp = timestamp.replace(/[:.]/g, "-");
+-        const newSessionFile = join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.jsonl`);
+-        const header = {
+-            type: "session",
+-            version: CURRENT_SESSION_VERSION,
+-            id: newSessionId,
+-            timestamp,
+-            cwd: this.cwd,
+-            parentSession: this.persist ? previousSessionFile : undefined,
+-        };
+-        // Collect labels for entries in the path
+-        const pathEntryIds = new Set(pathWithoutLabels.map((e) => e.id));
+-        const labelsToWrite = [];
+-        for (const [targetId, label] of this.labelsById) {
+-            if (pathEntryIds.has(targetId)) {
+-                labelsToWrite.push({ targetId, label, timestamp: this.labelTimestampsById.get(targetId) });
+-            }
+-        }
+-        if (this.persist) {
+-            // Build label entries
+-            const lastEntryId = pathWithoutLabels[pathWithoutLabels.length - 1]?.id || null;
+-            let parentId = lastEntryId;
+-            const labelEntries = [];
+-            for (const { targetId, label, timestamp: labelTimestamp } of labelsToWrite) {
+-                const labelEntry = {
+-                    type: "label",
+-                    id: generateId(new Set(pathEntryIds)),
+-                    parentId,
+-                    timestamp: labelTimestamp,
+-                    targetId,
+-                    label,
+-                };
+-                pathEntryIds.add(labelEntry.id);
+-                labelEntries.push(labelEntry);
+-                parentId = labelEntry.id;
+-            }
+-            this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
+-            this.sessionId = newSessionId;
+-            this.sessionFile = newSessionFile;
+-            this._buildIndex();
+-            // Only write the file now if it contains an assistant message.
+-            // Otherwise defer to _persist(), which creates the file on the
+-            // first assistant response, matching the newSession() contract
+-            // and avoiding the duplicate-header bug when _persist()'s
+-            // no-assistant guard later resets flushed to false.
+-            const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message.role === "assistant");
+-            if (hasAssistant) {
+-                this._rewriteFile();
+-                this.flushed = true;
+-            }
+-            else {
+-                this.flushed = false;
+-            }
+-            return newSessionFile;
+-        }
+-        // In-memory mode: replace current session with the path + labels
+-        const labelEntries = [];
+-        let parentId = pathWithoutLabels[pathWithoutLabels.length - 1]?.id || null;
+-        for (const { targetId, label, timestamp: labelTimestamp } of labelsToWrite) {
+-            const labelEntry = {
+-                type: "label",
+-                id: generateId(new Set([...pathEntryIds, ...labelEntries.map((e) => e.id)])),
+-                parentId,
+-                timestamp: labelTimestamp,
+-                targetId,
+-                label,
+-            };
+-            labelEntries.push(labelEntry);
+-            parentId = labelEntry.id;
+-        }
+-        this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
+-        this.sessionId = newSessionId;
+-        this._buildIndex();
+-        return undefined;
++            } finally { source.close(); }
++            return file;
++        }));
+     }
+     /**
+      * Create a new session.
+@@ -1315,26 +1236,10 @@
+      */
+     static open(path, sessionDir, cwdOverride) {
+         const resolvedPath = resolvePath(path);
+-        let header = null;
+-        let preloadedFileEntries;
+-        if (cwdOverride === undefined && existsSync(resolvedPath)) {
+-            try {
+-                header = readSessionHeader(resolvedPath);
+-            }
+-            catch (error) {
+-                if (!(error instanceof SessionHeaderScanLimitError))
+-                    throw error;
+-                // The bounded scan is only a discovery optimization. A full load remains
+-                // authoritative for legacy files with very large headers or prefixes.
+-                preloadedFileEntries = loadEntriesFromFile(resolvedPath);
+-                const firstEntry = preloadedFileEntries[0];
+-                header = firstEntry?.type === "session" ? firstEntry : null;
+-            }
+-        }
+-        const cwd = cwdOverride ?? (header ? getSessionHeaderCwd(header) : undefined) ?? process.cwd();
+-        // If no sessionDir provided, derive from file's parent directory
+-        const dir = sessionDir ? normalizePath(sessionDir) : resolve(resolvedPath, "..");
+-        return new SessionManager(cwd, dir, resolvedPath, true, undefined, preloadedFileEntries);
++        const dir = sessionDir ? normalizePath(sessionDir) : dirname(resolvedPath);
++        const manager = new SessionManager(cwdOverride ?? process.cwd(), dir, resolvedPath, true);
++        manager.cwd = cwdOverride ?? manager.entryStore.header.cwd ?? process.cwd();
++        return manager;
+     }
+     /**
+      * Continue the most recent session, or create new if none.
+@@ -1351,8 +1256,8 @@
+         return new SessionManager(cwd, dir, undefined, true);
+     }
+     /** Create an in-memory session (no file persistence), optionally from entries held outside the filesystem. */
+-    static inMemory(cwd = process.cwd(), options, entries) {
+-        return new SessionManager(cwd, "", undefined, false, options, entries);
++    static inMemory(cwd = process.cwd(), options) {
++        return new SessionManager(cwd, "", undefined, false, options);
+     }
+     /**
+      * Fork a session from another project directory into the current project.
+@@ -1362,45 +1267,31 @@
+      * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
+      */
+     static forkFrom(sourcePath, targetCwd, sessionDir, options) {
+-        const resolvedSourcePath = resolvePath(sourcePath);
+-        const resolvedTargetCwd = resolvePath(targetCwd);
+-        const sourceEntries = loadEntriesFromFile(resolvedSourcePath);
+-        if (sourceEntries.length === 0) {
+-            throw new Error(`Cannot fork: source session file is empty or invalid: ${resolvedSourcePath}`);
+-        }
+-        const sourceHeader = sourceEntries.find((e) => e.type === "session");
+-        if (!sourceHeader) {
+-            throw new Error(`Cannot fork: source session has no header: ${resolvedSourcePath}`);
+-        }
+-        const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(resolvedTargetCwd);
+-        if (!existsSync(dir)) {
++        return pr48WriterLock(resolvePath(sourcePath), () => {
++        const source = new DiskEntryStore(resolvePath(sourcePath));
++        try {
++            if (options?.id !== undefined) assertValidSessionId(options.id);
++            const cwd = resolvePath(targetCwd);
++            const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(cwd);
+             mkdirSync(dir, { recursive: true, mode: 0o700 });
+-        }
+-        // Create new session file with new ID but forked content
+-        if (options?.id !== undefined) {
+-            assertValidSessionId(options.id);
+-        }
+-        const newSessionId = options?.id ?? createSessionId();
+-        const timestamp = new Date().toISOString();
+-        const fileTimestamp = timestamp.replace(/[:.]/g, "-");
+-        const newSessionFile = join(dir, `${fileTimestamp}_${newSessionId}.jsonl`);
+-        // Write new header pointing to source as parent, with updated cwd
+-        const newHeader = {
+-            type: "session",
+-            version: CURRENT_SESSION_VERSION,
+-            id: newSessionId,
+-            timestamp,
+-            cwd: resolvedTargetCwd,
+-            parentSession: resolvedSourcePath,
+-        };
+-        writeFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`, { flag: "wx", mode: 0o600 });
+-        // Copy all non-header entries from source
+-        for (const entry of sourceEntries) {
+-            if (entry.type !== "session") {
+-                appendFileSync(newSessionFile, `${JSON.stringify(entry)}\n`);
+-            }
+-        }
+-        return new SessionManager(resolvedTargetCwd, dir, newSessionFile, true);
++            const timestamp = new Date().toISOString();
++            const id = options?.id ?? createSessionId();
++            const header = { type: 'session', version: CURRENT_SESSION_VERSION, id, timestamp,
++                cwd, parentSession: resolvePath(sourcePath) };
++            const file = join(dir, `${timestamp.replace(/[:.]/g, '-')}_${id}.jsonl`);
++            pr48WriterLock(file, () => {
++                const fd = openSync(file, 'wx', 0o600);
++                try {
++                    writeFileSync(fd, JSON.stringify(header) + '\n');
++                    for (const entry of source.entries()) writeFileSync(fd, JSON.stringify(entry) + '\n');
++                    fsyncSync(fd);
++                    acSyncParents(dirname(file));
++                } catch (cause) { throw new Error("Native fork outcome unknown; no replay", {cause}); }
++                finally { closeSync(fd); }
++            });
++            return SessionManager.open(file, dir, cwd);
++        } finally { source.close(); }
++        });
+     }
+     /**
+      * List all sessions for a directory.
+--- a/dist/core/compaction/compaction.js
++++ b/dist/core/compaction/compaction.js
+@@ -1,3 +1,6 @@
++import { EntryMessageRange, HistorySummarySource, ReducedSummarySource } from "./agent-comms-source.js";
++import { CompactionPolicy } from "./agent-comms-policy.js";
++import { BudgetAdmissionError } from "@earendil-works/pi-ai/api/agent-comms-context-budget";
+ /**
+  * Context compaction for long sessions.
+  *
+@@ -5,37 +7,14 @@
+  * and after compaction the session is reloaded.
+  */
+ import { contentText, retryAssistantCall, uuidv7 } from "@earendil-works/pi-ai";
+-import { completeSimple } from "@earendil-works/pi-ai/compat";
+-import { convertToLlm } from "../messages.js";
+-import { buildSessionContext, sessionEntryToContextMessages, } from "../session-manager.js";
++import { streamSimple } from "@earendil-works/pi-ai/compat";
++import { convertToLlm, createCompactionSummaryMessage } from "../messages.js";
++import { sessionEntryToContextMessages, } from "../session-manager.js";
+ import { computeFileLists, createFileOps, extractFileOpsFromMessage, formatFileOperations, SUMMARIZATION_SYSTEM_PROMPT, serializeConversation, } from "./utils.js";
+ /**
+  * Extract file operations from messages and previous compaction entries.
+  */
+-function extractFileOperations(messages, entries, prevCompactionIndex) {
+-    const fileOps = createFileOps();
+-    // Collect from previous compaction's details (if pi-generated)
+-    if (prevCompactionIndex >= 0) {
+-        const prevCompaction = entries[prevCompactionIndex];
+-        if (!prevCompaction.fromHook && prevCompaction.details) {
+-            // fromHook field kept for session file compatibility
+-            const details = prevCompaction.details;
+-            if (Array.isArray(details.readFiles)) {
+-                for (const f of details.readFiles)
+-                    fileOps.read.add(f);
+-            }
+-            if (Array.isArray(details.modifiedFiles)) {
+-                for (const f of details.modifiedFiles)
+-                    fileOps.edited.add(f);
+-            }
+-        }
+-    }
+-    // Extract from tool calls in messages
+-    for (const msg of messages) {
+-        extractFileOpsFromMessage(msg, fileOps);
+-    }
+-    return fileOps;
+-}
++
+ // ============================================================================
+ // Message Extraction
+ // ============================================================================
+@@ -116,43 +95,20 @@
+     }
+     return undefined;
+ }
+-function getLastAssistantUsageInfo(messages) {
+-    for (let i = messages.length - 1; i >= 0; i--) {
+-        const usage = getAssistantUsage(messages[i]);
+-        if (usage)
+-            return { usage, index: i };
+-    }
+-    return undefined;
+-}
++
+ /**
+  * Estimate context tokens from messages, using the last assistant usage when available.
+  * If there are messages after the last usage, estimate their tokens with estimateTokens.
+  */
+ export function estimateContextTokens(messages) {
+-    const usageInfo = getLastAssistantUsageInfo(messages);
+-    if (!usageInfo) {
+-        let estimated = 0;
+-        for (const message of messages) {
+-            estimated += estimateTokens(message);
+-        }
+-        return {
+-            tokens: estimated,
+-            usageTokens: 0,
+-            trailingTokens: estimated,
+-            lastUsageIndex: null,
+-        };
+-    }
+-    const usageTokens = calculateContextTokens(usageInfo.usage);
+-    let trailingTokens = 0;
+-    for (let i = usageInfo.index + 1; i < messages.length; i++) {
+-        trailingTokens += estimateTokens(messages[i]);
+-    }
+-    return {
+-        tokens: usageTokens + trailingTokens,
+-        usageTokens,
+-        trailingTokens,
+-        lastUsageIndex: usageInfo.index,
+-    };
++    let usageTokens=0, trailingTokens=0, lastUsageIndex=null, index=0;
++    for(const message of messages) {
++        const usage=getAssistantUsage(message);
++        if(usage) {usageTokens=calculateContextTokens(usage);trailingTokens=0;lastUsageIndex=index;}
++        else trailingTokens+=estimateTokens(message);
++        index++;
++    }
++    return {tokens:usageTokens+trailingTokens,usageTokens,trailingTokens,lastUsageIndex};
+ }
+ /**
+  * Check if compaction should trigger based on context usage.
+@@ -264,31 +220,12 @@
+  * When we cut at an assistant message with tool calls, its tool results follow it
+  * and will be kept.
+  */
+-function findValidCutPoints(entries, startIndex, endIndex) {
+-    const cutPoints = [];
+-    for (let i = startIndex; i < endIndex; i++) {
+-        const entry = entries[i];
+-        if (entry.type === "compaction") {
+-            continue;
+-        }
+-        if (sessionEntryToContextMessages(entry).some(isCutPointMessage)) {
+-            cutPoints.push(i);
+-        }
+-    }
+-    return cutPoints;
+-}
++
+ /**
+  * Find the context-visible user-role message that starts the turn containing the given entry index.
+  * Returns -1 if no turn start found before the index.
+  */
+-export function findTurnStartIndex(entries, entryIndex, startIndex) {
+-    for (let i = entryIndex; i >= startIndex; i--) {
+-        if (isTurnStartEntry(entries[i])) {
+-            return i;
+-        }
+-    }
+-    return -1;
+-}
++
+ /**
+  * Find the cut point in session entries that keeps approximately `keepRecentTokens`.
+  *
+@@ -305,51 +242,7 @@
+  *
+  * Only considers entries between `startIndex` and `endIndex` (exclusive).
+  */
+-export function findCutPoint(entries, startIndex, endIndex, keepRecentTokens) {
+-    const cutPoints = findValidCutPoints(entries, startIndex, endIndex);
+-    if (cutPoints.length === 0) {
+-        return { firstKeptEntryIndex: startIndex, turnStartIndex: -1, isSplitTurn: false };
+-    }
+-    // Walk backwards from newest, accumulating estimated message sizes
+-    let accumulatedTokens = 0;
+-    let cutIndex = cutPoints[0]; // Default: keep from first message (not header)
+-    for (let i = endIndex - 1; i >= startIndex; i--) {
+-        const entry = entries[i];
+-        const messageTokens = sessionEntryToContextMessages(entry).reduce((sum, message) => sum + estimateTokens(message), 0);
+-        if (messageTokens === 0)
+-            continue;
+-        accumulatedTokens += messageTokens;
+-        // Check if we've exceeded the budget
+-        if (accumulatedTokens >= keepRecentTokens) {
+-            // Find the closest valid cut point at or after this entry
+-            for (let c = 0; c < cutPoints.length; c++) {
+-                if (cutPoints[c] >= i) {
+-                    cutIndex = cutPoints[c];
+-                    break;
+-                }
+-            }
+-            break;
+-        }
+-    }
+-    // Scan backwards from cutIndex to include adjacent metadata entries that do not affect context.
+-    while (cutIndex > startIndex) {
+-        const prevEntry = entries[cutIndex - 1];
+-        // Stop at compaction boundaries or context-visible entries.
+-        if (prevEntry.type === "compaction" || sessionEntryToContextMessages(prevEntry).length > 0) {
+-            break;
+-        }
+-        cutIndex--;
+-    }
+-    // Determine if this is a split turn
+-    const cutEntry = entries[cutIndex];
+-    const startsTurn = isTurnStartEntry(cutEntry);
+-    const turnStartIndex = startsTurn ? -1 : findTurnStartIndex(entries, cutIndex, startIndex);
+-    return {
+-        firstKeptEntryIndex: cutIndex,
+-        turnStartIndex,
+-        isSplitTurn: !startsTurn && turnStartIndex !== -1,
+-    };
+-}
++
+ // ============================================================================
+ // Summarization
+ // ============================================================================
+@@ -459,10 +352,20 @@
+         cacheRetention: "none",
+         sessionId: options.sessionId ?? uuidv7(),
+     };
+-    const produce = async () => streamFn
+-        ? (await streamFn(model, context, requestOptions)).result()
+-        : completeSimple(model, context, requestOptions);
+-    return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
++    const produce = async () => {
++        const stream = await (streamFn ?? streamSimple)(model, context, requestOptions);
++        for await (const event of stream) {
++            if (event.type === 'text_delta') callbacks?.onSummaryText?.(event.delta, callbacks?.sourceProgress);
++            else if (event.type === 'start' || event.type === 'thinking_delta')
++                callbacks?.onSummaryProgress?.(callbacks?.sourceProgress);
++        }
++        return stream.result();
++    };
++    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
++    if (response.stopReason === 'stop') CompactionPolicy.fromEnvironment().requireSummaryOutput(response.usage, requestOptions.maxTokens);
++    callbacks?.onSummaryResponse?.(response.usage, response.stopReason === 'stop' && contentText(response.content).trim() ? callbacks?.sourceProgress : undefined);
++    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
++    return response;
+ }
+ /**
+  * Generate a summary of the conversation using the LLM.
+@@ -485,8 +388,80 @@
+     };
+ }
+ /** Generate or update a conversation summary and return its provider usage. */
+-export async function generateSummaryWithUsage(currentMessages, model, reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
+-    const maxTokens = Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
++
++function sourceCallbacks(callbacks, phase = callbacks.summarySource.summaryPhase) {
++    return { ...callbacks,
++        get sourceProgress() { return callbacks.summaryPlan.progress(phase); },
++        onSummaryResponse(usage, completed) {
++            if (completed) callbacks.summarySource.complete();
++            callbacks.onSummaryResponse?.(usage, completed ? this.sourceProgress : undefined);
++        },
++    };
++}
++
++export async function generateSummaryWithUsage(currentMessages, model, reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId, boundedChunk = false) {
++    signal?.throwIfAborted();
++    const policy=CompactionPolicy.fromEnvironment(env);
++    const inputTokens=policy.inputTokens(model,reserveTokens);
++    const source=boundedChunk ? new HistorySummarySource(currentMessages,previousSummary)
++        : callbacks?.summarySource ?? new HistorySummarySource(currentMessages,previousSummary);
++    const sourceTokens=source.tokenLength();
++    if (!boundedChunk) callbacks = { ...callbacks, summarySource: source,
++        summaryPlan: callbacks?.summaryPlan ?? policy.plan([source]) };
++    if(!boundedChunk && sourceTokens>policy.sourceTokens(model,reserveTokens)) {
++        const chunkTokens=policy.sourceTokens(model,reserveTokens);
++        const controller=new AbortController();
++        const abort=()=>controller.abort(signal?.reason);
++        if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
++        let combinedUsage;
++        const summarizeSource=async (input,phase) => {
++            if (phase === 'synthesis') callbacks?.onSummaryStart?.(
++                sourceCallbacks(callbacks,phase).sourceProgress);
++            const result=new ReducedSummarySource();
++            const plan=callbacks.summaryPlan;
++            try {
++                await plan.execute(async (part, index) => {
++                    const focus=phase==='synthesis' ? 'Combine these chronological summaries, preserving unresolved requests, constraints, paths, evidence and decisions.' : 'Summarize this chronological segment for later synthesis; preserve unresolved requests, constraints, paths, evidence and decisions.';
++                    const partCallbacks = { ...callbacks,
++                        get sourceProgress() { return sourceCallbacks(callbacks,phase).sourceProgress; },
++                        onSummaryResponse: (usage, completed) => {
++                            if (completed && phase==='map') callbacks.summarySource.consume(Buffer.byteLength(part));
++                            callbacks?.onSummaryResponse?.(usage, completed ? partCallbacks.sourceProgress : undefined);
++                        },
++                    };
++                    const item=await generateSummaryWithUsage([{role:'user',content:[{type:'text',text:part}],timestamp:Date.now()}],
++                        model,reserveTokens,apiKey,headers,controller.signal,[customInstructions,focus].filter(Boolean).join('\n\n'),
++                        undefined,thinkingLevel,streamFn,env,{enabled:false,maxRetries:0,provider:{maxRetries:0}},
++                        partCallbacks,sessionId,true);
++                    combinedUsage=combinedUsage?combineUsage(combinedUsage,item.usage):item.usage;
++                    result.append(item.text,index);
++                }, controller, input.chunks(chunkTokens));
++                return result;
++            } catch(error) {result.close();throw error;}
++        };
++        let reduced;
++        try {
++            reduced=await summarizeSource(source,'map');
++            for(;;) {
++                const tokens=reduced.tokenLength();
++                if(tokens<=chunkTokens) {
++                    // This is now an admitted single model-sized source.
++                    const text=[...reduced.pieces()].join('');
++                    callbacks?.onSummaryStart?.(
++                        sourceCallbacks(callbacks,'synthesis').sourceProgress);
++                    const final=await generateSummaryWithUsage([{role:'user',content:[{type:'text',text}],timestamp:Date.now()}],
++                        model,reserveTokens,apiKey,headers,controller.signal,customInstructions,undefined,thinkingLevel,
++                        streamFn,env,retry,sourceCallbacks(callbacks,'synthesis'),sessionId,true);
++                    return {text:final.text,usage:combinedUsage?combineUsage(combinedUsage,final.usage):final.usage};
++                }
++                const next=await summarizeSource(reduced,'synthesis');
++                reduced.close();reduced=next;
++                if(reduced.tokenLength()>=tokens)throw new Error('Compaction summaries did not shrink within native policy');
++            }
++        } finally {reduced?.close();signal?.removeEventListener('abort',abort);}
++    }
++    if(!boundedChunk)callbacks=sourceCallbacks(callbacks);
++    const maxTokens = policy.summaryTokens(model, inputTokens, reserveTokens);
+     // Use update prompt if we have a previous summary, otherwise initial prompt
+     let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
+     if (customInstructions) {
+@@ -494,92 +469,80 @@
+     }
+     // Serialize conversation to text so model doesn't try to continue it
+     // Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
+-    const llmMessages = convertToLlm(currentMessages);
+-    const conversationText = serializeConversation(llmMessages);
++    const conversationText = [...new HistorySummarySource(currentMessages).pieces()].join('');
+     // Build the prompt with conversation wrapped in tags
+     let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
+     if (previousSummary) {
+         promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
+     }
+     promptText += basePrompt;
++    policy.requireRequest(buildSummarizationContext(promptText),model,reserveTokens);
+     const completionOptions = createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId);
+-    const response = await completeSummarization(model, buildSummarizationContext(promptText), completionOptions, streamFn, retry, callbacks);
+-    const failure = getSummarizationFailure(response, "Summarization");
+-    if (failure) {
+-        throw new Error(failure);
+-    }
+-    if (response.content.some((block) => block.type === "toolCall")) {
+-        throw new Error("Summarization attempted to call a tool");
+-    }
+-    const textContent = contentText(response.content);
+-    return { text: textContent, usage: response.usage };
+-}
+-export function prepareCompaction(pathEntries, settings) {
+-    if (pathEntries.length > 0 && pathEntries[pathEntries.length - 1].type === "compaction") {
+-        return undefined;
+-    }
+-    let prevCompactionIndex = -1;
+-    for (let i = pathEntries.length - 1; i >= 0; i--) {
+-        if (pathEntries[i].type === "compaction") {
+-            prevCompactionIndex = i;
+-            break;
+-        }
+-    }
+-    let previousSummary;
+-    let boundaryStart = 0;
+-    if (prevCompactionIndex >= 0) {
+-        const prevCompaction = pathEntries[prevCompactionIndex];
+-        previousSummary = prevCompaction.summary;
+-        const firstKeptEntryIndex = pathEntries.findIndex((entry) => entry.id === prevCompaction.firstKeptEntryId);
+-        boundaryStart = firstKeptEntryIndex >= 0 ? firstKeptEntryIndex : prevCompactionIndex + 1;
+-    }
+-    const boundaryEnd = pathEntries.length;
+-    const tokensBefore = estimateContextTokens(buildSessionContext(pathEntries).messages).tokens;
+-    const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
+-    // Get UUID of first kept entry
+-    const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
+-    if (!firstKeptEntry?.id) {
+-        return undefined; // Session needs migration
+-    }
+-    const firstKeptEntryId = firstKeptEntry.id;
+-    const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
+-    // Messages to summarize (will be discarded after summary)
+-    const messagesToSummarize = [];
+-    for (let i = boundaryStart; i < historyEnd; i++) {
+-        const msg = getMessageFromEntryForCompaction(pathEntries[i]);
+-        if (msg)
+-            messagesToSummarize.push(msg);
+-    }
+-    // Messages for turn prefix summary (if splitting a turn)
+-    const turnPrefixMessages = [];
+-    if (cutPoint.isSplitTurn) {
+-        for (let i = cutPoint.turnStartIndex; i < cutPoint.firstKeptEntryIndex; i++) {
+-            const msg = getMessageFromEntryForCompaction(pathEntries[i]);
+-            if (msg)
+-                turnPrefixMessages.push(msg);
+-        }
+-    }
+-    if (messagesToSummarize.length === 0 && turnPrefixMessages.length === 0) {
+-        return undefined;
+-    }
+-    // Extract file operations from messages and previous compaction
+-    const fileOps = extractFileOperations(messagesToSummarize, pathEntries, prevCompactionIndex);
+-    // Also extract file ops from turn prefix if splitting
+-    if (cutPoint.isSplitTurn) {
+-        for (const msg of turnPrefixMessages) {
+-            extractFileOpsFromMessage(msg, fileOps);
+-        }
+-    }
+-    return {
+-        firstKeptEntryId,
+-        messagesToSummarize,
+-        turnPrefixMessages,
+-        isSplitTurn: cutPoint.isSplitTurn,
++    return callbacks.summaryPlan.run(async () => {
++        const response = await completeSummarization(model, buildSummarizationContext(promptText), completionOptions, streamFn, retry, callbacks);
++        const failure = getSummarizationFailure(response, "Summarization");
++        if (failure) {
++            throw new Error(failure);
++        }
++        if (response.content.some((block) => block.type === "toolCall")) {
++            throw new Error("Summarization attempted to call a tool");
++        }
++        const textContent = contentText(response.content);
++        return { text: textContent, usage: response.usage };
++    }, signal);
++}
++export function prepareCompaction(store, settings, model, leafId=store.lastId, retainedText="") {
++    const last=store.metadata(leafId);
++    if(!last || last.type==='compaction')return undefined;
++    const previous=store.latest(leafId,'compaction');
++    const floor=previous ? store.metadata(previous.firstKeptEntryId)?.sequence ?? store.metadata(previous.id).sequence+1 : 1;
++    const policy=CompactionPolicy.fromEnvironment();
++    const tokensBefore=estimateContextTokens(store.contextEntries(leafId).flatMap(sessionEntryToContextMessages)).tokens;
++    const fileOps=createFileOps();
++    if(previous && !previous.fromHook) {
++        for(const path of previous.details?.readFiles ?? [])fileOps.read.add(path);
++        for(const path of previous.details?.modifiedFiles ?? [])fileOps.edited.add(path);
++    }
++    // The persisted file-operation owner covers the whole current branch. Its
++    // exact annotation projection is reserved before selecting retained context.
++    for(const message of new EntryMessageRange(store,leafId,floor,last.sequence+1))
++        extractFileOpsFromMessage(message,fileOps);
++    const {readFiles,modifiedFiles}=computeFileLists(fileOps);
++    const annotations=formatFileOperations(readFiles,modifiedFiles);
++    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
++    policy.requireContext([required],model,settings.reserveTokens);
++    let accumulated=0, cut;
++    const retained=[];
++    for(const meta of store.ancestors(leafId)) {
++        if(meta.sequence<floor)break;
++        const entry=store.get(meta.id);
++        const messages=sessionEntryToContextMessages(entry);
++        if(meta.type!=='compaction') {
++            retained.unshift(...messages);
++            if(!policy.retainedFits(required,retained,model,settings.reserveTokens))break;
++            if(messages.some(isCutPointMessage))cut=meta;
++        }
++        accumulated+=messages.reduce((sum,message)=>sum+estimateTokens(message),0);
++        if(accumulated>=settings.keepRecentTokens && cut)break;
++    }
++    if(!cut)throw new BudgetAdmissionError('No atomic retained suffix fits the selected context budget');
++    // Include adjacent context-invisible metadata immediately before the retained message.
++    for(const meta of store.ancestors(cut.parentId)) {
++        if(meta.sequence<floor || meta.type==='compaction' || sessionEntryToContextMessages(store.get(meta.id)).length)break;
++        cut=meta;
++    }
++    let turnStart;
++    if(!isTurnStartEntry(store.get(cut.id)))for(const meta of store.ancestors(cut.parentId)) {
++        if(meta.sequence<floor)break;
++        if(isTurnStartEntry(store.get(meta.id))) {turnStart=meta;break;}
++    }
++    const messagesToSummarize=new EntryMessageRange(store,leafId,floor,turnStart?.sequence ?? cut.sequence);
++    const turnPrefixMessages=new EntryMessageRange(store,leafId,turnStart?.sequence ?? cut.sequence,cut.sequence);
++    if(messagesToSummarize.isEmpty() && turnPrefixMessages.isEmpty())return undefined;
++    return {firstKeptEntryId:cut.id,messagesToSummarize,turnPrefixMessages,isSplitTurn:Boolean(turnStart),
+         tokensBefore,
+-        previousSummary,
+-        fileOps,
+-        settings,
+-    };
++        previousSummary:previous?.summary,fileOps,settings,contextWindow:model.contextWindow,retainedText,
++        retainedMessages:new EntryMessageRange(store,leafId,cut.sequence,last.sequence+1)};
+ }
+ // ============================================================================
+ // Main compaction function
+@@ -608,31 +569,57 @@
+  */
+ export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
+-    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
++    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, retainedText, } = preparation;
+-    // Generate summaries and merge into one
+-    let summary;
+-    let summaryUsage;
+-    if (isSplitTurn && turnPrefixMessages.length > 0) {
+-        let historyText = "No prior history.";
+-        let historyUsage;
+-        if (messagesToSummarize.length > 0) {
+-            const historyResult = await generateSummaryWithUsage(messagesToSummarize, model, settings.reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId);
+-            historyText = historyResult.text;
+-            historyUsage = historyResult.usage;
+-        }
+-        const turnPrefixResult = await generateTurnPrefixSummary(turnPrefixMessages, model, settings.reserveTokens, apiKey, headers, env, signal, thinkingLevel, streamFn, retry, callbacks, sessionId);
+-        // Merge into single summary
+-        summary = `${historyText}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.text}`;
+-        summaryUsage = historyUsage ? combineUsage(historyUsage, turnPrefixResult.usage) : turnPrefixResult.usage;
+-    }
+-    else {
+-        // Just generate history summary
+-        const result = await generateSummaryWithUsage(messagesToSummarize, model, settings.reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId);
+-        summary = result.text;
+-        summaryUsage = result.usage;
++    if(preparation.contextWindow!==model.contextWindow)throw new Error('Compaction selected context window changed');
++    const contextPolicy=CompactionPolicy.fromEnvironment(env);
++    const { readFiles, modifiedFiles } = computeFileLists(fileOps);
++    const annotations = formatFileOperations(readFiles, modifiedFiles);
++    contextPolicy.packSummary(retainedText, "", annotations, tokensBefore, preparation.retainedMessages,
++        model, settings.reserveTokens, createCompactionSummaryMessage);
++    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
++    const summaryTokens=contextPolicy.inputTokens(model,settings.reserveTokens)-
++        contextPolicy.contextTokens([required,...preparation.retainedMessages],model);
++    const pieces=isSplitTurn ? 2 : 1;
++    customInstructions=[customInstructions,
++        `Keep the generated summary within ${Math.floor(summaryTokens/pieces)} tokens. File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.`]
++        .filter(Boolean).join('\n\n');
++    const history = new HistorySummarySource(messagesToSummarize, previousSummary);
++    const prefix = new TurnPrefixSummarySource(turnPrefixMessages);
++    const sources = [];
++    if (!messagesToSummarize.isEmpty() || !isSplitTurn) sources.push(history);
++    if (isSplitTurn && !turnPrefixMessages.isEmpty()) sources.push(prefix);
++    const plan = contextPolicy.plan(sources);
++    const controller = new AbortController();
++    const abort = () => controller.abort(signal.reason);
++    if (signal?.aborted) abort();
++    else signal?.addEventListener('abort', abort, { once: true });
++    callbacks?.onSummaryStart?.(plan.progress('history'));
++    const results = new Map();
++    try {
++        await plan.execute(async source => {
++            results.set(source, await generateSummaryWithUsage(source.messages, model,
++                settings.reserveTokens, apiKey, headers, controller.signal,
++                source.summaryInstructions(customInstructions), source.previousSummary,
++                thinkingLevel, streamFn, env, retry,
++                { ...callbacks, summaryPlan: plan, summarySource: source }, sessionId));
++        }, controller);
++    } finally { signal?.removeEventListener('abort', abort); }
++    const historyResult = results.get(history);
++    const prefixResult = results.get(prefix);
++    let summary = historyResult ? historyResult.text : previousSummary || 'No prior history.';
++    let summaryUsage = historyResult?.usage;
++    if (prefixResult) {
++        summary += `\n\n---\n\n**Turn Context (split turn):**\n\n${prefixResult.text}`;
++        summaryUsage = summaryUsage ? combineUsage(summaryUsage, prefixResult.usage) : prefixResult.usage;
+     }
+     // Compute file lists and append to summary
+-    const { readFiles, modifiedFiles } = computeFileLists(fileOps);
+-    summary += formatFileOperations(readFiles, modifiedFiles);
++    summary = contextPolicy.packSummary(retainedText, summary, annotations,
++        tokensBefore, preparation.retainedMessages, model, settings.reserveTokens, createCompactionSummaryMessage);
++    // This is the exact representation SessionContext.restore admits, including
++    // JSON escaping, summary envelope and the complete file annotations.
++    const synthesized=createCompactionSummaryMessage(summary,tokensBefore,Date.now());
++    const policy=CompactionPolicy.fromEnvironment(env);
++    function* committedContext() {yield synthesized;yield* preparation.retainedMessages;}
++    policy.requireContext(committedContext(),model,settings.reserveTokens);
+     if (!firstKeptEntryId) {
+         throw new Error("First kept entry has no UUID - session may need migration");
+     }
+@@ -647,22 +628,10 @@
+ /**
+  * Generate a summary for a turn prefix (when splitting a turn).
+  */
+-async function generateTurnPrefixSummary(messages, model, reserveTokens, apiKey, headers, env, signal, thinkingLevel, streamFn, retry, callbacks, sessionId) {
+-    const maxTokens = Math.min(Math.floor(0.5 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY); // Smaller budget for turn prefix
+-    const llmMessages = convertToLlm(messages);
+-    const conversationText = serializeConversation(llmMessages);
+-    const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
+-    const response = await completeSummarization(model, buildSummarizationContext(promptText), createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId), streamFn, retry, callbacks);
+-    const failure = getSummarizationFailure(response, "Turn prefix summarization");
+-    if (failure) {
+-        throw new Error(failure);
+-    }
+-    if (response.content.some((block) => block.type === "toolCall")) {
+-        throw new Error("Turn prefix summarization attempted to call a tool");
+-    }
+-    return {
+-        text: contentText(response.content),
+-        usage: response.usage,
+-    };
++class TurnPrefixSummarySource extends HistorySummarySource {
++    get summaryPhase() { return 'current-turn'; }
++    summaryInstructions(instructions) {
++        return [TURN_PREFIX_SUMMARIZATION_PROMPT, instructions].filter(Boolean).join('\n\n');
++    }
+ }
+ //# sourceMappingURL=compaction.js.map
+\ No newline at end of file
+--- a/dist/core/agent-session-runtime.js
++++ b/dist/core/agent-session-runtime.js
+@@ -1,3 +1,4 @@
++import { SessionContext } from "./session-context.js";
+ import { constants, copyFileSync, existsSync, mkdirSync } from "node:fs";
+ import { basename, join, parse, resolve } from "node:path";
+ import { resolvePath } from "../utils/paths.js";
+@@ -166,7 +167,7 @@
+         }));
+         if (options?.setup) {
+             await options.setup(this.session.sessionManager);
+-            this.session.agent.state.messages = this.session.sessionManager.buildSessionContext().messages;
++            SessionContext.restore(this.session);
+         }
+         await this.finishSessionReplacement(options?.withSession);
+         return { cancelled: false };
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -1,3 +1,4 @@
++import { SessionContext } from "./session-context.js";
+ /**
+  * AgentSession - Core abstraction for agent lifecycle and session management.
+  *
+@@ -32,7 +33,7 @@
+ import { ModelRegistry } from "./model-registry.js";
+ import { expandPromptTemplate } from "./prompt-templates.js";
+ import { exportSessionToJsonl } from "./session-export.js";
+-import { getLatestCompactionEntry } from "./session-manager.js";
++import { sessionEntryToContextMessages } from "./session-manager.js";
+ import { createSyntheticSourceInfo } from "./source-info.js";
+ import { buildSystemPrompt } from "./system-prompt.js";
+ import { createLocalBashOperations } from "./tools/bash.js";
+@@ -160,6 +161,7 @@
+         // (session persistence, extensions, auto-compaction, retry logic)
+         this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
+         this._loadNativeInputState();
++        SessionContext.restore(this);
+         this.agent.onContextReady = async (context) => await this._commitNativeContext(context);
+         this._installAgentToolHooks();
+         this._installAgentNextTurnRefresh();
+@@ -481,9 +483,9 @@
+                 this._nativeInputClaims.has(message.inputId));
+             if (currentInput && estimateTokens(currentInput) > budget)
+                 throw new Error("Native input is oversized and cannot be compacted; prompt refused");
+-            const before = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
++            const before = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction") ?? null;
+             await this._runAutoCompaction("threshold", false);
+-            const after = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
++            const after = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction") ?? null;
+             if (!after || after.id === before?.id)
+                 throw new Error("Native threshold compaction did not commit; prompt refused");
+             const fresh = this.agent.state.messages.slice();
+@@ -856,6 +858,7 @@
+         this._disconnectFromAgent();
+         this._eventListeners = [];
+         cleanupSessionResources(this.sessionId);
++        this.sessionManager.entryStore.close();
+     }
+     // =========================================================================
+     // Read-only State Access
+@@ -1140,6 +1143,7 @@
+      * @throws Error if no model selected or no API key available (when not streaming)
+      */
+     async prompt(text, options) {
++        await this.storedContext.beforeInput(this);
+         const expandPromptTemplates = options?.expandPromptTemplates ?? true;
+         const preflightResult = options?.preflightResult;
+         let messages;
+@@ -1884,12 +1888,12 @@
+                 throw new Error(formatNoModelSelectedMessage());
+             }
+             const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
+-            const pathEntries = this.sessionManager.getBranch();
++            const pathEntries = this.sessionManager.entryStore.branch(this.sessionManager.getLeafId());
+             const settings = this.settingsManager.getCompactionSettings();
+-            const preparation = prepareCompaction(pathEntries, settings);
++            const preparation = prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId());
+             if (!preparation) {
+                 // Check why we can't compact
+-                const lastEntry = pathEntries[pathEntries.length - 1];
++                const lastEntry = this.sessionManager.getLeafEntry();
+                 if (lastEntry?.type === "compaction") {
+                     throw new Error("Already compacted");
+                 }
+@@ -1940,12 +1944,11 @@
+                 throw new Error("Compaction cancelled");
+             }
+             this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
+-            const newEntries = this.sessionManager.getEntries();
+-            const sessionContext = this.sessionManager.buildSessionContext();
+-            this.agent.state.messages = sessionContext.messages;
++                        SessionContext.restore(this);
++            const sessionContext = { messages: this.agent.state.messages };
+             const estimatedTokensAfter = estimateMessagesTokens(sessionContext.messages);
+             // Get the saved compaction entry for the extension event
+-            const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary);
++            const savedCompactionEntry = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
+             if (this._extensionRunner && savedCompactionEntry) {
+                 await this._extensionRunner.emit({
+                     type: "session_compact",
+@@ -2053,7 +2056,7 @@
+         // Skip compaction checks if this assistant message is older than the latest
+         // compaction boundary. This prevents a stale pre-compaction usage/error
+         // from retriggering compaction on the first prompt after compaction.
+-        const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
++        const compactionEntry = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction") ?? null;
+         const assistantIsFromBeforeCompaction = compactionEntry !== null && assistantMessage.timestamp <= new Date(compactionEntry.timestamp).getTime();
+         if (assistantIsFromBeforeCompaction) {
+             return false;
+@@ -2151,8 +2154,8 @@
+                 return false;
+             }
+             const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
+-            const pathEntries = this.sessionManager.getBranch();
+-            const preparation = prepareCompaction(pathEntries, settings);
++            const pathEntries = this.sessionManager.entryStore.branch(this.sessionManager.getLeafId());
++            const preparation = prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId());
+             if (!preparation) {
+                 return false;
+             }
+@@ -2230,12 +2233,11 @@
+                 return false;
+             }
+             this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
+-            const newEntries = this.sessionManager.getEntries();
+-            const sessionContext = this.sessionManager.buildSessionContext();
+-            this.agent.state.messages = sessionContext.messages;
++                        SessionContext.restore(this);
++            const sessionContext = { messages: this.agent.state.messages };
+             const estimatedTokensAfter = estimateMessagesTokens(sessionContext.messages);
+             // Get the saved compaction entry for the extension event
+-            const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary);
++            const savedCompactionEntry = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
+             if (this._extensionRunner && savedCompactionEntry) {
+                 await this._extensionRunner.emit({
+                     type: "session_compact",
+@@ -2941,7 +2943,7 @@
+             let summaryText;
+             let summaryDetails;
+             let summaryUsage;
+-            if (options.summarize && entriesToSummarize.length > 0 && !extensionSummary) {
++            if (options.summarize && !entriesToSummarize.isEmpty() && !extensionSummary) {
+                 const model = this.model;
+                 const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(model);
+                 const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
+@@ -3018,8 +3020,8 @@
+                 this.sessionManager.appendLabelChange(targetId, label);
+             }
+             // Update agent state
+-            const sessionContext = this.sessionManager.buildSessionContext();
+-            this.agent.state.messages = sessionContext.messages;
++            SessionContext.restore(this);
++            const sessionContext = { messages: this.agent.state.messages };
+             // Emit session_tree event
+             await this._extensionRunner.emit({
+                 type: "session_tree",
+@@ -3040,7 +3042,7 @@
+      * Get all user messages from session for fork selector.
+      */
+     getUserMessagesForForking() {
+-        const entries = this.sessionManager.getEntries();
++        const entries = this.sessionManager.entryStore.entries();
+         const result = [];
+         for (const entry of entries) {
+             if (entry.type !== "message")
+@@ -3066,7 +3068,7 @@
+         let totalMessages = 0;
+         let toolCalls = 0;
+         const usageTotals = createUsageTotals();
+-        for (const entry of this.sessionManager.getEntries()) {
++        for (const entry of this.sessionManager.entryStore.entries()) {
+             if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
+                 addUsageToTotals(usageTotals, entry.usage);
+             }
+@@ -3121,30 +3123,20 @@
+         // After compaction, the last assistant usage reflects pre-compaction context size.
+         // We can only trust usage from an assistant that responded after the latest compaction.
+         // If no such assistant exists, context token count is unknown until the next LLM response.
+-        const branchEntries = this.sessionManager.getBranch();
+-        const latestCompaction = getLatestCompactionEntry(branchEntries);
+-        if (latestCompaction) {
+-            // Check if there's a valid assistant usage after the compaction boundary
+-            const compactionIndex = branchEntries.lastIndexOf(latestCompaction);
+-            let hasPostCompactionUsage = false;
+-            for (let i = branchEntries.length - 1; i > compactionIndex; i--) {
+-                const entry = branchEntries[i];
+-                if (entry.type === "message" && entry.message.role === "assistant") {
+-                    const assistant = entry.message;
+-                    if (assistant.stopReason !== "aborted" && assistant.stopReason !== "error") {
+-                        const contextTokens = calculateContextTokens(assistant.usage);
+-                        if (contextTokens > 0) {
+-                            hasPostCompactionUsage = true;
+-                            break;
+-                        }
+-                    }
+-                }
+-            }
+-            if (!hasPostCompactionUsage) {
+-                return { tokens: null, contextWindow, percent: null };
+-            }
+-        }
+-        const estimate = estimateContextTokens(this.messages);
++        const store=this.sessionManager.entryStore;
++        const latestCompaction=store.latest(this.sessionManager.getLeafId(),'compaction');
++        if(latestCompaction) {
++            let hasUsage=false;
++            for(const meta of store.ancestors(this.sessionManager.getLeafId())) {
++                if(meta.id===latestCompaction.id)break;
++                if(meta.role==='assistant') {
++                    const assistant=store.get(meta.id).message;
++                    if(assistant.stopReason!=='aborted' && assistant.stopReason!=='error' && calculateContextTokens(assistant.usage)>0) {hasUsage=true;break;}
++                }
++            }
++            if(!hasUsage)return {tokens:null,contextWindow,percent:null};
++        }
++        const estimate=estimateContextTokens(this.sessionManager.buildContextEntries().flatMap(sessionEntryToContextMessages));
+         const percent = (estimate.tokens / contextWindow) * 100;
+         return {
+             tokens: estimate.tokens,
+--- a/dist/core/cache-stats.d.ts
++++ b/dist/core/cache-stats.d.ts
+@@ -34,16 +34,16 @@
+  * Cumulative cache waste across a session: prompt tokens that should have been
+  * cache reads (they were in the previous turn's prompt) but were re-billed.
+  */
+-export declare function computeCacheWaste(entries: SessionEntry[], models: ModelPriceSource): CacheWasteTotals;
++export declare function computeCacheWaste(entries: Iterable<SessionEntry>, models: ModelPriceSource): CacheWasteTotals;
+ /**
+  * All counted cache misses across a session, keyed by the assistant message
+  * (by reference) that paid for them. Used to re-derive transcript notices when
+  * rebuilding the chat from entries (resume, post-compaction rebuild).
+  */
+-export declare function collectCacheMisses(entries: SessionEntry[], models: ModelPriceSource): Map<AssistantMessage, CacheMiss>;
++export declare function collectCacheMisses(entries: Iterable<SessionEntry>, models: ModelPriceSource): Map<string, CacheMiss>;
+ /**
+  * Detect a cache miss on a just-completed assistant message.
+  * `entries` must not yet contain `message` (message_end fires before persistence).
+  */
+-export declare function detectCacheMiss(entries: SessionEntry[], message: AssistantMessage, models: ModelPriceSource): CacheMiss | undefined;
++export declare function detectCacheMiss(entries: Iterable<SessionEntry>, message: AssistantMessage, models: ModelPriceSource): CacheMiss | undefined;
+ //# sourceMappingURL=cache-stats.d.ts.map
+\ No newline at end of file
+--- a/dist/core/cache-stats.js
++++ b/dist/core/cache-stats.js
+@@ -51,10 +51,9 @@
+         reportedCache: reportedCache || usage.cacheRead + usage.cacheWrite > 0,
+     };
+ }
+-function scan(entries, models) {
++function scan(entries, models, onMiss) {
+     let prev;
+     const totals = { missedTokens: 0, missedCost: 0, missCount: 0 };
+-    const misses = new Map();
+     for (const entry of entries) {
+         if (entry.type === "compaction" || entry.type === "branch_summary") {
+             // The context legitimately changed; the next turn's prompt is new content,
+@@ -69,12 +68,12 @@
+                 totals.missedTokens += miss.missedTokens;
+                 totals.missedCost += miss.missedCost;
+                 totals.missCount += 1;
+-                misses.set(entry.message, miss);
++                onMiss?.(entry.id, miss);
+             }
+             prev = asPreviousRequest(entry.message, prev?.reportedCache ?? false) ?? prev;
+         }
+     }
+-    return { prev, totals, misses };
++    return { prev, totals };
+ }
+ /**
+  * Cumulative cache waste across a session: prompt tokens that should have been
+@@ -84,12 +83,13 @@
+     return scan(entries, models).totals;
+ }
+ /**
+- * All counted cache misses across a session, keyed by the assistant message
+- * (by reference) that paid for them. Used to re-derive transcript notices when
++ * All counted cache misses across a session, keyed by persisted entry identity. Used to re-derive transcript notices when
+  * rebuilding the chat from entries (resume, post-compaction rebuild).
+  */
+ export function collectCacheMisses(entries, models) {
+-    return scan(entries, models).misses;
++    const misses = new Map();
++    scan(entries, models, (id, miss) => misses.set(id, miss));
++    return misses;
+ }
+ /**
+  * Detect a cache miss on a just-completed assistant message.
+--- a/dist/core/compaction/branch-summarization.d.ts
++++ b/dist/core/compaction/branch-summarization.d.ts
+@@ -1,3 +1,4 @@
++import type { EntryBranchRange } from "../session-entry-store.js";
+ /**
+  * Branch summarization for tree navigation.
+  *
+@@ -33,7 +34,7 @@
+ }
+ export interface CollectEntriesResult {
+     /** Entries to summarize, in chronological order */
+-    entries: SessionEntry[];
++    entries: EntryBranchRange;
+     /** Common ancestor between old and new position, if any */
+     commonAncestorId: string | null;
+ }
+@@ -87,12 +88,12 @@
+  * @param entries - Entries in chronological order
+  * @param tokenBudget - Maximum tokens to include (0 = no limit)
+  */
+-export declare function prepareBranchEntries(entries: SessionEntry[], tokenBudget?: number): BranchPreparation;
++export declare function prepareBranchEntries(entries: EntryBranchRange, tokenBudget?: number): BranchPreparation;
+ /**
+  * Generate a summary of abandoned branch entries.
+  *
+  * @param entries - Session entries to summarize (chronological order)
+  * @param options - Generation options
+  */
+-export declare function generateBranchSummary(entries: SessionEntry[], options: GenerateBranchSummaryOptions): Promise<BranchSummaryResult>;
++export declare function generateBranchSummary(entries: EntryBranchRange, options: GenerateBranchSummaryOptions): Promise<BranchSummaryResult>;
+ //# sourceMappingURL=branch-summarization.d.ts.map
+\ No newline at end of file
+--- a/dist/core/compaction/branch-summarization.js
++++ b/dist/core/compaction/branch-summarization.js
+@@ -1,3 +1,4 @@
++import { EntryBranchRange } from '../session-entry-store.js';
+ /**
+  * Branch summarization for tree navigation.
+  *
+@@ -24,34 +25,9 @@
+  * @returns Entries to summarize and the common ancestor
+  */
+ export function collectEntriesForBranchSummary(session, oldLeafId, targetId) {
+-    // If no old position, nothing to summarize
+-    if (!oldLeafId) {
+-        return { entries: [], commonAncestorId: null };
+-    }
+-    // Find common ancestor (deepest node that's on both paths)
+-    const oldPath = new Set(session.getBranch(oldLeafId).map((e) => e.id));
+-    const targetPath = session.getBranch(targetId);
+-    // targetPath is root-first, so iterate backwards to find deepest common ancestor
+-    let commonAncestorId = null;
+-    for (let i = targetPath.length - 1; i >= 0; i--) {
+-        if (oldPath.has(targetPath[i].id)) {
+-            commonAncestorId = targetPath[i].id;
+-            break;
+-        }
+-    }
+-    // Collect entries from old leaf back to common ancestor
+-    const entries = [];
+-    let current = oldLeafId;
+-    while (current && current !== commonAncestorId) {
+-        const entry = session.getEntry(current);
+-        if (!entry)
+-            break;
+-        entries.push(entry);
+-        current = entry.parentId;
+-    }
+-    // Reverse to get chronological order
+-    entries.reverse();
+-    return { entries, commonAncestorId };
++    const store = session.entryStore;
++    const commonAncestorId = store.commonAncestor(oldLeafId, targetId);
++    return { entries: new EntryBranchRange(store, oldLeafId, commonAncestorId), commonAncestorId };
+ }
+ // ============================================================================
+ // Entry to Message Conversion
+@@ -118,8 +94,7 @@
+         }
+     }
+     // Second pass: walk from newest to oldest, adding messages until token budget
+-    for (let i = entries.length - 1; i >= 0; i--) {
+-        const entry = entries[i];
++    for (const entry of entries.reverse()) {
+         const message = getMessageFromEntry(entry);
+         if (!message)
+             continue;
+--- a/dist/core/compaction/compaction.d.ts
++++ b/dist/core/compaction/compaction.d.ts
+@@ -1,3 +1,5 @@
++import type { EntryStore } from "../session-entry-store.js";
++import type { EntryMessageRange } from "./agent-comms-source.js";
+ /**
+  * Context compaction for long sessions.
+  *
+@@ -50,7 +52,7 @@
+  * Estimate context tokens from messages, using the last assistant usage when available.
+  * If there are messages after the last usage, estimate their tokens with estimateTokens.
+  */
+-export declare function estimateContextTokens(messages: AgentMessage[]): ContextUsageEstimate;
++export declare function estimateContextTokens(messages: Iterable<AgentMessage>): ContextUsageEstimate;
+ /**
+  * Check if compaction should trigger based on context usage.
+  */
+@@ -60,36 +62,6 @@
+  * This is conservative (overestimates tokens).
+  */
+ export declare function estimateTokens(message: AgentMessage): number;
+-/**
+- * Find the context-visible user-role message that starts the turn containing the given entry index.
+- * Returns -1 if no turn start found before the index.
+- */
+-export declare function findTurnStartIndex(entries: SessionEntry[], entryIndex: number, startIndex: number): number;
+-export interface CutPointResult {
+-    /** Index of first entry to keep */
+-    firstKeptEntryIndex: number;
+-    /** Index of user message that starts the turn being split, or -1 if not splitting */
+-    turnStartIndex: number;
+-    /** Whether this cut splits a turn (cut point is not a user message) */
+-    isSplitTurn: boolean;
+-}
+-/**
+- * Find the cut point in session entries that keeps approximately `keepRecentTokens`.
+- *
+- * Algorithm: Walk backwards from newest, accumulating estimated message sizes.
+- * Stop when we've accumulated >= keepRecentTokens. Cut at that point.
+- *
+- * Can cut at user OR assistant messages (never tool results). When cutting at an
+- * assistant message with tool calls, its tool results come after and will be kept.
+- *
+- * Returns CutPointResult with:
+- * - firstKeptEntryIndex: the entry index to start keeping from
+- * - turnStartIndex: if cutting mid-turn, the user message that started that turn
+- * - isSplitTurn: whether we're cutting in the middle of a turn
+- *
+- * Only considers entries between `startIndex` and `endIndex` (exclusive).
+- */
+-export declare function findCutPoint(entries: SessionEntry[], startIndex: number, endIndex: number, keepRecentTokens: number): CutPointResult;
+ /**
+  * Returns an error message when a summarization response cannot safely be persisted.
+  * A length stop contains partial text and must not become a session checkpoint.
+@@ -107,9 +79,9 @@
+  * Generate a summary of the conversation using the LLM.
+  * If previousSummary is provided, uses the update prompt to merge.
+  */
+-export declare function generateSummary(currentMessages: AgentMessage[], model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<string>;
++export declare function generateSummary(currentMessages: Iterable<AgentMessage>, model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<string>;
+ /** Generate or update a conversation summary and return its provider usage. */
+-export declare function generateSummaryWithUsage(currentMessages: AgentMessage[], model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<{
++export declare function generateSummaryWithUsage(currentMessages: Iterable<AgentMessage>, model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<{
+     text: string;
+     usage: Usage;
+ }>;
+@@ -117,9 +89,9 @@
+     /** UUID of first entry to keep */
+     firstKeptEntryId: string;
+     /** Messages that will be summarized and discarded */
+-    messagesToSummarize: AgentMessage[];
++    messagesToSummarize: EntryMessageRange;
+     /** Messages that will be turned into turn prefix summary (if splitting) */
+-    turnPrefixMessages: AgentMessage[];
++    turnPrefixMessages: EntryMessageRange;
+     /** Whether this is a split turn (cut point in middle of turn) */
+     isSplitTurn: boolean;
+     tokensBefore: number;
+@@ -130,7 +102,10 @@
+     /** Compaction settions from settings.jsonl	*/
+     settings: CompactionSettings;
++    contextWindow: number;
++    retainedMessages: EntryMessageRange;
++    retainedText: string;
+ }
+-export declare function prepareCompaction(pathEntries: SessionEntry[], settings: CompactionSettings): CompactionPreparation | undefined;
++export declare function prepareCompaction(store: EntryStore, settings: CompactionSettings, model: Pick<Model<any>, 'contextWindow'>, leafId?: string | null, retainedText?: string): CompactionPreparation | undefined;
+ /**
+  * Generate summaries for compaction using prepared data.
+  * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
+--- a/dist/core/export-html/index.js
++++ b/dist/core/export-html/index.js
+@@ -1,4 +1,4 @@
+-import { existsSync, readFileSync, writeFileSync } from "fs";
++import { closeSync, existsSync, openSync, readFileSync, writeSync } from "fs";
+ import { basename, join } from "path";
+ import { APP_NAME, getExportTemplateDir } from "../../config.js";
+ import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.js";
+@@ -86,7 +86,7 @@
+ /**
+  * Core HTML generation logic shared by both export functions.
+  */
+-function generateHtml(sessionData, themeName) {
++function* generateHtml(sessionData, themeName) {
+     const templateDir = getExportTemplateDir();
+     const template = readFileSync(join(templateDir, "template.html"), "utf-8");
+     const templateCss = readFileSync(join(templateDir, "template.css"), "utf-8");
+@@ -100,20 +100,60 @@
+     const bodyBg = themeExport.pageBg ?? derivedExportColors.pageBg;
+     const containerBg = themeExport.cardBg ?? derivedExportColors.cardBg;
+     const infoBg = themeExport.infoBg ?? derivedExportColors.infoBg;
+-    // Base64 encode session data to avoid escaping issues
+-    const sessionDataBase64 = Buffer.from(JSON.stringify(sessionData)).toString("base64");
+     // Build the CSS with theme variables injected
+     const css = templateCss
+         .replace("{{THEME_VARS}}", themeVars)
+         .replace("{{BODY_BG}}", bodyBg)
+         .replace("{{CONTAINER_BG}}", containerBg)
+         .replace("{{INFO_BG}}", infoBg);
+-    return template
++    const formatted = template
+         .replace("{{CSS}}", css)
+         .replace("{{JS}}", templateJs)
+-        .replace("{{SESSION_DATA}}", sessionDataBase64)
+         .replace("{{MARKED_JS}}", markedJs)
+         .replace("{{HIGHLIGHT_JS}}", hljsJs);
++    const marker = '{{SESSION_DATA}}';
++    const boundary = formatted.indexOf(marker);
++    if (boundary < 0) throw new Error('Export template has no session-data boundary');
++    yield formatted.slice(0, boundary);
++    // Encode the exact JSON wire shape incrementally, including UTF8/base64
++    // boundaries. No complete history JSON string or base64 copy is allocated.
++    let carry = Buffer.alloc(0);
++    for (const piece of sessionJson(sessionData)) {
++        const data = Buffer.concat([carry, Buffer.from(piece)]);
++        const end = data.length - data.length % 3;
++        if (end) yield data.subarray(0, end).toString('base64');
++        carry = data.subarray(end);
++    }
++    if (carry.length) yield carry.toString('base64');
++    yield formatted.slice(boundary + marker.length);
++}
++
++function* sessionJson({entries, ...fields}) {
++    const prefix = JSON.stringify(fields);
++    yield prefix.slice(0, -1) + ',"entries":[';
++    let first = true;
++    for (const entry of entries) {
++        if (!first) yield ',';
++        yield JSON.stringify(entry);
++        first = false;
++    }
++    yield ']}';
++}
++
++function writeHtml(outputPath, chunks, sessionFile) {
++    if (resolvePath(outputPath) === resolvePath(sessionFile)) throw new Error('Export cannot overwrite session history');
++    const fd = openSync(outputPath, 'w', 0o600);
++    try {
++        for (const chunk of chunks) {
++            const data = Buffer.from(chunk);
++            let offset = 0;
++            while (offset < data.length) {
++                const count = writeSync(fd, data, offset, data.length - offset);
++                if (!count) throw new Error('Incomplete HTML export write');
++                offset += count;
++            }
++        }
++    } finally { closeSync(fd); }
+ }
+ /** Tools rendered directly by the HTML template (not pre-rendered via TUI→ANSI→HTML pipeline) */
+ const TEMPLATE_RENDERED_TOOLS = new Set(["bash", "read", "write", "edit", "ls"]);
+@@ -169,11 +209,11 @@
+     if (!existsSync(sessionFile)) {
+         throw new Error("Nothing to export yet - start a conversation first");
+     }
+-    const entries = sm.getEntries();
++    const entries = sm.entryStore.entries();
+     // Pre-render custom tools if a tool renderer is provided
+     let renderedTools;
+     if (opts.toolRenderer) {
+-        renderedTools = preRenderCustomTools(entries, opts.toolRenderer);
++        renderedTools = preRenderCustomTools(sm.entryStore.entries(), opts.toolRenderer);
+         // Only include if we actually rendered something
+         if (Object.keys(renderedTools).length === 0) {
+             renderedTools = undefined;
+@@ -193,7 +233,7 @@
+         const sessionBasename = basename(sessionFile, ".jsonl");
+         outputPath = `${APP_NAME}-session-${sessionBasename}.html`;
+     }
+-    writeFileSync(outputPath, html, "utf8");
++    writeHtml(outputPath, html, sessionFile);
+     return outputPath;
+ }
+ /**
+@@ -207,9 +247,10 @@
+         throw new Error(`File not found: ${resolvedInputPath}`);
+     }
+     const sm = SessionManager.open(resolvedInputPath);
++    try {
+     const sessionData = {
+         header: sm.getHeader(),
+-        entries: sm.getEntries(),
++        entries: sm.entryStore.entries(),
+         leafId: sm.getLeafId(),
+         systemPrompt: undefined,
+         tools: undefined,
+@@ -220,7 +261,8 @@
+         const inputBasename = basename(resolvedInputPath, ".jsonl");
+         outputPath = `${APP_NAME}-session-${inputBasename}.html`;
+     }
+-    writeFileSync(outputPath, html, "utf8");
++    writeHtml(outputPath, html, resolvedInputPath);
+     return outputPath;
++    } finally { sm.entryStore.close(); }
+ }
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+--- a/dist/core/extensions/types.d.ts
++++ b/dist/core/extensions/types.d.ts
+@@ -1,3 +1,4 @@
++import type { EntryBranchRange } from "../session-entry-store.js";
+ /**
+  * Extension system types.
+  *
+@@ -102,7 +103,7 @@
+      *
+      * The factory receives a FooterDataProvider for data not otherwise accessible:
+      * git branch and extension statuses from setStatus(). Context usage is on
+-     * ctx.getContextUsage(), token stats on ctx.sessionManager.getEntries(), model info on ctx.model.
++     * ctx.getContextUsage(), token stats on ctx.sessionManager.entryStore.entries(), model info on ctx.model.
+      */
+     setFooter(factory: ((tui: TUI, theme: Theme, footerData: ReadonlyFooterDataProvider) => Component & {
+         dispose?(): void;
+@@ -486,7 +487,7 @@
+     targetId: string;
+     oldLeafId: string | null;
+     commonAncestorId: string | null;
+-    entriesToSummarize: SessionEntry[];
++    entriesToSummarize: EntryBranchRange;
+     userWantsSummary: boolean;
+     /** Custom instructions for summarization */
+     customInstructions?: string;
+--- a/dist/core/output-guard.js
++++ b/dist/core/output-guard.js
+@@ -68,7 +68,12 @@
+     if (text.length === 0) {
+         return;
+     }
+-    rawStdoutWriteTail = rawStdoutWriteTail.then(() => writeRawStdoutChunk(text));
++    writeRawStdoutRecord([text]);
++}
++export function writeRawStdoutRecord(pieces) {
++    rawStdoutWriteTail = rawStdoutWriteTail.then(async () => {
++        for (const piece of pieces) await writeRawStdoutChunk(piece);
++    });
+     void rawStdoutWriteTail.catch(() => {
+         process.exit(1);
+     });
+--- a/dist/core/sdk.js
++++ b/dist/core/sdk.js
+@@ -78,9 +78,9 @@
+         time("resourceLoader.reload");
+     }
+     // Check if session has existing data to restore
+-    const existingSession = sessionManager.buildSessionContext();
+-    const hasExistingSession = existingSession.messages.length > 0;
+-    const hasThinkingEntry = sessionManager.getBranch().some((entry) => entry.type === "thinking_level_change");
++    const existingSession = sessionManager.entryStore.contextSettings(sessionManager.getLeafId());
++    const hasExistingSession = sessionManager.entryStore.lastId !== null;
++    const hasThinkingEntry = Boolean(sessionManager.entryStore.latest(sessionManager.getLeafId(), "thinking_level_change"));
+     let model = options.model;
+     let modelFallbackMessage;
+     // If session has data, try to restore model from it
+@@ -238,7 +238,6 @@
+     });
+     // Restore messages if session has existing data
+     if (hasExistingSession) {
+-        agent.state.messages = existingSession.messages;
+         if (!hasThinkingEntry) {
+             sessionManager.appendThinkingLevelChange(thinkingLevel);
+         }
+--- a/dist/core/session-export.js
++++ b/dist/core/session-export.js
+@@ -1,4 +1,4 @@
+-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
++import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+ import { dirname } from "node:path";
+ import { resolvePath } from "../utils/paths.js";
+ import { CURRENT_SESSION_VERSION } from "./session-manager.js";
+@@ -17,16 +17,18 @@
+         timestamp,
+         cwd: sessionManager.getCwd(),
+     };
+-    const lines = [JSON.stringify(header)];
++    const fd = openSync(filePath, "w", 0o600);
++    try {
++    writeFileSync(fd, JSON.stringify(header) + "\n");
+     let parentId = null;
+-    for (const entry of sessionManager.getBranch()) {
+-        lines.push(JSON.stringify({ ...entry, parentId }));
++    for (const entry of sessionManager.entryStore.branch(sessionManager.getLeafId())) {
++        writeFileSync(fd, JSON.stringify({ ...entry, parentId }) + "\n");
+         parentId = entry.id;
+     }
+     for (const entry of createTrailingEntries?.(parentId, timestamp) ?? []) {
+-        lines.push(JSON.stringify(entry));
++        writeFileSync(fd, JSON.stringify(entry) + "\n");
+     }
+-    writeFileSync(filePath, `${lines.join("\n")}\n`);
++    } finally { closeSync(fd); }
+     return filePath;
+ }
+ //# sourceMappingURL=session-export.js.map
+\ No newline at end of file
+--- a/dist/core/session-manager.d.ts
++++ b/dist/core/session-manager.d.ts
+@@ -1,3 +1,4 @@
++import type { EntryStore } from "./session-entry-store.js";
+ import type { AgentMessage } from "@earendil-works/pi-agent-core";
+ import { type ImageContent, type Message, type TextContent, type Usage } from "@earendil-works/pi-ai";
+ import { type BashExecutionMessage, type CustomMessage } from "./messages.ts";
+@@ -63,7 +64,7 @@
+  * Purpose: Persist extension state across session reloads. On reload, extensions can
+  * scan entries for their customType and reconstruct internal state.
+  *
+- * Does NOT participate in LLM context (ignored by buildSessionContext).
++ * Does NOT participate in LLM context (omitted from contextEntries).
+  * For injecting content into context, see CustomMessageEntry.
+  */
+ export interface CustomEntry<T = unknown> extends SessionEntryBase {
+@@ -87,7 +88,7 @@
+  * Use customType to identify your extension's entries.
+  *
+  * Unlike CustomEntry, this DOES participate in LLM context.
+- * The content is converted to a user message in buildSessionContext().
++ * The content is converted to a user message in entryStore.contextEntries().
+  * Use details for extension-specific metadata (not sent to LLM).
+  *
+  * display controls TUI rendering:
+@@ -113,14 +114,6 @@
+     label?: string;
+     /** Timestamp of the latest label change for this entry, if any */
+     labelTimestamp?: string;
+-}
+-export interface SessionContext {
+-    messages: AgentMessage[];
+-    thinkingLevel: string;
+-    model: {
+-        provider: string;
+-        modelId: string;
+-    } | null;
+ }
+ export interface SessionInfo {
+     path: string;
+@@ -137,13 +130,10 @@
+     firstMessage: string;
+     allMessagesText: string;
+ }
+-export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "getBranch" | "buildContextEntries" | "getHeader" | "getEntries" | "getTree" | "getSessionName">;
++export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "buildContextEntries" | "getHeader" | "entryStore" | "getTree" | "getSessionName">;
+ export declare function assertValidSessionId(id: string): void;
+ /** Exported for testing */
+-export declare function migrateSessionEntries(entries: FileEntry[]): void;
+ /** Exported for compaction.test.ts */
+-export declare function parseSessionEntries(content: string): FileEntry[];
+-export declare function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEntry | null;
+ /**
+  * Project one selected session entry into LLM/runtime messages.
+  * Plain custom entries are display/state entries and do not participate in context.
+@@ -157,16 +147,13 @@
+  * by the kept entries starting at firstKeptEntryId and all entries after the
+  * compaction entry. Older summarized entries are omitted.
+  */
+-export declare function buildContextEntries(entries: SessionEntry[], leafId?: string | null, byId?: Map<string, SessionEntry>): SessionEntry[];
+ /**
+  * Build the session context from entries using tree traversal.
+  * If leafId is provided, walks from that entry to root.
+  * Handles compaction and branch summaries along the path.
+  */
+-export declare function buildSessionContext(entries: SessionEntry[], leafId?: string | null, byId?: Map<string, SessionEntry>): SessionContext;
+ export declare function getDefaultSessionDir(cwd: string, agentDir?: string): string;
+ /** Exported for testing */
+-export declare function loadEntriesFromFile(filePath: string): FileEntry[];
+ /** Exported for testing */
+ export declare function findMostRecentSession(sessionDir: string, cwd?: string): string | null;
+ export type SessionListProgress = (loaded: number, total: number) => void;
+@@ -178,7 +165,7 @@
+  * Branching moves the leaf to an earlier entry, allowing new branches without
+  * modifying history.
+  *
+- * Use buildSessionContext() to get the resolved message list for the LLM, which
++ * Use entryStore.contextEntries() to get the resolved message list for the LLM, which
+  * handles compaction summaries and follows the path from root to current leaf.
+  */
+ export declare class SessionManager {
+@@ -188,19 +175,13 @@
+     private cwd;
+     private persist;
+     private flushed;
+-    private fileEntries;
+-    private byId;
+-    private labelsById;
+-    private labelTimestampsById;
++    entryStore: EntryStore;
+     private leafId;
+     private constructor();
+     /** Switch to a different session file (used for resume and branching) */
+     setSessionFile(sessionFile: string): void;
+     private _setSessionFile;
+     newSession(options?: NewSessionOptions): string | undefined;
+-    private _loadEntries;
+-    private _buildIndex;
+-    private _rewriteFile;
+     isPersisted(): boolean;
+     getCwd(): string;
+     getSessionDir(): string;
+@@ -247,7 +228,7 @@
+     /**
+      * Get all direct children of an entry.
+      */
+-    getChildren(parentId: string): SessionEntry[];
++    getChildren(parentId: string): IterableIterator<SessionEntry>;
+     /**
+      * Get the label for an entry, if any.
+      */
+@@ -261,19 +242,17 @@
+     /**
+      * Walk from entry to root, returning all entries in path order.
+      * Includes all entry types (messages, compaction, model changes, etc.).
+-     * Use buildSessionContext() to get the resolved messages for the LLM.
+-     */
+-    getBranch(fromId?: string): SessionEntry[];
++     * Use entryStore.contextEntries() to get the resolved messages for the LLM.
++     */
+     /**
+      * Build the active, compaction-aware entry list for context/rendering.
+      * Uses tree traversal from current leaf.
+      */
+-    buildContextEntries(): SessionEntry[];
++    buildContextEntries(): IterableIterator<SessionEntry>;
+     /**
+      * Build the session context (what gets sent to the LLM).
+      * Uses tree traversal from current leaf.
+      */
+-    buildSessionContext(): SessionContext;
+     /**
+      * Get session header.
+      */
+@@ -283,7 +262,6 @@
+      * The session is append-only: use appendXXX() to add entries, branch() to
+      * change the leaf pointer. Entries cannot be modified or deleted.
+      */
+-    getEntries(): SessionEntry[];
+     /**
+      * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
+      * A well-formed session has exactly one root (first entry with parentId === null).
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -2,7 +2,7 @@
+ export { CONFIG_DIR_NAME, getAgentDir, getDocsPath, getExamplesPath, getPackageDir, getReadmePath, VERSION, } from "./config.ts";
+ export { AgentSession, type AgentSessionConfig, type AgentSessionEvent, type AgentSessionEventListener, type ModelCycleResult, type ParsedSkillBlock, type PromptOptions, parseSkillBlock, type SessionStats, } from "./core/agent-session.ts";
+ export { readStoredCredential } from "./core/auth-storage.ts";
+-export { type BranchPreparation, type BranchSummaryResult, type CollectEntriesResult, type CompactionResult, type CutPointResult, calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, type FileOperations, findCutPoint, findTurnStartIndex, type GenerateBranchSummaryOptions, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.ts";
++export { type BranchPreparation, type BranchSummaryResult, type CollectEntriesResult, type CompactionResult, calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, type FileOperations, type GenerateBranchSummaryOptions, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.ts";
+ export { createEventBus, type EventBus, type EventBusController } from "./core/event-bus.ts";
+ export type { AgentEndEvent, AgentSettledEvent, AgentStartEvent, AgentToolResult, AgentToolUpdateCallback, AppKeybinding, AutocompleteProviderFactory, BashToolCallEvent, BeforeAgentStartEvent, BeforeAgentStartEventResult, BeforeProviderHeadersEvent, BeforeProviderRequestEvent, BeforeProviderRequestEventResult, BuildSystemPromptOptions, CompactOptions, ContextEvent, ContextUsage, CustomToolCallEvent, EditToolCallEvent, EntryRenderer, EntryRenderOptions, ExecOptions, ExecResult, Extension, ExtensionActions, ExtensionAPI, ExtensionCommandContext, ExtensionCommandContextActions, ExtensionContext, ExtensionContextActions, ExtensionError, ExtensionEvent, ExtensionFactory, ExtensionFlag, ExtensionHandler, ExtensionRuntime, ExtensionShortcut, ExtensionUIContext, ExtensionUIDialogOptions, ExtensionWidgetOptions, FindToolCallEvent, GrepToolCallEvent, InlineExtension, InputEvent, InputEventResult, InputSource, KeybindingsManager, LoadExtensionsResult, LsToolCallEvent, MarkdownTransformContext, MarkdownTransformer, MessageEndEvent, MessageRenderer, MessageRenderOptions, MessageStartEvent, MessageUpdateEvent, PowerShellToolCallEvent, ProjectTrustContext, ProjectTrustEvent, ProjectTrustEventDecision, ProjectTrustEventResult, ProjectTrustHandler, ProviderConfig, ProviderModelConfig, ReadToolCallEvent, RegisteredCommand, RegisteredTool, ResolvedCommand, SessionBeforeCompactEvent, SessionBeforeForkEvent, SessionBeforeSwitchEvent, SessionBeforeTreeEvent, SessionCompactEvent, SessionInfoChangedEvent, SessionShutdownEvent, SessionStartEvent, SessionTreeEvent, SlashCommandInfo, SlashCommandSource, SourceInfo, TerminalInputHandler, ToolCallEvent, ToolCallEventResult, ToolDefinition, ToolExecutionEndEvent, ToolExecutionMode, ToolExecutionStartEvent, ToolExecutionUpdateEvent, ToolInfo, ToolRenderResultOptions, ToolResultEvent, TurnEndEvent, TurnStartEvent, UIPromptEndEvent, UIPromptKind, UIPromptStartEvent, UserBashEvent, UserBashEventResult, WidgetPlacement, WorkingIndicatorOptions, WriteToolCallEvent, } from "./core/extensions/index.ts";
+ export { createExtensionRuntime, defineTool, discoverAndLoadExtensions, ExtensionRunner, isBashToolResult, isEditToolResult, isFindToolResult, isGrepToolResult, isLsToolResult, isPowerShellToolResult, isReadToolResult, isToolCallEventType, isWriteToolResult, wrapRegisteredTool, wrapRegisteredTools, } from "./core/extensions/index.ts";
+@@ -16,7 +16,7 @@
+ export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/resource-loader.ts";
+ export { DefaultResourceLoader, loadProjectContextFiles } from "./core/resource-loader.ts";
+ export { AgentSessionRuntime, type AgentSessionRuntimeDiagnostic, type AgentSessionServices, type CreateAgentSessionFromServicesOptions, type CreateAgentSessionOptions, type CreateAgentSessionResult, type CreateAgentSessionRuntimeFactory, type CreateAgentSessionRuntimeResult, type CreateAgentSessionServicesOptions, createAgentSession, createAgentSessionFromServices, createAgentSessionRuntime, createAgentSessionServices, createBashTool, createCodingTools, createEditTool, createFindTool, createGrepTool, createLsTool, createPowerShellTool, createReadOnlyTools, createReadTool, createWriteTool, type PromptTemplate, } from "./core/sdk.ts";
+-export { type BranchSummaryEntry, buildContextEntries, buildSessionContext, type CompactionEntry, CURRENT_SESSION_VERSION, type CustomEntry, type CustomMessageEntry, type FileEntry, getLatestCompactionEntry, type ModelChangeEntry, migrateSessionEntries, type NewSessionOptions, parseSessionEntries, type SessionContext, type SessionEntry, type SessionEntryBase, type SessionHeader, type SessionInfo, type SessionInfoEntry, SessionManager, type SessionMessageEntry, type SessionTreeNode, sessionEntryToContextMessages, type ThinkingLevelChangeEntry, } from "./core/session-manager.ts";
++export { type BranchSummaryEntry, type CompactionEntry, CURRENT_SESSION_VERSION, type CustomEntry, type CustomMessageEntry, type FileEntry, type ModelChangeEntry, type NewSessionOptions, type SessionEntry, type SessionEntryBase, type SessionHeader, type SessionInfo, type SessionInfoEntry, SessionManager, type SessionMessageEntry, type SessionTreeNode, sessionEntryToContextMessages, type ThinkingLevelChangeEntry, } from "./core/session-manager.ts";
+ export { type CompactionSettings, type DefaultProjectTrust, type FullscreenExitOutput, type ImageSettings, type PackageSource, type RetrySettings, SettingsManager, type SettingsManagerCreateOptions, type TuiMode, } from "./core/settings-manager.ts";
+ export { formatSkillsForPrompt, type LoadSkillsFromDirOptions, type LoadSkillsResult, loadSkills, loadSkillsFromDir, type Skill, type SkillFrontmatter, } from "./core/skills.ts";
+ export { createSyntheticSourceInfo } from "./core/source-info.ts";
+@@ -33,4 +33,5 @@
+ export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.ts";
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.ts";
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5,7 +5,7 @@
+ export { AgentSession, parseSkillBlock, } from "./core/agent-session.js";
+ export { readStoredCredential } from "./core/auth-storage.js";
+ // Compaction
+-export { calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, findCutPoint, findTurnStartIndex, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.js";
++export { calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.js";
+ export { createEventBus } from "./core/event-bus.js";
+ export { createExtensionRuntime, defineTool, discoverAndLoadExtensions, ExtensionRunner, isBashToolResult, isEditToolResult, isFindToolResult, isGrepToolResult, isLsToolResult, isPowerShellToolResult, isReadToolResult, isToolCallEventType, isWriteToolResult, wrapRegisteredTool, wrapRegisteredTools, } from "./core/extensions/index.js";
+ export { convertToLlm } from "./core/messages.js";
+@@ -20,7 +20,7 @@
+ createAgentSession, createAgentSessionFromServices, createAgentSessionRuntime, createAgentSessionServices, createBashTool, 
+ // Tool factories (for custom cwd)
+ createCodingTools, createEditTool, createFindTool, createGrepTool, createLsTool, createPowerShellTool, createReadOnlyTools, createReadTool, createWriteTool, } from "./core/sdk.js";
+-export { buildContextEntries, buildSessionContext, CURRENT_SESSION_VERSION, getLatestCompactionEntry, migrateSessionEntries, parseSessionEntries, SessionManager, sessionEntryToContextMessages, } from "./core/session-manager.js";
++export { CURRENT_SESSION_VERSION, SessionManager, sessionEntryToContextMessages, } from "./core/session-manager.js";
+ export { SettingsManager, } from "./core/settings-manager.js";
+ // Skills
+ export { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, } from "./core/skills.js";
+@@ -45,4 +45,5 @@
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.js";
+ // Shell utilities
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.js";
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
++export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
+--- a/dist/main.js
++++ b/dist/main.js
+@@ -637,7 +637,7 @@
+         const scopedModels = modelPatterns && modelPatterns.length > 0
+             ? await resolveModelScope(modelPatterns, modelRuntime, { signal: AbortSignal.timeout(15_000) })
+             : [];
+-        const { options: sessionOptions, cliThinkingFromModel, diagnostics: sessionOptionDiagnostics, } = buildSessionOptions(parsed, scopedModels, sessionManager.buildSessionContext().messages.length > 0, modelRuntime, settingsManager);
++        const { options: sessionOptions, cliThinkingFromModel, diagnostics: sessionOptionDiagnostics, } = buildSessionOptions(parsed, scopedModels, sessionManager.entryStore.lastId !== null, modelRuntime, settingsManager);
+         diagnostics.push(...sessionOptionDiagnostics);
+         if (parsed.apiKey) {
+             if (!sessionOptions.model) {
+--- a/dist/modes/interactive/components/footer.js
++++ b/dist/modes/interactive/components/footer.js
+@@ -77,7 +77,7 @@
+         // Calculate cumulative usage from ALL session entries (not just post-compaction messages)
+         const usageTotals = createUsageTotals();
+         let latestCacheHitRate;
+-        for (const entry of this.session.sessionManager.getEntries()) {
++        for (const entry of this.session.sessionManager.entryStore.entries()) {
+             if (entry.type === "message" && entry.message.role === "assistant") {
+                 addUsageToTotals(usageTotals, entry.message.usage);
+                 const latestPromptTokens = entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
+--- a/dist/modes/interactive/interactive-mode.js
++++ b/dist/modes/interactive/interactive-mode.js
+@@ -1140,7 +1140,7 @@
+             project: { scope: "project", paths: [], packages: new Map() },
+             path: { scope: "path", paths: [], packages: new Map() },
+         };
+-        for (const item of items) {
++        for (const {entryId, item} of items) {
+             const groupKey = this.getScopeGroup(item.sourceInfo);
+             const group = groups[groupKey];
+             const source = item.sourceInfo?.source ?? "local";
+@@ -2770,12 +2770,12 @@
+                 }
+                 else if (event.result) {
+                     const entries = this.sessionManager.buildContextEntries();
+-                    if (entries[0]?.type !== "compaction") {
++                    if (entries.next().value?.type !== "compaction") {
+                         throw new Error("Completed compaction is missing from the session context");
+                     }
+                     this.chatContainer.clear();
+                     // The latest compaction is prepended for model context; append it below at its chronological position.
+-                    this.renderSessionEntries(entries.slice(1));
++                    this.renderSessionEntries(entries);
+                     this.addMessageToChat(createCompactionSummaryMessage(event.result.summary, event.result.tokensBefore, new Date().toISOString()));
+                     if (event.result.usage) {
+                         this.addCompactionCostNotice({
+@@ -2994,13 +2994,13 @@
+         // Cache-miss notices are not persisted; re-derive them from the full entry
+         // list and re-inject them after the assistant messages that paid for them.
+         const cacheMisses = this.settingsManager.getShowCacheMissNotices()
+-            ? collectCacheMisses(this.sessionManager.getEntries(), this.session.modelRuntime)
++            ? collectCacheMisses(this.sessionManager.entryStore.entries(), this.session.modelRuntime)
+             : new Map();
+         if (options.updateFooter) {
+             this.footer.invalidate();
+             this.updateEditorBorderColor();
+         }
+-        for (const item of items) {
++        for (const {entryId, item} of items) {
+             if (isCustomSessionEntry(item)) {
+                 this.addCustomEntryToChat(item);
+                 continue;
+@@ -3043,7 +3043,7 @@
+                 }
+                 if (message.stopReason !== "aborted" && message.stopReason !== "error") {
+                     this.maybeShowAssistantDiagnostics(message);
+-                    const miss = cacheMisses.get(message);
++                    const miss = cacheMisses.get(entryId);
+                     if (miss)
+                         this.addCacheMissNotice(miss);
+                 }
+@@ -3074,12 +3074,11 @@
+      */
+     renderSessionEntries(entries, options = {}) {
+         const items = entries.flatMap((entry) => {
+-            if (entry.type === "custom") {
+-                return [entry];
+-            }
+-            const messages = sessionEntryToContextMessages(entry);
++            const item = (value) => ({entryId: entry.id, item: value});
++            if (entry.type === "custom") return [item(entry)];
++            const messages = sessionEntryToContextMessages(entry).map(item);
+             if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage && messages.length > 0) {
+-                return [...messages, { type: "compaction_cost", kind: entry.type, usage: entry.usage }];
++                messages.push(item({ type: "compaction_cost", kind: entry.type, usage: entry.usage }));
+             }
+             return messages;
+         });
+@@ -3134,7 +3133,7 @@
+         if (!this.settingsManager.getShowCacheMissNotices())
+             return;
+         // Entries don't contain `message` yet: message_end fires before persistence.
+-        const miss = detectCacheMiss(this.sessionManager.getEntries(), message, this.session.modelRuntime);
++        const miss = detectCacheMiss(this.sessionManager.entryStore.entries(), message, this.session.modelRuntime);
+         if (miss)
+             this.addCacheMissNotice(miss);
+     }
+@@ -3162,8 +3161,8 @@
+         });
+         this.renderProjectTrustWarningIfNeeded();
+         // Show compaction info if session was compacted
+-        const allEntries = this.sessionManager.getEntries();
+-        const compactionCount = allEntries.filter((e) => e.type === "compaction").length;
++        const allEntries = this.sessionManager.entryStore.entries();
++        const compactionCount = allEntries.reduce((count,e) => count + (e.type === "compaction" ? 1 : 0),0);
+         if (compactionCount > 0) {
+             const times = compactionCount === 1 ? "1 time" : `${compactionCount} times`;
+             this.showStatus(`Session compacted ${times}`);
+@@ -5194,12 +5193,12 @@
+     handleSessionCommand() {
+         const stats = this.session.getSessionStats();
+         const sessionName = this.sessionManager.getSessionName();
+-        const entries = this.sessionManager.getEntries();
++        const entries = this.sessionManager.entryStore.entries();
+         const cacheWaste = computeCacheWaste(entries, this.session.modelRuntime);
+         // Cost/token totals per provider/model actually used (e.g. OpenRouter `auto`
+         // resolves to a concrete responseModel). Usage without model attribution is
+         // grouped separately so the breakdown reconciles with the session total.
+-        const usageBreakdown = getUsageCostBreakdown(entries);
++        const usageBreakdown = getUsageCostBreakdown(this.sessionManager.entryStore.entries());
+         let info = `${theme.bold("Session Info")}\n\n`;
+         if (sessionName) {
+             info += `${theme.fg("dim", "Name:")} ${sessionName}\n`;
+--- a/dist/modes/rpc/rpc-mode.js
++++ b/dist/modes/rpc/rpc-mode.js
+@@ -13,7 +13,7 @@
+ import * as crypto from "node:crypto";
+ import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";
+ import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";
+-import { flushRawStdout, takeOverStdout, waitForRawStdoutBackpressure, writeRawStdout, } from "../../core/output-guard.js";
++import { flushRawStdout, takeOverStdout, waitForRawStdoutBackpressure, writeRawStdout, writeRawStdoutRecord, } from "../../core/output-guard.js";
+ import { killTrackedDetachedChildren } from "../../utils/shell.js";
+ import { theme } from "../interactive/theme/theme.js";
+ import { toJsonEvent } from "../json-event.js";
+@@ -385,6 +385,18 @@
+     let unsubscribeBackpressure;
+     const output = (obj) => {
+         writeRawStdout(serializeJsonLine(obj));
++    };
++    const outputArray = async (id, command, key, entries, extra = {}) => {
++        function* pieces() {
++            yield JSON.stringify({id,type:'response',command,success:true}).slice(0,-1) + ',"data":' +
++                JSON.stringify(extra).slice(0,-1) + (Object.keys(extra).length ? ',' : '') +
++                JSON.stringify(key) + ':[';
++            let separator='';
++            for(const entry of entries) {yield separator + JSON.stringify(entry);separator=',';}
++            yield ']}}\n';
++        }
++        writeRawStdoutRecord(pieces());
++        await waitForRawStdoutBackpressure();
+     };
+     const success = (id, command, data) => {
+         if (data === undefined) {
+@@ -777,7 +789,7 @@
+                     sessionId: session.sessionId,
+                     sessionName: session.sessionName,
+                     autoCompactionEnabled: session.autoCompactionEnabled,
+-                    messageCount: session.messages.length,
++                    messageCount: session.storedContext.messages(session.agent).reduce(count => count + 1, 0),
+                     pendingMessageCount: session.pendingMessageCount,
+                     nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
+                 };
+@@ -926,15 +938,15 @@
+             }
+             case "get_entries": {
+                 const sessionManager = session.sessionManager;
+-                let entries = sessionManager.getEntries();
++                let entries = sessionManager.entryStore.entries();
+                 if (command.since !== undefined) {
+-                    const sinceIndex = entries.findIndex((e) => e.id === command.since);
+-                    if (sinceIndex === -1) {
++                    const since = sessionManager.entryStore.metadata(command.since);
++                    if (!since) {
+                         return error(id, "get_entries", `Entry not found: ${command.since}`);
+                     }
+-                    entries = entries.slice(sinceIndex + 1);
+-                }
+-                return success(id, "get_entries", { entries, leafId: sessionManager.getLeafId() });
++                    entries = entries.filter((entry) => sessionManager.entryStore.metadata(entry.id).sequence > since.sequence);
++                }
++                return outputArray(id, "get_entries", "entries", entries, {leafId:sessionManager.getLeafId()});
+             }
+             case "get_tree": {
+                 const sessionManager = session.sessionManager;
+@@ -956,7 +968,7 @@
+             // Messages
+             // =================================================================
+             case "get_messages": {
+-                return success(id, "get_messages", { messages: session.messages });
++                return outputArray(id, "get_messages", "messages", session.storedContext.messages(session.agent));
+             }
+             // =================================================================
+             // Commands (available for invocation via prompt)

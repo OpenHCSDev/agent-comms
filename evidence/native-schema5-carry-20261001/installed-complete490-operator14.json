@@ -1,0 +1,157 @@
+{
+  "state": "installed-complete490-carry-journey-passed",
+  "seed": {
+    "source_package": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "root": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/full490-controls09/original/wire",
+    "triage_id": "37d0f6d24feb2b449b23b14f0128c11a",
+    "full_id": "eaf6325b56b5f20bcc26fdaa67736492",
+    "seed_strength": "reused preserved authentic original8/2/2/4 fixture; no producer replay"
+  },
+  "source_python": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/bin/python",
+  "target_python": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/full490-installed/bin/python",
+  "target_package": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/full490-installed/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "installation": {
+    "classification": "runtime/complete490-release-preserve",
+    "stores": [
+      {
+        "name": "coordination.sqlite3",
+        "original_sha256": "d7346e163553f23c2c0203a5d48f723bfa2e68e1aca8ab17afa3529258e1eb52",
+        "candidate_sha256": "e6e72783d1f383af68e9280dce4f826fa33fb5ea106320cfea5d3082b029d36f",
+        "evidence": {
+          "original_release": [
+            8,
+            2,
+            2,
+            4
+          ],
+          "target_release": [
+            9,
+            3,
+            3,
+            5
+          ],
+          "historical_routes": {
+            "wirev1231b207833bdf4742890e41ecb3d93e0a86f9e79e02fb72034e2dfac301314f3": "#team"
+          },
+          "original_rows": {
+            "wake_claims": 3,
+            "execution_claims": 2,
+            "participants": 3,
+            "participant_aliases": 3,
+            "owner_generations": 3,
+            "attempts": 1,
+            "replay_assessments": 0,
+            "current_executions": 3,
+            "executions": 1,
+            "schema_meta": 1,
+            "publication_intents": 1,
+            "publication_receipts": 1,
+            "connectivity": 0,
+            "recovery_audit": 0,
+            "obligations": 1,
+            "native_runtime_schema_meta": 1,
+            "native_runtime_input": 2,
+            "current_native_cursor": 1,
+            "cohort_schema_meta": 1,
+            "claim_batch_receipts": 2,
+            "claim_batch_members": 3,
+            "cohort_delivery_receipts": 4,
+            "awareness_schema_meta": 1,
+            "awareness_claim_generations": 3,
+            "response_schema_meta": 1,
+            "publication_append_dispatches": 1
+          },
+          "carried_rows": {
+            "cohort_schema_meta": 1,
+            "claim_batch_receipts": 2,
+            "claim_batch_members": 3,
+            "cohort_delivery_receipts": 4,
+            "awareness_schema_meta": 1,
+            "awareness_claim_generations": 3,
+            "wake_claims": 3,
+            "execution_claims": 2,
+            "participants": 3,
+            "participant_aliases": 3,
+            "owner_generations": 3,
+            "attempts": 1,
+            "replay_assessments": 0,
+            "current_executions": 3,
+            "executions": 1,
+            "schema_meta": 1,
+            "publication_intents": 1,
+            "publication_receipts": 1,
+            "connectivity": 0,
+            "recovery_audit": 0,
+            "obligations": 1,
+            "response_schema_meta": 1,
+            "publication_append_dispatches": 1,
+            "native_runtime_schema_meta": 1,
+            "native_runtime_input": 2,
+            "current_native_cursor": 1,
+            "native_runtime_triage_sources": 1
+          },
+          "unchanged_rows_sha256": "ab5ab53807fd11663518d196b21ba5b23989f20ba1bbd2ce22b4b25faae25f1f",
+          "native_projection_sha256": "e5f82e9974be5d50b2c484b88b813435e16f2083f5976ee480030ba8bbefd494",
+          "triage_originals": 1
+        }
+      },
+      {
+        "name": "native_prompt_bindings.sqlite3",
+        "original_sha256": "df57d68d81bec5a9986c8069e6e0bf0f86d64201aefb4e0a4d5adde986383ffe",
+        "candidate_sha256": "cec864da400bcf44c475b42686c9a7521330b31b82d77be0cc7fd99fde5a0795",
+        "evidence": {
+          "original_bindings": 2,
+          "remaining_columns_sha256": "73d3e557de9583fe30b1da3ebcb74e1b097c20d73f7237b0a8bd4442b8a6f048"
+        }
+      }
+    ],
+    "original_preimages": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/full490-controls14/originals/native",
+    "retired": [],
+    "reconstructed_proofs": 0,
+    "input_replays": 0,
+    "compaction": {
+      "classification": "runtime/preserve",
+      "original_files": [
+        {
+          "path": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/full490-controls09/original/wire/compaction-commits.sqlite3",
+          "sha256": "60eb401f3fed11f5dd1ac993c15282558b17f844ec3068950edfc7af8e7cb3d4",
+          "revision": {
+            "identity": {
+              "device": 2084,
+              "inode": 17833789
+            },
+            "size": 57344,
+            "mtime_ns": 1790901518198499627,
+            "ctime_ns": 1790901518198499627
+          }
+        }
+      ],
+      "retired": [],
+      "copied_bytes": 0
+    }
+  },
+  "unchanged_protected_files": 24,
+  "refusals": [],
+  "public_mutations": 0,
+  "owner_stops": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "strength": "installed original8/2/2/4 producer and durable response -> one matched clone -> actual RuntimeInstallation member -> installed9/3/3/5 coordinator snapshot/response/native/binding/cursor and original keyed-bus readers; not public cohort activation",
+  "original_release": [
+    8,
+    2,
+    2,
+    4
+  ],
+  "target_release": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "historical_controls_rerun": false,
+  "original_obligations": 1,
+  "original_intents": 1,
+  "original_receipts": 1,
+  "original_append_dispatches": 1
+}

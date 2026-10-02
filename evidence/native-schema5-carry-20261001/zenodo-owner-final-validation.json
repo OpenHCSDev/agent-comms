@@ -1,0 +1,61 @@
+{
+  "state": "final installed-owner clone sanity passed",
+  "captured_at_utc": "2026-10-01T22:55:23.549066+00:00",
+  "order": "source reasoning and coherent owner reuse before validation",
+  "target_package": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/target/lib/python3.14/site-packages/agent_comms/native_runtime_input.py",
+  "target_package_sha256": "d46d3c82bcfa764df2f8f08c142963b46dcd0822e07fa2fabc84b2341337e9cb",
+  "target_owner": "NativeRuntimeSchemaMeta.create_schema",
+  "original_preimages_unchanged": {
+    "coordination.sqlite3": "2c704e90d4ba81dfb54bbb44ba81123adb183781f9e5dd94fe1b69c4f781848b",
+    "native_prompt_bindings.sqlite3": "6e32b564e1272a1213bbc832ec5c8e412d3c036f70f6bfd60b4c4a6658cc7e36"
+  },
+  "logical_schema_and_all_rows_equal_to_completed_control07": {
+    "coordination.sqlite3": true,
+    "native_prompt_bindings.sqlite3": true
+  },
+  "counts": {
+    "coordination.sqlite3": {
+      "wake_claims": 3,
+      "execution_claims": 2,
+      "participants": 3,
+      "participant_aliases": 3,
+      "owner_generations": 3,
+      "attempts": 1,
+      "replay_assessments": 0,
+      "current_executions": 3,
+      "executions": 1,
+      "schema_meta": 1,
+      "publication_intents": 0,
+      "publication_receipts": 0,
+      "connectivity": 0,
+      "recovery_audit": 0,
+      "sqlite_sequence": 0,
+      "obligations": 1,
+      "cohort_schema_meta": 1,
+      "claim_batch_receipts": 2,
+      "claim_batch_members": 3,
+      "cohort_delivery_receipts": 4,
+      "awareness_schema_meta": 1,
+      "awareness_claim_generations": 3,
+      "response_schema_meta": 1,
+      "publication_append_dispatches": 0,
+      "native_runtime_schema_meta": 1,
+      "native_runtime_input": 2,
+      "current_native_cursor": 1,
+      "native_runtime_triage_sources": 1
+    },
+    "native_prompt_bindings.sqlite3": {
+      "snapshot_meta": 1,
+      "prompt_binding": 2
+    }
+  },
+  "new_candidate": "/home/ts/wt/comms-native-schema5-preserved-carry-20261001/.artifacts/native-schema5-carry/schema-owner-closure08/matched-candidate",
+  "installed_public": false,
+  "prior_controls_rerun": false,
+  "canonical_user_gate": "Sch499/Heisenberg actual configured failing-thread fork; not executed here",
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_mutations": 0,
+  "owner_stops": 0,
+  "new_builds": 0
+}

@@ -1,0 +1,1 @@
+{"enforcement":"disabled","id":24123123,"name":"Round-two debt ratchet and surface guards","rules":[{"parameters":{"do_not_enforce_on_create":false,"required_status_checks":[{"context":"Debt ratchet and surface guards","integration_id":15368}],"strict_required_status_checks_policy":false},"type":"required_status_checks"}]}

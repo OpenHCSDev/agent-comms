@@ -1,0 +1,240 @@
+tests/test_active_turn.py:11:    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_active_turn.py:19:    assert comms.registry.require("worker").pid == os.getpid()
+tests/test_owner_compaction_prepare.py:85:            pid=os.getpid(),
+tests/test_owner_compaction_prepare.py:121:            pid=os.getpid(),
+tests/test_owner_compaction_prepare.py:162:            pid=os.getpid(),
+tests/test_owner_compaction_prepare.py:209:            pid=os.getpid(),
+tests/test_owner_compaction_prepare.py:250:            pid=os.getpid(),
+tests/test_owner_compaction_prepare.py:381:            pid=os.getpid(),
+tests/test_owner_compaction_prepare.py:457:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_goal_direct_interrupt.py:32:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_direct_interrupt.py:330:    comms.threads.register(Thread("member", frozenset({"ci"}), str(tmp_path), pid=os.getpid()))
+tests/test_registration_components.py:22:    return Thread("owner", frozenset(), str(path), pid=os.getpid(), created_at=10.0)
+tests/test_registration_components.py:114:r.register(Thread('owner', frozenset({'team'}), str(root), pid=54321, created_at=10.0));capture()
+tests/test_selected_pi_route.py:33:        self.pid = 1
+tests/test_user_channels.py:64:        assert comms.registry.require("user").pid == 0
+tests/test_headless_diagnostics.py:52:    comms.threads.register(Thread(name="sender", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_wire_watch.py:18:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_input_review.py:27:    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_native_source_cursor_certificate.py:41:    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_native_source_cursor_certificate.py:44:        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="fake/fake"))
+tests/test_native_prompt_binding.py:61:        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+tests/test_native_prompt_binding.py:66:            pid=os.getpid(),
+tests/test_native_prompt_binding.py:410:    beta = Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+tests/test_irc.py:20:        Thread(name="PR111", tags=frozenset({"ci"}), worktree=pr111.worktree, pid=pr111.pid)
+tests/test_irc.py:29:            pid=fixer.pid,
+tests/test_irc.py:32:    comms.threads.register(Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", pid=300))
+tests/test_runtime.py:151:    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
+tests/test_runtime.py:207:        comms.registry.register(replace(comms.registry.require("renamed"), pid=new_pid))
+tests/test_runtime.py:240:        comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=901003))
+tests/test_runtime.py:263:    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
+tests/test_runtime.py:272:        comms.registry.register(replace(comms.registry.require("worker"), pid=new_pid))
+tests/test_runtime.py:474:        assert comms.registry.require("child").pid == child.pid
+tests/test_runtime.py:480:        assert comms.registry.require("child").pid == child.pid
+tests/test_runtime.py:508:        assert comms.registry.require("child").pid == child.pid
+tests/test_runtime.py:521:        assert comms.registry.require("child").pid == child.pid
+tests/test_runtime.py:546:    comms.threads.register(Thread(name="child", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_runtime.py:549:    assert comms.registry.require("child").pid == os.getpid()
+tests/test_prompt_restart_queue.py:41:        name="owner", pid=401, created_at=100.5, worktree=str(root), active_turn=object()
+tests/test_prompt_restart_queue.py:54:        return (SimpleNamespace(previous_pid=401, pid=501),)
+tests/test_prompt_restart_queue.py:108:    owner.pid = 402
+tests/test_command_families.py:149:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_stack_goal_standby.py:192:            comms.threads.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
+tests/test_manual_compaction_bridge.py:28:    owner._comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:64:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:94:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:141:    comms.threads.attach_session("project", str(first), pid=os.getpid())
+tests/test_compaction_publication.py:153:        comms.threads.attach_session("project", str(second), pid=os.getpid())
+tests/test_compaction_publication.py:168:            "project", str(second), pid=os.getpid()
+tests/test_compaction_publication.py:180:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:230:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:271:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:311:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_compaction_publication.py:364:    comms.threads.attach_session("project", str(first), pid=os.getpid())
+tests/test_compaction_publication.py:394:            comms.threads.attach_session("project", str(second), pid=os.getpid())
+tests/test_compaction_publication.py:409:            "project", str(second), pid=os.getpid()
+tests/test_compaction_publication.py:411:        comms.threads.attach_session("project", str(first), pid=os.getpid())
+tests/test_compaction_publication.py:439:        Thread("project", frozenset(), str(tmp_path), pid=os.getpid(), session_file=str(first))
+tests/test_compaction_publication.py:478:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_native_startup.py:123:        pid = int(pid_file.read_text())
+tests/test_acp_queue_contract.py:22:    thread = Thread("beta", frozenset(), str(tmp_path), pid=os.getpid())
+tests/test_goal_block_reason.py:134:    comms.threads.register(replace(comms.registry.require("worker"), pid=os.getpid()))
+tests/test_wake_candidate_index.py:50:            Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), created_at=identity)
+tests/test_owner_compaction_authority.py:30:    owner = Thread("owner", frozenset(), str(root), pid=os.getpid(), goal=Goal("task", "g"))
+tests/test_owner_compaction_commit.py:69:        pid=os.getpid(),
+tests/test_owner_compaction_commit.py:767:bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+tests/test_owner_compaction_commit.py:885:bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+tests/test_acp_private_nk_delivery.py:43:    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_acp_private_nk_delivery.py:45:        "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+tests/test_acp_private_nk_delivery.py:320:    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_acp_private_nk_delivery.py:800:    alpha = Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+tests/test_channels.py:407:    comms.threads.register(Thread("peer", frozenset({"api"}), str(tmp_path), pid=os.getpid()))
+tests/test_channels.py:485:    comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
+tests/test_thread_status.py:33:        pid=os.getpid(),
+tests/test_thread_status.py:58:    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()), status)
+tests/test_thread_status.py:73:    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()), status)
+tests/test_ordinary_nk_delivery.py:46:    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_ordinary_nk_delivery.py:48:        "alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+tests/test_ordinary_nk_delivery.py:116:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_ordinary_nk_delivery.py:127:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_tool_output.py:179:    comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
+tests/test_tool_output.py:221:    comms.threads.register(replace(comms.registry.require("a"), pid=os.getpid()))
+tests/test_tool_output.py:314:    comms.threads.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_runtime_goal_retry_running.py:217:                replace(comms.registry.require(session), pid=os.getpid() + 100000)
+tests/test_input_disposition.py:110:    comms.threads.register(Thread(name="kid", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_selected_owner_compaction_integration.py:91:                pid=os.getpid(),
+tests/test_selected_owner_compaction_integration.py:252:                pid=os.getpid(),
+tests/test_goal_standby_liveness.py:27:    comms.threads.register(Thread(name, frozenset(), str(worktree), pid=os.getpid()))
+tests/test_dm_scoped_ack_successor.py:17:    return Thread(name, frozenset({"talk"}), str(root), pid=os.getpid())
+tests/test_maintenance_barrier.py:77:    comms.threads.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_maintenance_barrier.py:162:    comms.threads.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=proc.pid))
+tests/test_maintenance_barrier.py:207:    owner = Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid())
+tests/test_maintenance_barrier.py:216:    assert comms.registry.require("renamed").pid == os.getpid()
+tests/test_maintenance_barrier.py:227:    comms.threads.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=child.pid))
+tests/test_thread_identity.py:21:    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_thread_identity.py:75:    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_thread_identity.py:93:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_thread_identity.py:132:    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_acp_selected_write_plan.py:74:                    pid=os.getpid(),
+tests/test_acp_selected_write_plan.py:256:        comms.threads.register(Thread("sender", frozenset(), str(work), pid=sender_pid, created_at=61001.0))
+tests/test_acp_selected_write_plan.py:262:                pid=sender_pid,
+tests/test_acp_selected_write_plan.py:306:                    pid=process.pid,
+tests/test_native_unknown_recovery.py:118:    comms.registry.register(replace(comms.registry.require("beta"), pid=os.getpid()), new_owner=True)
+tests/test_native_unknown_recovery.py:195:            replace(comms.registry.require("beta"), pid=os.getpid()), new_owner=True
+tests/test_project.py:32:            pid=os.getpid(),
+tests/test_project.py:44:    assert thread.pid == os.getpid() and thread.model == "test/model"
+tests/test_project.py:122:        assert comms.registry.require(session).pid == os.getpid()
+tests/test_operations.py:234:        attached = wired.threads.attach_session("fixer", str(session_file), pid=123)
+tests/test_operations.py:239:        assert attached.pid == 123
+tests/test_operations.py:327:                pid=os.getpid(),
+tests/test_operations.py:347:                pid=123,
+tests/test_operations.py:355:                pid=456,
+tests/test_operations.py:365:            Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", pid=os.getpid())
+tests/test_operations.py:398:                pid=process.pid,
+tests/test_detached_owner.py:62:        assert comms.registry.require(name).pid == owner
+tests/test_manual_compaction_fail_closed.py:160:        pid = 1_000_000_000
+tests/test_goal_failure_observation.py:51:        pid=123,
+tests/test_roster_restoration.py:19:    live = Thread("live", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+tests/test_roster_restoration.py:24:        pid=os.getpid(),
+tests/test_roster_restoration.py:47:    assert after.threads["missing"] == replace(missing, pid=0, active_turn=None)
+tests/test_roster_restoration.py:88:    assert new.registry.require(thread.name).pid == 0
+tests/test_roster_restoration.py:135:    live = Thread("live", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+tests/test_roster_restoration.py:136:    missing = Thread("missing", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+tests/test_roster_restoration.py:159:        assert snapshot.threads[missing.name].pid == 0
+tests/test_registry_current_format.py:54:    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_passive_channel_awareness.py:20:    comms.threads.register(Thread("speaker", frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
+tests/test_passive_channel_awareness.py:387:        comms.threads.register(Thread(owner, frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
+tests/test_private_nk_entrypoint.py:179:        Thread("resumable", frozenset(), str(tmp_path), pid=0, session_file=str(saved))
+tests/test_private_nk_entrypoint.py:201:        assert result.pid == launched[0].pid
+tests/test_private_nk_entrypoint.py:245:        Thread("owner", frozenset(), str(tmp_path), pid=0),
+tests/test_private_nk_entrypoint.py:346:        legacy.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_private_nk_entrypoint.py:395:        comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=process.pid))
+tests/test_private_nk_entrypoint.py:396:        comms.threads.register(Thread("alpha", frozenset({"team"}), str(tmp_path), pid=process.pid))
+tests/test_private_nk_entrypoint.py:463:            Thread("sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
+tests/test_private_nk_entrypoint.py:466:        legacy.threads.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
+tests/test_private_nk_entrypoint.py:467:        legacy.threads.register(Thread("observer", frozenset(), str(tmp_path), pid=0))
+tests/test_private_nk_entrypoint.py:551:        assert private.registry.require("sender").pid == 0
+tests/test_native_source_cursor_scale.py:43:        member = Thread(f"member{number:03}", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+tests/test_native_source_cursor_scale.py:93:    comms.threads.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_native_source_cursor_scale.py:119:    comms.threads.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_runtime_goal_snapshot.py:49:    comms.threads.register(Thread("child", frozenset(), str(comms.root), pid=os.getpid()))
+tests/test_runtime_goal_snapshot.py:136:        comms.registry.register(replace(comms.registry.require(session), pid=os.getpid() + 100000))
+tests/test_supervised_cutover.py:42:            comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=process.pid))
+tests/test_supervised_cutover.py:96:        Thread("owner", frozenset(), str(tmp_path), pid=0), StoppedThreadStatus()
+tests/test_supervised_cutover.py:121:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=0))
+tests/test_supervised_cutover.py:160:                "sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
+tests/test_supervised_cutover.py:165:        legacy.threads.register(Thread("receiver", frozenset(), str(tmp_path), pid=receiver_process.pid,
+tests/test_supervised_cutover.py:227:        assert staged.pid == 0 and staged.session_file == str(saved)
+tests/test_supervised_cutover.py:246:        private.registry.register(replace(staged, pid=os.getpid()), RunningThreadStatus())
+tests/test_supervised_cutover.py:248:            replace(private.registry.require("receiver"), pid=os.getpid()), RunningThreadStatus()
+tests/test_agent_events.py:85:    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_agent_events.py:132:    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_agent_events.py:163:    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+tests/test_goal_resume.py:52:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_resume.py:74:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_wake_candidate_index_incremental.py:46:            pid=os.getpid(),
+tests/test_wake_candidate_index_incremental.py:56:                pid=os.getpid(),
+tests/test_acp_compact_live.py:41:        agent._comms.threads.attach_session(session, str(session_file), pid=os.getpid())
+tests/test_maintenance_native_boundary.py:73:            pid = 999999999  # Never signaled: this stream fixture is already exited.
+tests/test_owner_compaction_gate.py:34:        pid=__import__("os").getpid(),
+tests/test_owner_process.py:35:        assert comms.owners.start("worker").pid == owner.pid
+tests/conftest.py:44:            pid=0,
+tests/test_goal_standby.py:42:    comms.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:167:        owner = replace(owner, pid=owner.pid + 1)
+tests/test_goal_standby.py:198:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:224:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:245:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:269:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:271:    comms.threads.register(Thread("carol", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:278:            pid=999999999,
+tests/test_goal_standby.py:301:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:344:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_goal_standby.py:381:        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_declarations.py:268:        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:285:        owner = Thread(name="a", tags=frozenset(), worktree="/wt", pid=1234)
+tests/test_declarations.py:292:        registry.register(replace(registry.require("a"), pid=5678))
+tests/test_declarations.py:297:        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=1234))
+tests/test_declarations.py:311:                pid=os.getpid(),
+tests/test_declarations.py:340:            registry.register(Thread(name=name, tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:361:        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:383:        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:398:        reopened.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:408:        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:430:        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:461:                Thread(name="b", tags=frozenset(), worktree="/wt", pid=os.getpid())
+tests/test_declarations.py:557:        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:584:        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+tests/test_declarations.py:639:                pid=9,
+tests/test_declarations.py:645:        assert thread.parent == "p" and thread.task == "t" and thread.pid == 9
+tests/test_claim_admission_verifier.py:52:                    name, frozenset({"team"}), str(worktree), pid=os.getpid(), created_at=created
+tests/test_private_bus_checkpoint.py:40:            Thread(name, frozenset(tags), str(tmp_path), pid=os.getpid(), created_at=stamp)
+tests/test_read_ledger.py:64:    comms.registry.register(replace(peer, pid=os.getpid()))
+tests/test_compaction_send_admission.py:59:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_dm_scoped_ack.py:20:    return Thread(name, frozenset({"talk"}), str(root), pid=os.getpid())
+tests/test_owner_compaction_adaptive.py:68:            pid=os.getpid(),
+tests/test_owner_compaction_adaptive.py:333:            pid=os.getpid(),
+tests/test_cohort_foreground.py:65:    comms.threads.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
+tests/test_cohort_foreground.py:156:            assert thread.pid == os.getpid()
+tests/test_cohort_foreground.py:157:            assert comms.registry.require("beta").pid == os.getpid()
+tests/test_cohort_foreground.py:350:        comms.threads.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+tests/test_cohort_foreground.py:452:        comms.threads.register(Thread("beta", frozenset(), str(base), pid=os.getpid()))
+tests/test_cohort_foreground.py:559:            assert comms.registry.require("beta").pid == child.pid
+tests/test_cohort_foreground.py:648:                assert comms.registry.require(name).pid == child.pid
+tests/test_cohort_foreground.py:751:        comms.threads.register(Thread("beta", frozenset(), dirname, pid=os.getpid()))
+tests/test_importing.py:63:    assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
+tests/test_private_checkpoint_cursor_integration.py:44:        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+tests/test_private_checkpoint_cursor_integration.py:49:            pid=os.getpid(),
+tests/test_private_checkpoint_cursor_integration.py:52:        Thread("other", frozenset(), str(tmp_path), pid=os.getpid()),
+tests/test_end_to_end.py:92:                pid=parent.pid,
+tests/test_acp.py:463:        first._comms.threads.attach_session("proj", str(session_file), pid=os.getpid())
+tests/test_acp.py:482:        assert second._comms.registry.require("proj").pid == os.getpid()
+tests/test_acp.py:687:        pid = int(pid_path.read_text())
+tests/test_acp.py:2474:            wired.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_input_drain.py:25:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_input_drain.py:202:            replace(current, pid=12345, active_turn=None)
+tests/test_coordination_response.py:72:            Thread(name, frozenset({"team"}), worktree=str(tmp_path), pid=os.getpid())
+tests/test_coordination_response.py:476:            witness = replace(witness, pid=os.getpid() + 1)
+tests/test_selected_summary_admission.py:486:    comms.threads.attach_session("project", str(session), pid=os.getpid())
+tests/test_nk_foreground.py:54:    comms.threads.register(Thread("sender", frozenset(), str(root / "work"), pid=os.getpid()))
+tests/test_nk_foreground.py:131:        assert comms.registry.require("beta").pid == ready[1]
+tests/test_nk_foreground.py:139:        assert comms.registry.require("beta").pid == ready[1]
+tests/test_nk_foreground.py:201:        comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+tests/test_nk_foreground.py:238:    comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+tests/test_nk_foreground.py:255:            assert comms.registry.require("beta").pid == os.getpid()
+tests/test_nk_foreground.py:316:    assert comms.registry.require("beta").pid == os.getpid()
+tests/test_turn_lease_release.py:16:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_turn_lease_release.py:34:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_turn_lease_release.py:38:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_turn_lease_release.py:50:    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_turn_lease_release.py:58:    owner = Thread("owner", frozenset(), str(tmp_path), pid=os.getpid())
+tests/test_candidate_maintenance.py:26:    comms.threads.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
+tests/test_candidate_maintenance.py:27:    comms.threads.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+tests/test_input_drain_native.py:54:                comms.registry.require("proj"), session_file=file, model=info.model, pid=os.getpid()
+tests/test_native_failure_recovery.py:250:    comms.registry.register(replace(owner, pid=os.getpid()), new_owner=True)
+tests/test_optional_awareness_projection.py:37:    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_optional_awareness_projection.py:44:                pid=os.getpid(),
+tests/test_coordinated_runtime.py:96:        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+tests/test_coordinated_runtime.py:101:            pid=os.getpid(),
+tests/test_coordinated_runtime.py:109:            pid=os.getpid(),
+tests/test_coordinated_runtime.py:1418:    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+tests/test_coordinated_runtime.py:1424:            pid=os.getpid(),

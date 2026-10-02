@@ -1,0 +1,2 @@
+FRAME Size(width=139, height=25) CHOPS 25 LAST_SPAN (24, 0, 139)
+PASS actual native scene resize damage rendered

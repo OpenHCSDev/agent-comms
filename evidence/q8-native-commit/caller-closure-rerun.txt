@@ -1,0 +1,41 @@
+F
+=================================== FAILURES ===================================
+___ test_live_future_queue_and_foreign_ingress_do_not_change_summary_source ____
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f297125da90>, Thread(name='owner', tags=frozenset(), worktree='/home/ts/wt/c...1d14a47f6dedaefa7e69e0c068d89e69d2374', pending_input_key='acp:original', settings_paths=None, settings_revision=None))
+
+    async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_source(owner):
+        agent, current, admission_generation, bridge, witness, source = owner
+>       key = await queue(agent)
+              ^^^^^^^^^^^^^^^^^^
+
+tests/test_input_drain.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+agent = <agent_comms.acp.CommsAgent object at 0x7f297125da90>, text = 'future'
+delivery = <class 'agent_comms.acp_extension.QueuePromptRequest'>
+
+    async def queue(agent, text="future", delivery=QueuePromptRequest):
+        response = await agent.prompt(
+            "owner",
+            [{"type": "text", "text": text}],
+            _meta=encode_request(delivery(defer_display=True)),
+        )
+        (receipt,) = decode_updates(response.field_meta)
+        assert isinstance(receipt, InputDeliveryChangedUpdate)
+        key = "acp:" + receipt.input_id
+        assert (
+            InputDispositions(agent._comms.root / InputDispositions.filename)
+            .read()
+            .rows.get(key)
+>           .native_id
+             ^^^^^^^^^
+            is None
+        )
+E       AttributeError: 'ReservedInput' object has no attribute 'native_id'
+
+tests/test_input_drain.py:87: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_input_drain.py::test_live_future_queue_and_foreign_ingress_do_not_change_summary_source
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 0.65s

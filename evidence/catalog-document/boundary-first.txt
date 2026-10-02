@@ -1,0 +1,557 @@
+F.F..F..........................................................F....... [ 53%]
+...............................................................          [100%]
+=================================== FAILURES ===================================
+___________ test_read_is_nonmutating_then_complete_atomic_migration ____________
+
+self = ChannelCatalog(path=PosixPath('/home/ts/wt/.cat28/boundary/test_read_is_nonmutating_then_0/catalog.json'))
+
+    def _read_unlocked(self) -> T:
+        try:
+>           text = self.path.read_text(encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/locked_store.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/.cat28/boundary/test_read_is_nonmutating_then_0/catalog.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/.cat28/boundary/test_read_is_nonmutating_then_0/catalog.json'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+
+During handling of the above exception, another exception occurred:
+
+historical_catalog = PosixPath('/home/ts/wt/.cat28/boundary/test_read_is_nonmutating_then_0')
+
+    def test_read_is_nonmutating_then_complete_atomic_migration(historical_catalog):
+        root = historical_catalog
+        catalog = ChannelCatalog(root / 'catalog.json')
+        before_bytes = {p: p.read_bytes() for p in CatalogMigration.paths(root)}
+>       before = catalog.read()
+                 ^^^^^^^^^^^^^^
+
+tests/test_catalog_document.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/locked_store.py:81: in read
+    with self.reading() as value:
+         ^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/locked_store.py:78: in reading
+    yield self._read_unlocked()
+          ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/locked_store.py:52: in _read_unlocked
+    return self.empty()
+           ^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:107: in empty
+    return CatalogMigration.read(self.path.parent)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:80: in read
+    source = FieldCodec.decode(cls, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:200: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:200: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:177: in _decode
+    return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:206: in _decode
+    return target(data)
+           ^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/enum.py:707: in __call__
+    return cls.__new__(cls, value)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'ThreadSort'>, value = 'last_message'
+
+    def __new__(cls, value):
+        # all enum instances are actually created during class construction
+        # without calling this method; this method is called by the metaclass'
+        # __call__ (i.e. Color(3) ), and by pickle
+        if type(value) is cls:
+            # For lookups like Color(Color.RED)
+            return value
+        # by-value search for a matching enum member
+        # see if it's in the reverse mapping (for hashable values)
+        try:
+            return cls._value2member_map_[value]
+        except KeyError:
+            # Not found, no need to do long O(n) search
+            pass
+        except TypeError:
+            # not there, now do long search -- O(n) behavior
+            for name, unhashable_values in cls._unhashable_values_map_.items():
+                if value in unhashable_values:
+                    return cls[name]
+            for name, member in cls._member_map_.items():
+                if value == member._value_:
+                    return cls[name]
+        # still not found -- verify that members exist, in-case somebody got here mistakenly
+        # (such as via super when trying to override __new__)
+        if not cls._member_map_:
+            if getattr(cls, '_%s__in_progress' % cls.__name__, False):
+                raise TypeError('do not use `super().__new__; call the appropriate __new__ directly') from None
+            raise TypeError("%r has no members defined" % cls)
+        #
+        # still not found -- try _missing_ hook
+        try:
+            exc = None
+            result = cls._missing_(value)
+        except Exception as e:
+            exc = e
+            result = None
+        try:
+            if isinstance(result, cls):
+                return result
+            elif (
+                    Flag is not None and issubclass(cls, Flag)
+                    and cls._boundary_ is EJECT and isinstance(result, int)
+                ):
+                return result
+            else:
+                ve_exc = ValueError("%r is not a valid %s" % (value, cls.__qualname__))
+                if result is None and exc is None:
+>                   raise ve_exc
+E                   ValueError: 'last_message' is not a valid ThreadSort
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/enum.py:1192: ValueError
+___ test_failed_migration_directory_sync_keeps_sources_and_retryable_absence ___
+
+self = ChannelCatalog(path=PosixPath('/home/ts/wt/.cat28/boundary/test_failed_migration_director0/catalog.json'))
+
+    def _read_unlocked(self) -> T:
+        try:
+>           text = self.path.read_text(encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/locked_store.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/.cat28/boundary/test_failed_migration_director0/catalog.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/.cat28/boundary/test_failed_migration_director0/catalog.json'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+
+During handling of the above exception, another exception occurred:
+
+historical_catalog = PosixPath('/home/ts/wt/.cat28/boundary/test_failed_migration_director0')
+
+    def test_failed_migration_directory_sync_keeps_sources_and_retryable_absence(historical_catalog):
+        root = historical_catalog
+        before = {p: p.read_bytes() for p in CatalogMigration.paths(root)}
+        catalog = ChannelCatalog(root / 'catalog.json')
+        real_sync = os.fsync
+        failed = False
+    
+        def fail_directory(fd):
+            nonlocal failed
+            if stat.S_ISDIR(os.fstat(fd).st_mode) and not failed:
+                failed = True
+                raise OSError('directory publication failed')
+            real_sync(fd)
+    
+        with patch.object(locked_store.os, 'fsync', side_effect=fail_directory):
+            with pytest.raises(OSError, match='directory publication failed'):
+>               with catalog.editing() as document:
+                     ^^^^^^^^^^^^^^^^^
+
+tests/test_catalog_document.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:125: in editing
+    original = self._read_unlocked()
+               ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/locked_store.py:52: in _read_unlocked
+    return self.empty()
+           ^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:107: in empty
+    return CatalogMigration.read(self.path.parent)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:80: in read
+    source = FieldCodec.decode(cls, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:200: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:200: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:177: in _decode
+    return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:206: in _decode
+    return target(data)
+           ^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/enum.py:707: in __call__
+    return cls.__new__(cls, value)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'ThreadSort'>, value = 'last_message'
+
+    def __new__(cls, value):
+        # all enum instances are actually created during class construction
+        # without calling this method; this method is called by the metaclass'
+        # __call__ (i.e. Color(3) ), and by pickle
+        if type(value) is cls:
+            # For lookups like Color(Color.RED)
+            return value
+        # by-value search for a matching enum member
+        # see if it's in the reverse mapping (for hashable values)
+        try:
+            return cls._value2member_map_[value]
+        except KeyError:
+            # Not found, no need to do long O(n) search
+            pass
+        except TypeError:
+            # not there, now do long search -- O(n) behavior
+            for name, unhashable_values in cls._unhashable_values_map_.items():
+                if value in unhashable_values:
+                    return cls[name]
+            for name, member in cls._member_map_.items():
+                if value == member._value_:
+                    return cls[name]
+        # still not found -- verify that members exist, in-case somebody got here mistakenly
+        # (such as via super when trying to override __new__)
+        if not cls._member_map_:
+            if getattr(cls, '_%s__in_progress' % cls.__name__, False):
+                raise TypeError('do not use `super().__new__; call the appropriate __new__ directly') from None
+            raise TypeError("%r has no members defined" % cls)
+        #
+        # still not found -- try _missing_ hook
+        try:
+            exc = None
+            result = cls._missing_(value)
+        except Exception as e:
+            exc = e
+            result = None
+        try:
+            if isinstance(result, cls):
+                return result
+            elif (
+                    Flag is not None and issubclass(cls, Flag)
+                    and cls._boundary_ is EJECT and isinstance(result, int)
+                ):
+                return result
+            else:
+                ve_exc = ValueError("%r is not a valid %s" % (value, cls.__qualname__))
+                if result is None and exc is None:
+>                   raise ve_exc
+E                   ValueError: 'last_message' is not a valid ThreadSort
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/enum.py:1192: ValueError
+______ test_observer_revision_covers_migration_and_subsequent_preferences ______
+
+self = ChannelCatalog(path=PosixPath('/home/ts/wt/.cat28/boundary/test_observer_revision_covers_0/catalog.json'))
+
+    def _read_unlocked(self) -> T:
+        try:
+>           text = self.path.read_text(encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/locked_store.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/.cat28/boundary/test_observer_revision_covers_0/catalog.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/.cat28/boundary/test_observer_revision_covers_0/catalog.json'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+
+During handling of the above exception, another exception occurred:
+
+historical_catalog = PosixPath('/home/ts/wt/.cat28/boundary/test_observer_revision_covers_0')
+
+    def test_observer_revision_covers_migration_and_subsequent_preferences(historical_catalog):
+        observer = wire(historical_catalog)
+        first = observer.views.revision()
+        writer = wire(historical_catalog)
+>       writer.channels.set_channel_any_mode('api', False)
+
+tests/test_catalog_document.py:142: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/channel_management.py:160: in set_channel_any_mode
+    with self.catalog.editing() as document:
+         ^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:125: in editing
+    original = self._read_unlocked()
+               ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/locked_store.py:52: in _read_unlocked
+    return self.empty()
+           ^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:107: in empty
+    return CatalogMigration.read(self.path.parent)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/catalog_store.py:80: in read
+    source = FieldCodec.decode(cls, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:200: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:200: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:177: in _decode
+    return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:206: in _decode
+    return target(data)
+           ^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/enum.py:707: in __call__
+    return cls.__new__(cls, value)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <enum 'ThreadSort'>, value = 'last_message'
+
+    def __new__(cls, value):
+        # all enum instances are actually created during class construction
+        # without calling this method; this method is called by the metaclass'
+        # __call__ (i.e. Color(3) ), and by pickle
+        if type(value) is cls:
+            # For lookups like Color(Color.RED)
+            return value
+        # by-value search for a matching enum member
+        # see if it's in the reverse mapping (for hashable values)
+        try:
+            return cls._value2member_map_[value]
+        except KeyError:
+            # Not found, no need to do long O(n) search
+            pass
+        except TypeError:
+            # not there, now do long search -- O(n) behavior
+            for name, unhashable_values in cls._unhashable_values_map_.items():
+                if value in unhashable_values:
+                    return cls[name]
+            for name, member in cls._member_map_.items():
+                if value == member._value_:
+                    return cls[name]
+        # still not found -- verify that members exist, in-case somebody got here mistakenly
+        # (such as via super when trying to override __new__)
+        if not cls._member_map_:
+            if getattr(cls, '_%s__in_progress' % cls.__name__, False):
+                raise TypeError('do not use `super().__new__; call the appropriate __new__ directly') from None
+            raise TypeError("%r has no members defined" % cls)
+        #
+        # still not found -- try _missing_ hook
+        try:
+            exc = None
+            result = cls._missing_(value)
+        except Exception as e:
+            exc = e
+            result = None
+        try:
+            if isinstance(result, cls):
+                return result
+            elif (
+                    Flag is not None and issubclass(cls, Flag)
+                    and cls._boundary_ is EJECT and isinstance(result, int)
+                ):
+                return result
+            else:
+                ve_exc = ValueError("%r is not a valid %s" % (value, cls.__qualname__))
+                if result is None and exc is None:
+>                   raise ve_exc
+E                   ValueError: 'last_message' is not a valid ThreadSort
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/enum.py:1192: ValueError
+_____ test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance _____
+
+tmp_path = PosixPath('/home/ts/wt/.cat28/boundary/test_jsonl_is_versioned_lossle0')
+
+    def test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance(tmp_path):
+        destination = tmp_path / "wire.jsonl"
+        first = message(1, "hello").to_wire()
+        first["future_extension"] = {"preserved": True}
+        second = message(2, "unicode: café")
+    
+>       receipt = exporter(through=2).export(iter([first, second]), destination)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_exporting.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/exporting.py:414: in export
+    for row in self.limit.select(
+src/agent_comms/exporting.py:209: in filtered
+    for row in rows:
+               ^^^^
+src/agent_comms/exporting.py:475: in _rows
+    row = self._row(envelope)
+          ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/exporting.py:489: in _row
+    message = Message.from_wire(stored)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/messages.py:177: in from_wire
+    return MessageWireCodec.decode(cls, {"ts": 0.0, **public})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/messages.py:67: in _decode
+    return super()._decode(target, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.messages.MessageWireCodec'>
+target = <class 'agent_comms.messages.Message'>
+data = {'ts': 1.0, 'seq': 1, 'from': 'alice', 'to': '#team', ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError):
+                    pass
+            raise ValueError(f"Value does not match {target}")
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            name = data.get("kind")
+            if not isinstance(name, str):
+                raise ValueError("Expected a string family kind.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != "kind"}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            unknown = set(data) - {key for _, key in declared}
+            if unknown:
+>               raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+E               ValueError: Unknown fields for Message: ['future_extension']
+
+src/agent_comms/field_codec.py:196: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_catalog_document.py::test_read_is_nonmutating_then_complete_atomic_migration
+FAILED tests/test_catalog_document.py::test_failed_migration_directory_sync_keeps_sources_and_retryable_absence
+FAILED tests/test_catalog_document.py::test_observer_revision_covers_migration_and_subsequent_preferences
+FAILED tests/test_exporting.py::test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance
+4 failed, 131 passed in 11.04s

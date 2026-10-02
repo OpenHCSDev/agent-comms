@@ -1,0 +1,4 @@
+Parent integration at queue implementation 1dea4f7 plus acceptance harness:
+PYTHONPATH=/home/ts/wt/comms-refactor-integration-20260928/src timeout 60 /home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python -m pytest tests/test_input_drain.py tests/test_acp_input_disposition.py tests/test_acp_private_nk_delivery.py tests/test_channel_coding_tools.py -q -o addopts=
+57 passed in 21.04s.
+Earlier command named nonexistent test_private_nk_delivery.py and test_channel_coding.py; pytest collected no tests and exited4. Corrected actual filenames above.

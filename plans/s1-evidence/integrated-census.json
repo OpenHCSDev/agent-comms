@@ -1,0 +1,10 @@
+{
+  "backend_dictionary_yields": [],
+  "production_consumers": [
+    "CommsAgent._run_agent_turn.TurnEventConsumer",
+    "ParticipantEventConsumer"
+  ],
+  "publication_consumer": "AcpEventConsumer",
+  "dictionary_backend_mock_producers": [],
+  "remaining_dictionaries": "external Pi RPC, wire/transcript replay and parent-owned diagnostic API boundary"
+}

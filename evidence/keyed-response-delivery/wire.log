@@ -1,0 +1,69 @@
+..............................F.....................                     [100%]
+=================================== FAILURES ===================================
+____________ test_claim_and_keyed_response_append_share_certificate ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-keyed-response-delivery-20260928/.test-wire/test_claim_and_keyed_response_0')
+
+    def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        resource = tmp_path / "owned.py"
+        resource.write_text("owned\n")
+        initial = comms.messaging.send_initial_cohort("sender", "Alice", "task")
+        claim = comms.messaging.send_message(
+            "sender",
+            "Alice",
+            "claim",
+            MessageType.HANDOFF,
+            claims=[ExistingFileClaim(Path("owned.py"))],
+        )
+        assert claim.claim_transition is not None
+        assert comms.bus.log.claim_projection()[str(resource)].owner == "sender"
+        response_bus = MessageBus(comms.bus.log.path, comms.registry, private_response_writes=True)
+        expected = Message("Alice", "sender", "done", MessageType.INFO)
+        key = canonical_publication_key("execution-1", expected.target)
+        from agent_comms.response_conversation import ResponseConversation
+        from agent_comms.audience_manifest import FrozenRecipient
+    
+        source = comms.bus.log.read_delivery_cohort(
+            comms.bus.log._private_marker_unlocked().root_id, initial.seq
+        )
+        conversation = ResponseConversation(
+            FrozenRecipient(stable_thread_lookup(17002.0), "Alice"), "sender", (source,)
+        )
+        response = response_bus.publisher.publish_keyed_response(
+            PublicationIntents(
+                execution_id="execution-1",
+                sender=expected.sender,
+                exact_target=expected.target,
+                message_type=expected.type,
+                notice=expected.notice,
+                timestamp=expected.timestamp,
+                payload=expected.body,
+                payload_digest=hashlib.sha256(expected.body.encode()).hexdigest(),
+                publication_key=key,
+                expected_message_id=expected.message_id,
+            ),
+            conversation=conversation,
+        )
+        assert response.seq == claim.seq + 1
+        with _store_lock(comms.bus.log.path):
+            marker = comms.bus.log._private_marker_unlocked()
+            witness = checkpoint.verify_private_bus_checkpoint_unlocked(comms.bus.log, marker)
+            assert witness.through_seq == response.seq
+        with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
+            assert db.execute("SELECT key FROM response_keys").fetchone()[0] == key
+            assert db.execute("SELECT COUNT(*) FROM initials").fetchone()[0] == 2
+        page_witness, page_rows, _ = _page(comms, stable_thread_lookup(17002.0))
+        assert page_rows[0].message.seq == initial.seq
+        assert page_witness.through_seq == response.seq
+>       assert page_witness.latest_source_seq == initial.seq
+E       AssertionError: assert 3 == 1
+E        +  where 3 = PrefixWitness(root_id='2af718b1a1d14ef89aadb7a79ddaf6c1', revision=(2084, 6073422, 2934, 1790651447842574091, 17906514...45936ef06accee9bd2ca7bd', tail='90b9088e45b7bea97dd61a333c94e9b29b38879ce36139c4e934cff76852e24d', latest_source_seq=3).latest_source_seq
+E        +  and   1 = Message(sender='sender', target='Alice', body='task', type=<MessageType.INFO: 'info'>, timestamp=1790651447.7513866, seq=1, sender_role=<ThreadRole.AGENT: 'agent'>, membership=None, notice=False, mentions=(), claim_transition=None).seq
+
+tests/test_private_bus_checkpoint.py:171: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_private_bus_checkpoint.py::test_claim_and_keyed_response_append_share_certificate
+1 failed, 51 passed in 48.84s

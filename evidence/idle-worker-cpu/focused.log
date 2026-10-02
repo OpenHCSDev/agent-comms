@@ -1,0 +1,25 @@
+..........................F........                                      [100%]
+=================================== FAILURES ===================================
+_________________ test_acp_private_does_not_overlap_owner_turn _________________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-3v_j_lhi')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff8e631cde0>
+
+    async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+        agent.turns.active_turns["beta"] = "active-human-turn"
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert calls == [] and agent.inputs.inbox_cursors == {}
+        agent.turns.active_turns.pop("beta")
+>       assert await agent.inputs.drain_inbox("beta") == 1
+E       assert 0 == 1
+
+tests/test_acp_private_nk_delivery.py:777: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn
+1 failed, 34 passed in 9.99s

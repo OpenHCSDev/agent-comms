@@ -1,0 +1,20 @@
+{
+  "observation_source": "explicit parent review of Heisenberg real ToadApp/compositor counterexample; no additional physical capture in this lane",
+  "cause": "Compositor.full_map publishes new geometry/clears visible map without old-to-new damage, then reflow loses old coordinates",
+  "observed_effect": "Submitting and Queued retained in first physical paint, next27ms clears",
+  "implementation_owner": "Heisenberg: canonical Textual damage ownership, separate persistent worktree/draft",
+  "next_cohort_requirement": "exact NEW published Textual fix pin; historical2e49 cannot be silently reused as final",
+  "core_source": "cd6c4b8867d6df82180126c81b00651de936206e",
+  "toad_source_closure": "252a3ffa1d5 published causal completion retry",
+  "remaining_source": [
+    "467 canonical prepared StateData/selected startup acceptance",
+    "Textual canonical damage fix",
+    "Kepler strict actual idle/busy pre-delivery terminal assertion"
+  ],
+  "physical_proof_preserved": "original g458f/u02; real Queued+Submitting duplicate found by emitting-frame incremental ANSI oracle; no replay",
+  "new_gate_owner": "Einstein; ONE new coherent installed native/ACP/UI continuous5POST journey",
+  "stage_owner": "Sch derives final full dependency graph and manifest pins",
+  "stage_frozen": false,
+  "public_or_old_prefix_mutated": false,
+  "ready": false
+}

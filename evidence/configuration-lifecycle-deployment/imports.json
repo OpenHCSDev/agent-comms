@@ -1,0 +1,31 @@
+{
+  "agent-comms": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "d7745d0e9e745b8e4c30fb08464d3dc6fed7debf",
+      "requested_revision": "d7745d0e9e745b8e4c30fb08464d3dc6fed7debf"
+    }
+  },
+  "batrachian-toad": {
+    "url": "https://github.com/OpenHCSDev/toad.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "5059d4aa23a085bbeada04957fb9dfe9cb220bd8",
+      "requested_revision": "5059d4aa23a085bbeada04957fb9dfe9cb220bd8"
+    }
+  },
+  "textual": {
+    "url": "https://github.com/OpenHCSDev/textual.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "1738abd8e3524b7e86171b70256d7f7e52fdb724",
+      "requested_revision": "1738abd8e3524b7e86171b70256d7f7e52fdb724"
+    }
+  },
+  "locations": [
+    "/home/ts/.local/share/agent-comms/runtime-configuration-lifecycle-20260929/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "/home/ts/.local/share/agent-comms/runtime-configuration-lifecycle-20260929/lib/python3.14/site-packages/toad/__init__.py",
+    "/home/ts/.local/share/agent-comms/runtime-configuration-lifecycle-20260929/lib/python3.14/site-packages/textual/__init__.py"
+  ]
+}

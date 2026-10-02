@@ -1,0 +1,36 @@
+{"python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-20261001/bin/python", "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-20261001/lib/python3.14/site-packages/agent_comms/__init__.py", "fixture": "/home/ts/wt/s5i06", "public_inputs": 0, "paid_provider_calls": 0, "state": "FAILED_NO_REPLAY", "error": "AssertionError('Original tracked native input has no successful terminal reply')", "local_provider_posts": 2, "elapsed_seconds": 35.03399876400363}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-turn-context-phase1-20261001/tests/turn_context_installed_journey.py", line 58, in <module>
+    asyncio.run(run(options.root))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-turn-context-phase1-20261001/tests/turn_context_installed_journey.py", line 29, in run
+    await test_context_manifest_native_acp_and_cli_continuous(original)
+  File "/home/ts/wt/comms-turn-context-phase1-20261001/tests/test_native_context_inspection.py", line 177, in test_context_manifest_native_acp_and_cli_continuous
+    original = await observer.submit(text, image=image,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        while_running=queue_during_original if index == 1 else None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-retained-input-origin-s2-20261001/tests/retained_input_origin_observer.py", line 226, in submit
+    return await self.run(self.observer.submit(text, image=image,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        while_running=callback if while_running is not None else None))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-retained-input-origin-s2-20261001/tests/retained_input_origin_observer.py", line 214, in run
+    return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(invoke(), self.loop))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-retained-input-origin-s2-20261001/tests/retained_input_origin_observer.py", line 212, in invoke
+    return await operation
+           ^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-retained-input-origin-s2-20261001/tests/retained_input_origin_observer.py", line 116, in submit
+    assert replies, 'Original tracked native input has no successful terminal reply'
+           ^^^^^^^
+AssertionError: Original tracked native input has no successful terminal reply

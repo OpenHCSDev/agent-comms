@@ -1,0 +1,427 @@
+"""Bounded, disposable N/K candidate pages are never admission receipts."""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import sys
+from pathlib import Path
+
+import pytest
+
+from agent_comms.bus_publication import (
+    PRIVATE_WIRE_FIELD,
+    public_envelope_digest,
+    stable_thread_lookup,
+)
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from agent_comms.coordination_tables.publications import canonical_publication_key
+from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.threads import Thread
+from agent_comms.wake_candidate_index import (
+    ProjectionRebuildRequiredError,
+    ProjectionUnavailableError,
+    WakeCandidateIndex,
+)
+
+pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="private N/K bus requires POSIX")
+
+
+@pytest.fixture(autouse=True)
+def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests own the explicit WAL maintenance schedule and fault points;
+    # the production post-commit worker has separate integration coverage.
+    monkeypatch.setattr(
+        "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
+    )
+
+
+def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
+    root = tmp_path / "wire"
+    root.mkdir(mode=0o700)
+    comms = Comms(root)
+    created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
+    for name, identity in created.items():
+        comms.registry.declare(
+            Thread(
+                name,
+                frozenset({"team"}),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                created_at=identity,
+            )
+        )
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    lookup = {name: stable_thread_lookup(identity) for name, identity in created.items()}
+    return comms, root_id, lookup
+
+
+def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
+    tmp_path: Path,
+) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ProjectionUnavailableError):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=message.seq,
+        )
+    with pytest.raises(ProjectionRebuildRequiredError):
+        index.maintain()  # Initial rebuild must be an explicit maintenance choice.
+    assert index.maintain(rebuild=True)
+    with sqlite3.connect(index.path) as db:
+        assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
+    selected = index.page(
+        root_id=root_id,
+        recipient_lookup=lookup["Alice"],
+        after_seq=0,
+        required_through_seq=message.seq,
+    )
+    assert len(selected.entries) == 1
+    assert selected.entries[0].wake_mode == "full"
+    assert selected.entries[0].source_seq == message.seq
+    assert not selected.has_more
+    assert (
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Bob"],
+            after_seq=0,
+            required_through_seq=message.seq,
+        ).entries
+        == ()
+    )
+    passive = index.page(
+        root_id=root_id,
+        recipient_lookup=lookup["Bob"],
+        after_seq=0,
+        required_through_seq=message.seq,
+        delivery_only=True,
+    )
+    assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
+    # Bus projection is only a candidate: coordinator has not sealed ANY wake.
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        for name in ("Alice", "Bob"):
+            store.participants.register(lookup[name], name, name, committed=True)
+        assert sealed_cohort_assignments(store, lookup["Alice"]) == ()
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+        assert len(sealed_cohort_assignments(store, lookup["Alice"])) == 1
+        assert sealed_cohort_assignments(store, lookup["Bob"]) == ()
+    assert index.maintain()  # Exact no-new-bytes replay adds nothing.
+    assert (
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=message.seq,
+        )
+        == selected
+    )
+
+
+@pytest.mark.parametrize(
+    ("limits", "expected"),
+    [
+        ({"max_rows": True}, "max_rows"),
+        ({"max_rows": 0}, "max_rows"),
+        ({"max_rows": 257}, "max_rows"),
+        ({"max_bytes": True}, "max_bytes"),
+        ({"max_bytes": 0}, "max_bytes"),
+        ({"max_bytes": 8 * 1024 * 1024 + 1}, "max_bytes"),
+    ],
+)
+def test_maintenance_limits_fail_before_schema_or_checkpoint(
+    tmp_path: Path, limits: dict[str, object], expected: str
+) -> None:
+    comms, _, _ = _private(tmp_path)
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ValueError, match=expected):
+        index.maintain(**limits)
+    assert not index.path.exists()
+
+
+def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path: Path) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+    index = WakeCandidateIndex(comms.bus)
+    assert not index.maintain(rebuild=True, max_rows=1)
+    with pytest.raises(ProjectionUnavailableError, match="stale"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=second.seq,
+        )
+    assert index.maintain(max_rows=1)
+    page = index.page(
+        root_id=root_id,
+        recipient_lookup=lookup["Alice"],
+        after_seq=0,
+        required_through_seq=second.seq,
+        limit=1,
+    )
+    assert page.through_seq == second.seq and page.has_more
+    assert [row.source_seq for row in page.entries] == [first.seq]
+    assert [
+        row.source_seq
+        for row in index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=first.seq,
+            required_through_seq=second.seq,
+        ).entries
+    ] == [second.seq]
+    assert index.maintain(max_rows=1)
+    assert (
+        len(
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=second.seq,
+            ).entries
+        )
+        == 2
+    )
+    with pytest.raises(ProjectionUnavailableError, match="stale"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=second.seq + 1,
+        )
+
+
+def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
+    index = WakeCandidateIndex(comms.bus)
+    assert not index.maintain(rebuild=True, max_bytes=128)
+    with pytest.raises(ProjectionUnavailableError, match="stale"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=message.seq,
+        )
+    assert index.maintain(max_bytes=16 * 1024)
+    assert (
+        len(
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=message.seq,
+            ).entries
+        )
+        == 1
+    )
+
+
+def _replace_rows(comms: Comms, rows: list[dict]) -> None:
+    path = comms.bus.log.path
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    path.chmod(0o600)
+
+
+def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3)
+    ]
+    rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
+    rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
+    _replace_rows(comms, rows)
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ProjectionUnavailableError, match="candidate index maintenance unavailable"):
+        index.maintain(rebuild=True)
+    with pytest.raises(ProjectionUnavailableError):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=messages[2].seq,
+        )
+    with pytest.raises(
+        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+    ):
+        comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "expected"),
+    [
+        ("wire_root_id", "another wire root"),
+        ("envelope_digest", "envelope digest differs"),
+        ("publication_key", "execution/route"),
+    ],
+)
+def test_response_identity_must_match_private_bus_before_later_candidate(
+    tmp_path: Path, corrupt: str, expected: str
+) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3)
+    ]
+    rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
+    rows[1] = _as_response(rows[1], root_id, "one-execution")
+    response = rows[1][PRIVATE_WIRE_FIELD]["response"]
+    response[corrupt] = "0" * 64 if corrupt == "envelope_digest" else "wrong"
+    _replace_rows(comms, rows)
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ProjectionUnavailableError) as failure:
+        index.maintain(rebuild=True)
+    assert expected in str(failure.value.__cause__)
+    with pytest.raises(ProjectionUnavailableError):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=messages[2].seq,
+        )
+    with pytest.raises(
+        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+    ):
+        comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
+
+
+@pytest.mark.parametrize("first_batch_rows", [2, 4], ids=["stored-key", "same-batch"])
+def test_duplicate_private_response_key_rejected_by_unique_constraint(
+    tmp_path: Path, first_batch_rows: int
+) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3, 4)
+    ]
+    rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
+    rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
+    _replace_rows(comms, rows)
+    index = WakeCandidateIndex(comms.bus)
+    if first_batch_rows == 4:
+        with pytest.raises(
+            ProjectionUnavailableError, match="duplicate private response publication key"
+        ):
+            index.maintain(rebuild=True, max_rows=first_batch_rows)
+        with pytest.raises(ProjectionUnavailableError):
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=messages[3].seq,
+            )
+        return
+    assert not index.maintain(rebuild=True, max_rows=first_batch_rows)
+    first = index.page(
+        root_id=root_id,
+        recipient_lookup=lookup["Alice"],
+        after_seq=0,
+        required_through_seq=messages[1].seq,
+    )
+    assert [candidate.source_seq for candidate in first.entries] == [m.seq for m in messages[:2]]
+    with sqlite3.connect(index.path) as db:
+        checkpoint = db.execute("SELECT * FROM candidate_checkpoint").fetchall()
+        recipients = db.execute("SELECT * FROM candidate").fetchall()
+        keys = db.execute("SELECT * FROM candidate_response_key").fetchall()
+    with pytest.raises(
+        ProjectionUnavailableError, match="duplicate private response publication key"
+    ):
+        index.maintain(max_rows=2)
+    with sqlite3.connect(index.path) as db:
+        assert db.execute("SELECT * FROM candidate_checkpoint").fetchall() == checkpoint
+        assert db.execute("SELECT * FROM candidate").fetchall() == recipients
+        assert db.execute("SELECT * FROM candidate_response_key").fetchall() == keys
+    with pytest.raises(ProjectionUnavailableError, match="stale"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=messages[3].seq,
+        )
+    with pytest.raises(
+        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+    ):
+        comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
+
+
+def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    index = WakeCandidateIndex(comms.bus)
+    assert index.maintain(rebuild=True)
+    source = comms.bus.log.path
+    with source.open("ab") as output:
+        output.write(b'{"partial":')
+    with pytest.raises(ProjectionUnavailableError, match="incomplete tail"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=message.seq,
+        )
+    with pytest.raises(ProjectionUnavailableError, match="incomplete"):
+        index.maintain()
+    source.write_bytes(source.read_bytes().split(b"\n")[0] + b"\n")
+    source.chmod(0o600)
+    moved = source.with_name("replacement.jsonl")
+    moved.write_bytes(source.read_bytes())
+    moved.chmod(0o600)
+    moved.replace(source)
+    with pytest.raises(ProjectionRebuildRequiredError):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=message.seq,
+        )
+    with pytest.raises(ProjectionRebuildRequiredError):
+        index.maintain()
+    assert index.maintain(rebuild=True)
+    assert (
+        len(
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=message.seq,
+            ).entries
+        )
+        == 1
+    )
+
+
+def _as_response(row, root_id, execution_id):
+    """Build current declared response shape for raw-writer corruption tests."""
+    from agent_comms.bus_publication import initial_sideband, CommittedDelivery
+    from agent_comms.delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.wake import ControlClassification
+
+    delivery = CommittedDelivery.from_wire(row, root_id)
+    public = delivery.message.to_wire()
+    policy = ResponseDeliveryPolicy(
+        version=1,
+        initial=initial_sideband(
+            root_id, delivery.message, delivery.audience,
+            ResponseDeliveryPolicy.resolve(
+                delivery.message, delivery.audience, ControlClassification.ORDINARY
+            ),
+            control=ControlClassification.ORDINARY.value,
+        ),
+        response=KeyedResponseReceipt(
+            root_id, execution_id,
+            canonical_publication_key(execution_id, delivery.message.target),
+            public_envelope_digest(public),
+        ),
+    )
+    return {**public, PRIVATE_WIRE_FIELD: FieldCodec.encode(policy)}

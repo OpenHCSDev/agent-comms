@@ -1,0 +1,61 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929",
+  "owners": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 50500,
+      "pid": 206973
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 50501,
+      "pid": 206974
+    },
+    {
+      "thread": "nra-architecture",
+      "previous_pid": 50502,
+      "pid": 206975
+    },
+    {
+      "thread": "nra-class-first-name-review",
+      "previous_pid": 50503,
+      "pid": 206976
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "previous_pid": 50504,
+      "pid": 206977
+    },
+    {
+      "thread": "nra-ordered-branch-call-review",
+      "previous_pid": 50505,
+      "pid": 206978
+    },
+    {
+      "thread": "nra-roster-heuristic-map",
+      "previous_pid": 50507,
+      "pid": 206979
+    },
+    {
+      "thread": "openhcs-architecture-memory",
+      "previous_pid": 50508,
+      "pid": 206980
+    },
+    {
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "previous_pid": 50520,
+      "pid": 206981
+    }
+  ],
+  "full_thread_metadata_preserved_except_process_identity": true,
+  "launchers": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929/bin/agent-comms-nk-foreground"
+  },
+  "store_resets": 0,
+  "active_turns_interrupted": 0,
+  "inputs_replayed": 0
+}

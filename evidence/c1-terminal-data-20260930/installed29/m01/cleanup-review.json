@@ -1,0 +1,16 @@
+{
+  "remaining": [],
+  "exact_known_private_pids": [
+    51672,
+    51673,
+    51697
+  ],
+  "attempt_scope": "g458g-m01",
+  "private_root": "/home/ts/wt/g458g/m01/fixture/private-root/wire",
+  "manual_signals": [],
+  "paid_calls": 0,
+  "public_effects": 0,
+  "original_replay": false,
+  "tool_handle_status": "wrapper180s timeout retained",
+  "runtime_activation_unchanged": true
+}

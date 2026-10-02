@@ -1,0 +1,84 @@
+{
+  "state": "activated",
+  "activation": {
+    "launcher_names": [
+      "agent-comms",
+      "agent-comms-acp",
+      "agent-comms-agent",
+      "agent-comms-nk-foreground",
+      "toad"
+    ],
+    "core": "72062939239b0f07707406309305a056a23f925f",
+    "toad": "3b019be07ddcde7201a4a3332f7083bc127ee39b",
+    "textual": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+  },
+  "restarts": [
+    {
+      "name": "agent-comms-ux",
+      "previous_pid": 1775547,
+      "pid": 2060356,
+      "settings_preserved": true
+    },
+    {
+      "name": "nra-architecture",
+      "previous_pid": 1775612,
+      "pid": 2060437,
+      "settings_preserved": true
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "previous_pid": 1775810,
+      "pid": 2060482,
+      "settings_preserved": true
+    },
+    {
+      "name": "nra-domain-mapping",
+      "previous_pid": 1775894,
+      "pid": 2060538,
+      "settings_preserved": true
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "previous_pid": 1775938,
+      "pid": 2060747,
+      "settings_preserved": true
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "previous_pid": 1776026,
+      "pid": 2060832,
+      "settings_preserved": true
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "previous_pid": 1776171,
+      "pid": 2060908,
+      "settings_preserved": true
+    },
+    {
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "previous_pid": 1784241,
+      "pid": 2061004,
+      "settings_preserved": true
+    },
+    {
+      "name": "openhcs-helper",
+      "previous_pid": 1776376,
+      "pid": 2061254,
+      "settings_preserved": true
+    },
+    {
+      "name": "openhcs-helper2",
+      "previous_pid": 1776439,
+      "pid": 2061391,
+      "settings_preserved": true
+    },
+    {
+      "name": "comms428",
+      "previous_pid": 1853375,
+      "pid": 2061578,
+      "settings_preserved": true
+    }
+  ]
+}

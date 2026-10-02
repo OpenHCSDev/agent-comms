@@ -1,0 +1,16 @@
+[
+  {
+    "root": "/home/ts/.agent-comms",
+    "present": true,
+    "rows": 4,
+    "unknown_fields": []
+  },
+  {
+    "root": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+    "present": false
+  },
+  {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "present": false
+  }
+]

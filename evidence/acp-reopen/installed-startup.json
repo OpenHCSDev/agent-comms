@@ -1,0 +1,14 @@
+{
+  "inherited_worker_path": "/usr/local/bin:/usr/bin",
+  "normal_automatic_extensions": true,
+  "get_state": true,
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928",
+  "native_package": "/var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent",
+  "native_capability": "pi-native-input-v1-live-only",
+  "model": "gpt-6-sol",
+  "message_count": 714,
+  "saved_session_bytes": 143224441,
+  "provider_prompts": 0,
+  "network": "kernel-denied",
+  "live_writes": 0
+}

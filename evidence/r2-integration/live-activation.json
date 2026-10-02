@@ -1,0 +1,31 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-r2-catalog-20260928",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2773216,
+      "pid": 2798082
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2773221,
+      "pid": 2798086
+    }
+  ],
+  "error": null,
+  "catalog_migration": {
+    "equal": true,
+    "original_inputs_unchanged": true,
+    "canonical_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/catalog.json",
+    "preferences": 27,
+    "tags": 4,
+    "saved_views": 0
+  },
+  "ready": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true
+  },
+  "roster_count": 103,
+  "bus_seq": 58
+}

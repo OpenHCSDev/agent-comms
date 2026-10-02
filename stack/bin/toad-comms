@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Attach the installed Toad runtime to an owner on the active route.
+set -euo pipefail
+
+usage() {
+    printf 'Usage: toad-comms [THREAD]\n\nLaunch Agent Comms in Toad. Default thread: agent-comms-ux.\n'
+}
+
+if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+    usage
+    exit 0
+fi
+if (( $# > 1 )); then
+    usage >&2
+    exit 2
+fi
+
+runtime="${AGENT_COMMS_RUNTIME_ROOT:-}"
+if [[ -z "$runtime" ]]; then
+    acp_launcher="${AGENT_COMMS_ACP_LAUNCHER:-$(command -v agent-comms-acp || true)}"
+    if [[ -z "$acp_launcher" ]]; then
+        acp_launcher="$HOME/.local/bin/agent-comms-acp"
+    fi
+    if [[ ! -x "$acp_launcher" ]]; then
+        printf 'Installed agent-comms ACP launcher is unavailable: %s\n' "$acp_launcher" >&2
+        exit 1
+    fi
+    runtime="$(dirname "$(readlink -f "$acp_launcher")")"
+fi
+python="$runtime/python"
+toad="$runtime/toad"
+if [[ ! -x "$python" || ! -x "$toad" ]]; then
+    printf 'Installed Toad environment is unavailable: %s\n' "$runtime" >&2
+    exit 1
+fi
+
+# The runtime discovers the active route and its private launch pins together.
+# Inherited roots from the old stack must not send Toad to a stale bus.
+unset AGENT_COMMS_ROOT AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE
+unset PYTHONPATH
+unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
+
+thread="${1:-agent-comms-ux}"
+project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"
+if [[ ! -d "$project" ]]; then
+    printf 'Thread project directory is unavailable: %s\n' "$project" >&2
+    exit 1
+fi
+
+exec "$toad" acp "$python -m agent_comms.acp" "$project" \
+    --title 'Agent Comms' --session "$thread"

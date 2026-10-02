@@ -1,0 +1,314 @@
+{
+  "phases": [
+    {
+      "phase": "channel-pending",
+      "seconds": 14.632524774002377,
+      "session": "comms-1",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "@",
+        "summary": "CLI participant",
+        "busy": false
+      }
+    },
+    {
+      "phase": "channel-checked",
+      "seconds": 16.166271851980127,
+      "session": "comms-1",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "@",
+        "summary": "CLI participant",
+        "busy": false
+      }
+    },
+    {
+      "phase": "channel-both-checked",
+      "seconds": 17.609959649969824,
+      "session": "comms-1",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "@",
+        "summary": "CLI participant",
+        "busy": false
+      }
+    },
+    {
+      "phase": "second-cli-open-no-native",
+      "seconds": 18.54011893796269,
+      "session": "comms-2",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "@",
+        "summary": "CLI participant",
+        "busy": false
+      }
+    },
+    {
+      "phase": "dm-pending",
+      "seconds": 21.290313499979675,
+      "session": "comms-3",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "@",
+        "summary": "CLI participant",
+        "busy": false
+      }
+    },
+    {
+      "phase": "dm-reply",
+      "seconds": 23.703840754984412,
+      "session": "comms-3",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "@",
+        "summary": "CLI participant",
+        "busy": false
+      }
+    },
+    {
+      "phase": "external-offline",
+      "seconds": 24.990410814003553,
+      "session": "comms-3",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "\u25cb",
+        "summary": "CLI offline",
+        "busy": false
+      }
+    },
+    {
+      "phase": "return-no-native-spawn",
+      "seconds": 27.092502893996425,
+      "session": "comms-3",
+      "driver": "LinuxDriver",
+      "external": {
+        "name": "external-cli-fixture",
+        "tags": [
+          "openhcs"
+        ],
+        "worktree": "/home/ts/wt/k487a06/application/external-project",
+        "created_at": 1790876182.8866217,
+        "session_file": null,
+        "title": null,
+        "parent": null,
+        "task": null,
+        "process_identity": {
+          "pid": 1879053,
+          "start_time": 35182034
+        },
+        "model": null,
+        "thinking_level": null,
+        "goal": null,
+        "previous_worktrees": [],
+        "auto_title_pending": false,
+        "role": "agent",
+        "execution": "external",
+        "active_turn": null,
+        "channel_scope_generation": 0,
+        "turn_generation": 0,
+        "last_finished_turn_id": null
+      },
+      "presentation": {
+        "marker": "\u25cb",
+        "summary": "CLI offline",
+        "busy": false
+      }
+    }
+  ],
+  "provider_requests": 0,
+  "public_mutations": 0,
+  "direct_acp_refusal": "This participant checks its CLI inbox; it has no native prompt transport.",
+  "completed": true,
+  "native_owner_unchanged": true,
+  "duration_seconds": 30.712366197956726
+}

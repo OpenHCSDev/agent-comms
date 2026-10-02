@@ -1,0 +1,402 @@
+....................FFF..F...FFF.F...                                    [100%]
+=================================== FAILURES ===================================
+_______ test_private_rename_intent_fences_inflight_reserved_native_send ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-0o2tze77')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f70291b5fd0>
+
+    async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def held_before_raw_send(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", held_before_raw_send)
+        invoke_tool(
+            comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}
+        )
+        running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+>           reserved_count = store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs"
+            ).fetchone()[0]
+E           sqlite3.OperationalError: no such table: native_runtime_inputs
+
+tests/test_acp_private_nk_delivery.py:516: OperationalError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+_______ test_acp_session_selected_native_pipeline_never_uses_legacy_ack ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-rjph9b0l')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f70291b4670>
+
+    async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_path, monkeypatch):
+        comms, agent, root_id = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        sent = invoke_tool(
+            comms, "comms_send", {"from": "sender", "to": "beta", "body": "Compute 17+25"}
+        )
+        original = comms.bus.log.message_by_id(sent["id"])
+        before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+        assert before["status"] == "none"
+        assert before["version"] == 1 and before["revision"] >= 1
+        assert before["scope"]["ownerThread"] == "beta"
+        assert before["scope"]["wireRootId"] == root_id
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            assert session_id == "beta"
+            updates.append(update)
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        assert await agent.inputs.drain_inbox("beta") == 1
+        assert len(calls) == 1
+        current = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+        assert current["status"] == "proven"
+        assert current["covered_seq"] == original.seq
+        assert current["injected_seq"] == original.seq
+        announced = updates[-1].field_meta["agentComms"]["privateNativeCursor"]
+        assert announced["scope"] == current["scope"]
+        assert before["revision"] < announced["revision"] < current["revision"]
+        assert announced["input_id"] == current["input_id"]
+        assert updates[-1].field_meta["agentComms"]["lastSelectedCursorStatus"] == "proven"
+    
+        async def noop(*_args, **_kwargs):
+            return None
+    
+        async def no_options(*_args, **_kwargs):
+            return []
+    
+        monkeypatch.setattr(agent._runtime, "start", noop)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(agent.sessions.config, "options", no_options)
+        reconnected = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
+        reconnect_cursor = reconnected.field_meta["agentComms"]["privateNativeCursor"]
+        assert reconnect_cursor["scope"] == current["scope"]
+        assert reconnect_cursor["revision"] > current["revision"]
+        assert reconnect_cursor["input_id"] == current["input_id"]
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            assert (
+>               store._connection.execute(
+                    "SELECT COUNT(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                ).fetchone()[0]
+                == 1
+            )
+E           sqlite3.OperationalError: no such table: native_runtime_inputs
+
+tests/test_acp_private_nk_delivery.py:593: OperationalError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+_______ test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-kdlussmp')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f70291b73f0>
+
+    async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_path, monkeypatch):
+        """ACP metadata orders a delayed epoch-2 update below trusted epoch-3 load.
+    
+        This tests the backend contract, not a Toad widget or provider acceptance.
+        """
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        delivered = []
+    
+        async def update(*, session_id, update):
+            assert session_id == "beta"
+            cursor = (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor")
+            if cursor and cursor["status"] == "proven":
+                entered.set()
+                await release.wait()
+            delivered.append(update)
+    
+        async def noop(*_args, **_kwargs):
+            return None
+    
+        async def no_options(*_args, **_kwargs):
+            return []
+    
+        monkeypatch.setattr(agent._runtime, "session_update", update)
+        monkeypatch.setattr(agent._runtime, "start", noop)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(agent.sessions.config, "options", no_options)
+        drain = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        comms.registry.unregister("beta")
+        comms.registry.heartbeat("beta")
+        loaded = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
+        fresh = loaded.field_meta["agentComms"]["privateNativeCursor"]
+        assert fresh["status"] == "none"
+        assert fresh["scope"]["ownerEpoch"] > 0
+        release.set()
+        assert await asyncio.wait_for(drain, timeout=5) == 1
+        old = delivered[-1].field_meta["agentComms"]["privateNativeCursor"]
+        assert old["status"] == "proven" and old["input_id"]
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+        )
+>       assert set(old) == set(fixture["trustedLoad"]["cursor"])
+E       AssertionError: assert {'assignment_...eration', ...} == {'claim_id', ...eration', ...}
+E         
+E         Extra items in the left set:
+E         'owner_admission_generation'
+E         'kind'
+E         'assignment_id'
+E         Extra items in the right set:
+E         'claim_id'
+E         'owner_admission_epoch'
+E         Use -v to get more diff
+
+tests/test_acp_private_nk_delivery.py:659: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+____ test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-zxpglb9p')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f70292e8210>
+
+    async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model()
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        comms.messaging.send_message("sender", "beta", "first")
+>       assert await agent.inputs.drain_inbox("beta") == 1
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_private_nk_delivery.py:734: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/input_drain.py:329: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:364: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:355: in _drain_private_if_changed
+    result = await self.effects._drain_private_nk(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:686: in _drain_private_nk
+    result = await self.turns.run_selected(session_id, execution)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/turn_runner.py:729: in run_selected
+    await self.inputs.finish_turn_inputs(session_id, inbox)
+src/agent_comms/input_drain.py:648: in finish_turn_inputs
+    await self.emit_input_delivery_changed(session_id)
+src/agent_comms/input_drain.py:247: in emit_input_delivery_changed
+    await self.runtime.session_update(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+session_id = 'beta'
+update = AgentMessageChunk(content=TextContentBlock(annotations=None, text='', field_meta=None, type='text'), message_id=None, field_meta={'agentComms': {'inputDeliveryChanged': True}}, session_update='agent_message_chunk')
+
+    async def record_update(*, session_id, update):
+>       updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'privateNativeCursor'
+
+tests/test_acp_private_nk_delivery.py:730: KeyError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+__________ test_acp_private_no_wake_has_delivery_receipt_but_no_model __________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-2bxzcktd')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f702ba2da20>
+
+    async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
+        comms, agent, root_id = _session(tmp_path)
+        alpha = Thread(
+            "alpha",
+            frozenset({"team"}),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+        comms.threads.register(alpha)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            store.register_participant(
+                stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True
+            )
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        sent = invoke_tool(
+            comms,
+            "comms_send",
+            {"from": "sender", "to": "#team", "body": "@alpha review this."},
+        )
+        original = comms.bus.log.message_by_id(sent["id"])
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert calls == []
+        cursor = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+        assert cursor["status"] == "coverage_only"
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+        )
+>       assert set(cursor) == set(fixture["coverageOnlyExample"])
+E       AssertionError: assert {'assignment_...eration', ...} == {'claim_id', ...eration', ...}
+E         
+E         Extra items in the left set:
+E         'owner_admission_generation'
+E         'kind'
+E         'assignment_id'
+E         Extra items in the right set:
+E         'claim_id'
+E         'owner_admission_epoch'
+E         Use -v to get more diff
+
+tests/test_acp_private_nk_delivery.py:838: AssertionError
+___________ test_acp_uncertain_native_turn_is_not_replayed_or_acked ____________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-dmm3d4s9')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f70292372a0>
+
+    async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(fail_on=1)
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+        assert comms.bus.log.message_by_id(sent["id"]) is not None
+        with pytest.raises(NativePiUnavailable):
+            await agent.inputs.drain_inbox("beta")
+        assert len(calls) == 1
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 1
+        assert agent.inputs.pending_turns == {}
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+>           row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           sqlite3.OperationalError: no such table: native_runtime_inputs
+
+tests/test_acp_private_nk_delivery.py:871: OperationalError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+_________ test_two_acp_instances_cannot_engage_or_send_simultaneously __________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-9h8w2qfa')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7028f19320>
+
+    async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
+        comms, first, root_id = _session(tmp_path)
+        second = CommsAgent(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=tmp_path,
+            private_nk_wire_root_id=root_id,
+        )
+        second.sessions.bindings["beta"] = "beta"
+        second.sessions.titles["beta"] = "beta"
+        second.sessions.worktrees["beta"] = str(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = separate_session_fake(decision="FULL")
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def suspended(package, **kwargs):
+            result = await fake(package, **kwargs)
+            if len(calls) == 1:
+                entered.set()
+                await release.wait()
+            return result
+    
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+        for body in ("one", "two"):
+            invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": body})
+        running = asyncio.create_task(first.inputs.drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        try:
+            with pytest.raises(StaleFence, match="busy"):
+                await second.inputs.drain_inbox("beta")
+            assert len(calls) == 1
+            with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+                assert (
+                    store._connection.execute(
+                        "SELECT COUNT(*) FROM wake_claims WHERE disposition='engaged'"
+                    ).fetchone()[0]
+                    == 1
+                )
+                assert (
+>                   store._connection.execute("SELECT COUNT(*) FROM native_runtime_inputs").fetchone()[
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        0
+                    ]
+                    == 1
+                )
+E               sqlite3.OperationalError: no such table: native_runtime_inputs
+
+tests/test_acp_private_nk_delivery.py:915: OperationalError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+_________ test_goal_change_between_reservation_and_native_send_refuses _________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-3x6ow6do')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7029235470>
+
+    async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def suspended_before_send(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended_before_send)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+        running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        try:
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Work on a separate task"))
+            assert goal.state.active
+        finally:
+            release.set()
+        with pytest.raises(StaleFence, match="owner changed before native send"):
+            await asyncio.wait_for(running, timeout=5)
+        assert calls == []
+        assert await agent.inputs.drain_inbox("beta") == 0
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+>           row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           sqlite3.OperationalError: no such table: native_runtime_inputs
+
+tests/test_acp_private_nk_delivery.py:987: OperationalError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:203 Optional awareness omitted; original delivered alone (ValueError)
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_intent_fences_inflight_reserved_native_send
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_session_selected_native_pipeline_never_uses_legacy_ack
+FAILED tests/test_acp_private_nk_delivery.py::test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot
+FAILED tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_no_wake_has_delivery_receipt_but_no_model
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_uncertain_native_turn_is_not_replayed_or_acked
+FAILED tests/test_acp_private_nk_delivery.py::test_two_acp_instances_cannot_engage_or_send_simultaneously
+FAILED tests/test_acp_private_nk_delivery.py::test_goal_change_between_reservation_and_native_send_refuses
+8 failed, 29 passed in 25.26s

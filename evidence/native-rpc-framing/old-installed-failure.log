@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_copied_cli_private_policy_allows_one_local_http_attempt[large] ______
+tests/test_native_pi.py:1090: in readuntil
+    raw = await self.stream.readuntil(separator)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py:663: in readuntil
+    raise exceptions.LimitOverrunError(
+E   asyncio.exceptions.LimitOverrunError: Separator is not found, and chunk exceed the limit
+
+The above exception was the direct cause of the following exception:
+.artifacts/native-return-installed/agent_comms/native_pi.py:832: in next_event
+    raw = await asyncio.wait_for(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+.artifacts/native-return-installed/agent_comms/pi_rpc.py:45: in readline
+    raise ValueError("Native RPC record exceeds transport limit") from error
+E   ValueError: Native RPC record exceeds transport limit
+
+The above exception was the direct cause of the following exception:
+tests/test_native_pi.py:1184: in test_copied_cli_private_policy_allows_one_local_http_attempt
+    result = await run_native_pi_turn(package, **request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/native-return-installed/agent_comms/native_pi.py:935: in run_native_pi_turn
+    event = await next_event()
+            ^^^^^^^^^^^^^^^^^^
+.artifacts/native-return-installed/agent_comms/native_pi.py:836: in next_event
+    raise NativePiUnavailable("Native Pi RPC record is incomplete") from error
+E   agent_comms.native_pi.NativePiUnavailable: Native Pi RPC record is incomplete
+=========================== short test summary info ============================
+FAILED tests/test_native_pi.py::test_copied_cli_private_policy_allows_one_local_http_attempt[large]
+1 failed in 3.18s

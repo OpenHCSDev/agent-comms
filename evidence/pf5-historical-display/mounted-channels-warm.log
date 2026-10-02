@@ -1,0 +1,104 @@
+Timeout (0:00:25)!
+Thread 0x00007f6150efd6c0 [asyncio_4] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f6152efe6c0 [asyncio_3] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f6153dff6c0 [asyncio_2] (most recent call first):
+  <invalid frame>
+
+Thread 0x00007f616d1fa6c0 [asyncio_1] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f616ddfb6c0 [Thread-2] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 369 in wait
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/queue.py", line 199 in get
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/api.py", line 379 in dispatch_events
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/api.py", line 213 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f616e5fc6c0 [Thread-3] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 369 in wait
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/utils/delayed_queue.py", line 47 in get
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_buffer.py", line 38 in read_event
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/inotify.py", line 136 in queue_events
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/api.py", line 158 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f616edfd6c0 [Thread-4] (most recent call first):
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 163 in do_poll
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_c.py", line 313 in read_events
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/watchdog/observers/inotify_buffer.py", line 82 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f616f5fe6c0 [DirectoryWatche] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 369 in wait
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 670 in wait
+  File "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928/lib/python3.14/site-packages/toad/directory_watcher.py", line 233 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f616fdff6c0 [asyncio-waitpid] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 931 in _do_waitpid
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f61750ee6c0 [toad] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f6178b58780 [python] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/selectors.py", line 452 in select
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 2008 in _run_once
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 677 in run_forever
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 706 in run_until_complete
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204 in run
+  File "/home/ts/wt/comms-pf5-historical-display-20260928/evidence/pf5-historical-display/mounted_channels.py", line 56 in <module>
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-pf5-historical-display-20260928/evidence/pf5-historical-display/mounted_channels.py", line 25, in until
+    await asyncio.sleep(.05)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 702, in sleep
+    return await future
+           ^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-pf5-historical-display-20260928/evidence/pf5-historical-display/mounted_channels.py", line 56, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-pf5-historical-display-20260928/evidence/pf5-historical-display/mounted_channels.py", line 46, in main
+    await until(lambda: chat._history[0][0].view_cursor != cursor or not chat._has_older)
+  File "/home/ts/wt/comms-pf5-historical-display-20260928/evidence/pf5-historical-display/mounted_channels.py", line 23, in until
+    async with asyncio.timeout(30):
+               ~~~~~~~~~~~~~~~^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 114, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError

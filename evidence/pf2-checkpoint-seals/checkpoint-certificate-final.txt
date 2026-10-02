@@ -1,0 +1,5 @@
+command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_private_bus_checkpoint.py', 'tests/test_native_source_cursor_certificate.py']
+..................................                                       [100%]
+34 passed in 50.00s
+
+exit: 0

@@ -1,0 +1,86 @@
+actual complete wire projection: 0.010152s
+F.
+=================================== FAILURES ===================================
+_ test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete_proof _
+
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/optional-awareness-identity/wire-journey/test_saved_wire_awareness_pres0')
+
+    def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete_proof(
+        tmp_path: Path,
+    ) -> None:
+        """Real frozen wire and SQLite lifecycle; projection cannot create permission."""
+        import time
+    
+        from agent_comms.assignment_states import PassiveAssignment
+        from agent_comms.coordination_tables.responses import ResponseObligation
+    
+        comms, store, index, root_id = _root(tmp_path)
+        try:
+            initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 act")
+            notice = comms.messaging.send_initial_cohort(
+                "sender", "member000", "Passive retained context", notice=True
+            )
+            passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
+            assert isinstance(passive.lifecycle, PassiveAssignment)
+            assert not passive.lifecycle.engageable and not passive.lifecycle.mode.active
+            observer = stable_thread_lookup(comms.registry.require("member001").created_at)
+            assert not WakeAssignment.select(
+                store.session._connection,
+                where="recipient_lookup=? AND wire_seq=?",
+                parameters=(observer, initial.message.seq),
+            )
+            owner = _owner(comms, "member000")
+            store.executions.create(
+                "wire-awareness-reply",
+                ExecutionOrigin.WIRE,
+                assignment.recipient_lookup,
+                owner.name,
+                1,
+                assignment_ids=(assignment.assignment_id,),
+                exact_target="#team",
+            )
+            assignment = store.assignments.get(assignment.assignment_id)
+            index.maintain(rebuild=True)
+            builder = _projection(index, store, owner, 0, notice.seq)
+            wire_before = comms.bus.log.path.read_bytes()
+            assignments_before = WakeAssignment.select(store.session._connection)
+            obligations_before = ResponseObligation.select(store.session._connection)
+            started = time.monotonic()
+            result = builder(initial, assignment, owner)
+            elapsed = time.monotonic() - started
+            assert result.mandatory_complete, result.omission_reason
+            context = json.loads(result.text)
+            assert {row["claim_id"] for row in context["selected"]} == {
+                assignment.assignment_id,
+                passive.assignment_id,
+            }
+            passive_context = next(
+                row for row in context["selected"] if row["claim_id"] == passive.assignment_id
+            )
+            assert passive_context["wake_mode"] == passive.lifecycle.mode.declared_name
+            assert len(context["open_obligations"]) == 1
+            assert context["open_obligations"][0]["execution_id"] == "wire-awareness-reply"
+            assert WakeAssignment.select(store.session._connection) == assignments_before
+            assert ResponseObligation.select(store.session._connection) == obligations_before
+            assert comms.bus.log.path.read_bytes() == wire_before
+            print(f"actual complete wire projection: {elapsed:.6f}s", flush=True)
+    
+            # A reused numeric PID with a different recorded process birth is not
+            # the selected owner, even when every old numeric-PID field agrees.
+            identity = owner.process_identity
+            assert identity is not None
+            comms.registry.register(
+                replace(owner, process_identity=replace(identity, start_time=identity.start_time + 1))
+            )
+            changed = builder(initial, assignment, owner)
+            assert not changed.mandatory_complete and changed.text == ""
+            comms.registry.register(owner)
+>           assert builder(initial, assignment, owner).mandatory_complete
+E           AssertionError: assert False
+E            +  where False = OptionalAwarenessResult(text='', mandatory_complete=False, omitted_count=0, omission_reason='StaleFence').mandatory_complete
+E            +    where OptionalAwarenessResult(text='', mandatory_complete=False, omitted_count=0, omission_reason='StaleFence') = OptionalAwarenessProjection(index=<agent_comms.wake_candidate_index.WakeCandidateIndex object at 0x7f6e75ac9be0>, afte... through_seq=2, expected_participant_generation=1, expected_admission_generation=2, max_rows=100, max_text_bytes=16384)(CommittedDelivery(wire_root_id='f2e81c114e684bb3b15939fb40d2491b', message=Message(sender='sender', target='#team', bo...rol='ordinary', resolver_version='resolver-v1', policy_version='policy-v1', manifest_codec='audience-v1', receipt=None), WakeAssignment(assignment_id='cohort-v1:4af3a80a0f3b59ee28ea7863c26a7db1f3bc2ca65739fa1ba637a58b9ed3d143', recipient='..._ms=1790661381469, revision=2, resolver_version='resolver-v1', policy_version='policy-v1', claim_status_kind='engaged'), Thread(name='member000', tags=frozenset({'team'}), worktree='/home/ts/wt/comms-selected-cold-compaction-native-2026092...n_generation=1), last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None))
+
+tests/test_optional_awareness_projection.py:684: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_optional_awareness_projection.py::test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete_proof
+1 failed, 1 passed in 5.90s

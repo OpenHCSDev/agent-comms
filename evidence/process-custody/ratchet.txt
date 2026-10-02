@@ -1,0 +1,10 @@
+{
+  "base": "a2dee9c42ec36f9cbba43d939a19000aa1bb3f08",
+  "head": "e365604298ccebae95891489d15372d28189e609",
+  "paths": [
+    "src/agent_comms/child_process.py",
+    "src/agent_comms/owner_lifecycle.py"
+  ],
+  "nonzero_delta": {},
+  "increased": false
+}

@@ -1,0 +1,192 @@
+............................FF.......................................... [ 94%]
+....                                                                     [100%]
+=================================== FAILURES ===================================
+_______ test_public_snapshot_is_one_committed_revision_during_settlement _______
+
+db_path = PosixPath('/home/ts/wt/comms-mutation-owners-20260928/.test-mutations-all/test_public_snapshot_is_one_co0/coordination.sqlite3')
+
+    def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Path) -> None:
+        with ready(db_path) as db:
+            _, fence = started(db)
+            fence = final_evidence(db, fence)
+    
+>       observed = _read_while_other_store_commits(
+            db_path,
+            "executions",
+            lambda reader: reader.snapshots.get("exec"),
+            lambda writer: writer.settle_nonpublication(
+                fence, expected_pointer_revision=1, success=False, reason_code="failure"
+            ),
+        )
+
+tests/test_coordination_store.py:1460: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-mutation-owners-20260928/.test-mutations-all/test_public_snapshot_is_one_co0/coordination.sqlite3')
+first_table = 'executions'
+read = <function test_public_snapshot_is_one_committed_revision_during_settlement.<locals>.<lambda> at 0x7fbb99934040>
+write = <function test_public_snapshot_is_one_committed_revision_during_settlement.<locals>.<lambda> at 0x7fbb99934300>
+
+    def _read_while_other_store_commits(
+        path: Path,
+        first_table: str,
+        read: Callable[[Coordination], object],
+        write: Callable[[Coordination], None],
+    ) -> object:
+        """Hold a reader after its first SELECT while a second connection tries COMMIT."""
+        first_read = threading.Event()
+        writer_ready = threading.Event()
+        commit_started = threading.Event()
+        writer_done = threading.Event()
+        errors: list[BaseException] = []
+    
+        class PausedReader(Coordination):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                paused = False
+                selected = False
+    
+                def trace(statement):
+                    nonlocal selected
+                    selected = f"FROM {first_table} " in statement or (
+                        f'FROM "{first_table}" ' in statement
+                    )
+    
+                def read_row(cursor, values):
+                    nonlocal paused
+                    result = sqlite3.Row(cursor, values)
+                    if selected and not paused:
+                        paused = True
+                        first_read.set()
+                        assert commit_started.wait(timeout=5), "writer never reached COMMIT"
+                        # A real SQLite row was read under the aggregate snapshot.
+                        # The second connection must remain blocked until its reader exits.
+                        writer_done.wait(timeout=0.3)
+                    return result
+    
+                self.session._connection.set_trace_callback(trace)
+                self.session._connection.row_factory = read_row
+    
+        def writer() -> None:
+            try:
+                with store(path) as other:
+    
+                    def trace(statement: str) -> None:
+                        if statement == "COMMIT":
+                            commit_started.set()
+    
+                    other._connection.set_trace_callback(trace)
+                    writer_ready.set()
+                    assert first_read.wait(timeout=5), "reader never reached its first SELECT"
+                    write(other)
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                writer_done.set()
+    
+        worker = threading.Thread(target=writer)
+        with PausedReader(str(path), clock_ms=lambda: 1_000) as reader:
+            worker.start()
+            try:
+>               assert writer_ready.wait(timeout=5), "writer never opened its connection"
+E               AssertionError: writer never opened its connection
+E               assert False
+E                +  where False = wait(timeout=5)
+E                +    where wait = <threading.Event at 0x7fbb992a8cd0: unset>.wait
+
+tests/test_coordination_store.py:1446: AssertionError
+_______ test_public_participant_is_one_committed_revision_during_rename ________
+
+db_path = PosixPath('/home/ts/wt/comms-mutation-owners-20260928/.test-mutations-all/test_public_participant_is_one0/coordination.sqlite3')
+
+    def test_public_participant_is_one_committed_revision_during_rename(db_path: Path) -> None:
+        with store(db_path) as db:
+            db.participants.register("owner", "Old", "thread", committed=True)
+    
+>       observed = _read_while_other_store_commits(
+            db_path,
+            "participants",
+            lambda reader: reader.participants.get("owner"),
+            lambda writer: writer.rename_participant("owner", "New", "New", expected_generation=1),
+        )
+
+tests/test_coordination_store.py:1480: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-mutation-owners-20260928/.test-mutations-all/test_public_participant_is_one0/coordination.sqlite3')
+first_table = 'participants'
+read = <function test_public_participant_is_one_committed_revision_during_rename.<locals>.<lambda> at 0x7fbb98eb1a60>
+write = <function test_public_participant_is_one_committed_revision_during_rename.<locals>.<lambda> at 0x7fbb98eb1f30>
+
+    def _read_while_other_store_commits(
+        path: Path,
+        first_table: str,
+        read: Callable[[Coordination], object],
+        write: Callable[[Coordination], None],
+    ) -> object:
+        """Hold a reader after its first SELECT while a second connection tries COMMIT."""
+        first_read = threading.Event()
+        writer_ready = threading.Event()
+        commit_started = threading.Event()
+        writer_done = threading.Event()
+        errors: list[BaseException] = []
+    
+        class PausedReader(Coordination):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                paused = False
+                selected = False
+    
+                def trace(statement):
+                    nonlocal selected
+                    selected = f"FROM {first_table} " in statement or (
+                        f'FROM "{first_table}" ' in statement
+                    )
+    
+                def read_row(cursor, values):
+                    nonlocal paused
+                    result = sqlite3.Row(cursor, values)
+                    if selected and not paused:
+                        paused = True
+                        first_read.set()
+                        assert commit_started.wait(timeout=5), "writer never reached COMMIT"
+                        # A real SQLite row was read under the aggregate snapshot.
+                        # The second connection must remain blocked until its reader exits.
+                        writer_done.wait(timeout=0.3)
+                    return result
+    
+                self.session._connection.set_trace_callback(trace)
+                self.session._connection.row_factory = read_row
+    
+        def writer() -> None:
+            try:
+                with store(path) as other:
+    
+                    def trace(statement: str) -> None:
+                        if statement == "COMMIT":
+                            commit_started.set()
+    
+                    other._connection.set_trace_callback(trace)
+                    writer_ready.set()
+                    assert first_read.wait(timeout=5), "reader never reached its first SELECT"
+                    write(other)
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                writer_done.set()
+    
+        worker = threading.Thread(target=writer)
+        with PausedReader(str(path), clock_ms=lambda: 1_000) as reader:
+            worker.start()
+            try:
+>               assert writer_ready.wait(timeout=5), "writer never opened its connection"
+E               AssertionError: writer never opened its connection
+E               assert False
+E                +  where False = wait(timeout=5)
+E                +    where wait = <threading.Event at 0x7fbb99105040: unset>.wait
+
+tests/test_coordination_store.py:1446: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_coordination_store.py::test_public_snapshot_is_one_committed_revision_during_settlement
+FAILED tests/test_coordination_store.py::test_public_participant_is_one_committed_revision_during_rename
+2 failed, 74 passed in 27.21s

@@ -1,0 +1,23 @@
+{
+  "root": "src/agent_comms/",
+  "base_revision": "58bfad30af78e1f99986c1247b51034641e6a90c",
+  "head_revision": "f40446d3fffeaf908dc2424826677e8b91661741",
+  "paths": [
+    "src/agent_comms/debt_ratchet.py"
+  ],
+  "base": {
+    "TypeIdentity": 0,
+    "LongBooleanChain": 0,
+    "StringSubscript": 0
+  },
+  "head": {
+    "TypeIdentity": 0,
+    "LongBooleanChain": 0,
+    "StringSubscript": 0
+  },
+  "delta": {
+    "TypeIdentity": 0,
+    "LongBooleanChain": 0,
+    "StringSubscript": 0
+  }
+}

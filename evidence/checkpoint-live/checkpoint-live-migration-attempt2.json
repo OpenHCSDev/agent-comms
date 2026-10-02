@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "error": null,
+  "rows_preserved": 52,
+  "root_id_preserved": true,
+  "bus_bytes_preserved": true,
+  "bus_inode_preserved": true,
+  "execution_claim_input_rows_preserved": true,
+  "checkpoint_version": 1,
+  "checkpoint_state": "final"
+}

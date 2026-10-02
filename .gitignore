@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+htmlcov/
+.coverage
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.test-tmp/
+
+# venvs
+.venv/
+.venv_juno/
+
+# Runtime state (never commit coordination data)
+/registry.json
+/bus.jsonl
+/bus_meta.json
+/read_markers.json
+/ledger.json
+/state.json
+/tool-output/
+/*.lock
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+/activity.jsonl
+/runtime_info.json
+/runtime/
+/transcript_reply_index.sqlite3*
+/bus_activity_latest.json
+/bus_route_counts.sqlite3*
+/activity_latest.json
+/.native-init-fixtures/
+/.phase-fixtures/
+/.catalog-fixtures/
+/.configuration-fixtures/
+/.proof-runtime/
+/.focused-tests/
+/.orphan-cleanup-receipt.json

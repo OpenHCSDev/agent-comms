@@ -1,0 +1,349 @@
+........................................................................ [ 67%]
+.........ss.........FF.FFFF....F...                                      [100%]
+=================================== FAILURES ===================================
+______ test_local_delivery_requires_existing_owner_and_attached_transport ______
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f2252e3e0d0>, <agent_comms.comms.Comms object at 0x7f2253afad50>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f2252b66510>, '3e51f4e181454cf5a8bd8fd51deb51e4')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_local_delivery_requires_e0')
+
+    @pytest.mark.asyncio
+    async def test_local_delivery_requires_existing_owner_and_attached_transport(owner, tmp_path):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        try:
+            assert await publish_pending_local(agent, "project", "project") == 0
+            assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
+            updates = []
+
+            class Client:
+                async def session_update(self, session_id, update):
+                    updates.append(update.model_dump(by_alias=True, exclude_none=True))
+
+            agent.on_connect(Client())
+            assert await publish_pending_local(agent, "project", "project") == 1
+            assert journal.publications.pending(str(session)) == ()
+            wire_value = json.dumps(updates)
+            assert commit_id in wire_value and "entry" in wire_value
+            assert "private summary" not in wire_value and "recipient" not in wire_value
+>           assert "compactionPublication" in wire_value
+E           assert 'compactionPublication' in '[{"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "compaction_published", "pub..."rev", "leafId": "leaf", "commitId": "3e51f4e181454cf5a8bd8fd51deb51e4"}}]}}, "sessionUpdate": "agent_message_chunk"}]'
+
+tests/test_compaction_publication.py:80: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 218027 exit status already read:  will report returncode 255
+WARNING  asyncio:unix_events.py:897 child process pid 218133 exit status already read:  will report returncode 255
+_________ test_pending_metadata_projects_before_next_owner_input_send __________
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f2252b3f390>, <agent_comms.comms.Comms object at 0x7f2252eac950>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f2252279e10>, '153bfe872a174e9baab7c7b82e63dd96')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_pending_metadata_projects0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2252b667b0>
+
+    @pytest.mark.asyncio
+    async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp_path, monkeypatch):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        updates = []
+
+        class Client:
+            async def session_update(self, session_id, update):
+                updates.append(update.model_dump(by_alias=True, exclude_none=True))
+
+        async def events(*args, **kwargs):
+            assert any(
+                item.get("_meta", {})
+                .get("agentComms", {})
+                .get("compactionPublication", {})
+                .get("commitId")
+                == commit_id
+                for item in updates
+            ), "Local metadata projection must precede native provider send"
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            yield ae.Done(ok=False, text="No provider invoked")
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        agent.on_connect(Client())
+        try:
+>           await agent.inputs.run_owned_input("project", "project", "distinct new input")
+
+tests/test_compaction_publication.py:117:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:642: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:501: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:448: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:329: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:143: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:64: in open
+    launch = await asyncio.to_thread(
+/usr/lib/python3.14/asyncio/threads.py:26: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:326: in managed
+    cwd = worktree.resolve(strict=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/pathlib/__init__.py:938: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+filename = '/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_pending_metadata_projects0/project'
+strict = True
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_pending_metadata_projects0/project'
+
+<frozen posixpath>:457: FileNotFoundError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 218247 exit status already read:  will report returncode 255
+WARNING  asyncio:unix_events.py:897 child process pid 218364 exit status already read:  will report returncode 255
+_____ test_client_only_rebind_before_actual_transport_denies_wrong_client ______
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f2252b96650>, <agent_comms.comms.Comms object at 0x7f2252eac4d0>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f2252325550>, '7accfda3316844f5ad032b675ecae19a')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_client_only_rebind_before0')
+
+    @pytest.mark.asyncio
+    async def test_client_only_rebind_before_actual_transport_denies_wrong_client(owner, tmp_path):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        original_received, wrong_received = [], []
+
+        class Client:
+            def __init__(self, received):
+                self.received = received
+
+            async def session_update(self, session_id, update):
+                self.received.append(update.model_dump(by_alias=True, exclude_none=True))
+
+        original = Client(original_received)
+        wrong = Client(wrong_received)
+        agent.on_connect(original)
+        actual = agent._runtime.session_update
+
+        async def race(*, session_id, update, **binding):
+            # Registry/session file and epoch remain untouched. This swaps only
+            # the ACP binding after publisher precheck but before runtime transport.
+            agent.on_connect(wrong)
+            agent.sessions.bindings[session_id] = "other-canonical-thread"
+            return await actual(session_id=session_id, update=update, **binding)
+
+        agent._runtime.session_update = race
+        try:
+            assert await publish_pending_local(agent, "project", "project") == 0
+            assert not _publication_events(original_received)
+            assert not _publication_events(wrong_received)
+            assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
+            assert comms.registry.require("project").session_file == str(session)
+            agent._runtime.session_update = actual
+            agent.sessions.bindings["project"] = "project"
+            agent.on_connect(original)
+            assert await publish_pending_local(agent, "project", "project") == 1
+>           assert len(_publication_events(original_received)) == 1
+E           AssertionError: assert 0 == 1
+E            +  where 0 = len([])
+E            +    where [] = _publication_events([{'content': {'text': '', 'type': 'text'}, '_meta': {'agentComms': {'updates': [{'kind': 'compaction_published', 'publication': {...}}]}}, 'sessionUpdate': 'agent_message_chunk'}])
+
+tests/test_compaction_publication.py:213: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 218837 exit status already read:  will report returncode 255
+_ test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket _
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f2252b6d6d0>, <agent_comms.comms.Comms object at 0x7f2252eaf410>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f2252326c10>, 'd3611b84b5cf4dfe8d61c761bd3f3d4e')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_socket_incarnation_swap_b0')
+
+    @pytest.mark.asyncio
+    async def test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket(
+        owner, tmp_path
+    ):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        old_received, new_received = [], []
+
+        class Socket:
+            def __init__(self, received):
+                self.received = received
+
+            async def session_update(self, *, session_id, update):
+                self.received.append(update.model_dump(by_alias=True, exclude_none=True))
+
+        old, new = Socket(old_received), Socket(new_received)
+        agent._runtime.clients["project"] = {old}
+        actual = agent._runtime.session_update
+
+        async def swap(*, session_id, update, **binding):
+            # ACP socket set only; canonical registry/session/epoch stay unchanged.
+            agent._runtime.clients["project"] = {new}
+            return await actual(session_id=session_id, update=update, **binding)
+
+        agent._runtime.session_update = swap
+        try:
+            assert await publish_pending_local(agent, "project", "project") == 0
+            assert not old_received and not new_received
+            assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
+            agent._runtime.session_update = actual
+            agent._runtime.clients["project"] = {old}
+            assert await publish_pending_local(agent, "project", "project") == 1
+>           assert len(_publication_events(old_received)) == 1 and not new_received
+E           AssertionError: assert (0 == 1)
+E            +  where 0 = len([])
+E            +    where [] = _publication_events([{'content': {'text': '', 'type': 'text'}, '_meta': {'agentComms': {'updates': [{'kind': 'compaction_published', 'publication': {...}}]}}, 'sessionUpdate': 'agent_message_chunk'}])
+
+tests/test_compaction_publication.py:257: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 218980 exit status already read:  will report returncode 255
+WARNING  asyncio:unix_events.py:897 child process pid 219177 exit status already read:  will report returncode 255
+_____ test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending ______
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f2252b4b460>, <agent_comms.comms.Comms object at 0x7f2252eaf1d0>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f2252326350>, '7af1a6b4f9c84914beb5a3209ee4b1bf')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_socket_incarnation_swap_a0')
+
+    @pytest.mark.asyncio
+    async def test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending(owner, tmp_path):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        old_received, new_received = [], []
+
+        class NewSocket:
+            async def session_update(self, *, session_id, update):
+                new_received.append(update)
+
+        new = NewSocket()
+
+        class OldSocket:
+            swap = True
+
+            async def session_update(self, *, session_id, update):
+                old_received.append(update.model_dump(by_alias=True, exclude_none=True))
+                if self.swap:
+                    agent._runtime.clients[session_id] = {new}
+
+        old = OldSocket()
+        agent._runtime.clients["project"] = {old}
+        try:
+            assert await publish_pending_local(agent, "project", "project") == 0
+>           assert len(_publication_events(old_received)) == 1 and not new_received
+E           AssertionError: assert (0 == 1)
+E            +  where 0 = len([])
+E            +    where [] = _publication_events([{'content': {'text': '', 'type': 'text'}, '_meta': {'agentComms': {'updates': [{'kind': 'compaction_published', 'publication': {...}}]}}, 'sessionUpdate': 'agent_message_chunk'}])
+
+tests/test_compaction_publication.py:292: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 219302 exit status already read:  will report returncode 255
+WARNING  asyncio:unix_events.py:897 child process pid 219397 exit status already read:  will report returncode 255
+________ test_after_delivery_changed_acp_binding_never_marks_old_commit ________
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f225220c9e0>, <agent_comms.comms.Comms object at 0x7f2252131190>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f2252210600>, '67e27dfe998943629b3848e2ef19de61')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_after_delivery_changed_ac0')
+
+    @pytest.mark.asyncio
+    async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, tmp_path):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        received = []
+        wrong_received = []
+
+        class WrongClient:
+            async def session_update(self, session_id, update):
+                wrong_received.append(update)
+
+        wrong = WrongClient()
+
+        class Client:
+            async def session_update(self, session_id, update):
+                received.append(update.model_dump(by_alias=True, exclude_none=True))
+                # AFTER transport accepts metadata, BEFORE observation: cannot
+                # retroactively prevent the first delivery, but never mark ACK.
+                agent.on_connect(wrong)
+                agent.sessions.bindings[session_id] = "other-canonical-thread"
+
+        original = Client()
+        agent.on_connect(original)
+        try:
+            assert await publish_pending_local(agent, "project", "project") == 0
+>           assert len(_publication_events(received)) == 1
+E           AssertionError: assert 0 == 1
+E            +  where 0 = len([])
+E            +    where [] = _publication_events([{'content': {'text': '', 'type': 'text'}, '_meta': {'agentComms': {'updates': [{'kind': 'compaction_published', 'publication': {...}}]}}, 'sessionUpdate': 'agent_message_chunk'}])
+
+tests/test_compaction_publication.py:333: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 219667 exit status already read:  will report returncode 255
+WARNING  asyncio:unix_events.py:897 child process pid 219815 exit status already read:  will report returncode 255
+____ test_uncertain_local_delivery_remains_pending_until_exact_reprojection ____
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7f2254e1d470>, <agent_comms.comms.Comms object at 0x7f2252eaeed0>, PosixPath(...onl'), <agent_comms.compaction_journal.CompactionJournal object at 0x7f225227a5f0>, '68042b4567d845318bd3942fa222a992')
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_uncertain_local_delivery_0')
+
+    @pytest.mark.asyncio
+    async def test_uncertain_local_delivery_remains_pending_until_exact_reprojection(owner, tmp_path):
+        agent, comms, session, journal, commit_id = owner
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        seen = []
+
+        class Client:
+            fail = True
+
+            async def session_update(self, session_id, update):
+                seen.append(update.model_dump(by_alias=True, exclude_none=True))
+                if self.fail:
+                    raise ConnectionError("delivery uncertain")
+
+        client = Client()
+        agent.on_connect(client)
+        try:
+            with pytest.raises(ConnectionError, match="uncertain"):
+                await publish_pending_local(agent, "project", "project")
+            assert [
+                row.commit_id
+                for row in CompactionJournal(journal.path).publications.pending(str(session))
+            ] == [commit_id]
+            client.fail = False
+            assert await publish_pending_local(agent, "project", "project") == 1
+            assert len(seen) == 2
+>           first = seen[0]["_meta"]["agentComms"]["compactionPublication"]
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           KeyError: 'compactionPublication'
+
+tests/test_compaction_publication.py:507: KeyError
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 220828 exit status already read:  will report returncode 255
+=========================== short test summary info ============================
+FAILED tests/test_compaction_publication.py::test_local_delivery_requires_existing_owner_and_attached_transport
+FAILED tests/test_compaction_publication.py::test_pending_metadata_projects_before_next_owner_input_send
+FAILED tests/test_compaction_publication.py::test_client_only_rebind_before_actual_transport_denies_wrong_client
+FAILED tests/test_compaction_publication.py::test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket
+FAILED tests/test_compaction_publication.py::test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending
+FAILED tests/test_compaction_publication.py::test_after_delivery_changed_acp_binding_never_marks_old_commit
+FAILED tests/test_compaction_publication.py::test_uncertain_local_delivery_remains_pending_until_exact_reprojection
+7 failed, 98 passed, 2 skipped in 79.30s (0:01:19)

@@ -1,0 +1,13 @@
+{
+  "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "candidate": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-current-root-latest",
+  "messages": 118,
+  "admission_after_seq": 118,
+  "threads": 104,
+  "unresolved_inputs": 13,
+  "archived_runtime_databases": [
+    "coordination.sqlite3",
+    "native_prompt_bindings.sqlite3",
+    "compaction-commits.sqlite3"
+  ]
+}

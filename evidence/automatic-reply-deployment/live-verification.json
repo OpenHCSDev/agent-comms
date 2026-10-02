@@ -1,0 +1,53 @@
+{
+  "maintenance": "ready",
+  "owners": [
+    {
+      "name": "agent-comms-ux",
+      "process_alive": true,
+      "runtime": "/proc/3549414/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "pr95-selected-pi-summary-owner",
+      "process_alive": true,
+      "runtime": "/proc/3549418/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "nra-architecture",
+      "process_alive": true,
+      "runtime": "/proc/3549432/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "process_alive": true,
+      "runtime": "/proc/3549433/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "nra-domain-mapping",
+      "process_alive": true,
+      "runtime": "/proc/3549491/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "process_alive": true,
+      "runtime": "/proc/3549498/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "process_alive": true,
+      "runtime": "/proc/3549499/exe",
+      "settings_session_preserved": true
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "process_alive": true,
+      "runtime": "/proc/3549501/exe",
+      "settings_session_preserved": true
+    }
+  ]
+}
