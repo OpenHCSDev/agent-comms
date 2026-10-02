@@ -20,7 +20,7 @@ import tempfile
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Iterator, Set
+from collections.abc import Iterator, Mapping, Set
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .bus_source_page import AddressedPage
@@ -300,8 +300,11 @@ class DeliverySources(CheckpointTable, TypedTable):
 
     def read_bytes(self, stream) -> bytes:
         """Capture this original row while the certificate's stream is held."""
-        stream.seek(self.offset)
-        raw = stream.read(self.length)
+        try:
+            stream.seek(self.offset)
+            raw = stream.read(self.length)
+        except OSError as error:
+            raise RelationViolationError("Certified initial source bytes are unavailable.") from error
         if len(raw) != self.length or not raw.endswith(b"\n"):
             raise RelationViolationError("Certified initial row changed.")
         return raw
@@ -310,9 +313,15 @@ class DeliverySources(CheckpointTable, TypedTable):
         """One frozen seq/id/audience relation for locked and snapshot readers."""
         from .bus_publication import CommittedDelivery, unique_wire_object
 
-        original = CommittedDelivery.from_wire(
-            json.loads(raw, object_pairs_hook=unique_wire_object), root_id
-        )
+        try:
+            record = json.loads(raw, object_pairs_hook=unique_wire_object)
+            if not isinstance(record, Mapping):
+                raise ValueError("Certified initial JSON must be an object.")
+            original = CommittedDelivery.from_wire(record, root_id)
+        except RelationViolationError:
+            raise
+        except (ValueError, TypeError) as error:
+            raise RelationViolationError("Certified initial row is invalid.") from error
         if (
             original.message.reference != self.reference
             or original.audience.sender_lookup != self.sender_lookup

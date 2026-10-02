@@ -107,3 +107,17 @@ borrowing capture work through a complete owned operation rather than exporting
 its SQLite connection to a thread. Remaining reader/publication relations above
 are still explicit closure obligations. No tests or installed journey have run
 for this unfinished source checkpoint.
+
+## Source error-family closure
+
+The source trace confirms `CommittedDelivery.from_wire` does **not** normalize
+raw/FieldCodec failures: duplicate JSON keys, malformed JSON, Unicode decoding,
+message/private-field shape and frozen policy checks raise ValueError/TypeError.
+A non-object JSON root otherwise reaches mapping operations before those checks.
+`DeliverySources.decode_bytes` now owns that boundary once: require an object,
+then call the original committed decoder, preserve existing RelationViolationError,
+and translate malformed source ValueError/TypeError to RelationViolationError
+with the original cause. Its locked `delivery` and every captured iterator call
+this same method. `read_bytes` similarly translates only its own seek/read
+OSError; it does not catch consumer exceptions. No per-caller catches or generic
+error suppression was added, and input/UNKNOWN disposition is unchanged.
