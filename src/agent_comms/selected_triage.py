@@ -23,6 +23,11 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     family_discriminator = "decision"
 
     @classmethod
+    def output_values(cls) -> dict[str, str]:
+        names = [member.declared_name for member in cls.members_with(cls)]
+        return dict(discriminator=cls.family_discriminator, names=json.dumps(names))
+
+    @classmethod
     def parse(cls, text: str) -> SelectedTriage:
         if not 0 < len(text.encode("utf-8")) <= 256:
             raise InvalidTriageDecision("triage response is not bounded")

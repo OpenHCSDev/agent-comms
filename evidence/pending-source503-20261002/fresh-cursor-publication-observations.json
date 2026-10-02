@@ -1,0 +1,74 @@
+[
+  {
+    "session_id": "purechannel-owner-0",
+    "revision": 5,
+    "status": "none",
+    "selected_status": null,
+    "input_id": null,
+    "stage": null
+  },
+  {
+    "session_id": "purechannel-owner-1",
+    "revision": 5,
+    "status": "none",
+    "selected_status": null,
+    "input_id": null,
+    "stage": null
+  },
+  {
+    "session_id": "purechannel-owner-2",
+    "revision": 5,
+    "status": "none",
+    "selected_status": null,
+    "input_id": null,
+    "stage": null
+  },
+  {
+    "session_id": "purechannel-owner-0",
+    "revision": 7,
+    "status": "proven",
+    "selected_status": "proven",
+    "input_id": "da17d8ffbf8f23b6579ecdc7c24ca24c",
+    "stage": "full"
+  },
+  {
+    "session_id": "purechannel-owner-2",
+    "revision": 7,
+    "status": "proven",
+    "selected_status": "proven",
+    "input_id": "598d3abc4ed4a0558e77af334f227e81",
+    "stage": "full"
+  },
+  {
+    "session_id": "purechannel-owner-1",
+    "revision": 7,
+    "status": "proven",
+    "selected_status": "proven",
+    "input_id": "99d6f280b29e3717d7a8d02e3ed29364",
+    "stage": "full"
+  },
+  {
+    "session_id": "purechannel-owner-0",
+    "revision": 14,
+    "status": "proven",
+    "selected_status": "proven",
+    "input_id": "e898ab85022d45a40a4df4ce4cdbaac6",
+    "stage": "triage"
+  },
+  {
+    "session_id": "purechannel-owner-2",
+    "revision": 9,
+    "status": "proven",
+    "selected_status": "proven",
+    "input_id": "5abc917c1243e5a429cfd237f582c5b3",
+    "stage": "triage"
+  },
+  {
+    "session_id": "purechannel-owner-1",
+    "revision": 9,
+    "status": "proven",
+    "selected_status": "proven",
+    "input_id": "0ed716bd84cb8bbee4f6a6777665e337",
+    "stage": "triage"
+  }
+]

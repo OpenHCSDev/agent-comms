@@ -33,6 +33,7 @@ from .private_path import FileRevision
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
+from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
@@ -52,7 +53,7 @@ class PrivateSendAdmission:
     stage: NativeSendStage
     input_id: str
     token_digest: str
-    prompt: str
+    prompt: RenderedInput
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _journal: CompactionJournal = field(init=False, repr=False)
@@ -94,7 +95,7 @@ class PrivateSendAdmission:
         selected: SelectedParticipant,
         stage: NativeSendStage,
         token: str,
-        prompt: str,
+        prompt: RenderedInput,
         session: SelectedSession,
     ) -> PrivateSendAdmission:
         """Reserve once and bind the exact prompt before any native process starts.
@@ -110,7 +111,7 @@ class PrivateSendAdmission:
             stage=stage,
             owner=selected.owner.thread,
             generation=selected.identity.generation,
-            prompt=prompt,
+            prompt=prompt.text,
         )
         return cls(
             selected=selected,
@@ -129,7 +130,7 @@ class PrivateSendAdmission:
             self.token_digest,
             context,
             wire_root_id=self.wire_root_id,
-            prompt=self.prompt,
+            prompt=self.prompt.text,
         )
         self.owner.require_registry(self.bus._registry)
 
@@ -157,7 +158,8 @@ class PrivateSendAdmission:
                 result = await TrackedTurnSession.execute(
                     package,
                     input_id=self.input_id,
-                    prompt=self.prompt,
+                    prompt=self.prompt.text,
+                    context_contributions=self.prompt.contributions,
                     worktree=Path(self.owner.thread.worktree).absolute(),
                     session=self.session,
                     provider=provider,
@@ -204,7 +206,7 @@ class PrivateSendAdmission:
                 with self._measurements.operation("prompt_binding"):
                     authority.enter_context(self.stage.bound_prompt(
                         store, self.input_id, self.participant, self.wire_root_id,
-                        self.prompt, blocking=False,
+                        self.prompt.text, blocking=False,
                     ))
                 with self._measurements.operation("selected_source_admission"):
                     saved = self.session.admit(identity, selected_runtime_revision)

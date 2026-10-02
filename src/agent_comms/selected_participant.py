@@ -7,11 +7,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from .agent_events import NativePhaseChanged
-from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .pi_events import TurnContextObserved
+from .bus_publication import stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+from .coordination_cohort import _receipt_matches, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_tables.assignments import WakeAssignment
@@ -64,14 +65,19 @@ class SelectedParticipant(MroDispatch):
         )
 
     def transition(self, phase: TurnPhase) -> None:
-        lease = self.owner.thread.turn_lease
-        assert lease is not None
+        lease = self.owner.thread.require_turn_lease()
         self.comms.agents.transition_turn(lease, phase)
 
     def consume_reply_wait(self) -> None:
         """Consume each original dependency reply included in this completed input."""
         for source in self.batch.sources:
             self.comms.goals.consume_reply_wait(self.owner, source.delivery.message.reference)
+
+    @handles(TurnContextObserved)
+    async def observe_context(self, event: TurnContextObserved) -> None:
+        self.owner.require_active_turn()
+        lease = self.owner.thread.require_turn_lease()
+        event.context.record(self.bus.log, self.owner.thread, lease)
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
@@ -120,11 +126,7 @@ class SelectedParticipant(MroDispatch):
         if not provider or not model:
             raise IdentityConflict("Selected owner's configured provider/model is incomplete")
         with cls.lease(comms, owner) as leased:
-            sources = tuple(
-                SelectedSource(row.assignment_id, store.assignments,
-                               cls.source(bus, store, root_id, row, identity))
-                for row in pending
-            )
+            sources = cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch(sources)
             selected = cls(
                 comms,
@@ -166,14 +168,29 @@ class SelectedParticipant(MroDispatch):
             comms.agents.finish_turn(lease)
 
     @staticmethod
-    def source(bus, store, root_id, assignment, identity) -> CommittedDelivery:
-        initial = bus.log.read_delivery_cohort(root_id, assignment.wire_seq)
-        receipt = accept_delivery_cohort(bus, root_id, assignment.wire_seq, store).value
-        if receipt.message_id != assignment.message_id:
-            raise IdentityConflict("selected source differs from its sealed receipt")
-        if not any(row.assignment_id == assignment.assignment_id for row in receipt.assignments):
-            raise IdentityConflict("selected assignment is absent from its sealed receipt")
-        assignment.require_selected_source(initial, identity.thread)
-        with store.session.read():
-            identity.require(store, assignment.recipient_lookup)
-        return initial
+    def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:
+        """Borrow one original certificate for the already sealed pending batch.
+
+        Initial acceptance owns writes. Selection verifies every original sealed
+        receipt through that same validator, without re-entering acceptance. Both
+        read resources close before any native preparation or provider request.
+        """
+        selected = []
+        with bus.log.certified_read() as source:
+            marker = source.marker
+            if marker.root_id != root_id:
+                raise IdentityConflict("selected source wire root changed")
+            with store.session.read():
+                assert_cohort_schema(store.session._connection)
+                for assignment in assignments:
+                    if assignment.wire_seq <= marker.admission_after_seq:
+                        raise IdentityConflict("historical source precedes the current admission floor")
+                    initial = source.delivery(assignment.wire_seq)
+                    receipt = _receipt_matches(store.session._connection, initial)
+                    if not any(row.assignment_id == assignment.assignment_id
+                               for row in receipt.assignments):
+                        raise IdentityConflict("selected assignment is absent from its sealed receipt")
+                    assignment.require_selected_source(initial, identity.thread)
+                    identity.require(store, assignment.recipient_lookup)
+                    selected.append(SelectedSource(assignment.assignment_id, store.assignments, initial))
+        return tuple(selected)
