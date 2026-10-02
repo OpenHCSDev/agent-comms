@@ -92,15 +92,15 @@ def _accept_visible_deliveries(
         if marker.root_id != root_id:
             raise IdentityConflict("private initial wire root changed")
         after_seq = max(after_seq, marker.admission_after_seq)
-        initials = tuple(
-            initial
-            for initial in source.addressed_deliveries(lookup, after_seq, sealed)
-            if initial.message.seq > after_seq
-            and any(
-                r.recipient_lookup == lookup and r.canonical_thread == owner_name
-                for r in initial.audience.recipients
-            )
+    initials = tuple(
+        initial
+        for initial in bus.log.addressed_sources(lookup, after_seq)
+        if initial.message.seq not in sealed
+        and any(
+            r.recipient_lookup == lookup and r.canonical_thread == owner_name
+            for r in initial.audience.recipients
         )
+    )
     unaccepted = initials
     if len(unaccepted) > 100:
         raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")

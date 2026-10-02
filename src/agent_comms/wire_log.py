@@ -9,6 +9,7 @@ import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -22,6 +23,7 @@ from .bus_publication import (
     has_private_wire_fields,
     unique_wire_object,
 )
+from .bus_source_page import AddressedPage
 from .envelope_claim_transitions import (
     ClaimProjection,
     apply_transition,
@@ -83,6 +85,25 @@ class WireLog:
             )
             source.require_current()
         return tuple(originals)
+
+    def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
+        """Borrow bounded pages from one original committed append-only cut.
+
+        A later append cannot extend this iteration. Each page captures exact
+        original pointers and bytes inside certification; validation and all
+        consumer work occur after its publication custody has closed.
+        """
+        request = AddressedPage(lookup=lookup, after_seq=after_seq)
+        with self.certified_read() as source:
+            witness, captured, more = source.addressed_page(self, request)
+        while True:
+            originals = tuple(captured)
+            yield from originals
+            if not more:
+                return
+            request = replace(request, after_seq=originals[-1].message.seq)
+            with self.certified_read() as source:
+                _, captured, more = source.addressed_page(self, request, prefix=witness)
 
     def full_history(self) -> list[Message]:
         with self.verified_snapshot() as records:

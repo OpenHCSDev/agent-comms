@@ -121,30 +121,29 @@ class Goals:
         lookup = stable_thread_lookup(thread.created_at)
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
-        with self.bus.log.certified_read() as source:
-            for original in source.addressed_deliveries(lookup, 0, frozenset()):
-                message = original.message
-                if not (
-                    original.direct_for(lookup)
-                    and any(target.sent(original) for target in targets)
-                ):
-                    continue
-                key = InputDispositions.bus_key(message, thread)
-                row = document.lookup(key)
-                if not row.exists:
-                    # Read-only inspection of a canonical input. Only an
-                    # explicit successful review persists this observation.
-                    row = ReservedInput(
-                        key,
-                        message.seq,
-                        thread.name,
-                        snapshot.admission_generations[thread.name],
-                        message.target,
-                        message.body,
-                    )
-                if row.owner in owners and row.unresolved:
-                    unknown[key] = row
-                    eligible.add(key)
+        for original in self.bus.log.addressed_sources(lookup):
+            message = original.message
+            if not (
+                original.direct_for(lookup)
+                and any(target.sent(original) for target in targets)
+            ):
+                continue
+            key = InputDispositions.bus_key(message, thread)
+            row = document.lookup(key)
+            if not row.exists:
+                # Read-only inspection of a canonical input. Only an
+                # explicit successful review persists this observation.
+                row = ReservedInput(
+                    key,
+                    message.seq,
+                    thread.name,
+                    snapshot.admission_generations[thread.name],
+                    message.target,
+                    message.body,
+                )
+            if row.owner in owners and row.unresolved:
+                unknown[key] = row
+                eligible.add(key)
         return GoalInputReview(
             goal_id,
             targets,

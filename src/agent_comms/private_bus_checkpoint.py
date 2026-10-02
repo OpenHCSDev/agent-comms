@@ -20,7 +20,7 @@ import tempfile
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Iterator, Mapping, Set
+from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .bus_source_page import AddressedPage
@@ -71,6 +71,13 @@ class PrefixWitness(PrefixSeal):
             raise RelationViolationError("Private bus checkpoint append lost its source fence.")
         if offset != self.offset or sequence < self.through_seq:
             raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
+
+    def require_read_window(self, selected: PrefixWitness) -> None:
+        """An original read cut must remain in this certified append-only source."""
+        if self.source_identity != selected.source_identity:
+            raise RelationViolationError("Addressed window changed its original source.")
+        if selected.offset > self.offset or selected.through_seq > self.through_seq:
+            raise RelationViolationError("Addressed window exceeds its committed source cut.")
 
 
 @dataclass(frozen=True)
@@ -153,24 +160,9 @@ class CertifiedSourceRead:
         self.require_current()
         return original
 
-    def addressed_deliveries(
-        self, lookup: str, after: int, sealed: Set[int]
-    ) -> Iterator[CommittedDelivery]:
-        """Original addressed rows not already sealed by the coordinator owner."""
-        self.require_current()
-        rows = DeliverySources.iterate(self.connection.execute(
-            f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
-            f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
-            "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq", (lookup, after)))
-        for row in rows:
-            if row.seq not in sealed:
-                initial = row.delivery(self.stream, self.witness.root_id)
-                if not any(r.recipient_lookup == lookup for r in initial.audience.recipients):
-                    raise RelationViolationError("Certified address differs from original frozen row.")
-                yield initial
-        self.require_current()
-
-    def addressed_page(self, bus: WireLog, request: AddressedPage):
+    def addressed_page(
+        self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None = None,
+    ):
         """Read a bounded original addressed window through this one certificate.
 
         The query carries no input/ACK authority. Capture resolves the page and
@@ -180,12 +172,14 @@ class CertifiedSourceRead:
         self.require_current()
         self.require_marker(bus._private_marker_unlocked())
         db, witness = self.connection, self.witness
+        window = witness if prefix is None else prefix
+        witness.require_read_window(window)
         try:
             rows = DeliverySources.read(db.execute(
                 f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
                 f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
-                "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
-                (request.lookup, request.after_seq, request.limit + 1),
+                "WHERE a.lookup=? AND i.seq>? AND i.seq<=? ORDER BY i.seq LIMIT ?",
+                (request.lookup, request.after_seq, window.through_seq, request.limit + 1),
             ))
             last = DeliverySources.read(db.execute(
                 f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"))

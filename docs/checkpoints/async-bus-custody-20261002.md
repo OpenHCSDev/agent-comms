@@ -182,3 +182,34 @@ plural selection contribution, bounded goal/foreground addressed iteration,
 full async durability acquisition and current keyed-publication lookup. Final
 validation stays last after their coherent closure. Native5/durable formats,
 original UNKNOWN inputs and all native history remain unchanged.
+
+## Working code checkpoint — addressed original read windows
+
+Deleted `CertifiedSourceRead.addressed_deliveries` and every caller. Existing
+`WireLog.addressed_sources` now traverses the original AddressedPage resource
+in its existing bounded page size. The first certificate's PrefixWitness owns
+the complete read cut; subsequent pages cannot include later appends or change
+its root/opened inode. `PrefixWitness.require_read_window` owns that source and
+monotonic-prefix relation. The page's pointers/raw bytes are captured under
+certification, then the original DeliverySources decoder and all consumer
+predicates run after bus custody closes. No new read cursor, high-water store,
+page cache, source identity or family was introduced.
+
+All three former addressed-iteration consumers migrate together: GoalWait
+reply observation, GoalManagement input-review projection, and foreground/ACP
+visible-original discovery. Existing foreground acceptance still reopens the
+canonical current source at `accept_delivery_cohort` before its SQL write;
+the read window cannot grant acceptance or native admission. Actual goal wait
+consumption retains its original current write fence. Its enclosing goal
+command's maintenance custody is still an explicit remaining relation when
+decoding is part of a write predicate; this draft does not claim all physical
+lock lifetimes have been eliminated.
+
+Patterns: IMPL-10/IMPL-14 resource lifetime belongs to the existing acquired
+owner; BOUND-1 external original bytes have one decoder; IDEN-1 the committed
+prefix and addressed initial high-water are distinct facts. The new-case
+maintenance relation is source based: an external malformed row is translated
+once by DeliverySources, and an append can only extend the current seal while
+the selected original window stays bounded. Neither case needs a caller guard.
+Source syntax and replaced-reference searches are complete; batched behavioral
+and configured installed validation remain last, after remaining source closure.
