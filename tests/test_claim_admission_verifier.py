@@ -91,7 +91,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 alice_lookup,
                 owner.name,
                 1,
-                sources=(SelectedSource(assignment, initial),),
+                sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
             )
             snapshot = store.snapshots.get(execution_id)
             snapshot = store.executions.mark_pending(

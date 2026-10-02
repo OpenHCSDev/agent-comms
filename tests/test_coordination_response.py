@@ -101,13 +101,13 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
     assert accepted.value.member_count == accepted.value.assignment_count == 1
     assignment = accepted.value.assignments[0]
-    sources = [SelectedSource(assignment, original_record)]
+    sources = [SelectedSource(assignment.assignment_id, store.assignments, original_record)]
     for extra_target in extra_targets:
         message = comms.messaging.send_initial_cohort("sender", extra_target, "Another original question")
         delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
         (extra_assignment,) = receipt.assignments
-        sources.append(SelectedSource(extra_assignment, delivery))
+        sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
     reply_target = derive_exact_reply_target(original)
     assert reply_target is not None
     store.executions.create(

@@ -39,6 +39,11 @@ class SelectedParticipant(MroDispatch):
     provider: str
     model: str
 
+    def require_current(self) -> None:
+        self.owner.require_registry(self.comms.registry)
+        with self.store.session.read():
+            self.identity.require(self.store, self.lookup)
+
     @property
     def response_owner(self) -> LiveResponseOwner:
         return LiveResponseOwner(
@@ -103,7 +108,8 @@ class SelectedParticipant(MroDispatch):
             raise IdentityConflict("Selected owner's configured provider/model is incomplete")
         with cls.lease(comms, owner) as leased:
             sources = tuple(
-                SelectedSource(row, cls.source(bus, store, root_id, row, identity))
+                SelectedSource(row.assignment_id, store.assignments,
+                               cls.source(bus, store, root_id, row, identity))
                 for row in pending
             )
             batch = SelectedSourceBatch(sources)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +12,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import prepare_fenced_response, publish_fenced_response
 from .coordination_tables.executions import ExecutionOrigin
+from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeAdmission
@@ -94,26 +93,14 @@ class SelectedAttempt:
     obligations: tuple[ResponseObligation, ...]
 
     @classmethod
-    def engage(cls, participant: SelectedParticipant) -> SelectedAttempt:
-        participant.owner.require_registry(participant.comms.registry)
+    def engage(cls, participant: SelectedParticipant,
+               snapshot: RecoverySnapshot) -> SelectedAttempt:
+        participant.require_current()
         store = participant.store
-        with store.session.read():
-            participant.identity.require(store, participant.lookup)
         assignment_ids = participant.batch.assignment_ids
-        execution_id = "wirev1" + hashlib.sha256(
-            json.dumps(assignment_ids, separators=(",", ":")).encode()
-        ).hexdigest()
-        store.executions.create(
-            execution_id,
-            ExecutionOrigin.WIRE,
-            participant.lookup,
-            participant.owner.thread.name,
-            1,
-            sources=participant.batch.sources,
-        )
-        with store.session.read():
-            participant.identity.require(store, participant.lookup)
-        snapshot = store.snapshots.get(execution_id)
+        execution_id = participant.batch.execution_id
+        if snapshot.execution.execution_id != execution_id:
+            raise IdentityConflict("selected attempt differs from its created batch execution")
         if snapshot.execution.lifecycle.queued:
             snapshot = store.executions.mark_pending(
                 execution_id,
@@ -245,10 +232,18 @@ class SelectedAttempt:
 class SelectedConsideration:
     participant: SelectedParticipant
 
-    async def run(self, package, session):
+    async def run(self, execution, session):
         participant = self.participant
         if not participant.batch.requires_triage:
-            return session, None
+            participant.require_current()
+            created = participant.store.executions.create(
+                participant.batch.execution_id, ExecutionOrigin.WIRE,
+                participant.lookup, participant.owner.thread.name, 1,
+                sources=participant.batch.sources,
+            ).value
+            attempt = SelectedAttempt.engage(participant, created)
+            return await attempt.run(execution.native_package, session,
+                                     execution.action(session), execution.write_authority)
         participant.transition(
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
         )
@@ -263,15 +258,17 @@ class SelectedConsideration:
         with request.native_failures():
             participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
-                package,
+                execution.native_package,
                 provider=participant.provider,
                 model=participant.model,
                 observe_event=participant.dispatch,
             )
             participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
-            outcome.settle(participant, stage, request.admission, result.context)
+            settled = outcome.settle(participant, stage, request.admission, result.context)
             continued = session.continued(result.context.session_file)
-            return continued, outcome.continue_turn(
-                participant, continued, request.admission.input_id
-            )
+        # The FULL request owns its own failure boundary. Never report its
+        # failure through the already-proved triage input's request custody.
+        return await outcome.continue_turn(
+            participant, continued, request.admission.input_id, execution, settled
+        )

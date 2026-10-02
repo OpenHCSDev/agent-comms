@@ -1,7 +1,9 @@
 """Captured selected sources share one input; they do not create another inbox."""
 
+import hashlib
 import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .bus_publication import CommittedDelivery
 from .channel_input_batch import InputBatch
@@ -12,11 +14,28 @@ from .messages import Message, MessageType
 from .native_pi import NativePiUnavailable
 from .wake import derive_exact_reply_target
 
+if TYPE_CHECKING:
+    from .assignment_store import AssignmentStore
+
 
 @dataclass(frozen=True)
 class SelectedSource:
-    assignment: WakeAssignment
+    """An original delivery and its relation to the owning mutable claim store.
+
+    Membership is captured once; lifecycle belongs to AssignmentStore. Native
+    send stages separately capture exact rows for their reservation fences.
+    """
+
+    assignment_id: str
+    store: AssignmentStore
     delivery: CommittedDelivery
+
+    @property
+    def assignment(self) -> WakeAssignment:
+        with self.store.session.read():
+            current = self.store.get(self.assignment_id)
+            current.require_committed_source(self.delivery)
+            return current
 
     def require(self, owner) -> None:
         self.assignment.require_selected_source(self.delivery, owner)
@@ -29,6 +48,8 @@ class SelectedSourceBatch(InputBatch):
     def __post_init__(self):
         if not self.sources:
             raise IdentityConflict("Selected input needs original sources")
+        if any(source.store is not self.sources[0].store for source in self.sources):
+            raise IdentityConflict("Selected batch crosses assignment store ownership")
         assignments = self.assignments
         if len(set(self.assignment_ids)) != len(assignments):
             raise IdentityConflict("Selected batch repeats an original source")
@@ -45,11 +66,18 @@ class SelectedSourceBatch(InputBatch):
 
     @property
     def assignments(self) -> tuple[WakeAssignment, ...]:
-        return tuple(source.assignment for source in self.sources)
+        with self.sources[0].store.session.read():
+            return tuple(source.assignment for source in self.sources)
 
     @property
     def assignment_ids(self) -> tuple[str, ...]:
-        return tuple(row.assignment_id for row in self.assignments)
+        return tuple(source.assignment_id for source in self.sources)
+
+    @property
+    def execution_id(self) -> str:
+        return "wirev1" + hashlib.sha256(
+            json.dumps(self.assignment_ids, separators=(",", ":")).encode()
+        ).hexdigest()
 
     @property
     def requires_triage(self) -> bool:

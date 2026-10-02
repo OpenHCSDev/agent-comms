@@ -272,7 +272,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
             assignment.recipient_lookup,
             owner.name,
             1,
-            sources=(SelectedSource(assignment, initial),),
+            sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         current = store.assignments.get(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
@@ -332,7 +332,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
                 assignment.recipient_lookup,
                 owner.name,
                 1,
-                sources=(SelectedSource(assignment, delivery),),
+                sources=(SelectedSource(assignment.assignment_id, store.assignments, delivery),),
             )
         index.maintain(rebuild=True)
         current = store.assignments.get(new_claim.assignment_id)
@@ -395,7 +395,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
             old_claim.recipient_lookup,
             "member000",
             1,
-            sources=(SelectedSource(old_claim, old),),
+            sources=(SelectedSource(old_claim.assignment_id, store.assignments, old),),
         )
         store.participants.advance_generation(
             old_claim.recipient_lookup, "member000", expected_generation=1
@@ -637,7 +637,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             assignment.recipient_lookup,
             owner.name,
             1,
-            sources=(SelectedSource(assignment, initial),),
+            sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         assignment = store.assignments.get(assignment.assignment_id)
         index.maintain(rebuild=True)
