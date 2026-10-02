@@ -49,3 +49,5 @@ Use ordinary language: what changed, what still fails, what happens next.
 - Keep a concrete checklist and report merged, installed and verified states
   accurately. Retire test processes and owned scratch; check disk/RAM before large
   work. Never replay an uncertain input or restart an active owner for convenience.
+
+- Keep implementation and verification with the agent that already owns the context. Delegate genuinely independent work; do not transfer a continuing task merely to redistribute activity.

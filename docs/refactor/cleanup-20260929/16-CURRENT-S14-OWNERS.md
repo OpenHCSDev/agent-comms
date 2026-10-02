@@ -1,3 +1,9 @@
+## Headless UI fold-in and current ownership
+
+Tristan supplied [the headless UI package](../headless-ui/README.md). [Current owners](../headless-ui/00-CURRENT-OWNERS.md) fold U3 into existing338 and U7 into existing340; Einstein starts independent U1 after completed546, with U2 following the same owner. Heisenberg retains Window/frame/anchor context and339 preparation; parent takeover was cancelled after Tristan corrected unnecessary handoffs. Parent owns the existing recording harness in a reused clean checkout. No new environment/worktree. Current qualified fixes do not wait for a new frontend.
+
+Joined545/546 now accepts the exact original boundaries NotSent row, original incarnation, full215-row input document and41.9MB source in2.454081s without changing source/proof/stores or replaying input. Receiver337 is prepared, not installed. Original negative remains.335's actual recorded motion is readable but chunky, with visible holds/highCPU;339 deletes the second token worker round-trip and is source-qualified, awaiting changed installed verification.
+
 ## Current installation and active delivery — 2026-10-02
 
 Default334 is installed. Core540's original saved-source coverage and Core542's atomic RegistryOwner are included, together with the reviewed520/538/541 foundation; optional task-aware behavior stays off. One stopped-lifetime publication completed in48.839768s. All19 original thread births and full settings are preserved, all replacement identities are alive, five launchers match, and the original native rows/cells/source/UNKNOWN digest matches its retained preimage. Current334 and previous333 are protected. Raw publication phase is unchanged; separate identity/carry closure lives under receiving `combined542/operator-preparation/`.
