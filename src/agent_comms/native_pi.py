@@ -322,7 +322,9 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+        from .native_entries import NativeInputEvidenceRead
+
+        with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             header, entries = evidence.observe()
             tracked = NativeEntry.tracked_users(entries)
             if input_id not in tracked:
@@ -817,7 +819,9 @@ def read_tracked_input_digest(
     """Corroborating digest only; this cannot authorize recovery or input replay."""
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
-    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+    from .native_entries import NativeInputEvidenceRead
+
+    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         _header, entries = evidence.observe()
         users = NativeEntry.tracked_users(entries)
         if input_id not in users:

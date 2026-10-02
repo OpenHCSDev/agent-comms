@@ -71,10 +71,14 @@ def test_unrepresented_content_is_preserved_but_cannot_match_started_text(part):
 
 @pytest.mark.parametrize("role", ["assistant", "toolResult", "extension"])
 def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
-    with pytest.raises(ValueError, match="must belong to a user"):
-        NativeEntry.from_evidence(
-            {"type": "message", "id": "entry", "message": {"role": role, "inputId": "a" * 32}}
-        )
+    raw = {"type": "message", "id": "entry", "message": {
+        "role": role, "content": [], "inputId": "a" * 32,
+    }}
+    # Pi requires assistant content; omission fails before tracked-role custody.
+    # Both original history and input-proof projection must reject this same ID.
+    for decode in (NativeEntry.from_evidence, NativeEntry.wire_member(raw).input_evidence):
+        with pytest.raises(ValueError, match="must belong to a user"):
+            decode(raw)
 
 
 @pytest.mark.parametrize(

@@ -22,7 +22,7 @@ from .store_files import _store_lock, file_revision
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
 _RUNNING_STATUS = RunningThreadStatus()
@@ -53,14 +53,8 @@ class Registration:
         phase is retained from the locked document, not compared to an old view.
         Native session identity and context proof remain with their producers.
         """
-        with _store_lock(self.store.path.parent / "wire"), self.store.editing() as edit:
-            snapshot = edit.document.snapshot()
-            original.require_snapshot(snapshot, "Native source owner changed before publication")
-            current = snapshot.require_active(original.thread.name)
-            attached = replace(current, session_file=session_file)
-            change = edit.document.prepare_registration(
-                attached, snapshot.statuses[current.name], new_owner=False
-            )
+        with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
+            change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
             return RegistryOwner(
                 thread=change.installed_thread, admission_generation=original.admission_generation
@@ -194,11 +188,18 @@ class Registration:
             edit.commit()
             return result
 
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with self.store.editing() as edit:
-            changed = edit.document.transition_turn(lease, phase)
+            effects = edit.document.transition_turn(lease, phase)
             edit.commit()
-            return changed
+            return effects
+
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        """Interpret the observation against this same locked original turn."""
+        with self.store.editing() as edit:
+            effects = edit.document.observe_native_phase(lease, phase)
+            edit.commit()
+            return effects
 
     def live_owner_with_generation(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.

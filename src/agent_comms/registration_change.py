@@ -149,6 +149,17 @@ class UpdatedRegistration(RegistrationChange):
         )
 
 
+class NativeSourcePublication(UpdatedRegistration):
+    """The leased owner keeps identity/heartbeat/goal; only its source is published.
+
+    The existing identity-change property still requires the publication handoff
+    fence when the actual canonical session changes.
+    """
+
+    def apply(self, document: RegistryDocument) -> None:
+        document.threads[self.thread.name] = self.installed_thread
+
+
 class ExplicitOwnerChange(RegistrationChange):
     """Fresh explicit admission always revokes imported turn authority."""
 

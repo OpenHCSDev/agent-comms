@@ -395,7 +395,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.evidence = self.custody.enter_context(
-                NativeEntry.open_evidence(self.active_session_file)
+                NativeEntry.open_input_evidence(self.active_session_file)
             )
             await asyncio.to_thread(self.evidence.observe)
 

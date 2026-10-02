@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
+from .registration_change import InitialRegistration, NativeSourcePublication, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
 from .restart_refusals import (
     OwnerBusyRefusal,
@@ -27,7 +28,11 @@ from .thread_status import (
 )
 from .threads import Thread
 from .registry_provenance import RegistryProvenance
-from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence
+from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_phase import TurnPhase
+
+if TYPE_CHECKING:
+    from .native_input_owner import RegistryOwner
 
 
 @dataclass(slots=True)
@@ -330,14 +335,35 @@ class RegistryDocument:
             admission_generation=lease.admission_generation,
         )
 
-    def transition_turn(self, lease: TurnLeaseFence, phase) -> bool:
-        """Only the existing exact lease can publish its observed phase."""
+    def _turn_effects(
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
+    ) -> tuple[TurnState, ...]:
+        """Capture publication effects from the exact fenced document mutation."""
         name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None or current.turn_lease != lease.renamed(name):
-            return False
-        self.threads[name] = replace(current, active_turn=replace(current.active_turn, phase=phase))
-        return True
+            return ()
+        effects = tuple(observe(current.turn_state))
+        for state in effects:
+            self.threads[name] = replace(current, active_turn=state.active)
+        return effects
+
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        return self._turn_effects(lease, lambda state: state.phase_effects(phase))
+
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
+
+    def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
+        """Publish only the source fact of an already admitted original owner."""
+        snapshot = self.snapshot()
+        original.require_snapshot(snapshot, "Native source owner changed before publication")
+        current = snapshot.require_active(original.thread.name)
+        return NativeSourcePublication(
+            thread=replace(current, session_file=session_file),
+            status=snapshot.statuses[current.name],
+            previous=current, previous_status=snapshot.statuses[current.name],
+        )
 
 
 @dataclass(frozen=True, slots=True)
