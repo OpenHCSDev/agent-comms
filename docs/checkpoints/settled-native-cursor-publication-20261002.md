@@ -38,10 +38,10 @@ original recorded owner/epoch/context, not a last-input mirror or another store.
 InputDrain._drain_private_if_changed caches an unchanged idle drain, then invokes
 only CursorPublication.refresh. A second transient refusal can therefore outlive
 the file revision that scheduled it. The publication owner must continue the
-original projection on that existing refresh path. EmptyCursorObservation currently
-inherits needs_refresh=False and can terminate this continuation without a durable
-cursor; its existing family behavior also requires ownership closure. That family
-property is requested from Arendt, without overlapping WireLog edits.
+original projection on that existing refresh path. EmptyCursorObservation formerly
+inherited needs_refresh=False and could terminate this continuation without a
+durable cursor. Arendt granted its existing family property; it now requests
+refresh through the same publication owner, without overlapping WireLog edits.
 
 SourceCoverage additionally captures a source witness, while NativeSourceCursor
 independently captures another witness before its unlocked proof scan. Another
@@ -82,13 +82,30 @@ This continuation is not a rerun of gate01 and does not retroactively qualify it
 missing cursor. Same-admission permission is separate from the still-required
 live process/registry fence; gate01's retired workers are not restarted.
 
-Draft remains incomplete pending Arendt's grant for the existing
-EmptyCursorObservation.needs_refresh family property. The producer and delegated
-refresh edits are visible for review; source checks/installed qualification have
-not run before this coherent consumer closure. The original failed gate is not
-repeated, and no new native inputs are permitted in this investigation.
+The existing EmptyCursorObservation.needs_refresh family property now completes
+the delegated refresh closure. No original proof still yields an empty observation;
+refresh neither accepts a claim nor creates an input. Validation follows this
+coherent source implementation. The original failed gate is not repeated, and no
+new native inputs are permitted in this investigation.
 
 The global certified snapshot/async publication resource work belongs to Arendt.
 This change borrows existing NativeEvidenceScope and SourceCoverage's original
 PrefixWitness, then preserves the exact locked final comparison. It introduces
 no independent current high-water, lease, alternative store, or WireLog edit.
+
+## End validation and release boundary
+
+After the complete four-file implementation, the read-only original admission
+operator passed against gate01 owner2's actual FULL row, original three-source
+membership, SDK journal context and prelaunch PromptBinding. Same-admission
+projection without a transient ID and with the exact explicit ID are admitted;
+another explicit original ID and a newer admission are refused. The existing
+empty observation requests refresh. All four changed modules compile, and the
+actual existing-owner/caller search is persisted with the evidence.
+
+Original coordinator, prompt-binding sidecar, registry, bus and the read native
+journal remain hash-identical. The absent owner2 cursor stays absent. No model,
+claim, native input, store or response was created or replayed. This is a source
+relation check, not an installed package or live journey claim. The same operator
+is reusable under Kepler's qualified receiving package; paired installed/live
+qualification belongs to the lifecycle integration owner and is still pending.

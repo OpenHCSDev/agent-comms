@@ -1,0 +1,26 @@
+{
+  "state": "ORIGINAL_ADMISSION_RELATION_PASS",
+  "module": "/home/ts/wt/comms-context-history-owner-20261002/src/agent_comms/cursor_owner.py",
+  "original_input": "d4eece9aee310bf4b9733ba3888e7008",
+  "source_members": 3,
+  "controls": [
+    "same_admission_without_transient_id",
+    "explicit_original_id",
+    "wrong_explicit_id_refused",
+    "new_admission_refused",
+    "empty_observation_requests_refresh"
+  ],
+  "original_sql_bus_registry_journal_unchanged": true,
+  "original_cursor_still_missing": true,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "product_mutations": 0,
+  "live_gate_qualification": false,
+  "syntax_modules": [
+    "src/agent_comms/cursor_owner.py",
+    "src/agent_comms/native_source_cursor.py",
+    "src/agent_comms/cursor_publication.py",
+    "src/agent_comms/acp_extension.py"
+  ],
+  "validation_boundary": "SOURCE_ONLY_READONLY_ORIGINAL_RELATION_NOT_INSTALLED_OR_LIVE"
+}
