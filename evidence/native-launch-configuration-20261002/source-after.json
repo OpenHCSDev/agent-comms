@@ -1,5 +1,8 @@
 {
+  "source_head": "c6019afd34313db81504a364e3cc4024470a3034",
+  "receiving_main": "c80fcae5",
   "parsed_production": 311,
+  "parsed_tests": 355,
   "omitted_production": [],
   "omitted_tests": [],
   "external_configuration_declarations": [
@@ -17,44 +20,46 @@
   "explicit_launch_constructors": [
     {
       "path": "tests/test_backend_response_ownership.py",
-      "line": 30,
+      "line": 31,
+      "positional_arguments": 5,
       "configuration_passed": true
     },
     {
       "path": "tests/test_selected_owner_compaction_integration.py",
-      "line": 165,
+      "line": 166,
+      "positional_arguments": 5,
       "configuration_passed": true
     },
     {
       "path": "tests/test_selected_summary_output_accounting.py",
-      "line": 112,
+      "line": 113,
+      "positional_arguments": 5,
       "configuration_passed": true
     },
     {
       "path": "tests/test_selected_summary_failure_native.py",
-      "line": 249,
-      "configuration_passed": true
-    },
-    {
-      "path": "tests/test_maintenance_native_boundary.py",
-      "line": 61,
+      "line": 250,
+      "positional_arguments": 5,
       "configuration_passed": true
     },
     {
       "path": "tests/conftest.py",
       "line": 82,
+      "positional_arguments": 5,
       "configuration_passed": true
     },
     {
       "path": "tests/test_native_phase_producer.py",
-      "line": 19,
+      "line": 20,
+      "positional_arguments": 5,
       "configuration_passed": true
     },
     {
       "path": "tests/test_pi_rpc_nominal.py",
-      "line": 97,
+      "line": 98,
+      "positional_arguments": 5,
       "configuration_passed": true
     }
   ],
-  "interpretation": "The two external names are declared on existing RestartEnvironment. NativePiRpcLaunch and RetainedOwnerLaunch hold that decoded contract. Settings/auth consumers call owner behavior. These are lexical references, not a dynamic dispatch proof. Native6 selected session migration remains a normal integration into #489."
+  "interpretation": "Existing RestartEnvironment declares native discovery and writable directory. NativePiRpcLaunch/RetainedOwnerLaunch retain the decoded configuration. Current Native6 SelectedSession projects writable resources; selected settings and auth consumers use owner behavior. #516 owns this complete configuration migration; #489 implementation is independently merged via #506. AST lexical references do not prove dynamic dispatch."
 }

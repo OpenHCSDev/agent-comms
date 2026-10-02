@@ -36,7 +36,8 @@ async def run(stage, package):
     for original in (checkout / 'src/agent_comms').rglob('*'):
         if original.is_file() and '__pycache__' not in original.parts:
             assert (installed / original.relative_to(checkout / 'src/agent_comms')).read_bytes() == original.read_bytes()
-    assert stage.is_relative_to(checkout)
+    # Persistent fixture roots must also leave room for POSIX socket names.
+    assert stage.is_relative_to(Path('/home/ts/wt'))
     stage.mkdir(mode=0o700, exist_ok=False)
     verify_native_package(package)
     public = wire()

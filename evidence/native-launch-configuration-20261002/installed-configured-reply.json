@@ -1,0 +1,104 @@
+{
+  "state": "PASS configured saved-fork launch/native/ACP triage-FULL-reply handling",
+  "core_source": "c6019afd34313db81504a364e3cc4024470a3034",
+  "toad_source": "c7f5e2475d535bf625d8e90345ff44acefc1458d",
+  "textual_source": "23822923a02b75a1fad10751d97dc009c36b598b",
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "native_tree": "5c9d304db96618de00d96b0c5143bb24cdeb935c802e29f97ef988ec38131df7",
+  "sdk": "0.12.1",
+  "installed_packages": 69,
+  "normal_installed_sources": [
+    {
+      "module": "agent_comms",
+      "head": "c6019afd34313db81504a364e3cc4024470a3034",
+      "files": 339,
+      "python_files": 311,
+      "byte_equal": true,
+      "inventory_sha256": "5dce84af5323c79a3d76668f618d07042bb9016ff9cd253328df804300ef4984"
+    },
+    {
+      "module": "toad",
+      "head": "c7f5e2475d535bf625d8e90345ff44acefc1458d",
+      "files": 307,
+      "python_files": 276,
+      "byte_equal": true,
+      "inventory_sha256": "8612301b37207a642751af2435abc0dc11e437e8526ad9b1239e52917bc8f235"
+    },
+    {
+      "module": "textual",
+      "head": "23822923a02b75a1fad10751d97dc009c36b598b",
+      "files": 266,
+      "python_files": 249,
+      "byte_equal": true,
+      "inventory_sha256": "770bce0d22525fd68e4cd8b16e8d40f0654a9bbf01f2269e3cd3def58b43c361"
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "files": 3,
+      "python_files": 2,
+      "byte_equal": true,
+      "inventory_sha256": "c1ab2e4c7a7595de81eeb8fef14f9fa9e45b603f84e810dc7c08fa9145793679"
+    }
+  ],
+  "source_proof_sha256": "2c5128c037fea2d5fbaf100040cf4ae0643b4bee3ba80e531999db79e1871c46",
+  "raw_receipt_path": "/home/ts/wt/c51601/receipt.json",
+  "raw_receipt_sha256": "ba90877230baa6f986a52df7cbfb91d756792d5d2af76e8f26a6bc430fda2957",
+  "source_owner": "openhcs-helper",
+  "source_bytes_at_final_read": 42932905,
+  "source_sha256_observed": "4c7dad1d4669bce0258cbc6fbd17c382628657cac38c919f13f129c9f12eca11",
+  "source_sha256_at_final_read": "4c7dad1d4669bce0258cbc6fbd17c382628657cac38c919f13f129c9f12eca11",
+  "source_sha256_unchanged": true,
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "off",
+  "configured_source_hashes_unchanged": true,
+  "originals": [
+    {
+      "seq": 1,
+      "message_id": "282ac0103854"
+    }
+  ],
+  "native_inputs": [
+    {
+      "input_id": "208d8bcf1ae570c74bd46befa4392f37",
+      "stage": "full",
+      "session_id": "01a0fba0-40c4-7692-a8f7-8cc06f7e2dc5",
+      "session_entry_id": "199c3f7e",
+      "request_generation": 2,
+      "verdict": null
+    },
+    {
+      "input_id": "e80ac6b5464ad5e9fbf4564544ca3324",
+      "stage": "triage",
+      "session_id": "01a0fba0-40c4-7692-a8f7-8cc06f7e2dc5",
+      "session_entry_id": "a4e0a773",
+      "request_generation": 1,
+      "verdict": "full"
+    }
+  ],
+  "publication": {
+    "kind": "publication_receipts",
+    "execution_id": "wirev1148328b4426da5ba48503e5a9cfe3cfdb5d3da1fde06c674c5f369940854e53f",
+    "exact_target": "#openhcs",
+    "seq": 2,
+    "message_id": "d09cdef0ffc8",
+    "received_at_ms": 1790928006878
+  },
+  "handling_state": "Responded",
+  "historical_source_proofs": 2,
+  "acp_observations": 4,
+  "worker_after_cleanup": "absent",
+  "public_inputs": 0,
+  "original_replays": 0,
+  "first_fixture_failure": {
+    "raw_receipt_sha256": "01583745fd84c5f5264e13a1b4be0e4111f86fafc48763453f904f58d0080ddf",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/configuration516-configured-saved01/receipt.json",
+    "state": "FAILED_OR_UNRESOLVED_NO_REPLAY",
+    "cause": "AF_UNIX path too long during native acquisition before get_state/prompt write; original typed input disposition not_sent",
+    "provider_calls": 0,
+    "input_preserved": true,
+    "worker_after_cleanup": "absent"
+  },
+  "qualification": "Configured original helper environment/model/settings/extensions retained; offline SDK fork explicit output operand; ordinary ACP saved-load then one distinct private channel input and canonical native handling. No public UI or compaction-speed claim; no public effects.",
+  "publication_dependency": "Native6 historical preserving carry owned by Mendel510; parent sole activation owner"
+}
