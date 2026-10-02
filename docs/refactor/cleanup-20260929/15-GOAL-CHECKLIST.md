@@ -1,3 +1,44 @@
+## Channel and scrolling checkpoint DEFAULT INSTALLED — 2026-10-02
+
+Core502 merged1282a422, Toad294 mergedb9ebd4c; paired qualified Toad284
+merged01d93a5 and Textual19 merged68a0d1cf now reach the default immutable
+runtime-purechannel502-20261002. Core5c74/Toad7df5/Text68/native5184; ordinary
+normal69 install, all four source/assets/directURL inventories, no overlays.
+Core selected-source closure deletes137 production lines and adds201 in seven
+files; mutable claim lifecycle derives from AssignmentStore, existing outcome
+members own continuation, and one execution creation transaction owns mutation.
+
+Actual configured pure-channel02: one fresh #openhcs human input, no DM/mention
+forcing FULL, three original43MB saved forks with OFF/HIGH/HIGH settings. Three
+TRIAGE-to-FULL transitions produce three channel replies/receipts, all six
+original native proofs and covering cursors,25 ACP facts in21.120s. Original
+provider streams overlap1611ms for triage and2276ms for FULL. First observer
+lock-inversion failure is preserved and its SQLite scope corrected in the
+fixture; production remained frozen. Three additional unproven reply-triage
+reservations remain protected, with no replay. Tristan clarified channel reply
+fanout and resulting relevance work are NORMAL, not a defect; Kepler503 targets
+pending-message batching/confirmed overhead without suppressing delivery.
+
+The existing stopped-owner publisher retained and restarted all19 idle owners,
+verified settings and38 protected original files byte-invariant. Native5 and
+446464-byte compaction journal remain; no runtime reset or original input replay.
+Whole original certified wire and43MB saved RPC startup accepted under
+kernel-denied network with zero provider prompts. Old Toad2824077 normally
+closed only after its own UI showed no unsent draft or active submission.
+
+Actual ordinary /home/ts/bin/toad-comms openhcs-helper, no root/runtime override,
+loaded retained history and Ready; parent personally viewed before.png. Capture
+completed with original owner unchanged and no cleanup errors. Historical
+Needs attention/Paused and UNKNOWN notices remain visible; startup is not a
+claim that original failed seq326 was recovered. Evidence:
+evidence/purechannel502-live-20261002/installation.json.
+
+Parallel active scope: Arendt489 startup/admission/native/compaction custody;
+Heisenberg295/Text21 prepared-batch restoration, CPU/raster/reader and remaining
+TC1/T9; Kepler503 pending-source batching; Sch287 source reconciliation;
+Mendel original C0/T4 site closure; Einstein verified obsolete disk cleanup.
+Full original and round-two objective stays ACTIVE.
+
 ## Actual many-owner channel failure and owner closure — 2026-10-02
 
 The installed mixed channel/DM gate did not cover pure-channel TRIAGE to FULL:
