@@ -42,14 +42,19 @@
       "after_sha256": "9423f3a379c3eb0c285d5ad29d0892c00107bb51cd533c73d42c1927564c33a8"
     },
     {
-      "path": "dist/core/provider-composer.js",
-      "original_sha256": "8eca507009d00768130e46cd9a0831e4fa2f98b81435ae0a8d5079a1d27e13cd",
-      "after_sha256": "ef231c5e9df156d650fd73c53ee404724263ed5de19b4bb055c1137113e6c570"
+      "path": "node_modules/@earendil-works/pi-ai/dist/compat.js",
+      "original_sha256": "cde63dcc0cd419767f6ac8b7c0d8fcb8446902cb1e1800c61aea343839c48999",
+      "after_sha256": "c794a7daaaa4c55febda0395ea076c92d2e5a414fabe453054235157a44ae7ca"
     },
     {
-      "path": "dist/core/provider-composer.d.ts",
-      "original_sha256": "b1bb3ebad4b13e0d538cc86c63af4afc97fd74894e49efb5700707a54c841a8d",
-      "after_sha256": "773c333828b38d0605a6fcebe412a470bda65d3d2db0a114c2ceb1b6694761c1"
+      "path": "node_modules/@earendil-works/pi-ai/dist/compat.d.ts",
+      "original_sha256": "0df7a1d7a084f17bae0497037bb1fb4f6a678b111d6202909427fd3d190c2491",
+      "after_sha256": "58bd1aca5e58f613015bc52bcedf81e4809ba7be85c86d012891603f6b6ca87e"
+    },
+    {
+      "path": "dist/core/provider-composer.js",
+      "original_sha256": "8eca507009d00768130e46cd9a0831e4fa2f98b81435ae0a8d5079a1d27e13cd",
+      "after_sha256": "d5a64999a033d3e0951ca2917c21772d103a9a129b2282fffe560457edf5112a"
     },
     {
       "path": "dist/core/compaction/compaction.js",

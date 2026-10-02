@@ -32,7 +32,7 @@ export class SessionContext {
             tools: session.agent.state.tools,
         };
     }
-    static async summaryPrefix(session, messages) {
+    static async prefixContext(session, messages) {
         // Use the original SDK converter (including configured image exclusion),
         // not a Python narrative or an independently captured prompt body.
         return this.sourceContext(session, await session.agent.convertToLlm(Array.from(messages)));

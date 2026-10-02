@@ -96,6 +96,7 @@ function acSummaryCompatible(session, binding) {
         (!session._extensionRunnerRef || session._extensionRunnerRef.current === runner) &&
         (!binding || (runner === binding.runner && session.agent.streamFunction === binding.streamFn &&
             session.model === binding.model && session.modelRuntime === binding.modelRuntime &&
+            session.modelRuntime.getProvider(binding.model.provider) === binding.provider &&
             session.settingsManager === binding.settingsManager && session.sessionManager === binding.manager &&
             session.modelRuntime.getAvailableSnapshot() === binding.catalog));
 }
@@ -186,6 +187,7 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     // never reaches the model. Do not reject a valid preparation before chunking.
     const binding = { host, runner: session.extensionRunner, streamFn: session.agent.streamFunction,
         model: session.model, modelRuntime: session.modelRuntime,
+        provider: session.modelRuntime.getProvider(model.provider),
         settingsManager: session.settingsManager, manager: session.sessionManager,
         catalog: session.modelRuntime.getAvailableSnapshot() };
     if (typeof binding.streamFn !== "function" || !acSummaryCurrent(session, request, binding))
@@ -319,10 +321,9 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
                   // A context hook can transform the original request. Its
                   // absence here is a route admission fact, not an alias/mirror.
                   if (binding.runner.hasHandlers("context")) return undefined;
-                  const context = await SessionContext.summaryPrefix(session, messages.prefixMessages());
+                  const context = await SessionContext.prefixContext(session, messages.prefixMessages());
                   if (!acSummaryCurrent(session, request, binding)) throw new Error("Selected prefix source changed");
-                  const provider = binding.modelRuntime.getProvider(binding.model.provider);
-                  return provider?.summaryPrefix?.(binding.model, context, instructions,
+                  return binding.provider?.summaryPrefix?.(binding.model, context, instructions,
                       { ...options, cacheRetention: undefined,
                         sessionId: session.agent.sessionId, transport: session.agent.transport });
               },

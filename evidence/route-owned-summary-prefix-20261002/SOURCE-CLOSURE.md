@@ -1,52 +1,68 @@
-# S3 source findings; implementation remains parked
+# S3 source checkpoint
 
-Core census: `24c60646eeab364fd32a8acb4777d40a4d47f865`, based on
-main `155b00076312626e025861efc3ed14549adca5c0`. Original requirement:
-`docs/refactor/retained-task-memory/S3-CACHE.md`, originally merged through #428.
-This checkpoint changes evidence only. It does not implement or accept S3.
+Singer owns existing PR527 after Mendel's explicit handoff. The branch normally
+integrates main; no separate worktree, environment or native build was created.
+The original Python owner census remains historical source evidence, not a claim
+that its old settings-RPC version is current.
 
-## Existing owners and the remaining relation
+## One owner per fact
 
-| Fact | Existing owner and source | Remaining work |
-| --- | --- | --- |
-| Effective transport, authentication and hooks | Native `ModelRuntime.prepareRequest` (model-runtime.js:422); SDK stream wrapper (sdk.js:194–226) | Keep the original selected stream. Its existence does not establish a prefix capability. |
-| API support and route selection | pi-ai `ProviderStreams`; `lazyApi` (api/lazy.js:56), `createProvider` (models.js:431); coding-agent `composeModelProvider` (provider-composer.js:298–376) | Declare lawful summary request formation on the effective route. The composer can select extension streaming before base streaming; base support must not survive a replacement automatically. `withRemoteCatalog` spreads the provider, but the composer constructs a fresh object and explicitly forwards capabilities. Close those consumers together. |
-| Exact source and admission | `SelectedSummarySource`, `NativePreparation`, `SelectedSummarySlot.run_selected_summary`; native selected-summary admission | Keep source/witness reservation and original child custody. Prefix context must come from original native session conversion, system prompt and tools, not a Python reconstruction or serialized narrative. |
-| Bounded planning, output and cancellation | Native `SummarySource`, `HistorySummarySource`, `CompactionPolicy`, `compact` (compaction.js:573–606) | Choose prefix formation before a request when the effective route and full input budget permit it. Otherwise use the existing bounded plan before spending. Preserve split-turn source boundaries and retained-history packing. Never choose an alternate strategy after uncertain execution. |
-| Actual summary request | `generateSummaryWithUsage` (compaction.js:403–483), `completeSummarization` (:348–355) | The former constructs a fresh conversation-tagged prompt; the latter forces cacheRetention none and generates a routing ID if none was supplied. Neither preserves the original request prefix. Removing none alone is insufficient. |
-| Cache usage and settlement | API usage decoder; `SummaryUsage`/`SummaryCost`; original native summary response and journal | OpenAI-compatible `parseChunkUsage` (:1193–1220) normalizes absent cache counters to zero. Those normalized zeros cannot distinguish unavailable measurement from an observed zero. Route capability and original response provenance must establish measurement availability; do not infer hits from matching text or timing. |
+| Fact | Existing owner and complete consumers |
+| --- | --- |
+| Allowed external request | Original Codex API `summaryPrefix`, using its own existing endpoint constant. It retains ordered instructions/messages/tools, appends declared summary instructions, and uses its existing `toolChoice:none` serializer. Other endpoints/routes make no support claim. |
+| Effective route | `createProvider.apiFor` and `composeModelProvider.routeFor` each supply both their original streaming and prefix methods. Named extension streaming has no prefix capability; a complete NativeProvider may declare its own. No copied support survives a replacement stream. |
+| Capability projection | Existing `lazyApi`, API registration, built-in registration, ProviderStreams and Provider/ApiProvider declarations. Registration carries declared capabilities; the duplicate `wrapStreamSimple` identity check is deleted and both streams plus prefix use the original shared wrapper. Provider object spreads remain derived views. |
+| Original ordered source | `EntryMessageRange.prefixMessages` traverses original `EntryStore.contextMetadata`, retaining the previous compaction before kept history and stopping at the sealed source end. It converts original entries through `sessionEntryToContextMessages`. |
+| Native instructions/tools/converter | `SessionContext.sourceContext` supplies the same envelope to sourceBudget and `prefixContext`; prefixContext uses the selected agent's converter, including configured image exclusion. SourceBudget retains its original converter and ContextBudget calculation. |
+| Affinity | The original selected-summary binding retains the registered Provider reference, alongside its existing source/catalog/stream witnesses. Existing acSummaryCompatible compares that reference with the same ModelRuntime owner; the capability uses the bound original provider. No second registry or state is written. Context hooks select bounded formation before sending. |
+| Admission and bounded form | `HistorySummarySource.requestContext` selects an admitted prefix or its own boundedPrompt before the leaf scheduler enters auth/provider work. Oversized sources still use the original map/reduction plan first. TurnPrefixSummarySource inherits the same formation; map/reduction leaves and standalone branches retain their original bounded retention. No alternative is selected after an attempted request. |
+| Settlement | Original source progress, provider Usage, terminal joins, output limits, source/witness checks and atomic native/journal commit remain. Cache usage counters are observations, not a capability or cache-hit proof. |
 
-Provider declaration, effective composition and summary formation are one family
-closure (MEMB-2, IMPL-13, TIME-7). No second transport, credential resolver,
-capability catalog, cache, usage store or retry path is justified.
+The unconditional retention override and history prompt rebuilding are deleted
+from the shared summarizer. Bounded/branch options retain their former `none`
+setting at the existing options constructor; the admitted original prefix alone
+inherits the native route's retention. This avoids changing another provider's
+cache-write spending as a side effect. No model, output/source budget, policy,
+authentication, transport, cache, store, registry or summary carrier class is added.
 
-The #520 timing/context grant remains disjoint: its settings RPC is version 2
-with purpose/boundary. This older census base still has version 1; any future
-implementation must integrate that source normally, never restore version 1.
-Einstein owns timing/source-budget conversion, Arendt summary lifecycle/custody,
-and Sch native artifact/pins. Mendel owns the granted S3 strategy/capability seam.
+Einstein and Arendt granted these shared methods. Sch's current receiving package
+is independently frozen; this feature does not alter it, its originals or default.
 
-## Source coverage and limits
+## Source evidence and limits
 
-`python-owner-census.json` uses existing NRA `audit.findings.Package.load` across
-the declared Core src/agent_comms, tests and tools roots: 11 seed declarations,
-173 conservative reference sites in 50 files, no Python parse failures. Spelling
-matches are not dynamic receiver or dispatch proof. Other repository roots are
-outside this query.
+Before/after native maps use the original Node builtin Acorn on 544 JavaScript
+modules in coding-agent/dist, pi-ai/dist and pi-agent-core/dist. No JavaScript
+parse failures occurred. The after map substitutes only final patch-manifest paths
+and the changed original source/SessionContext/RPC helper for AST analysis. It is
+not a product overlay or execution. Declarations, member uses, imports and
+consumer sites are in native-before.json.gz and native-after.json.gz.
 
-Native provider/API/composer/summary declarations above were read directly from
-the unchanged reviewed Native5184 dependency. No JavaScript AST grammar was
-available in the existing environment; native AST coverage is **incomplete**.
-This checkpoint does not use that omission to justify semantic source edits.
+Acorn does not parse declaration TypeScript; changed .d.ts contracts were read
+semantically. Other external SDK package implementations are outside these roots.
+Spelling references do not prove dynamic dispatch. Frozen stock bundle chunks
+also contain older compiled declarations; the configured wrapper selects
+modular dist/cli.js, and dist/index.js exports modular SDK/compaction owners.
+Those stock outputs and the separate agent-core harness compactor are not claimed
+as migrated or unique declarations. The new route formation is one API member;
+SessionContext.prefixContext owns a different fact: original native context.
 
-Exact dependency file SHA256s:
+The source-only patch composes with zero fuzz against twelve recorded original
+files; every resulting SHA256 matches the authored source. Node syntax, shell
+recipe syntax and Python patcher compilation were batched after the coherent
+implementation. These detect corrupt hunks/preimages and malformed executable
+source; they do not qualify an installed package or a provider result.
 
-- pi-ai models.js: `42610d47fe293d99f4b05b147971e181c7312ea47c9be2906a4803955276a8a4`
-- coding-agent provider-composer.js: `8eca507009d00768130e46cd9a0831e4fa2f98b81435ae0a8d5079a1d27e13cd`
-- coding-agent compaction/compaction.js: `2e507c23edf47391265f81db353b205d9f5e9b78b3025f0497e9415a6121d2de`
+## Remaining acceptance
 
-No environment, worktree, native build, test or provider call was created for
-this census. No actual cost, cache gain, latency gain or model recall is claimed.
-Real-provider comparison remains dependent on an explicit budget grant.
-#528's existing 339-file installed proof and private gate were handed to Sch for
-the #528/#525 pair; parent owns its next configured-channel acceptance.
+The Native9f12/00c2 artifacts remain unchanged. A matching artifact/pin must be
+produced by the existing single native builder, then one affected configured
+saved-session/inspection journey must observe this producer and original prefix.
+No old artifact or historical reader qualifies the new producer. Keep the PR
+draft until that ordinary installed path is verified; no standalone new env,
+native build, provider call or cache comparison was run here.
+
+Real cache hits, cost/latency comparisons and recall remain unmeasured. The separate
+paid comparison has no budget grant. Missing normalized cache counters must not be
+reported as measured zeros or inferred savings. API rationale: OpenAI's original
+prompt-caching guide specifies preserving definitions and tool_choice:none:
+https://developers.openai.com/api/docs/guides/prompt-caching

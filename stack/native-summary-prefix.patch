@@ -101,19 +101,92 @@
  export declare const stream: StreamFunction<"openai-codex-responses", OpenAICodexResponsesOptions>;
  export declare const streamSimple: StreamFunction<"openai-codex-responses", SimpleStreamOptions>;
  export interface OpenAICodexWebSocketDebugStats {
+--- a/node_modules/@earendil-works/pi-ai/dist/compat.js
++++ b/node_modules/@earendil-works/pi-ai/dist/compat.js
+@@ -47,19 +47,11 @@
+ export const getProviders = getBuiltinProviders;
+ const apiProviderRegistry = new Map();
+ function wrapStream(api, stream) {
+-    return (model, context, options) => {
++    return (model, ...args) => {
+         if (model.api !== api) {
+             throw new Error(`Mismatched api: ${model.api} expected ${api}`);
+         }
+-        return stream(model, context, options);
+-    };
+-}
+-function wrapStreamSimple(api, streamSimple) {
+-    return (model, context, options) => {
+-        if (model.api !== api) {
+-            throw new Error(`Mismatched api: ${model.api} expected ${api}`);
+-        }
+-        return streamSimple(model, context, options);
++        return stream(model, ...args);
+     };
+ }
+ export function registerApiProvider(provider, sourceId) {
+@@ -67,7 +59,8 @@
+         provider: {
+             api: provider.api,
+             stream: wrapStream(provider.api, provider.stream),
+-            streamSimple: wrapStreamSimple(provider.api, provider.streamSimple),
++            streamSimple: wrapStream(provider.api, provider.streamSimple),
++            summaryPrefix: provider.summaryPrefix && wrapStream(provider.api, provider.summaryPrefix),
+         },
+         sourceId,
+     });
+@@ -126,7 +119,7 @@
+ export function registerBuiltInApiProviders() {
+     for (const [api, streams] of BUILTIN_APIS) {
+         if (!getApiProvider(api)) {
+-            registerApiProvider({ api, stream: streams.stream, streamSimple: streams.streamSimple });
++            registerApiProvider({ api, ...streams });
+         }
+         builtinApiProviderInstances.set(api, getApiProvider(api));
+     }
+--- a/node_modules/@earendil-works/pi-ai/dist/compat.d.ts
++++ b/node_modules/@earendil-works/pi-ai/dist/compat.d.ts
+@@ -29,7 +29,7 @@
+ import { getBuiltinModel, getBuiltinModels, getBuiltinProviders } from "./providers/all.ts";
+ export type { BuiltinProvider } from "./providers/all.ts";
+ import { type FauxProviderRegistration, type RegisterFauxProviderOptions } from "./providers/faux.ts";
+-import type { Api, AssistantMessage, AssistantMessageEventStream, Context, Model, ProviderStreamOptions, SimpleStreamOptions, StreamFunction, StreamOptions } from "./types.ts";
++import type { Api, AssistantMessage, AssistantMessageEventStream, Context, Model, ProviderStreams, ProviderStreamOptions, SimpleStreamOptions, StreamFunction, StreamOptions } from "./types.ts";
+ /** @deprecated Static catalog read. Use `getBuiltinModel` from "@earendil-works/pi-ai/providers/all" or `Models.getModel()`. */
+ export declare const getModel: typeof getBuiltinModel;
+ /** @deprecated Static catalog read. Use `getBuiltinModels` from "@earendil-works/pi-ai/providers/all" or `Models.getModels()`. */
+@@ -38,12 +38,12 @@
+ export declare const getProviders: typeof getBuiltinProviders;
+ export type ApiStreamFunction = (model: Model<Api>, context: Context, options?: StreamOptions) => AssistantMessageEventStream;
+ export type ApiStreamSimpleFunction = (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+-export interface ApiProvider<TApi extends Api = Api, TOptions extends StreamOptions = StreamOptions> {
++export interface ApiProvider<TApi extends Api = Api, TOptions extends StreamOptions = StreamOptions> extends Pick<ProviderStreams, "summaryPrefix"> {
+     api: TApi;
+     stream: StreamFunction<TApi, TOptions>;
+     streamSimple: StreamFunction<TApi, SimpleStreamOptions>;
+ }
+-interface ApiProviderInternal {
++interface ApiProviderInternal extends Pick<ProviderStreams, "summaryPrefix"> {
+     api: Api;
+     stream: ApiStreamFunction;
+     streamSimple: ApiStreamSimpleFunction;
 --- a/dist/core/provider-composer.js
 +++ b/dist/core/provider-composer.js
-@@ -312,21 +312,19 @@
+@@ -312,21 +312,24 @@
      if (!apiKey && !oauth)
          throw new Error(`Provider ${providerId}: no authentication method configured.`);
      const supportsBaseApi = (model) => base?.getModels().some((entry) => entry.api === model.api) ?? false;
 +    // Streaming and prefix formation resolve the SAME effective route.
 +    // An extension replacing streaming never borrows the base capability.
 +    const routeFor = model => {
-+        if (extension?.streamSimple && model.api === extension.api) return extension;
++        if (extension?.streamSimple && model.api === extension.api) {
++            // Named extension streaming has no declared prefix capability.
++            // Its two original dispatch methods derive from that same function.
++            const stream = extension.streamSimple.bind(extension);
++            return { stream, streamSimple: stream };
++        }
 +        if (base && supportsBaseApi(model)) return base;
 +        const api = getApiProvider(model.api);
-+        if (!api) throw new Error(`No API provider registered for api: ${model.api}`);
 +        return api;
 +    };
      const streamWith = (model, context, options, simple) => lazyStream(model, async () => {
@@ -132,30 +205,21 @@
 -            ? api.streamSimple(model, context, options)
 -            : api.stream(model, context, options);
 +        const route = routeFor(model);
-+        const stream = simple ? route.streamSimple : route.stream ?? route.streamSimple;
++        if (!route) throw new Error(`No API provider registered for api: ${model.api}`);
++        const stream = simple ? route.streamSimple : route.stream;
 +        return stream.call(route, model, context, options);
      });
      const provider = {
          id: providerId,
-@@ -362,6 +360,8 @@
+@@ -362,6 +365,8 @@
          filterModels: base?.filterModels
              ? (models, credential) => base.filterModels(models, credential)
              : undefined,
 +        summaryPrefix: (model, context, instructions, options) =>
-+            routeFor(model).summaryPrefix?.(model, context, instructions, options),
++            routeFor(model)?.summaryPrefix?.(model, context, instructions, options),
          stream: (model, context, options) => streamWith(model, context, options, false),
          streamSimple: (model, context, options) => streamWith(model, context, options, true),
      };
---- a/dist/core/provider-composer.d.ts
-+++ b/dist/core/provider-composer.d.ts
-@@ -18,6 +18,7 @@
-     baseUrl?: string;
-     apiKey?: string;
-     api?: Api;
-+    summaryPrefix?: Provider["summaryPrefix"];
-     streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
-     headers?: Record<string, string>;
-     authHeader?: boolean;
 --- a/dist/core/compaction/compaction.js
 +++ b/dist/core/compaction/compaction.js
 @@ -332,7 +332,7 @@

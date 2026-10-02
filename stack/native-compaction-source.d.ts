@@ -18,6 +18,8 @@ export declare abstract class SummarySource {
 }
 export declare class HistorySummarySource extends SummarySource {
     constructor(messages: Iterable<AgentMessage>, previousSummary?: string);
+    readonly messages: Iterable<AgentMessage>;
+    readonly previousSummary?: string;
     readonly sourceBytes: number;
     readonly consumedBytes: number;
     readonly summaryPhase: string;
