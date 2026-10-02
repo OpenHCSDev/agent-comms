@@ -225,6 +225,37 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         InputDocument(rows={"missing": missing})
 
 
+def test_compaction_input_custody_survives_attention_and_admission_changes(tmp_path):
+    from agent_comms.thread_identity import ThreadIncarnation
+
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    owner = ThreadIncarnation("owner", 1.0)
+    for key, admission in (("acp:old", 1), ("acp:current", 2)):
+        assert store.record(key, seq=None, owner="owner", admission=admission,
+                            target="owner", text=key)
+    # A reserved predecessor cannot disappear through a later admission.
+    with pytest.raises(RelationViolationError):
+        store.read().require_compaction_ready(owner, ("acp:current",))
+    assert store.settle_unbound(("acp:old",))
+    before = store.path.read_bytes()
+    store.read().require_compaction_ready(owner, ("acp:current",))
+    assert store.path.read_bytes() == before
+    assert store.read().lookup("acp:old").unresolved  # Attention is still required.
+
+    assert store.bind("acp:current", admission=2, turn_id="actual-turn",
+                      native_id="a" * 32, text="acp:current")
+    before = store.path.read_bytes()
+    # Even naming this bound original as pending must not grant a new send.
+    for pending in ((), ("acp:current",), ("acp:future",)):
+        with pytest.raises(RelationViolationError):
+            store.read().require_compaction_ready(owner, pending)
+    assert not store.settle_unbound(("acp:current",))
+    assert store.path.read_bytes() == before
+    assert store.started("acp:current", turn_id="actual-turn", native_id="a" * 32,
+                         text="acp:current")
+    store.read().require_compaction_ready(owner, ())
+
+
 @pytest.mark.parametrize(
     "sent",
     [

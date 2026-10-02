@@ -45,14 +45,8 @@ def verify_continued_private_session(
         required = tuple(entry for entry in entries if entry.id not in covered)
         rows = inputs.rows
         # The locked document already excludes proven process-local future inputs.
-        # Every other unresolved owner input except the exact original remains a stop.
-        # Do not use admission rollover to hide uncertain history.
-        if any(
-            row.matches_owner(source.incarnation) and row.unresolved
-            and key not in source.pending_input_keys
-            for key, row in rows.items()
-        ):
-            raise ValueError("Continued private history contains unresolved owner input")
+        # Its original input family distinguishes notices from uncertain custody.
+        inputs.require_compaction_ready(source.incarnation, source.pending_input_keys)
         started = {}
         for row in rows.values():
             if row.matches_owner(source.incarnation) and row.has_started:

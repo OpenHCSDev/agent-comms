@@ -191,12 +191,13 @@ class StoredInput(InputAttempt):
     def matches_admission(self, admission: int) -> bool:
         return self.admission == admission
 
-    def unsettled_for(self, owner: Thread, pending_key: str | None) -> bool:
-        assert owner.active_turn is not None
-        admission = owner.active_turn.admission_generation
-        return admission is None or (
-            self.admission == admission and self.unresolved and self.key != pending_key
-        )
+    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
+        """Settled delivery and confirmed non-delivery permit source compaction.
+
+        User attention is a separate fact: NotSent may still need review without
+        making a later original's native source uncertain.
+        """
+        return False
 
     def _transition(self, target: type[StoredInput], **changes) -> StoredInput:
         values = {item.name: getattr(self, item.name) for item in fields(self)}
@@ -240,6 +241,10 @@ class ReservedInput(StoredInput):
 
     accepts_reservation = True
 
+    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
+        """Only the captured original may wait for its own pre-send compaction."""
+        return self.key not in pending_input_keys
+
     def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
         return (
             self.matches_owner(owner)
@@ -272,6 +277,10 @@ class SentInput(StoredInput):
     turn_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     sent_text: str = field(metadata={"public_exclude": True, "wire_required": True})
+
+    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
+        """A native binding remains uncertain across admission and input changes."""
+        return True
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -314,6 +323,10 @@ class StartedInput(SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
+
+    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
+        """The original native-start receipt settled this binding's delivery."""
+        return False
 
     def require_started(self, admission: int) -> StartedInput:
         if not self.matches_admission(admission):
@@ -368,9 +381,6 @@ class NotSentInput(StoredInput):
     cancellation_feedback = (
         "Not sent — cancellation completed before native delivery. Input not retried."
     )
-
-    def unsettled_for(self, owner: Thread, pending_key: str | None) -> bool:
-        return False
 
 
 class MissingInput(InputAttempt):

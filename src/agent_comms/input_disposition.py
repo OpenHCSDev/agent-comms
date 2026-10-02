@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .input_origin import InputProvenance
     from .selected_source import SelectedSource
-    from .thread_identity import TurnId
+    from .thread_identity import ThreadIncarnation, TurnId
     from .turn_lease import TurnLeaseFence
 
 
@@ -82,6 +82,18 @@ class InputDocument:
         """Source proofs reference originals without copying mutable disposition data."""
         return tuple(row.context_provenance() for row in self.originals(keys))
 
+    def require_compaction_ready(
+        self, owner: ThreadIncarnation, pending_input_keys: tuple[str, ...]
+    ) -> None:
+        """Original input members own custody; notices never decide source admission.
+
+        A live future queue may select a view before this check. Neither an old
+        admission nor naming an uncertain native binding makes it settled.
+        """
+        if any(row.matches_owner(owner) and row.unsettled_for(pending_input_keys)
+               for row in self.rows.values()):
+            raise RelationViolationError("Unsettled owner input; compaction not dispatched")
+
     def compaction_rows(
         self, owner: Thread, pending_input_keys: tuple[str, ...], queue: FutureInputQueue | None = None
     ) -> dict[str, StoredInput]:
@@ -100,9 +112,8 @@ class InputDocument:
                 continue
             if key not in pending_input_keys and key in future and row.pending_for(owner):
                 continue
-            if row.unsettled_for(owner, key if key in pending_input_keys else None):
-                raise RelationViolationError("Unsettled owner input; compaction not dispatched")
             relevant[key] = row
+        replace(self, rows=relevant).require_compaction_ready(owner.incarnation, pending_input_keys)
         return relevant
 
     def compaction_material(self, owner: Thread, pending_input_keys: tuple[str, ...],

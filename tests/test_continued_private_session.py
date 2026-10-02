@@ -71,6 +71,23 @@ def test_continued_private_session_needs_no_fresh_object_and_preserves_history(c
         journal.summaries.reserve(str(session), source)
 
 
+def test_known_not_sent_notice_does_not_redecide_native_source_custody(continued):
+    journal, session, inputs, source = continued
+    key = "acp:confirmed-unsent"
+    assert inputs.record(key, seq=None, owner="owner", admission=1,
+                         target="owner", text="Never delivered; keep this notice")
+    assert inputs.settle_unbound((key,))
+    original = inputs.read().lookup(key)
+    before = session.read_bytes(), inputs.path.read_bytes()
+    operation = journal.summaries.reserve(str(session), source)
+    assert journal.summaries.get(operation).request == source
+    assert original.unresolved and original.public_status == "not_sent"
+    assert inputs.read().lookup(key) == original
+    assert before == (session.read_bytes(), inputs.path.read_bytes())
+    assert not inputs.bind(key, admission=1, turn_id="new", native_id="b" * 32,
+                           text=original.source_text)
+
+
 @pytest.mark.parametrize(
     "damage",
     [
