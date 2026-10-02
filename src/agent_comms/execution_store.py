@@ -72,6 +72,9 @@ class ExecutionStore:
         if origin is not ExecutionOrigin.WIRE and sources:
             raise IdentityConflict("claimless execution cannot bind claims")
         with self.session.transaction() as db:
+            # Lifecycle/revision is a witness from this owner's transaction,
+            # not a lifecycle copy retained by the captured delivery relation.
+            assignments = tuple(source.assignment for source in sources)
             row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
             if row is not None:
                 snapshot = self.snapshots.get(execution_id)
@@ -114,9 +117,8 @@ class ExecutionStore:
                 updated_at_ms=now,
             ).insert(db)
             routes = {}
-            for ordinal, source in enumerate(sources):
+            for ordinal, (source, assignment) in enumerate(zip(sources, assignments, strict=True)):
                 assignment_id = source.assignment_id
-                assignment = source.assignment
                 exact_target = derive_exact_reply_target(source.delivery.message)
                 routes.setdefault(exact_target, None)
                 if (
