@@ -217,16 +217,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as custody:
             self.custody = custody
-            custody.callback(self.startup.release)
-            await self.open_tools(custody)
-            self.native = await self.native_session.open(
-                self.launch,
-                reuse=False,
-                require_input_id=True,
-                startup=self.startup,
-                finish_event=self.finish_event,
-                watchdog=self.watchdog,
-            )
+            self.native = await self.acquire_native(custody, reuse=False)
             custody.push_async_callback(self.native_session.close)
             await custody.enter_async_context(self.native.failures())
             custody.callback(self.native.reader.pending.cancel_all)
@@ -252,7 +243,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             except NativePiUnavailable as error:
                 self.admission.raise_native_failure(error, self.native.attestation)
 
-    async def open_tools(self, custody: AsyncExitStack) -> None:
+    async def open_transport(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
                 self.launch.session.directory, os.urandom(32).hex()

@@ -22,7 +22,7 @@ import secrets
 import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, aclosing, contextmanager, nullcontext
+from contextlib import AbstractContextManager, AsyncExitStack, aclosing, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -50,6 +50,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .selected_source import SessionRevision, SessionRevisionUnavailable
+from .selected_tool_broker import SelectedToolDenied
 from .store_files import _store_lock
 from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
@@ -472,86 +473,98 @@ class TurnSession:
             context_size=self.usage.size,
         )
 
+    async def open_transport(self, resources: AsyncExitStack) -> None:
+        """Leaf-owned launch resources enter the original turn's custody."""
+
+    async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
+        """One acquisition seam before the original prompt's irreversible writer.
+
+        Ordinary, preparation and tracked turns share source attestation,
+        startup admission and failure disposition. Transport leaves acquire
+        their resources here; no missing child is rediscovered at failure.
+        """
+        resources.callback(self.startup.release)
+        try:
+            await self.open_transport(resources)
+            return await self.native_session.open(
+                self.launch, reuse=reuse, require_input_id=self.require_input_id,
+                startup=self.startup, finish_event=self.finish_event, watchdog=self.watchdog,
+            )
+        except (OSError, TimeoutError, SelectedToolDenied, SavedSessionReopenError) as error:
+            failure = NativePiUnavailable(
+                f"Native resource acquisition failed: {type(error).__name__}: {error}"
+            )
+            failure.__cause__ = error
+            self.admission.raise_native_failure(failure, self.launch.session.attestation())
+        except NativePiUnavailable as error:
+            self.admission.raise_native_failure(error, self.launch.session.attestation())
+
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
         self.finished = self.skip = False
         self.loop = asyncio.get_running_loop()
         self.owner = asyncio.current_task()
-        try:
+        async with AsyncExitStack() as resources:
             try:
-                self.native = await self.native_session.open(
-                    self.launch,
-                    reuse=self.persistent_session is not None,
-                    require_input_id=self.require_input_id,
-                    startup=self.startup,
-                    finish_event=self.finish_event,
-                    watchdog=self.watchdog,
+                self.native = await self.acquire_native(
+                    resources, reuse=self.persistent_session is not None
                 )
-            except SavedSessionReopenError as error:
-                yield events.Done(
-                    text=str(error), ok=False, reason_code="compaction_reopen_invalid"
-                )
-                return
-            except OSError as error:
-                yield events.Done(text=f"agent launch failed: {error}", ok=False)
-                return
-            if self.owner is not None:
-                self.active[self.owner] = self
-            async with self.native.failures():
-                self.prepare_launch()
-                self.output.sensitive |= self.native.sensitive_diagnostics
-                if self.native.proc.stdin is not None:
-                    try:
-                        if not self.require_input_id:
-                            self.grant_prompt()
-                        self.native.proc.stdin.write(self.stdin_payload)
-                        await self.native.proc.stdin.drain()
-                    except (BrokenPipeError, ConnectionResetError):
-                        pass
-                async for event in self.initialize_rpc():
-                    yield event
-                while True:
-                    self.skip = False
-                    async for event in self.receive_record():
-                        yield event
-                    if self.finished:
-                        break
-                    if self.skip:
-                        continue
-                    if self.awaiting_native_attestation:
+                if self.owner is not None:
+                    self.active[self.owner] = self
+                async with self.native.failures():
+                    self.prepare_launch()
+                    self.output.sensitive |= self.native.sensitive_diagnostics
+                    if self.native.proc.stdin is not None:
                         try:
-                            self.native.attestation = self.native.attestation.accept(self.payload)
-                        except AttestationError as error:
-                            await error.refuse(self)
-                            break
-                        self.startup.release()
-                        await self.input_ready()
+                            if not self.require_input_id:
+                                self.grant_prompt()
+                            self.native.proc.stdin.write(self.stdin_payload)
+                            await self.native.proc.stdin.drain()
+                        except (BrokenPipeError, ConnectionResetError):
+                            pass
+                    async for event in self.initialize_rpc():
+                        yield event
+                    while True:
+                        self.skip = False
+                        async for event in self.receive_record():
+                            yield event
                         if self.finished:
                             break
-                    async for event in self.payload.consume(self):
+                        if self.skip:
+                            continue
+                        if self.awaiting_native_attestation:
+                            try:
+                                self.native.attestation = self.native.attestation.accept(self.payload)
+                            except AttestationError as error:
+                                await error.refuse(self)
+                                break
+                            self.startup.release()
+                            await self.input_ready()
+                            if self.finished:
+                                break
+                        async for event in self.payload.consume(self):
+                            yield event
+                        if self.finished:
+                            break
+                        if self.skip:
+                            continue
+                        async for event in self.stats.settle(self):
+                            yield event
+                        if self.finished:
+                            break
+                    self.finished = False
+                    async for event in self.retain_or_close():
                         yield event
-                    if self.finished:
-                        break
-                    if self.skip:
-                        continue
-                    async for event in self.stats.settle(self):
+                    async for event in self.finish_diagnostics():
                         yield event
-                    if self.finished:
-                        break
-                self.finished = False
-                async for event in self.retain_or_close():
-                    yield event
-                async for event in self.finish_diagnostics():
-                    yield event
-                async for event in self.finish_result():
-                    yield event
-        finally:
-            try:
-                await self.stop_forwarding()
-                if not self.native_session.custody.retained:
-                    await self.native_session.close()
+                    async for event in self.finish_result():
+                        yield event
             finally:
-                self.startup.release()
-                self.active.pop(self.owner, None)
+                try:
+                    await self.stop_forwarding()
+                    if not self.native_session.custody.retained:
+                        await self.native_session.close()
+                finally:
+                    self.active.pop(self.owner, None)
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
         while self.rejected_commands:

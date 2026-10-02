@@ -356,3 +356,30 @@ the final configured ordinary workflow remain unfinished. In particular Singer's
 new socket-start failure is before native spawn, but historical NULL UNKNOWN is
 not automatically reclassified using that fact. No native/provider input, tests,
 public restart or installed runtime mutation occurred in this implementation.
+
+## Receiving acquisition ownership implementation
+
+`TurnSession.acquire_native` now owns the original algorithm for ordinary,
+preparation and tracked turns: enter the original startup-release callback,
+acquire leaf-owned transport resources, then acquire the original persistent
+native child. `TrackedTurnSession.open_transport` supplies only its existing
+tool socket acquisition hook. The earlier tracked `open_tools` plus independent
+child acquisition, and ordinary launch-only exception path, are deleted.
+
+Acquisition failures now reach the existing `PromptAdmission` owner BEFORE a
+missing native child is ever queried. `UnwrittenPrompt` supplies typed NotSent
+for that fresh operation using its original selected pending attestation;
+already-dispatched states retain their existing uncertain outcome. The original
+exception remains chained. The original `AsyncExitStack` closes socket/startup
+resources on refusal or cancellation; acquired native children retain their
+existing `PiSessionChild.failures` and persistent retirement custody. This does
+not manufacture stderr for a child which never started, nor reclassify any old
+SQL input, NULL context or UNKNOWN attempt. No native/input store writes occur
+in the acquisition algorithm.
+
+Source caller search has one `native_session.open` call in this upstream method;
+both ordinary `run` and tracked `complete` consume it, and preparation inherits
+ordinary `run`. A fixture override of the deleted `open_tools` hook remains an
+explicit migration obligation before end validation. Paused dispatch and Native6
+preservation are still unfinished; this source increment supplies no installed
+or provider qualification.
