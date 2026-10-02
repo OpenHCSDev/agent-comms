@@ -1,0 +1,3 @@
+{"family": "PreserveRuntimeInstallation", "roundtrip": true, "original_goal_derived": true, "serialized_fields": ["goal_schema", "kind"]}
+{"family": "ResetRuntimeInstallation", "roundtrip": true, "original_goal_derived": true, "serialized_fields": ["goal_schema", "kind"]}
+{"family": "CarryNativeRuntimeInstallation", "roundtrip": true, "original_goal_derived": true, "serialized_fields": ["candidate", "kind", "original", "source_python"]}
