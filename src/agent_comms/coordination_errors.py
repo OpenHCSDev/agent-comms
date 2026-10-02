@@ -1,8 +1,22 @@
 """Shared durable coordination errors, independent of record store_files."""
 
+import sqlite3
+from typing import Never
+
 
 class CoordinationError(RuntimeError):
     """Base class for fail-loud coordinator errors."""
+
+
+class CoordinationReadUnavailable(CoordinationError):
+    """No committed SQLite snapshot was acquired; no absence is established."""
+
+    @classmethod
+    def raise_from(cls, error: sqlite3.OperationalError) -> Never:
+        """Decode SQLite's contention codes once, never its error wording."""
+        if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+            raise cls("The original database read is busy") from error
+        raise error
 
 
 class SchemaVersionError(CoordinationError):

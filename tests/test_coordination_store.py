@@ -1504,6 +1504,36 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
         assert db.participants.get("other").display_name == "Other"
 
 
+def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.recovery_projection import (
+        UnavailableRecoveryProjection, read_recovery_projection,
+    )
+
+    with store(db_path) as writer:
+        writer.participants.register("owner", "Owner", "thread", committed=True)
+    for statement in (
+        "UPDATE participants SET display_name='unauthorized'",
+        "SELECT * FROM nonexistent_original_table",
+    ):
+        with pytest.raises(sqlite3.OperationalError):
+            with CoordinationStore.observing(db_path, lock_timeout=0.05) as reader:
+                reader.execute(statement)
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            reader.execute("SELECT 1")
+    with pytest.raises(RuntimeError, match="consumer failed"):
+        with CoordinationStore.observing(db_path, lock_timeout=0.05) as reader:
+            raise RuntimeError("consumer failed")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        reader.execute("SELECT 1")
+    with store(db_path) as writer:
+        assert writer.participants.get("owner").display_name == "Owner"
+        writer.session._connection.execute("PRAGMA user_version=991")
+    assert read_recovery_projection(
+        db_path, owner_lookup="owner", owner_thread="thread"
+    ) == UnavailableRecoveryProjection("unsupported_schema")
+
+
 @pytest.mark.parametrize(
     "invalid",
     ["false", 0, 1, None, PromptStartingAttempt(60000)],

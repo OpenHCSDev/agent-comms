@@ -144,7 +144,7 @@ def test_sqlite_read_transaction_cannot_mix_owner_rows(private_db: Path, monkeyp
     update_started = threading.Event()
     release = threading.Event()
     committed = threading.Event()
-    original = projection._read_in_transaction
+    original = projection.RecoverySelection.project
 
     def mid_transaction(connection, lookup, thread):
         # The first SELECT pins SQLite's rollback-journal reader snapshot.
@@ -159,7 +159,7 @@ def test_sqlite_read_transaction_cannot_mix_owner_rows(private_db: Path, monkeyp
         assert release.wait(2)
         return original(connection, lookup, thread)
 
-    monkeypatch.setattr(projection, "_read_in_transaction", mid_transaction)
+    monkeypatch.setattr(projection.RecoverySelection, "project", staticmethod(mid_transaction))
     result = []
     reader = threading.Thread(target=lambda: result.append(view(private_db)))
 
@@ -190,7 +190,7 @@ def test_sqlite_read_transaction_cannot_mix_owner_rows(private_db: Path, monkeyp
     assert committed.is_set()
     assert isinstance(result[0], AvailableRecoveryProjection)
     assert result[0].current is not None and result[0].current.status.declared_name == "pending"
-    monkeypatch.setattr(projection, "_read_in_transaction", original)
+    monkeypatch.setattr(projection.RecoverySelection, "project", staticmethod(original))
     latest = view(private_db)
     assert isinstance(latest, AvailableRecoveryProjection)
     assert latest.current is not None and latest.current.status.declared_name == "failed"
