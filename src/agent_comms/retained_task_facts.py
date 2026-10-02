@@ -23,6 +23,7 @@ from .native_file_artifact import NativeFileArtifact
 from .turn_context import JournalProvenance
 
 if TYPE_CHECKING:
+    from .input_disposition import InputDocument
     from .input_origin import InputProvenance
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -222,6 +223,32 @@ class RetainedTaskFacts:
     facts: tuple[ExactTaskFact, ...]
 
     journal_control_bytes: ClassVar[int] = 65536
+
+    def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
+        """Resolve pins through their original declarations and input owner.
+
+        The lookup is local to this read. A pin cannot supply replacement input
+        text, infer an owner or acquire an input's execution disposition.
+        """
+        originals = {original.key: original for fact in self.facts
+                     for message in fact.wire_sources()
+                     for original in message.task.original_input_sources(inputs)}
+        return tuple(original.origin.retained_fact(original) for original in originals.values())
+
+    def changed_from(self, previous: RetainedTaskFacts) -> dict[str, object]:
+        """Compare original captured facts, including multiplicity and disposition.
+
+        These are source differences, not inferred summary correctness or a
+        current native capture. The original declarations own serialization.
+        """
+        from collections import Counter
+
+        before = Counter(self.canonical_journal_bytes(FieldCodec.encode(fact))
+                         for fact in previous.facts)
+        after = Counter(self.canonical_journal_bytes(FieldCodec.encode(fact))
+                        for fact in self.facts)
+        return dict(added=[json.loads(raw) for raw in (after - before).elements()],
+                    removed=[json.loads(raw) for raw in (before - after).elements()])
 
     def original_inputs(self, references: tuple[InputProvenance, ...]) -> tuple[StoredInput, ...]:
         """Resolve exact ordered originals in this already captured payload.

@@ -350,13 +350,19 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
 class RetainedContextCliCommand(CliCommand, declared_name="retained-context"):
     help = "Inspect retained context and original provenance without native input"
     thread: str = option("thread")
+    diff: bool = option("--diff", default=False, action="store_true",
+                        help="Compare the last two original selected compaction source cuts")
 
     def apply(self, ctx: Comms) -> Any:
-        from .field_codec import FieldCodec
+        from .compaction_boundary import CompactionBoundary
+        from .input_disposition import InputDispositions
 
-        segment = ctx.bus.log.retained_context(self.thread, ctx.registry)
-        return {"kind": segment.declared_name, "text": segment.text(),
-                "provenance": FieldCodec.encode(segment.provenance), "input_supplied": False}
+        boundary = CompactionBoundary(ctx.registry,
+            InputDispositions(ctx.root / InputDispositions.filename))
+        if self.diff:
+            return dict(boundary.retained_history(ctx.registry.require(self.thread), diff=True),
+                        input_supplied=False)
+        return boundary.inspect(self.thread)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -726,21 +732,17 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        from .compaction_journal import CompactionJournal
-        from .field_codec import FieldCodec
+        from .compaction_boundary import CompactionBoundary
+        from .compaction_records import SelectedSummaryAttempt
+        from .input_disposition import InputDispositions
 
-        thread = ctx.registry.require(self.thread)
-        path = ctx.root / "compaction-commits.sqlite3"
-        if not thread.session_file or not path.exists():
-            return {"thread": thread.name, "attempts": []}
-        journal = CompactionJournal(path)
-        return {
-            "thread": thread.name,
-            "attempts": [
-                {"operation_id": row.operation_id, "state": FieldCodec.encode(row.state)}
-                for row in journal.summaries.history(thread.session_file)
-            ],
-        }
+        owner = ctx.registry.require(self.thread)
+        history = CompactionBoundary(ctx.registry,
+            InputDispositions(ctx.root / InputDispositions.filename)).retained_history(owner)
+        return dict(thread=owner.name, attempts=[
+            dict(operation_id=row["operation_id"], state=row["state"])
+            for row in history.get("tables", {}).get(SelectedSummaryAttempt.declared_name, ())
+        ])
 
 
 @dataclass(frozen=True, kw_only=True)
