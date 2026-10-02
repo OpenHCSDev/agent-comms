@@ -1,3 +1,32 @@
+## Current default checkpoint: reply, command, restoration and certified bus read — 2026-10-02 04:19 UTC
+
+Core #505 and #508, Toad #297/#295 and receiving #301 are merged and installed
+through the ordinary default entrypoints. Immutable installed Core74877/Toad8b24,
+Text68/native5184. Existing publisher normally closed the original idle user UI
+(no drafts or submissions), restarted all19 retained owners with unchanged
+settings, and verified38 protected original files byte-invariant. Runtime stores
+were preserved, including the original446464-byte compaction journal. Zero
+original input replays or reset. See evidence/merged297-505-508-live-20261002/installation.json.
+
+Actual ordinary toad-comms openhcs-helper in isolated st/Xvfb loaded retained
+history and Ready; parent personally inspected after.png. Same newly restarted
+helper owner stayed alive throughout capture. This proves default startup,
+not a claim that long public model waits or compaction are fully fixed.
+#508 actual saved-history/channel-click/paint/End acceptance completed31.554s;
+#505 actual configured reply criterion journey and #297/#295 real command/
+restoration journeys are retained in the reviewed publication.
+
+The full async bus is Arendt #509: existing publication/snapshot/resource owners,
+bounded original snapshot capture and decoding outside writer custody, async
+contention rather than event-loop blocking. The checkpoint removes the full-log
+sequence scan under EX lock; it does not finish all read-resource lifetimes.
+Arendt #489 and Einstein #506 retain full native/preparation/compaction custody.
+Kepler #503 + Singer #507 retain pending batching/cursor publication; Heisenberg
+#298/Text21 retains actual public profiling/scrolling; Schrodinger #302 owns
+original Agent model/mode selection. Mendel completed a source audit of the full
+original goal, with explicit remaining C3/T4/performance/S1/S3/S4 relations.
+No original named scope is removed and no whole-goal completion is claimed.
+
 ## Current owner checkpoint: channel latency and independent merged install, 2026-10-02 03:27 UTC
 
 - Original public327 remains seven canonical replies, three actual IGNORE decisions, two external-CLI pending. Replies took 62–247 seconds; pre-model delay is unsolved. Arendt owns cross-owner preparation/admission source closure in #489.
