@@ -104,7 +104,7 @@ class AgentActivity:
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
             self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
 
@@ -149,7 +149,7 @@ class AgentActivity:
         self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic | None
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
@@ -176,7 +176,7 @@ class AgentActivity:
             return lease
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.transition_turn(lease, phase)
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
@@ -199,7 +199,7 @@ class AgentActivity:
         context_size: int | None = None,
     ) -> None:
         """Record the latest model and context metadata for a thread."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
             self.runtime_info.set(
                 AgentRuntimeInfo(

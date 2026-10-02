@@ -239,7 +239,7 @@ class BusPresentation:
         """
         for _ in range(3):
             with ExitStack() as stack:
-                with _store_lock(self._wire_lock_path):
+                with _store_lock(self._wire_lock_path, shared=True):
                     revision = self.revision()
                     basis = DisplaySelection.capture(
                         self.registry, self.catalog, self.bus.reads, viewer
@@ -303,7 +303,7 @@ class BusPresentation:
         through: int | None = None,
         expected_scope: ChannelDisplayScope | None = None,
     ) -> None:
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             revision = self.revision()
             basis = DisplaySelection.capture(self.registry, self.catalog, self.bus.reads, viewer)
             current = basis.scope(target)

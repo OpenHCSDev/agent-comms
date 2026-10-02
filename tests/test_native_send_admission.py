@@ -131,7 +131,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
     write = native_prompt_send._write_fenced
     observed = []
 
-    def probe(fd, payload, boundary, cancelled, deadline):
+    def probe(fd, payload, boundary, cancelled, deadline, measurements):
         @contextmanager
         def scope():
             with boundary():
@@ -139,7 +139,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
                 yield
                 observed.append(_held(root))
 
-        result = write(fd, payload, scope, cancelled, deadline)
+        result = write(fd, payload, scope, cancelled, deadline, measurements)
         # The same production admission cannot write twice even after all locks
         # are released. Its UNKNOWN journal reservation survives the first send.
         with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
@@ -355,7 +355,7 @@ async def test_short_admission_contention_sends_once_after_release(
     write = native_prompt_send._write_fenced
     admissions = []
 
-    def probe(fd, payload, boundary, cancelled, deadline):
+    def probe(fd, payload, boundary, cancelled, deadline, measurements):
         held, release = threading.Event(), threading.Event()
 
         def contend():
@@ -384,7 +384,7 @@ async def test_short_admission_contention_sends_once_after_release(
                 yield
 
         try:
-            return write(fd, payload, scope, cancelled, deadline)
+            return write(fd, payload, scope, cancelled, deadline, measurements)
         finally:
             release.set()
             competitor.join(3)
@@ -550,7 +550,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     write = native_prompt_send._write_fenced
     observations = []
 
-    def probe(fd, payload, boundary, cancelled, deadline):
+    def probe(fd, payload, boundary, cancelled, deadline, measurements):
         path = root / "coordination.sqlite3"
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         reader.execute("BEGIN")
@@ -582,7 +582,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
                 raise
 
         try:
-            write(fd, payload, checked_admission, cancelled, deadline)
+            write(fd, payload, checked_admission, cancelled, deadline, measurements)
             observations.append("sent and committed once")
         finally:
             reader.close()

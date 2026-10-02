@@ -159,7 +159,7 @@ class DMDisplayBasis:
         if not isinstance(peer, str) or is_channel_target(peer):
             raise ValueError("A DM page requires a registered peer.")
         marker_path = bus.reads.path
-        with _store_lock(root / "wire"):
+        with _store_lock(root / "wire", shared=True):
             snapshot = registry.snapshot()
             revision = file_revision(registry.store.path)
             viewer_name = snapshot.aliases.get(viewer, viewer)
@@ -183,7 +183,7 @@ class DMDisplayBasis:
                     scope.unread_before(message, page.messages[0].seq, seen)
                     for message, _ in records
                 )
-        with _store_lock(root / "wire"):
+        with _store_lock(root / "wire", shared=True):
             if (
                 file_revision(registry.store.path) != revision
                 or file_revision(marker_path) != marker_revision
@@ -250,7 +250,7 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(root / "wire"), _store_lock(registry.store.path):
+        with _store_lock(root / "wire", shared=True), _store_lock(registry.store.path):
             snapshot = registry.store._read_unlocked().snapshot()
             self.validate_for(
                 root,
