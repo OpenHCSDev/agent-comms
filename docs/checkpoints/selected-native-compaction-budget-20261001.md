@@ -139,12 +139,18 @@ Sch owns producer semantics. No timer, throttle or progress mirror is proposed.
 The original ACP log contains5,105 measured progress records and5,100 text
 fragments,21,406 characters,2,386 leaf-phase switches and2,412 turn updates.
 Native callback clock gaps were median23ms for history and33ms for current-turn.
-The all-source-completed callback clock is23:21:42.251Z; saved native commit is
-23:35:53.485Z,851.234s later. These clocks locate a downstream gap after provider
-summary generation, but do not partition final packing, RPC buffering/consumption,
-registry locking/publication and native commit. ACP records have no receive
-timestamps. This is a concrete consumer backpressure lead, not a claim that all
-851 seconds are registry work or a direct provider TTFT measurement.
+The source-count-completed callback clock is23:21:42.251Z; saved native commit is
+23:35:53.485Z,851.234s later. This is a source-observation-to-commit gap, not a
+provider-completion interval. HistorySummarySource.consume can count completed
+map inputs before their later synthesis requests; complete reports a particular
+source scope, not every provider call in the operation. Provider terminal
+authority belongs to the original selectedStream terminal event joined with
+AssistantMessageEventStream.result and the final joined selected response.
+These clocks do not partition synthesis/provider work, final packing, RPC
+buffering/consumption, registry locking/publication and native commit. ACP
+records have no receive timestamps. This is a concrete consumer backpressure
+lead, not a claim that all851 seconds are registry work, that provider work
+finished at the source clock, or a direct provider TTFT measurement.
 
 Toad's declared CompactionRenderer consumes the original CompactionChangedUpdate;
 it excludes map text using the original source phase, then appends to the

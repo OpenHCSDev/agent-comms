@@ -65,8 +65,9 @@
       "totalTokens": 37793
     }
   },
-  "all_source_generated_to_native_commit_seconds": 851.234,
   "source_observation_clock_excluded_from_equality": true,
   "registry_read_on_every_progress": true,
-  "scope": "Native clock sampled when original callback emits; not direct provider network-arrival or ACP receive/paint clock. Gap includes native final packing, buffered RPC consumption, synchronous registry/publication and commit. No sole-cause attribution. Default stream not measured by this candidate."
+  "scope": "Native callback observation clock, not provider network-arrival/terminal or ACP receive/paint clock. Source consume/complete may precede later synthesis. The851.234s source-observation-to-commit gap can include further provider/synthesis work, final packing, buffered RPC consumption, synchronous registry/publication and commit. No sole-cause attribution or provider-finished claim. Default stream not measured by this candidate.",
+  "source_consumption_observation_to_native_commit_seconds": 851.234,
+  "provider_terminal_clock_exposed": false
 }
