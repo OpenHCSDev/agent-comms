@@ -1,4 +1,14 @@
-## Current delivery update — 2026-10-02T12:14Z
+## Latest checkpoint — 2026-10-02T12:49Z
+
+Toad323 (c08e6c65), Textual26 (94c14b57), and Core530 (5c55d1cc, includes531) are now merged after complete production-source and installed-receipt review. Schrodinger stages ONE combined release with unchanged nativead533; parent owns public installation. Default324 remains installed until that publication.
+
+Tristan reports lazy loading still extremely slow. The real recording supports that: native handler-to-terminal-writer Up p95 242.70ms and reversal316.23ms; this is not exact emulator input-to-paint. The 200s motion run is incomplete, and the separate41.321s retained-tab/draft/Undo/End journey passed all12 checks. Neither is full smooth-scrolling acceptance. Heisenberg and Kepler now own the next coherent body-capture geometry change: retirement checks, capture and rendering repeatedly acquire geometry, including a full-scene fallback. They extend the existing compositor/body/frame owners and delete repeated acquisitions across callers; actual saved-workload motion/profile verification comes after implementation. No new competing map or state store.
+
+Core530's final changed installed42MB TRIAGE/FULL/reply/cursor/lease journey passed14.741s on nativead533 with controlled responses, no public input. It removes redundant child reacquisition and whole-history semantic decoding for tracked-input proof; original-byte verification and custody liveness/revision checks remain. It does not close the original372 initial get_state timeout. Arendt532 independently owns that native source/count investigation; sole producer Sch has supplied its new artifact for a no-provider retained-source read. The qualified merged bundle does not wait for532 or final144Hz performance.
+
+Earlier updates below are historical.
+
+## Previous delivery update — 2026-10-02T12:14Z
 
 Default paired324 is installed: Cored6e196a8 (521/529 and prior523/524/525/528), Toad source322, Textual25, nativead533. Five default links target `/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002`. Preserve-only publication completed44.680s; all19 owners/configurations and actual route verified. Original sessions, inputs and UNKNOWN remain preserved. The ordinary default `toad-comms openhcs-helper` physical saved-history check completed45.659s; parent inspected the actual Ready/history/collapsed coordination screenshot before the final receipt existed, without simultaneous recorder-PID verification. This is not during-motion acceptance. Recorder255 remains distinct from operator0. This is startup/display proof, not scrolling acceptance.
 
