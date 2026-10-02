@@ -51,7 +51,6 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .selected_source import SessionRevision, SessionRevisionUnavailable
 from .selected_tool_broker import SelectedToolDenied
-from .store_files import _store_lock
 from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
@@ -172,8 +171,7 @@ def _maintenance_send_boundary(
         with delegate(public_id, native_id, text) as allowed:
             yield allowed
         return
-    with _store_lock(root / "wire"):
-        MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
+    with MaintenanceBarrier(root / "registry.json").admit_ingress():
         with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
             yield allowed
 
