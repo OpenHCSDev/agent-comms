@@ -259,3 +259,78 @@ controls are summary-baseline52/typed53/source-final55/related56/child57 and
 user-484-54. The latest audit archive100fbe8e was reread. Direct peer delivery
 remains unconfirmed because multi_agent_v1 is absent from this session catalog;
 publication in481 is the available handoff. Parent owns the next installation.
+
+## Direct native input pin: original-source extension
+
+NativeInputConstraintPin extends the existing HumanConstraintPin declaration,
+not a second constraint registry. Its subject is the original InputProvenance
+(key plus its original HumanInputOrigin), resolved through InputDispositions
+under the existing certified wire barrier. The shared USER author/recipient/
+scope/change/lineage machinery owns repeat pin, correction and drop; this
+member owns only its original input relation. No wording is copied to the pin,
+no model lease is borrowed, and pin publication never attempts the input.
+
+ExactTaskFact.original_sources provides the original Message or StoredInput at
+the same immutable captured cut. Active declarations must resolve their wording
+within that cut before classification: missing/future input material cannot be
+packed merely because the pin row exists. Recorded human input birth survives
+owner rename through the original origin; neutral rows retain only their
+recorded name. No birth is invented for old evidence (IDEN-8/IMPL-12/TIME-9).
+
+The existing source publisher/ingress family passes22 in5.95s, including the
+continuous new direct-input case: original queued human input, USER pin without
+new turn, exact source/codec, repeated same input, distinct equal-body inputs,
+foreign recipient/key/origin refusal, rename, correction/drop and unchanged
+original UNKNOWN disposition. Original60 negative was a narrower refusal
+message mismatch, preserved;61 and62 controls pass. This is source acceptance,
+not a new actual-native three-compaction or installed UI claim.
+
+Frozen79d3 remains the published wire-only checkpoint for Einstein474 b4e80.
+No native package/manifest change is required by this source-only extension.
+Native direct pin export needs S5's original-source renderer to consume
+StoredInput.source_text/context_provenance and the recorded human author rather
+than assume every wording source is Message. That downstream integration is
+explicit, not an alias or fabricated wire subject. Full three native compactions
+and separately budgeted S4 model recall remain open.
+
+## Installed direct-input native acceptance: three actual commits
+
+Normal Core wheel a6dd (production91d0) matches all installed Python modules;
+no source overlay, native build, public mutation or input replay. The existing
+NativeBackendFixture/SDK SessionManager source/CommsAgent ACP machinery performs
+three successive selected-summary COMMITs, each with a distinct native journal
+compaction entry and complete original SelectedSummarySource. Every captured
+cut resolves the same direct USER pin to the exact original StoredInput, and
+native packing preserves that frozen source. Original InputDispositions bytes
+remain unchanged by each compaction. A distinct fourth native input succeeds
+and its actual provider request contains the earliest retained source.
+
+Actual72 passes51.398s,8 localhost requests (four ordinary inputs, four actual
+summary/probe requests); paid/public calls0. This is actual native/ACP source
+and commit acceptance after484, not three generated manifests. No installed
+Toad/native-pin CLI/export or S4 model recall is claimed. Source remains exact
+and mandatory; the64KiB bound is unchanged. Actual70 has no complete initial
+cut with a single completed turn. Actual71 accepts its first native pin commit
+then correctly refuses oversized required input source at round2. Both original
+failed inputs/journals/requests remain preserved. Actual72 uses the established
+SDK retained-history builder and bounded authored inputs, not truncated facts
+or a waived decoder.
+
+Installed production debt ratchet68 has zero positive deltas. All marked guards
+run:123 pass, two baseline79 source findings remain byte-identical (owner_cutover
+filename rejection and native_pi SQL literal at250). One source-layout-only
+guard cannot read pyproject from a wheel installation; its correct source-path
+run passes. None are waived or called a full guard pass. Exact baseline proof77
+is available for parent/original source owners.
+
+Retirement75 independently checks /proc original fixture root/config/cwd refs:
+70/71/72 each empty,0signals. The fixture.children list was empty because the
+CommsAgent, not fixture.run, owned these native children; its boolean alone
+is not custody proof. The existing canonical agent shutdown joined resources,
+and the read-only kernel census independently confirms absence.
+
+Exact handoff: native-pin-checkpoint78.json, actual72 receipt +original journals
+under owned s2-direct-native-pin scratch. S5 wire-only79 checkpoint remains
+frozen. Direct native export must extend the existing S5 original-source reader
+and renderer to actual StoredInput source/author/provenance; no copied Message
+body or compatibility alias is supplied. Parent owns integration/publication.

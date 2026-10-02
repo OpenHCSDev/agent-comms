@@ -1,0 +1,191 @@
+{
+  "state": "PRODUCER_79_SCOPED_READY_FOR_NORMAL_WHOLE_474_MERGE",
+  "owner": "Schrodinger481",
+  "producer": "79d3aae28b2524a80cc97ed881fc6dcedcf02e09",
+  "candidate474": "8bb259ce33e4567b7dd13695eb9f9a4d3a1c28a6",
+  "tested_installed474": "60e5b0245bb8caa7da12f340f29b3c9c9b3c130c",
+  "current_main_comparison": "e25cd805219f010807ea98ffacb6eac1c0004093",
+  "producer_is_ancestor": true,
+  "consumer_only_delta_after_producer": [
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/exporting.py",
+    "src/agent_comms/retained_context.py",
+    "src/agent_comms/wire_log.py"
+  ],
+  "candidate_vs_tested_production_stack": "ZERO",
+  "all_incorporated_producer_paths_disposition": "ACCEPTED_USEFUL_TESTED_CHECKPOINT",
+  "producer_file_count": 27,
+  "producer_delta": [
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "added": 22,
+      "deleted": 18
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "added": 24,
+      "deleted": 17
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "added": 54,
+      "deleted": 24
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/messages.py",
+      "added": 11,
+      "deleted": 10
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "added": 34,
+      "deleted": 10
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "added": 83,
+      "deleted": 6
+    },
+    {
+      "path": "src/agent_comms/native_file_artifact.py",
+      "added": 23,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "added": 14,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/native_revision_text.py",
+      "added": 24,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/native_tools.py",
+      "added": 12,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "added": 18,
+      "deleted": 10
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "added": 133,
+      "deleted": 14
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "added": 19,
+      "deleted": 13
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "added": 20,
+      "deleted": 3
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "added": 118,
+      "deleted": 31
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "added": 2,
+      "deleted": 5
+    },
+    {
+      "path": "src/agent_comms/task_decisions.py",
+      "added": 0,
+      "deleted": 301
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "added": 508,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "added": 5,
+      "deleted": 5
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "added": 59,
+      "deleted": 27
+    },
+    {
+      "path": "stack/bin/prepare-pi-native",
+      "added": 2,
+      "deleted": 0
+    },
+    {
+      "path": "stack/native-file-artifact-schema.mjs",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "stack/native-file-artifact.mjs",
+      "added": 26,
+      "deleted": 0
+    },
+    {
+      "path": "stack/patch-native-file-artifact.py",
+      "added": 39,
+      "deleted": 0
+    },
+    {
+      "path": "stack/pi-native.sha256",
+      "added": 5,
+      "deleted": 1
+    }
+  ],
+  "producer_total_added": 1265,
+  "producer_total_deleted": 502,
+  "native_manifest": "776cd99e55d6917b77209b85e071529f5959b622ab666e6acaa16de6ed9b6a92",
+  "native_tree": "abaa5bf07cd1d40b56d23e7201ae58bd0615892b79b728fad5e1e0b25a1c3e1c",
+  "producer_evidence_sha256": {
+    "native-trust27.json": "cba59ad5d0fd1916b0b2c1a12fce25b30ab329c099251751036d14d2aaf40f87",
+    "installed-user-carry49.json": "659d152b5bd988446a1a4c2a95b1ff39df471efd56d63ef4d8470e9d878b8f22",
+    "installed-carry48-receipt.json": "b32cdcb379ed1ef31276c6ccdda0cce52676140bf39a100dcab460b711dc911f",
+    "USER-484-fixture-handoff58.json": "d19ff28a5a8ad58c3dafba6dd78eb27211a76514db08fc2d1ae3612da17df87d"
+  },
+  "actual474_receipt": "evidence/turn-context-phase2-20261001/authored-native-ready11.json",
+  "actual474_elapsed_seconds": 47.53183395595988,
+  "actual474_local_posts": 2,
+  "actual474_journey": [
+    "Certified original human pin with no agent lease or copied pin wording",
+    "Real Toad/ACP manual compaction and original native selected commit",
+    "Canonical exact retained prefix and original human author/reference/wording",
+    "Normal installed atomic CLI export to fresh SDK project AGENTS.md",
+    "Fresh original empty SDK session / actual Toad input / exported exact system-source / native terminal answer"
+  ],
+  "remaining_draft": "Core481 current source f73adac9 includes direct-input extension; after normal474 merge retain it as explicit follow-up. No79 producer code omitted/cherry-picked/reset.",
+  "remaining_scope": [
+    "Direct native HumanInput pin export/CLI/Toad consumers; three-native positive checkpoint already published separately",
+    "Full S2/S3 goal/failure/artifact repository-symbol source and recent retention scope",
+    "Separately authorized S4 model recall/economics",
+    "Underlying fresh-input awareness/cursor source failure from474; no fullbus claim"
+  ],
+  "not_merge_dependencies": [
+    "Optional provider evaluations",
+    "S4 research",
+    "Independent Arendt485 native budget fix on0064",
+    "Repeat ratchet/audit or accepted474 journey"
+  ],
+  "operator_install_requirement": "Use reviewed whole776 package and normal paired source. ExistingRetainedTaskSourceCarry validates original installed source/re-attests task envelopes under stopped-writer custody; no legacy decoder or partialstack. Parent alone public cutover.",
+  "new_tests_or_provider_calls": 0,
+  "public_mutations": []
+}
