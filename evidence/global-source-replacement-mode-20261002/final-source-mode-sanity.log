@@ -1,0 +1,29 @@
+{
+  "state": "final-source-owner-file-mode-and-bytes-batch-passed",
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+  "qualified_source_writer": "/home/ts/wt/comms-task-aware-native-bundle-20261002/src/agent_comms/store_files.py",
+  "qualified_source_writer_sha256": "897f5940e8839db9dbd0d92601408cf65b28ba97def00697bcb1769f56525ae7",
+  "global_source_owner": "existing parent-tracked GlobalSourceInstall/ReplaceGlobalSource; no new installer/atomic writer",
+  "global_source_owner_sha256": "5f299f5d246e6ad73f0e76f1ec822466e79f429105412a3632a64c6621030754",
+  "cases": [
+    {
+      "member": "executable",
+      "mode": "0o755",
+      "new_bytes_equal": true,
+      "preimage_preserved": true
+    },
+    {
+      "member": "ordinary",
+      "mode": "0o644",
+      "new_bytes_equal": true,
+      "preimage_preserved": true
+    }
+  ],
+  "private_default_mode": "0o600",
+  "new_global_source_mode": "0o600",
+  "changed_original_refused": true,
+  "temporary_files_remaining": false,
+  "public_changes": 0,
+  "provider_calls": 0,
+  "scope": "Final source actual filesystem primitive and existing reviewed source behavior; no public deployment, provider or repeated UI/lifetime journey"
+}

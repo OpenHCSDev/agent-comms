@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import BinaryIO, TYPE_CHECKING
 
 from .errors import RelationViolationError
+from .private_path import PrivateFileRole
 
 if TYPE_CHECKING:
     from .private_bus_checkpoint import CertifiedSourceRead
@@ -159,13 +160,17 @@ def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == 
             time.sleep(min(0.01 * (2**attempt), 0.1))
 
 
-def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool = False) -> None:
+def _atomic_write_text(
+    path: Path, text: str, *, fsync_parent: bool = False,
+    mode: int = PrivateFileRole.permissions,
+) -> None:
     """Replace a snapshot; private guarded writes also durably sync its name."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     temporary_path = Path(temporary)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
+            os.chmod(temporary_path, mode)
             output.write(text)
             output.flush()
             os.fsync(output.fileno())
