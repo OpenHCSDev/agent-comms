@@ -50,7 +50,8 @@ def record_fixture_history(inputs, owner, admission):
 
 @asynccontextmanager
 async def owner_fixture(
-    tmp_path, monkeypatch, *, goal=True, response_gate: asyncio.Event | None = None
+    tmp_path, monkeypatch, *, goal=True, response_gate: asyncio.Event | None = None,
+    completion_tokens: int = 5,
 ):
     package = Path(PACKAGE).resolve()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
@@ -88,7 +89,8 @@ async def owner_fixture(
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 9500, "completion_tokens": 5, "total_tokens": 9505},
+                "usage": {"prompt_tokens": 9500, "completion_tokens": completion_tokens,
+                          "total_tokens": 9500 + completion_tokens},
             }
             body = b"data: " + json.dumps(chunk).encode() + b"\n\ndata: [DONE]\n\n"
             writer.write(
@@ -212,10 +214,11 @@ async def owner_fixture(
         assert child.returncode is not None and not child.identity.alive()
 
 
+@pytest.mark.parametrize("completion_tokens", [5, 5534])
 async def test_selected_native_summary_commits_and_admits_original_exactly_once(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, completion_tokens
 ):
-    async with owner_fixture(tmp_path, monkeypatch) as (
+    async with owner_fixture(tmp_path, monkeypatch, completion_tokens=completion_tokens) as (
         persistent,
         registry,
         inputs,

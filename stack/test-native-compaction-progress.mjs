@@ -15,18 +15,25 @@ const { AssistantMessageEventStream } = await import(pathToFileURL(resolve(packa
     'node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js')).href);
 const { CompactionPolicy } = await import(pathToFileURL(resolve(packageDir,
     'dist/core/compaction/agent-comms-policy.js')).href);
+const { processResponsesStream } = await import(pathToFileURL(resolve(packageDir,
+    'node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js')).href);
 const model = { provider: 'openai-codex', id: 'selected', contextWindow: 272000,
-    maxTokens: 128000, reasoning: true };
+    maxTokens: 128000, reasoning: true,
+    cost: {input:0,output:0,cacheRead:0,cacheWrite:0} };
 const reserve = 16384;
-const usage = { input: 1, output: 2, reasoning: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 3,
+// Original failure: provider output exceeds intent, reasoning is unreported.
+// It remains cost accounting; native packing admits the actual summary text.
+const usage = { input: 1, output: 5534, cacheRead: 0, cacheWrite: 0, totalTokens: 5535,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const receipts = [];
 
 for (const body of ['retained short current turn', 'retained history '.repeat(45000)]) {
     const starts = [], observations = [], chunks = [], responses = [], budgets = [];
-    const stream = async (_model, _context, options) => {
+    const stream = async (_model, context, options) => {
         budgets.push(options.maxTokens);
+        assert.ok(context.messages[0].content[0].text.includes(
+            `Keep the generated summary within ${options.maxTokens} tokens.`));
         const result = { role: 'assistant', content: [{ type: 'text', text: 'summary' }],
             stopReason: 'stop', usage };
         const events = new AssistantMessageEventStream();
@@ -62,9 +69,24 @@ for (const body of ['retained short current turn', 'retained history '.repeat(45
     assert.ok(chunks.length > 0);
     const policy = new CompactionPolicy();
     assert.ok(budgets.every(b => b === policy.summaryTokens(model,
-        policy.inputBytes(model, reserve), reserve)), 'all summary requests use the same policy');
+        policy.inputTokens(model, reserve), reserve)), 'all summary requests use the same policy');
+    assert.equal(result.usage.output, budgets.length * usage.output);
+    assert.equal(result.usage.reasoning, undefined, 'unreported reasoning is not measured zero');
     receipts.push({ sourceBytes: Buffer.byteLength(body), calls: budgets.length,
         budget: budgets[0], progressEvents: observations.length, streamedChunks: chunks.length,
         elapsedMs: responses.at(-1).observedAtMs - responses[0].startedAtMs });
+}
+// Same SDK decoder shared by Responses and Codex: absent, zero and measured
+// reasoning are different external observations, not retained-text admission.
+for (const reasoning of [undefined, 0, 1000]) {
+    const output = {role:'assistant',content:[],stopReason:'stop',usage};
+    async function* events() {
+        yield {type:'response.completed',response:{id:'local-usage',status:'completed',output:[],
+            usage:{input_tokens:1,output_tokens:5534,total_tokens:5535,
+                ...(reasoning === undefined ? {} : {output_tokens_details:{reasoning_tokens:reasoning}})}}};
+    }
+    await processResponsesStream(events(), output, {push() {}}, model, {});
+    assert.equal(output.usage.output,5534);
+    assert.equal(output.usage.reasoning,reasoning);
 }
 console.log(JSON.stringify({ preparedNative: packageDir, cases: receipts }));
