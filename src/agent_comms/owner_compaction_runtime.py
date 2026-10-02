@@ -160,7 +160,7 @@ async def _commit_native_summary(
         raise ValueError("Bounded owner summary required")
     # No native write can begin until this returns; closing under the borrow
     # lock makes an old RPC manager unusable even if commit is later refused.
-    await persistent.discard_for_external_write(prepared.witness.session_file)
+    await persistent.discard_for_external_write(prepared.witness)
     # Do not use asyncio.to_thread in a named inner Task: all-tasks shutdown
     # can cancel that Task and mark it done while its real OS worker still
     # holds the native writer. Retain the concurrent.futures.Future itself,

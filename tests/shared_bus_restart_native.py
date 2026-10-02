@@ -155,7 +155,7 @@ async def configured_pure_channel(arguments):
                 MessageType.INFO),
                 _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))]
         overlap = False
-        async with asyncio.timeout(180):
+        async with asyncio.timeout(arguments.observation_seconds):
             while True:
                 with Coordination(str(service.root/'coordination.sqlite3')) as store:
                     with store.session.read():
@@ -1011,4 +1011,6 @@ if __name__=='__main__':
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
     parser.add_argument('--configured-peers',nargs='*',default=[])
+    parser.add_argument('--observation-seconds',type=float,default=180,
+                        help='Bound this private observer; never alters native turn/provider policy')
     asyncio.run(run(parser.parse_args()))

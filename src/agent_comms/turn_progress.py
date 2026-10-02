@@ -21,6 +21,7 @@ from .diagnostics import PublicationMeasurements, record_terminal_failure, recor
 from .messages import MessageType
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
+from .native_input_owner import RegistryOwner
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
 
@@ -213,11 +214,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def before_agent_info(self, event: events.AgentInfo) -> None:
         session_file = event.session_file
-        if (
-            session_file
-            and self.comms.registry.require(self.thread_name).session_file != session_file
-        ):
-            self.comms.threads.attach_session(self.thread_name, str(session_file))
+        if session_file and self.thread.session_file != session_file:
+            self.thread = self.comms.registry.attach_native_session(
+                RegistryOwner(thread=self.thread,
+                              admission_generation=self.turn_lease.admission_generation),
+                str(session_file),
+            ).thread
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)

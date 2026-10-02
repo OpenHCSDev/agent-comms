@@ -266,7 +266,7 @@ class SelectedConsideration:
             participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
             settled = outcome.settle(participant, stage, request.admission, result.context)
-            continued = session.continued(result.context.session_file)
+            continued = session.continued(result.context)
         # The FULL request owns its own failure boundary. Never report its
         # failure through the already-proved triage input's request custody.
         return await outcome.continue_turn(

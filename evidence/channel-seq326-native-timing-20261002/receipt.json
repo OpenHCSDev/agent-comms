@@ -1,0 +1,1073 @@
+{
+  "source_wire_seq": 326,
+  "source_message_id_prefix": "6ba2aee585ff",
+  "kind": "readonly_original_witness_join",
+  "claims": [
+    {
+      "assignment_id": "cohort-v1:19270c09ce0f82788cc66586a250e59fd846d0ace646958f90a905694902d784",
+      "recipient": "Linnaeus",
+      "lifecycle": "{\"kind\":\"triage_pending\"}",
+      "revision": 1,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906166227
+    },
+    {
+      "assignment_id": "cohort-v1:e539ab611a4793539bb4d49a154ea891d51cd421f925bd0c4ffa64c8ffddbe60",
+      "recipient": "compaction499-live-architecture-memory",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906170992
+    },
+    {
+      "assignment_id": "cohort-v1:b1cce32611f673dbdcedd0362f91fc41af187a046227deea565b5892ee61fd85",
+      "recipient": "compaction501-live-architecture-memory",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906170815
+    },
+    {
+      "assignment_id": "cohort-v1:caf66fbc1aa0ce2f1bdefebb6587591460cf74d43340cbfd10b09c8ced041c85",
+      "recipient": "openhcs-architecture-memory",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906170743
+    },
+    {
+      "assignment_id": "cohort-v1:d2b3ad8314490cd126f75cfbe52bb2fa07d051287d17de9b9ff7c3b54f490210",
+      "recipient": "openhcs-audit-merged-boundaries",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906171320
+    },
+    {
+      "assignment_id": "cohort-v1:89cf0580fafbdb0fb052672c3da22e125eb3d8c250bb36ba17588db60de76e7a",
+      "recipient": "openhcs-audit-merged-models",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906171122
+    },
+    {
+      "assignment_id": "cohort-v1:5e95224c0ac593408e7ef1484a22f3b54d66d65c645fb0c3889ede8c19f4f79f",
+      "recipient": "openhcs-audit-merged-runtime",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906167640
+    },
+    {
+      "assignment_id": "cohort-v1:009f0bd272be87d5f4cd5a58f08a44f1c0adf30bbc35186a6448ccade1b5eccf",
+      "recipient": "openhcs-audit-open-prs",
+      "lifecycle": "{\"kind\":\"ignored\"}",
+      "revision": 4,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906229895
+    },
+    {
+      "assignment_id": "cohort-v1:e48f281fdfabf7850100d42eed3bdab933cc68ff38d6a458ffddc94a0d5ba747",
+      "recipient": "openhcs-headless-bootstrap-worker",
+      "lifecycle": "{\"kind\":\"triage_pending\"}",
+      "revision": 1,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906166227
+    },
+    {
+      "assignment_id": "cohort-v1:88176a54c26517ee31d4c09a83480b81b37ed638541d75e61902a032bc36546e",
+      "recipient": "openhcs-helper",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906171445
+    },
+    {
+      "assignment_id": "cohort-v1:20e65c598b4a0adfcec5d4d88bb072e3236f121536fc190d427a1c4104305ecf",
+      "recipient": "openhcs-helper2",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906169232
+    },
+    {
+      "assignment_id": "cohort-v1:eb035ffcf83eafe3401a23410ea7e67d4646c5440e95b684456523af13e1f4a4",
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "lifecycle": "{\"kind\":\"deferred\",\"decision\":{\"mode\":{\"kind\":\"bounded_triage\"}}}",
+      "revision": 2,
+      "accepted_at_ms": 1790906166227,
+      "updated_at_ms": 1790906169357
+    }
+  ],
+  "requests": [
+    {
+      "owner": "openhcs-audit-merged-runtime",
+      "input_id": "e5ff0b1ac7f804883eddfe35e3c79516",
+      "assignment_id": "cohort-v1:5e95224c0ac593408e7ef1484a22f3b54d66d65c645fb0c3889ede8c19f4f79f",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-audit-merged-runtime",
+            "created_at": 1790873422.6705143
+          },
+          "generation": 32
+        },
+        "turn_id": "f292da0814428c89c22b71afe545e9c0",
+        "admission_generation": 1493
+      },
+      "native_process": {
+        "pid": 2824683,
+        "start_time": 38180828
+      },
+      "request_file": "f292da0814428c89c22b71afe545e9c0.requests.jsonl",
+      "request_sha256": "c7efdc277418ca15f2fafd604373868b89dcb9bdccd1c2f0474b14e5f4f38306",
+      "session_sha256": "e4b56dee0e58cb78e8ded4864d4f4498c62caa3ba1e6218ad1ae776b5be17b85",
+      "session_id": "01a0fa53-79e8-72ab-8ef5-3ce32218b33f",
+      "session_entry_id": "a9779330",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906167659,
+      "user_at_ms": 1790906173401.0,
+      "native_preparing_at_ms": 1790906173414,
+      "native_finished_at_ms": 1790906180858,
+      "claim_to_native_preparing_ms": 7187,
+      "header_to_original_user_ms": 3568.0,
+      "child_birth_to_native_preparing_ms": 4311.524,
+      "model_elapsed_ms": 7444.179336,
+      "native_callbacks_ms": 3.976954,
+      "maximum_observation_lag_ms": 1718.934709,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.064913
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 53.506305
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 53.644026
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 56.205689
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 4120.662323
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 4120.747194
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 4781.517662
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 4781.999404
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 4782.284224
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 7367.986161
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 7441.028877
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 7441.722441
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 7444.148587
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 7444.179336
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-merged-boundaries",
+      "input_id": "406406e13e3dc9875a01793734904708",
+      "assignment_id": "cohort-v1:d2b3ad8314490cd126f75cfbe52bb2fa07d051287d17de9b9ff7c3b54f490210",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-audit-merged-boundaries",
+            "created_at": 1790873473.1996155
+          },
+          "generation": 32
+        },
+        "turn_id": "8485dce61489161a16a0995fa52f5017",
+        "admission_generation": 1495
+      },
+      "native_process": {
+        "pid": 2825215,
+        "start_time": 38181268
+      },
+      "request_file": "8485dce61489161a16a0995fa52f5017.requests.jsonl",
+      "request_sha256": "3c85b3f1e78bf883c0209f91789aa947e065660ff7dceecc175b20738ffc1328",
+      "session_sha256": "ce9d5a0660705d0d21daaf1e11028716479c8df18b6d85ac8447c2a04382417f",
+      "session_id": "01a0fa53-8bcf-7227-989a-405607007a7e",
+      "session_entry_id": "1732646b",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906171332,
+      "user_at_ms": 1790906176891.0,
+      "native_preparing_at_ms": 1790906176904,
+      "native_finished_at_ms": 1790906182260,
+      "claim_to_native_preparing_ms": 10677,
+      "header_to_original_user_ms": 2475.0,
+      "child_birth_to_native_preparing_ms": 3401.955,
+      "model_elapsed_ms": 5355.936673,
+      "native_callbacks_ms": 9.437919,
+      "maximum_observation_lag_ms": 3148.033447,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.072727
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 53.088243
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 53.230632
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 55.283421
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 416.826778
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 416.907941
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 636.935844
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 637.374835
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 637.57794
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 5236.094878
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 5346.684615
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 5347.766665
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 5355.89318
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 5355.936673
+        }
+      ]
+    },
+    {
+      "owner": "compaction501-live-architecture-memory",
+      "input_id": "de42bbf443df16baddafef4b4f108964",
+      "assignment_id": "cohort-v1:b1cce32611f673dbdcedd0362f91fc41af187a046227deea565b5892ee61fd85",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "compaction501-live-architecture-memory",
+            "created_at": 1790900050.675298
+          },
+          "generation": 4
+        },
+        "turn_id": "aecde4ad9d743f2fee3adec5ea2b789e",
+        "admission_generation": 1498
+      },
+      "native_process": {
+        "pid": 2824974,
+        "start_time": 38181165
+      },
+      "request_file": "aecde4ad9d743f2fee3adec5ea2b789e.requests.jsonl",
+      "request_sha256": "bcb4151a0736ac11a57e51e7b424feea11c111ff078f379641623699924592f3",
+      "session_sha256": "a5abb060158e344a746b13fff2a314eb7679c916ed3bc64428b2690e5523dac7",
+      "session_id": "01a0fa53-882e-7056-a6bf-96568f78c450",
+      "session_entry_id": "a4eaebff",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906170829,
+      "user_at_ms": 1790906186773.0,
+      "native_preparing_at_ms": 1790906186785,
+      "native_finished_at_ms": 1790906190425,
+      "claim_to_native_preparing_ms": 20558,
+      "header_to_original_user_ms": 13286.0,
+      "child_birth_to_native_preparing_ms": 14312.425,
+      "model_elapsed_ms": 3640.435814,
+      "native_callbacks_ms": 4.639983,
+      "maximum_observation_lag_ms": 2954.09334,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.090522
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 55.476578
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 55.640989
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 57.94811
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 394.948972
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 395.001101
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 692.971742
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 693.333508
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 693.528948
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3552.772029
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 3635.937813
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 3637.119161
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 3640.350542
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 3640.435814
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-architecture-memory",
+      "input_id": "0e81d04b6b53f8eb2ab5dc93bcc9b564",
+      "assignment_id": "cohort-v1:caf66fbc1aa0ce2f1bdefebb6587591460cf74d43340cbfd10b09c8ced041c85",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-architecture-memory",
+            "created_at": 1790654215.0835924
+          },
+          "generation": 71
+        },
+        "turn_id": "87f62585f1dc52a179c4a1d1b2d19ab2",
+        "admission_generation": 1487
+      },
+      "native_process": {
+        "pid": 2824976,
+        "start_time": 38181165
+      },
+      "request_file": "87f62585f1dc52a179c4a1d1b2d19ab2.requests.jsonl",
+      "request_sha256": "3ff0db707e6cd0dbc6fa41e5db362f0bdafb983c998e1172a1ae37b58f3baa7b",
+      "session_sha256": "4d5f73e54b0f9c4df3edce41a19a94afc3b8bdcc2c77bf83213f6972d23cb036",
+      "session_id": "01a0fa53-87d8-72b7-915e-ec2c56da2451",
+      "session_entry_id": "1118cb8d",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906170758,
+      "user_at_ms": 1790906195886.0,
+      "native_preparing_at_ms": 1790906195899,
+      "native_finished_at_ms": 1790906199381,
+      "claim_to_native_preparing_ms": 29672,
+      "header_to_original_user_ms": 22485.0,
+      "child_birth_to_native_preparing_ms": 23427.124,
+      "model_elapsed_ms": 3481.871376,
+      "native_callbacks_ms": 4.132989,
+      "maximum_observation_lag_ms": 2080.633045,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.105019
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 39.772056
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 39.88488
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 41.617592
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 503.388075
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 503.446486
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 777.393215
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 777.746364
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 777.994845
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3408.805135
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 3478.577696
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 3479.116597
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 3481.825168
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 3481.871376
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-helper",
+      "input_id": "5c8a4b9fbce32df9802cbde2e2344fe4",
+      "assignment_id": "cohort-v1:88176a54c26517ee31d4c09a83480b81b37ed638541d75e61902a032bc36546e",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper",
+            "created_at": 1790708584.4423254
+          },
+          "generation": 63
+        },
+        "turn_id": "7076fe5c8f1741d70a5fbb6dc511b13b",
+        "admission_generation": 1490
+      },
+      "native_process": {
+        "pid": 2825224,
+        "start_time": 38181285
+      },
+      "request_file": "7076fe5c8f1741d70a5fbb6dc511b13b.requests.jsonl",
+      "request_sha256": "9493968f55fe0bd2bafe4b518581e9418eec423e5ed3fa9854043b15fdfabb52",
+      "session_sha256": "34b4d288dc59724c70e4dfa3c729cb4d93460d2be5ad571e8b0d7cc38bc21d7a",
+      "session_id": "01a0fa53-8c3c-70ef-9ded-3661311caf8b",
+      "session_entry_id": "980fc32a",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906171468,
+      "user_at_ms": 1790906199404.0,
+      "native_preparing_at_ms": 1790906199417,
+      "native_finished_at_ms": 1790906203103,
+      "claim_to_native_preparing_ms": 33190,
+      "header_to_original_user_ms": 24879.0,
+      "child_birth_to_native_preparing_ms": 25745.081,
+      "model_elapsed_ms": 3685.086378,
+      "native_callbacks_ms": 8.891263,
+      "maximum_observation_lag_ms": 4651.665741,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.085031
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 74.745752
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 74.836073
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 76.682942
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 485.541656
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 485.59618
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 798.222255
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 798.566297
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 798.779802
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3432.43971
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 3676.411023
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 3677.236567
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 3685.035912
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 3685.086378
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-merged-models",
+      "input_id": "9271afca418bc7ab7772c4acb86d3ba3",
+      "assignment_id": "cohort-v1:89cf0580fafbdb0fb052672c3da22e125eb3d8c250bb36ba17588db60de76e7a",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-audit-merged-models",
+            "created_at": 1790873447.6164267
+          },
+          "generation": 32
+        },
+        "turn_id": "cec067639ca73b51bd5d6ab92be25276",
+        "admission_generation": 1494
+      },
+      "native_process": {
+        "pid": 2825157,
+        "start_time": 38181247
+      },
+      "request_file": "cec067639ca73b51bd5d6ab92be25276.requests.jsonl",
+      "request_sha256": "25181d83fb54c005ab7f1b5f71ca796e46986f9e091838078920e0d3063cc1e9",
+      "session_sha256": "875b6ee3aaaaaf8d8df548a9a61d1661e2a4896b69dc2aa7ae786362e19efb06",
+      "session_id": "01a0fa53-8b09-7447-bc55-068952d2b06b",
+      "session_entry_id": "4935a2fc",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906171136,
+      "user_at_ms": 1790906211095.0,
+      "native_preparing_at_ms": 1790906211107,
+      "native_finished_at_ms": 1790906215947,
+      "claim_to_native_preparing_ms": 44880,
+      "header_to_original_user_ms": 36877.0,
+      "child_birth_to_native_preparing_ms": 37814.756,
+      "model_elapsed_ms": 4840.305015,
+      "native_callbacks_ms": 4.459667,
+      "maximum_observation_lag_ms": 3423.340928,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.107033
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 49.197523
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 49.33353
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 51.596918
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 420.920395
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 420.982934
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 720.050594
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 720.397331
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 720.590287
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 4738.652929
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 4835.997244
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 4837.154687
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 4840.255491
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 4840.305015
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-open-prs",
+      "input_id": "d65e3105aff9f302eed7d5c2808cca40",
+      "assignment_id": "cohort-v1:009f0bd272be87d5f4cd5a58f08a44f1c0adf30bbc35186a6448ccade1b5eccf",
+      "verdict": "ignore",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-audit-open-prs",
+            "created_at": 1790873496.352646
+          },
+          "generation": 30
+        },
+        "turn_id": "69237d520e93703462818a2a9c2b6705",
+        "admission_generation": 1496
+      },
+      "native_process": {
+        "pid": 2824772,
+        "start_time": 38181009
+      },
+      "request_file": "69237d520e93703462818a2a9c2b6705.requests.jsonl",
+      "request_sha256": "9da6b2e9ac61534837a132ea2d9de3e01779ed2bc71dd388c68f782146e0bf7c",
+      "session_sha256": "5b24f827cd7ff9b34a4282b5c9819745e8e7bbdba74272a00afe156576e0f719",
+      "session_id": "01a0fa53-8115-7173-a69b-69d0c848a55d",
+      "session_entry_id": "24b6b534",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906169153,
+      "user_at_ms": 1790906218853.0,
+      "native_preparing_at_ms": 1790906218865,
+      "native_finished_at_ms": 1790906226416,
+      "claim_to_native_preparing_ms": 52638,
+      "header_to_original_user_ms": 47182.0,
+      "child_birth_to_native_preparing_ms": 47952.774,
+      "model_elapsed_ms": 7550.834943,
+      "native_callbacks_ms": 12.758643,
+      "maximum_observation_lag_ms": 4058.976427,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.076215
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 50.595932
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 50.729726
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 53.899571
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 464.675388
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 464.723288
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 804.238205
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 804.60016
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 804.788106
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 6472.833816
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 7547.415285
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 7548.213858
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 7550.788685
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 7550.834943
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-helper2",
+      "input_id": "3376a4ee2afa0c4ae724a7145946091f",
+      "assignment_id": "cohort-v1:20e65c598b4a0adfcec5d4d88bb072e3236f121536fc190d427a1c4104305ecf",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper2",
+            "created_at": 1790713653.7134795
+          },
+          "generation": 46
+        },
+        "turn_id": "e4686e7682c2def939c6a639a7028c31",
+        "admission_generation": 1491
+      },
+      "native_process": {
+        "pid": 2824848,
+        "start_time": 38181027
+      },
+      "request_file": "e4686e7682c2def939c6a639a7028c31.requests.jsonl",
+      "request_sha256": "af1ff0c43187871895acfe40364d29e1ac2245b3074bd3ff7e12663c5ae63e48",
+      "session_sha256": "fb22784e2e5dd7bcf3234ecf9539dc38bd8b0c46cd2b28da6c8f273603959d9d",
+      "session_id": "01a0fa53-81e6-77fb-91cc-422bc7036d03",
+      "session_entry_id": "f2e61698",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906169248,
+      "user_at_ms": 1790906225029.0,
+      "native_preparing_at_ms": 1790906225044,
+      "native_finished_at_ms": 1790906228330,
+      "claim_to_native_preparing_ms": 58817,
+      "header_to_original_user_ms": 53150.0,
+      "child_birth_to_native_preparing_ms": 53951.24,
+      "model_elapsed_ms": 3286.589764,
+      "native_callbacks_ms": 3.614941,
+      "maximum_observation_lag_ms": 4071.099788,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.107583
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 45.763627
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 45.847796
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 47.291201
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 396.785232
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 396.853442
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 613.211392
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 613.502845
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 613.661675
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3166.359073
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 3283.488409
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 3284.267405
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 3286.558966
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 3286.589764
+        }
+      ]
+    },
+    {
+      "owner": "compaction499-live-architecture-memory",
+      "input_id": "d9414d531808b8f10bee8d7829c0b788",
+      "assignment_id": "cohort-v1:e539ab611a4793539bb4d49a154ea891d51cd421f925bd0c4ffa64c8ffddbe60",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "compaction499-live-architecture-memory",
+            "created_at": 1790895107.1284342
+          },
+          "generation": 2
+        },
+        "turn_id": "127897a85c96ea30a86d06187dd82bf8",
+        "admission_generation": 1497
+      },
+      "native_process": {
+        "pid": 2825159,
+        "start_time": 38181248
+      },
+      "request_file": "127897a85c96ea30a86d06187dd82bf8.requests.jsonl",
+      "request_sha256": "398451cf447fc3adebc7963935ffc178eae9bee5461cdb5fffa2dc502dc4a1c7",
+      "session_sha256": "b794b765e85ba0b1acca5e9b7293486a97ab6b6b1dd62530ee997b48552c0780",
+      "session_id": "01a0fa53-8b44-777e-87f3-decb73fb4d97",
+      "session_entry_id": "bae12279",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906171010,
+      "user_at_ms": 1790906235343.0,
+      "native_preparing_at_ms": 1790906235358,
+      "native_finished_at_ms": 1790906239032,
+      "claim_to_native_preparing_ms": 69131,
+      "header_to_original_user_ms": 61066.0,
+      "child_birth_to_native_preparing_ms": 62055.381,
+      "model_elapsed_ms": 3674.292496,
+      "native_callbacks_ms": 4.009806,
+      "maximum_observation_lag_ms": 4139.786628,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.049804
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 50.612533
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 50.742409
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 52.735295
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 418.786043
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 418.875021
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 658.770193
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 659.115196
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 659.309565
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3536.456281
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 3670.781414
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 3671.629672
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 3674.257199
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 3674.292496
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "input_id": "eab1d0679a35f48a868ba09869fd825c",
+      "assignment_id": "cohort-v1:eb035ffcf83eafe3401a23410ea7e67d4646c5440e95b684456523af13e1f4a4",
+      "verdict": "full",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-pr159-viewer-bind-owner",
+            "created_at": 1790657026.7285714
+          },
+          "generation": 62
+        },
+        "turn_id": "d8af8f182ecfd7985804e0da84d98bf8",
+        "admission_generation": 1488
+      },
+      "native_process": {
+        "pid": 2824858,
+        "start_time": 38181035
+      },
+      "request_file": "d8af8f182ecfd7985804e0da84d98bf8.requests.jsonl",
+      "request_sha256": "a7a8d2aa642de507f6a29215d14b1cb94f8fc95744b212f99bbffe4473f2098d",
+      "session_sha256": "4448491092c1b44a66041cfc0d562b86521bc07552a0a79ec0bd91708e7a0fb0",
+      "session_id": "01a0fa53-8240-76da-a695-d24bc7b81534",
+      "session_entry_id": "9a94c5c8",
+      "accepted_at_ms": 1790906166227,
+      "bound_at_ms": 1790906169370,
+      "user_at_ms": 1790906246698.0,
+      "native_preparing_at_ms": 1790906246710,
+      "native_finished_at_ms": 1790906253743,
+      "claim_to_native_preparing_ms": 80483,
+      "header_to_original_user_ms": 74730.0,
+      "child_birth_to_native_preparing_ms": 75537.567,
+      "model_elapsed_ms": 7032.975284,
+      "native_callbacks_ms": 6.590897,
+      "maximum_observation_lag_ms": 450.838696,
+      "stages": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.050024
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 77.612433
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 77.726309
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 79.450034
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 400.516542
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 400.56837
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 634.274988
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 634.714912
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 634.978651
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 6343.275605
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 7026.347558
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 7027.807183
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 7032.932102
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 7032.975284
+        }
+      ]
+    }
+  ],
+  "installed_source_sha256": {
+    "coordinated_runtime.py": "199b861cd9a00f199f9df4f648a4dfbec8b392d0b9c30990e5083dc9ca9d558e",
+    "selected_participant.py": "64a1671bbdaad35ed4d9fc1eb1aaf17f98701cc3c3e76c659412f6bab40e4fef",
+    "private_send_admission.py": "e1541f1f680f2f9bf2ba209af4ab9862a4fe5444e5cbebef3b54ddd12fee4f04",
+    "native_prompt_send.py": "82d8b454343ecc3313e8f48c992c9eb46c58fc3ae61faf3483b79f5c1946d263",
+    "tracked_turn.py": "70c609e395dff5a1155beaaba4f148fd8ab16e35d015224f016ab16e16a04256",
+    "native_startup.py": "3dd413f75755484d7f1998007a9fc5cb1884ab6ee7b8008693a28bbed3c58640",
+    "coordination_response.py": "d51fb8cf0984a0926f650f03556931791d9658357034a23f51360ade964ea18d",
+    "compaction_private_inputs.py": "b793dde31b014df7e5b837e81cbe1635c403af68c5fc79df2d7ea95b3803f1f5",
+    "backend.py": "019211b8f9c9ec500edec6b90987283c48280817a378f3a9bf6cd6c5a1ca598a"
+  },
+  "limits": [
+    "No historical get_state-response, prompt-writer-grant, or physical-lock wait timestamps were retained.",
+    "Header-to-user precedes model preparation but cannot distinguish parent admission wait from native pre-user handling.",
+    "Recorded observation lag includes queued consumption and Python publication; it is not a pure IPC or lock duration.",
+    "Kernel process birth has scheduler tick resolution; native elapsed measurements use the original monotonic clock.",
+    "No public writer, native input, replay, restart, repair, or provider invocation is performed."
+  ]
+}

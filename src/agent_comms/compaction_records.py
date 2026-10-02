@@ -305,9 +305,7 @@ class EnrolledPrivateSession(JournalTable, TypedTable, declared_name="enrolled_p
         witness: SelectedSource,
         admission_generation: int | None,
     ) -> None:
-        observed = FreshCoverageIdentity(witness.incarnation, witness.owner, fresh.path.parent.name)
-        if observed != self.coverage_identity:
-            raise CompactionJournalError("Fresh private owner coverage differs: owner identity")
+        self.coverage_identity.require_owner(witness)
         if admission_generation is not None and admission_generation != self.admission_generation:
             raise CompactionJournalError("Fresh private owner coverage differs: admission")
         fresh.verify_saved_identity()

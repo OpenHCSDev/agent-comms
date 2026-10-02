@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
-from .native_revision_text import NativeRevisionText
 from .private_path import FileRevision
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation, TurnId
@@ -90,11 +89,6 @@ class SessionRevision(SessionObservation):
 
     def current(self, session_file: str | None) -> bool:
         return self.observe(session_file).matches(self)
-
-    @property
-    def native_stamp(self) -> str:
-        """Pi's external five-field colon ABI; the sidecar is not in that ABI."""
-        return NativeRevisionText.encode(self.native)
 
     def same_input_proof(self, reserved: SessionRevision) -> bool:
         """Compare sidecar observations, not committed native-input evidence."""
