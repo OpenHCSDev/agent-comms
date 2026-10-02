@@ -18,12 +18,12 @@ class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
     def synchronize_goal(self, acquired, destination):
         return NativeSchemaDeclaration.observe().synchronize_goal(acquired, destination, self.goal_schema)
 
-    def unchanged_protected(self, paths: set[Path]) -> set[Path]:
+    def unchanged_protected(self, paths: frozenset[Path]) -> frozenset[Path]:
         """The member owns which original bytes its installation may change."""
-        return paths
+        return frozenset(paths)
 
     @abstractmethod
-    def retain_protected(self, paths: set[Path], directory: Path): ...
+    def retain_protected(self, paths: frozenset[Path], directory: Path): ...
 
     @abstractmethod
     def install(self, acquired: AcquiredRuntimeFiles, destination: Path): ...
@@ -31,7 +31,7 @@ class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
 
 @dataclass(frozen=True)
 class ResetRuntimeInstallation(RuntimeInstallation):
-    def retain_protected(self, paths, directory):
+    def retain_protected(self, paths: frozenset[Path], directory: Path):
         return [retain_file(path, directory / f'protected-{index}')
                 for index, path in enumerate(sorted(paths))]
 
@@ -41,7 +41,7 @@ class ResetRuntimeInstallation(RuntimeInstallation):
 
 @dataclass(frozen=True)
 class PreserveRuntimeInstallation(RuntimeInstallation):
-    def retain_protected(self, paths, directory):
+    def retain_protected(self, paths: frozenset[Path], directory: Path):
         # Original protected bytes are hashed by the installation before/after.
         # The earlier reset's private preimages remain at their original paths.
         return []
@@ -58,9 +58,10 @@ class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
 
     plan: NativeSchemaCarryPlan
 
-    def unchanged_protected(self, paths):
+    def unchanged_protected(self, paths: frozenset[Path]) -> frozenset[Path]:
         self.plan.require_candidate()
-        return paths - {self.plan.root / item.name for item in self.plan.stores}
+        return super().unchanged_protected(paths).difference(
+            self.plan.root / item.name for item in self.plan.stores)
 
     def install(self, acquired, destination):
         if acquired.paths[0].parent != self.plan.root:
