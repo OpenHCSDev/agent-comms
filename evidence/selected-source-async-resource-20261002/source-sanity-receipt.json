@@ -37,5 +37,32 @@
       "purpose": "original bounded source-sanity private roots/claim disposition evidence",
       "size_approx_mib": 4.5
     }
-  ]
+  ],
+  "latest_source_checkpoint": {
+    "head": "4c98616d290a0376dbec7c1e2131e20fe6da90bc",
+    "shared_owner": "ca22aa15",
+    "normal_context_integration": "24440b36",
+    "implementation_commit": "50b12af1",
+    "implementation_added_lines": 60,
+    "implementation_deleted_lines": 32,
+    "implementation_files": [
+      "src/agent_comms/selected_participant.py",
+      "src/agent_comms/selected_triage.py",
+      "src/agent_comms/selected_turn.py"
+    ],
+    "sanity": {
+      "passed": 2,
+      "exit_code": 0,
+      "duration_seconds": 6.29,
+      "cases": [
+        "tests/test_selected_source_batch.py",
+        "tests/test_private_idle_drain.py::test_sealed_cohorts_are_not_reaccepted_or_rewritten"
+      ],
+      "provider_calls": 0,
+      "native_prompts": 0,
+      "strength": "own source with donor dependencies; combined installed qualification belongs to Arendt509"
+    },
+    "remaining_installed_owner": "Arendt509",
+    "retained_private_state": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/async512-final-state"
+  }
 }
