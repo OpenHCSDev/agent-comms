@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import os
 import sys
 import threading
@@ -300,6 +301,35 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     with active_route.guard_default_route_write(root):
         (root / "read-marker").write_text("new write completed")
     assert (root / "read-marker").read_text() == "new write completed"
+
+
+def test_client_custody_explicit_published_root_and_cross_thread_retirement(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    route_file.parent.mkdir(mode=0o700)
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    route_file.write_text(json.dumps(active_route.FieldCodec.encode(route)))
+    route_file.chmod(0o600)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    client = active_route.resolve_comms_route(root)
+    descriptor = os.open(route_file.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            custody = client.admit_client()
+            executor.submit(custody.__enter__).result(timeout=5)
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Retirement is owned by the resource, regardless of the thread
+            # where its compatible nested acquisition ran.
+            custody.__exit__(None, None, None)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with pytest.raises(BlockingIOError), client.admit_client():
+                raise AssertionError("Published-root client entered publication")
+            independent = active_route.LocalRoute(tmp_path / "independent")
+            with independent.admit_client():
+                pass
+    finally:
+        os.close(descriptor)
 
 
 def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):

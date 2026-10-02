@@ -51,11 +51,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     route_guard = ExitStack()
     try:
         command = CliCommand.from_namespace(args)
-        comms = wire(Path(args.root).expanduser() if args.root else None)
-        if not args.root and "AGENT_COMMS_ROOT" not in os.environ:
-            from .active_route import guard_default_route_write
+        from .active_route import resolve_comms_route
 
-            route_guard.enter_context(guard_default_route_write(comms.root))
+        route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
+        route_guard.enter_context(route.admit_client())
+        comms = wire(route)
         _emit(command.apply(comms))
     except StoppedOwnerFailure as exc:
         # This JSON adapter is one-shot. It cannot silently discard acquired

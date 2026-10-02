@@ -6,7 +6,7 @@ signal, native input or alternative owner-stop/launch implementation.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from contextlib import ExitStack
 import fcntl
 import json
@@ -29,6 +29,7 @@ from agent_comms.store_files import _atomic_write_text
 from agent_comms.threads import Thread
 from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
 from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
+from native_schema_carry import RuntimeNativeFiles
 from runtime_installation import RuntimeInstallation
 from cutover_child import restore_stopped_batch
 
@@ -206,6 +207,31 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
     runtime_installation: RuntimeInstallation
     route_directory: int
     receipt: Path
+    recovery_originals: tuple[ReviewedArtifact, ...] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        # This witness precedes EVERY fence/signal. A failure before stopped
+        # capture still has evidence; later installation cannot redefine it.
+        object.__setattr__(self, 'recovery_originals', tuple(
+            ReviewedArtifact(path, digest(path)) for path in sorted(self.recovery_paths())
+        ))
+
+    def recovery_paths(self) -> frozenset[Path]:
+        """Include payloads the installation may replace, not only invariants."""
+        from agent_comms.wire_log import WireLog
+
+        bus = WireLog(ROOT / 'bus.jsonl')
+        paths = self.protected_files().union(
+            RuntimeCompactionFiles(ROOT).paths, RuntimeNativeFiles(ROOT).paths,
+            (bus.path, bus.metadata_path),
+        )
+        return frozenset(path for path in paths if path.exists() or path.is_symlink())
+
+    def require_recovery_originals(self):
+        if self.recovery_paths() != frozenset(item.path for item in self.recovery_originals):
+            raise RuntimeError('Original recovery membership changed; remain stopped')
+        for original in self.recovery_originals:
+            original.require_original()
 
     def note(self, phase, **facts):
         previous = json.loads(self.receipt.read_text())
@@ -304,16 +330,14 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         The same RAM handoff and original wire OFD cross the existing child.
         """
         self.cohort.require_publication_originals()
-        proof = json.loads(self.receipt.read_text())
-        protected = FieldCodec.decode(dict[str, str], proof['protected_original_sha256'])
-        if {str(path) for path in self.protected_files()} != set(protected):
-            raise RuntimeError('Protected original membership changed; no source recovery')
-        for name, expected in protected.items():
-            ReviewedArtifact(Path(name), expected).require_original()
-        expected_registry = FieldCodec.decode(str, proof['registry_original_sha256'])
-        ReviewedArtifact(self.receipt.with_suffix('.originals') / 'registry.json',
-                         expected_registry).require_original()
-        ReviewedArtifact(ROOT / 'registry.json', expected_registry).require_original()
+        self.require_recovery_originals()
+        # The original handoff owns fenced identity/admission, rather than a
+        # raw registry hash minted only after stopped validation. Full stored
+        # settings must also remain the captured originals before source restore.
+        snapshot = stopped.lifecycle.registry.snapshot()
+        for original in self.originals:
+            if snapshot.threads[original.name] != original:
+                raise RuntimeError('Original stopped configuration changed; remain stopped')
 
         restored = restore_stopped_batch(stopped)
         self.note('failed-install-original-runtime-restored',
@@ -367,6 +391,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
             json.dump({'phase':'preflight-complete', 'started':time.time(),
                        'cohort':FieldCodec.encode(cohort),
                        'runtime_installation':FieldCodec.encode(runtime_installation),
+                       'recovery_originals':FieldCodec.encode(operation.recovery_originals),
                        'owners_before':FieldCodec.encode(audience)}, opened, indent=2)
             opened.flush()
             os.fsync(opened.fileno())

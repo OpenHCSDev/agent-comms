@@ -504,75 +504,78 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    if "--login" in sys.argv[1:]:
-        from .login import run_login
+    from .active_route import resolve_comms_route
 
-        index = sys.argv.index("--login")
-        return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
-    debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
-    if debug_path:
-        import logging
+    with resolve_comms_route().admit_client():
+        if "--login" in sys.argv[1:]:
+            from .login import run_login
 
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s %(name)s %(levelname)s %(message)s",
-            filename=debug_path + ".log",
-        )
-    # The stdio ACP client only attaches to a separately owned worker. An
-    # explicit private launch must be checked before it can create a wire or
-    # request an owner; the worker independently repeats the same preflight.
-    from .private_nk_entrypoint import private_nk_from_environment
+            index = sys.argv.index("--login")
+            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
+        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+        if debug_path:
+            import logging
 
-    private_nk = private_nk_from_environment()
-    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
-    if private_nk is not None:
-        comms.owners.pin_private_nk_launch(
-            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
-        )
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format="%(asctime)s %(name)s %(levelname)s %(message)s",
+                filename=debug_path + ".log",
+            )
+        # The stdio ACP client only attaches to a separately owned worker. An
+        # explicit private launch must be checked before it can create a wire or
+        # request an owner; the worker independently repeats the same preflight.
+        from .private_nk_entrypoint import private_nk_from_environment
 
-    async def run() -> None:
-        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-
-            async def watchdog() -> None:
-                while True:
-                    await asyncio.sleep(5)
-                    tasks = [t for t in asyncio.all_tasks() if not t.done()]
-                    with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
-                        debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
-                        for task in tasks:
-                            stack = task.get_stack()
-                            innermost = [
-                                f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
-                                for frame in stack
-                                if frame
-                            ][-4:]
-                            debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
-
-            asyncio.create_task(watchdog())
-        agent = CommsClient(
-            comms,
-            runtime_enabled=True,
-            private_nk_native_package=private_nk.native_package if private_nk else None,
-            private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
-        )
-
-        def observe(event: Any) -> None:
-            agent._debug_log(
-                f"{event.direction.value}: {json.dumps(event.message)[:200]}"
-                if hasattr(event, "message")
-                else f"{event.direction.value}"
+        private_nk = private_nk_from_environment()
+        comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+        if private_nk is not None:
+            comms.owners.pin_private_nk_launch(
+                private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
             )
 
-        conn_kwargs: dict[str, Any] = {}
-        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-            conn_kwargs["observers"] = [observe]
-        try:
-            await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
-        finally:
-            await agent.shutdown()
+        async def run() -> None:
+            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
 
-    asyncio.run(run())
-    return 0
+                async def watchdog() -> None:
+                    while True:
+                        await asyncio.sleep(5)
+                        tasks = [t for t in asyncio.all_tasks() if not t.done()]
+                        with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
+                            debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
+                            for task in tasks:
+                                stack = task.get_stack()
+                                innermost = [
+                                    f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
+                                    for frame in stack
+                                    if frame
+                                ][-4:]
+                                debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
+
+                asyncio.create_task(watchdog())
+            agent = CommsClient(
+                comms,
+                runtime_enabled=True,
+                private_nk_native_package=private_nk.native_package if private_nk else None,
+                private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+            )
+
+            def observe(event: Any) -> None:
+                agent._debug_log(
+                    f"{event.direction.value}: {json.dumps(event.message)[:200]}"
+                    if hasattr(event, "message")
+                    else f"{event.direction.value}"
+                )
+
+            conn_kwargs: dict[str, Any] = {}
+            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+                conn_kwargs["observers"] = [observe]
+            try:
+                await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
+            finally:
+                await agent.shutdown()
+
+        asyncio.run(run())
+        return 0
 
 
 if __name__ == "__main__":
