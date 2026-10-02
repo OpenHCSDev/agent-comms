@@ -19,7 +19,7 @@ a2807c7397e69f560e9dc6f40b3b266cbd6f09da57826ad7012c5553638f6043  node_modules/@
 3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06  dist/core/agent-session-services.js
 26e34462390efffdac8253f83d4a33ccc5125c4f2b8aecc5b2e1b03d979396b6  dist/core/settings-manager.js
 66d34653479999e5110dd34183fdf69626ffd9cbd55c9b429a3e868919a5de11  dist/core/session-entry-store.js
-6e6f7c01737aa3270d8ce502ce15b3547d0d60f74e1100b5aac3b3e3ccd1c456  dist/core/session-context.js
+9f96b7dce77ab180524fe9c586756551a7cadaefae1a1b7dcce6e9509915e047  dist/core/session-context.js
 d274f8fea1374c41ada56876d50f67ad836e185327afd7ebb22758b486ff1d1d  dist/core/compaction/agent-comms-source.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
@@ -52,4 +52,4 @@ b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tool
 233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f  dist/core/tools/native-file-artifact-schema.mjs
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
 31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
-# agent-comms-native-tree-v1 e0f93fec172aced120c0ce3e90345a27ece91ac2a0436bad3353169922dfecc7
+# agent-comms-native-tree-v1 1e27f3ff7d93232528b26693fe462052f067bbd4ec6efd30216eb1b6ddd0575e

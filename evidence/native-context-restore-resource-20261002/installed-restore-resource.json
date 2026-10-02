@@ -1,0 +1,56 @@
+{
+  "scope": "One matched native CLI/RPC saved-source startup/read through normal automatic globals; original retained projection, count and overbudget controls. No prompt/provider/UI/cohort or historical-timeout attribution.",
+  "ok": true,
+  "production_freeze": "4f5823db6dca2b0a948157b5c4359873b8bf4bfe",
+  "native_manifest": "00c2c11feaaf6e53b543d1570ae6029f8395e64ebafcdac54c352082cbc460c7",
+  "native_tree": "e0f93fec172aced120c0ce3e90345a27ece91ac2a0436bad3353169922dfecc7",
+  "saved_source_bytes": 42924971,
+  "state_received_seconds": 2.3172537669888698,
+  "earlier_single_observation_seconds": 2.3939965729950927,
+  "timing_limit": "Two single observations, not a controlled latency benchmark or allocation of original18/20s. Current interval includes child startup and get_state response.",
+  "get_state": {
+    "success": true,
+    "messageCount": 27,
+    "nativeInputProofCapability": "pi-native-input-v1-live-only",
+    "model_field_present": true,
+    "model": {
+      "provider": "openrouter",
+      "id": "moonshotai/kimi-k2.6"
+    },
+    "thinkingLevel": "high"
+  },
+  "automatic_globals": 4,
+  "saved_source_sha256_before": "b190a927715c28e8a41aaf33c7adf58bdbb7eee5649b2eee700b41336f1d3d32",
+  "saved_source_sha256_after": "b190a927715c28e8a41aaf33c7adf58bdbb7eee5649b2eee700b41336f1d3d32",
+  "settings_sha256_before": "454eea274ef715bed0aef364fec823e04318850d28eb04f1c16a03a5127c071c",
+  "settings_sha256_after": "454eea274ef715bed0aef364fec823e04318850d28eb04f1c16a03a5127c071c",
+  "settings_scope": "Owned no-provider fixture settings packages=[]; original saved model/thinking retained, normal global extensions discovered. No public configuration writer.",
+  "original_donor_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+  "original_input_proof_sha256": "63fb13fd0ac1b24a6eb8def6f39804d0426a7927f540fe9ffba97742f9ef81f3",
+  "originals_unchanged": true,
+  "provider_prompts": 0,
+  "network": "kernel-denied",
+  "native_child_retired": true,
+  "remaining_fixture_node_pids": [],
+  "controls": {
+    "ok": true,
+    "retained_message_count": 27,
+    "provider_inputs": 0,
+    "body_reads_for_count": 0,
+    "branches_and_revision_refusal": true,
+    "ready_restore_body_reads": 27,
+    "over_budget_history_uninstalled": true
+  },
+  "parsed_native_files": 485,
+  "native_parse_omissions": [],
+  "raw_startup_receipt": ".artifacts/533-native-read01/global.log",
+  "raw_startup_sha256": "fc70135d8039bd82e415145c979f4a7cdbada19bc66998d81621d7b2e23c34f4",
+  "raw_control_receipt": ".artifacts/533-native-read01/controls.log",
+  "raw_control_sha256": "c9d180ec676f4586c6c0612444566b38ec640ddae5c60ac3b895ae17717eb4c6",
+  "changed_compiled_members": [
+    "dist/core/session-context.js"
+  ],
+  "all_other_compiled_files_identical_to_qualified532": true,
+  "historical_unknown_attempts_replayed": 0,
+  "public_mutations": false
+}

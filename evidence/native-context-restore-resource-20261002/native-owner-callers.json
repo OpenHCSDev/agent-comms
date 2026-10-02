@@ -1,0 +1,432 @@
+{
+  "tool": "Existing Prettier TypeScript AST parser",
+  "parser_path": "/home/ts/.local/share/opencode/bin/node_modules/prettier/plugins/typescript.js",
+  "parser_sha256": "f0b0a73ecef9608f92d388cefd4f8fc82c14a6c01b2fcf91c252093f29743f2d",
+  "native_manifest": "00c2c11feaaf6e53b543d1570ae6029f8395e64ebafcdac54c352082cbc460c7",
+  "scope": "Entire coding-agent dist JS/MJS/TypeScript declarations plus original ContextBudget and estimator boundary",
+  "parsed_files": 485,
+  "parse_omissions": [],
+  "classes": [
+    {
+      "file": "dist/core/session-context.js",
+      "line": 6,
+      "name": "SessionContext",
+      "extends": "",
+      "methods": [
+        {
+          "name": "constructor",
+          "static": false,
+          "line": 7
+        },
+        {
+          "name": "restore",
+          "static": true,
+          "line": 11
+        },
+        {
+          "name": "sourceMessages",
+          "static": true,
+          "line": 22
+        },
+        {
+          "name": "sourceBudget",
+          "static": true,
+          "line": 25
+        },
+        {
+          "name": "compactionRequired",
+          "static": false,
+          "line": 32
+        },
+        {
+          "name": "install",
+          "static": false,
+          "line": 36
+        },
+        {
+          "name": "requireReady",
+          "static": false,
+          "line": 37
+        },
+        {
+          "name": "messages",
+          "static": false,
+          "line": 38
+        },
+        {
+          "name": "messageCount",
+          "static": false,
+          "line": 39
+        },
+        {
+          "name": "beforeInput",
+          "static": false,
+          "line": 40
+        }
+      ]
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 42,
+      "name": "ReadyContext",
+      "extends": "SessionContext",
+      "methods": [
+        {
+          "name": "requireReady",
+          "static": false,
+          "line": 43
+        },
+        {
+          "name": "messages",
+          "static": false,
+          "line": 44
+        },
+        {
+          "name": "messageCount",
+          "static": false,
+          "line": 45
+        },
+        {
+          "name": "install",
+          "static": false,
+          "line": 46
+        }
+      ]
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 50,
+      "name": "CompactionContext",
+      "extends": "SessionContext",
+      "methods": [
+        {
+          "name": "messages",
+          "static": false,
+          "line": 51
+        },
+        {
+          "name": "messageCount",
+          "static": false,
+          "line": 52
+        },
+        {
+          "name": "install",
+          "static": false,
+          "line": 53
+        },
+        {
+          "name": "beforeInput",
+          "static": false,
+          "line": 54
+        }
+      ]
+    }
+  ],
+  "imports": [
+    {
+      "file": "dist/core/agent-session-runtime.js",
+      "line": 1,
+      "source": "./session-context.js",
+      "names": [
+        {
+          "imported": "SessionContext",
+          "local": "SessionContext"
+        }
+      ]
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2,
+      "source": "./session-context.js",
+      "names": [
+        {
+          "imported": "SessionContext",
+          "local": "SessionContext"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "file": "dist/core/agent-session-runtime.js",
+      "line": 170,
+      "owner": "AgentSessionRuntime",
+      "callee": "SessionContext.restore",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 165,
+      "owner": "AgentSession",
+      "callee": "SessionContext.restore",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1888,
+      "owner": "AgentSession",
+      "callee": "SessionContext.restore",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2177,
+      "owner": "AgentSession",
+      "callee": "SessionContext.restore",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2964,
+      "owner": "AgentSession",
+      "callee": "SessionContext.restore",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/compaction/agent-comms-policy.js",
+      "line": 123,
+      "owner": "CompactionPolicy",
+      "callee": "session.storedContext.compactionRequired",
+      "arguments": 2,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 15,
+      "owner": "SessionContext",
+      "callee": "this.sourceMessages",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 18,
+      "owner": "SessionContext",
+      "callee": "ReadyContext",
+      "arguments": 1,
+      "kind": "NewExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 17,
+      "owner": "SessionContext",
+      "callee": "CompactionContext",
+      "arguments": 1,
+      "kind": "NewExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 16,
+      "owner": "SessionContext",
+      "callee": "this.sourceBudget(session, messages).compactionRequired",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 16,
+      "owner": "SessionContext",
+      "callee": "this.sourceBudget",
+      "arguments": 2,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 19,
+      "owner": "SessionContext",
+      "callee": "session.storedContext.install",
+      "arguments": 2,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 33,
+      "owner": "SessionContext",
+      "callee": "SessionContext.sourceBudget(session, SessionContext.sourceMessages(this.manager).toArray())\n            .compactionRequired",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 33,
+      "owner": "SessionContext",
+      "callee": "SessionContext.sourceBudget",
+      "arguments": 2,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 33,
+      "owner": "SessionContext",
+      "callee": "SessionContext.sourceMessages",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 51,
+      "owner": "CompactionContext",
+      "callee": "SessionContext.sourceMessages",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/core/turn-context.js",
+      "line": 184,
+      "owner": "TurnContext",
+      "callee": "session.storedContext.messages",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "line": 776,
+      "owner": "",
+      "callee": "session.storedContext.messageCount",
+      "arguments": 1,
+      "kind": "CallExpression"
+    },
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "line": 955,
+      "owner": "",
+      "callee": "session.storedContext.messages",
+      "arguments": 1,
+      "kind": "CallExpression"
+    }
+  ],
+  "references": [
+    {
+      "file": "dist/core/agent-session-runtime.js",
+      "line": 1,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session-runtime.js",
+      "line": 1,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session-runtime.js",
+      "line": 170,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 165,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1888,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2177,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2964,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 8,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 18,
+      "name": "ReadyContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 17,
+      "name": "CompactionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 33,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 33,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 6,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 42,
+      "name": "ReadyContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 42,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 51,
+      "name": "SessionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 50,
+      "name": "CompactionContext"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 50,
+      "name": "SessionContext"
+    }
+  ],
+  "related_files": [
+    {
+      "file": "dist/core/agent-session-runtime.js",
+      "sha256": "71e089c87186de9ff421ed5c5cf8d00154cf85c910f947c0739097f768db9abd"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "sha256": "709bcbf952a648587e3f1961b79cf1e7a95095758018bd1f956b416784bfa06f"
+    },
+    {
+      "file": "dist/core/compaction/agent-comms-policy.js",
+      "sha256": "17a89fe81359a9297fdb3785cd3f23850710467ba230c3947bd888429f91b7b1"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "sha256": "6e6f7c01737aa3270d8ce502ce15b3547d0d60f74e1100b5aac3b3e3ccd1c456"
+    },
+    {
+      "file": "dist/core/turn-context.js",
+      "sha256": "247561c7f0dde1dd14734b03f1fc1a864895cbe93970e38f8af215d40fe4768c"
+    },
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "sha256": "b87fdc99f16ee1b37246cfec58500a6520e89740fac3e407a78687a528ce9cc1"
+    }
+  ],
+  "limitations": "Static AST declarations/references and call arguments; storedContext selection is source-reviewed. Dynamic imports and external callers are not inferred from identifier names. Dependency roots beyond the original budget/estimator boundary are not parsed."
+}
