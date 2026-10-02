@@ -159,7 +159,7 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
 
         return NativeOutcome.read(self.evidence_json).require_committed()
 
-    def covered_prefix(self, entry, payload, evidence, branch) -> frozenset[str]:
+    def covered_prefix(self, entry, evidence, branch) -> frozenset[str]:
         """A corroborated original cut covers only its replaced source prefix.
 
         This observes a completed native write. It grants no input admission,
@@ -180,12 +180,12 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
             or entry.id != outcome.entry_id
             or entry.parent_id != witness.leaf_id
             or entry.first_kept_entry_id != witness.first_kept_entry_id
-            or payload.details.agent_comms_commit != intent.identity(self.commit_id)
+            or entry.details.agent_comms_commit != intent.identity(self.commit_id)
         ):
             raise CompactionJournalError("Original committed source cut differs")
         if (
-            payload.payload_digest(witness) != intent.payload_digest
-            or payload.metadata_digest() != intent.metadata_digest
+            entry.payload_digest(witness) != intent.payload_digest
+            or entry.metadata_digest() != intent.metadata_digest
             or outcome.metadata_digest != intent.metadata_digest
         ):
             raise CompactionJournalError("Original committed source payload differs")

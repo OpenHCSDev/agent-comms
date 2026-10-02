@@ -8,6 +8,12 @@
   "omissions": [],
   "definitions": [
     {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 189,
+      "syntax": "ClassDef",
+      "term": "NativeContextJournal"
+    },
+    {
       "path": "src/agent_comms/native_entries.py",
       "line": 493,
       "syntax": "ClassDef",
@@ -26,6 +32,12 @@
       "term": "CompactionOperation"
     },
     {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 338,
+      "syntax": "ClassDef",
+      "term": "EnrolledPrivateSession"
+    },
+    {
       "path": "src/agent_comms/pi_summary_payloads.py",
       "line": 35,
       "syntax": "ClassDef",
@@ -34,6 +46,12 @@
     {
       "path": "src/agent_comms/pi_summary_payloads.py",
       "line": 53,
+      "syntax": "ClassDef",
+      "term": "ManagedSummaryMetadata"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 64,
       "syntax": "ClassDef",
       "term": "ManagedSummaryFiles"
     },
@@ -96,9 +114,45 @@
     },
     {
       "path": "src/agent_comms/native_pi.py",
+      "line": 189,
+      "syntax": "ClassDef",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
       "line": 339,
       "syntax": "FunctionDef",
       "term": "read_history_evidence"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 277,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 349,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 332,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 333,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 351,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
     },
     {
       "path": "src/agent_comms/native_entries.py",
@@ -112,6 +166,13 @@
       "line": 18,
       "syntax": "ImportFrom",
       "term": "ManagedSummaryFiles",
+      "module": "pi_summary_payloads"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 18,
+      "syntax": "ImportFrom",
+      "term": "ManagedSummaryMetadata",
       "module": "pi_summary_payloads"
     },
     {
@@ -176,16 +237,22 @@
     },
     {
       "path": "src/agent_comms/native_entries.py",
+      "line": 525,
+      "syntax": "ImportFrom",
+      "term": "CompactionOperation",
+      "module": "compaction_records"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
       "line": 517,
       "syntax": "Name",
       "term": "ManagedSummaryFiles"
     },
     {
       "path": "src/agent_comms/native_entries.py",
-      "line": 525,
-      "syntax": "ImportFrom",
-      "term": "CompactionOperation",
-      "module": "compaction_records"
+      "line": 517,
+      "syntax": "Name",
+      "term": "ManagedSummaryMetadata"
     },
     {
       "path": "src/agent_comms/native_entries.py",
@@ -314,6 +381,12 @@
       "line": 118,
       "syntax": "ClassDef",
       "term": "CompactionOperation"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 338,
+      "syntax": "ClassDef",
+      "term": "EnrolledPrivateSession"
     },
     {
       "path": "src/agent_comms/compaction_records.py",
@@ -503,6 +576,13 @@
     },
     {
       "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 20,
+      "syntax": "ImportFrom",
+      "term": "EnrolledPrivateSession",
+      "module": "compaction_records"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
       "line": 53,
       "syntax": "FunctionDef",
       "term": "require_source_coverage"
@@ -516,9 +596,27 @@
     },
     {
       "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 221,
+      "syntax": "Name",
+      "term": "EnrolledPrivateSession"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 71,
+      "syntax": "Name",
+      "term": "EnrolledPrivateSession"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
       "line": 94,
       "syntax": "Name",
       "term": "verify_continued_private_session"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 142,
+      "syntax": "Name",
+      "term": "EnrolledPrivateSession"
     },
     {
       "path": "src/agent_comms/compaction_private_inputs.py",
@@ -556,23 +654,35 @@
       "path": "src/agent_comms/pi_summary_payloads.py",
       "line": 53,
       "syntax": "ClassDef",
+      "term": "ManagedSummaryMetadata"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 64,
+      "syntax": "ClassDef",
       "term": "ManagedSummaryFiles"
     },
     {
       "path": "src/agent_comms/pi_summary_payloads.py",
-      "line": 53,
+      "line": 64,
       "syntax": "Name",
       "term": "SummaryFiles"
     },
     {
       "path": "src/agent_comms/pi_summary_payloads.py",
-      "line": 56,
+      "line": 64,
+      "syntax": "Name",
+      "term": "ManagedSummaryMetadata"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 57,
       "syntax": "Name",
       "term": "NativeCommitIdentity"
     },
     {
       "path": "src/agent_comms/pi_summary_payloads.py",
-      "line": 127,
+      "line": 136,
       "syntax": "Name",
       "term": "SummaryFiles"
     },
@@ -581,6 +691,19 @@
       "line": 28,
       "syntax": "ClassDef",
       "term": "NativeCommitIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 17,
+      "syntax": "ImportFrom",
+      "term": "EnrolledPrivateSession",
+      "module": "compaction_records"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 81,
+      "syntax": "Name",
+      "term": "EnrolledPrivateSession"
     },
     {
       "path": "src/agent_comms/input_disposition.py",
@@ -743,6 +866,25 @@
       "term": "CompactionOperation"
     },
     {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 122,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "native_pi"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 130,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 131,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
       "path": "src/agent_comms/native_compaction_request.py",
       "line": 14,
       "syntax": "ImportFrom",
@@ -848,6 +990,19 @@
       "term": "retained_task_facts"
     },
     {
+      "path": "tests/test_native_proof_streaming_guards.py",
+      "line": 10,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_proof_streaming_guards.py",
+      "line": 30,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
       "path": "tests/test_native_context_inspection.py",
       "line": 83,
       "syntax": "ImportFrom",
@@ -919,6 +1074,43 @@
       "term": "retained_task_facts"
     },
     {
+      "path": "tests/native_proof_cases.py",
+      "line": 9,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/native_proof_cases.py",
+      "line": 17,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/native_proof_cases.py",
+      "line": 26,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/native_proof_cases.py",
+      "line": 29,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/native_proof_cases.py",
+      "line": 21,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/native_proof_cases.py",
+      "line": 21,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
       "path": "tests/test_owner_compaction_runtime.py",
       "line": 137,
       "syntax": "ImportFrom",
@@ -930,6 +1122,25 @@
       "line": 140,
       "syntax": "Name",
       "term": "CompactionOperation"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 152,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 157,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 158,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
     },
     {
       "path": "tests/test_retained_context_operations.py",
@@ -1008,6 +1219,89 @@
       "term": "ForkSessionHelper"
     },
     {
+      "path": "tests/test_native_pi.py",
+      "line": 105,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 135,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1428,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1441,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1462,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 141,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1446,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 156,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1431,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1467,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1454,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1468,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 128,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
       "path": "tests/test_retained_manual_compaction.py",
       "line": 197,
       "syntax": "Attribute",
@@ -1048,7 +1342,7 @@
     },
     {
       "path": "tests/test_continued_private_session.py",
-      "line": 249,
+      "line": 251,
       "syntax": "Name",
       "term": "CompactionOperation"
     },
@@ -1064,6 +1358,55 @@
       "line": 136,
       "syntax": "Name",
       "term": "ForkSessionHelper"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 14,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 31,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 29,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 30,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 240,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 293,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 241,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 294,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
@@ -1127,6 +1470,19 @@
       "line": 89,
       "syntax": "Name",
       "term": "ForkSessionHelper"
+    },
+    {
+      "path": "tools/render_native_proof_schema.py",
+      "line": 6,
+      "syntax": "ImportFrom",
+      "term": "NativeContextJournal",
+      "module": "agent_comms.native_pi"
+    },
+    {
+      "path": "tools/render_native_proof_schema.py",
+      "line": 14,
+      "syntax": "Name",
+      "term": "NativeContextJournal"
     }
   ],
   "limitations": [

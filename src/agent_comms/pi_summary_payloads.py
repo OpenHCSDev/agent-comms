@@ -50,10 +50,19 @@ class SummaryFiles(PiPayload):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ManagedSummaryFiles(SummaryFiles):
-    """Native commit metadata carries one mandatory original journal identity."""
+class ManagedSummaryMetadata(PiPayload):
+    """A marker-only native commit preserves absent file-operation metadata."""
 
+    strict_fields = True
     agent_comms_commit: NativeCommitIdentity = field(metadata={"wire_name": "agentCommsCommit"})
+
+    def commit_metadata(self):
+        return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ManagedSummaryFiles(SummaryFiles, ManagedSummaryMetadata):
+    """Published file operations reuse the original summary file algorithm."""
 
 
 @dataclass(frozen=True)

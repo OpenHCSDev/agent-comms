@@ -9,10 +9,12 @@ later recorded private inputs; they do not enroll the inherited history.
 
 The existing NativeEntry boundary now selects a ManagedCompactionEntry only when
 native metadata declares the managed commit. FieldCodec constructs its mandatory
-ManagedSummaryFiles/NativeCommitIdentity once. The entry composes the existing
+ManagedSummaryMetadata/ManagedSummaryFiles with mandatory NativeCommitIdentity once. The entry composes the existing
 NativeSummaryPayload validation and digest behavior. Ordinary CompactionEntry
 continues to project external/plugin summaries without granting coverage.
 SummaryFiles retains its original provider contract and shared file algorithm.
+Marker-only ManagedSummaryMetadata preserves the original null file metadata
+digest. It is distinct from empty file lists; no missing operations are invented.
 There is no case flag, nullable managed marker, payload reconstruction, or raw
 metadata dispatch in covered_prefix.
 
@@ -56,3 +58,30 @@ compatibility reader is restored. The next batch checks the complete affected
 source-cut/refusal workflow, followed by an installed journey only when original
 admission permits it. No provider or saved-source replay was issued for this
 correction.
+
+## Qualified source checkpoint
+
+The final affected cut batch passed 10 cases in 0.44 seconds, including the
+original marker-only null metadata contract and refusal of copied-file, changed
+summary, changed cut/parent, unrecorded raw input, absent/UNKNOWN operation and
+untracked continuation. Existing fixture migration checks passed 16 cases in
+1.53 seconds with one stale foreign-owner-name oracle; the corrected foreign
+session identity and marker-only boundary batch passed four in 0.39 seconds.
+A recorded routing alias is not current source identity: foreign coverage must
+fail on original session identity, not today's owner spelling.
+
+original-cuts-readonly.json uses CompactionJournal.observe_readonly and the
+original acquired NativeEvidenceRead on preserved 102 and 201. It qualifies
+102's actual 9,523-entry replaced prefix containing all 834 inherited untracked
+users in 2.79 seconds. 201 remains without a corroborated original cut and still
+has 834 untracked users in 2.68 seconds. Both whole-file hashes stayed equal.
+Zero input, provider, journal write, enrollment or replay occurred. This is an
+authenticated source observation, not whole optional-journey acceptance.
+
+Fork acquisition closure remains active, not deferred. NativeContextJournal's
+first input receipt joins that session header and tracked input entry; its
+context digest is not recomputed against inherited source bytes. Therefore it
+cannot retrospectively supply a missing fork-creation/source witness. The
+canonical fork owner must carry that original relation from creation, rather
+than deriving a grant from parentSession or copying a native/journal proof.
+Arendt is reviewing all original reader/custody consumers directly.

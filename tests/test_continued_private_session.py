@@ -191,11 +191,11 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
                 input_id="a" * 32,
                 stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
                 owner_lookup="f" * 32,
-                owner_thread="foreign" if damage == "foreign" else "owner",
+                owner_thread="owner",
                 owner_generation=1,
                 owner_token_digest="c" * 64,
                 sent_owner_admission_generation=RecordedNativeAdmission(1),
-                session_id=None if damage == "unsettled" else "session",
+                session_id=None if damage == "unsettled" else ("foreign-session" if damage == "foreign" else "session"),
                 session_file=None if damage == "unsettled" else str(session),
                 session_entry_id=None if damage == "unsettled" else "user",
                 request_generation=None if damage == "unsettled" else 1,
@@ -219,7 +219,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
 
 
 @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
-    "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown", "marker-only"])
 def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
     """A recorded original cut is distinct from file-only or copied coverage."""
     from agent_comms.compaction_records import CompactionOperation
@@ -236,12 +236,14 @@ def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
     entries[2]["parentId"] = "public-user"
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
-    payload = NativeSummaryPayload(summary="original summary", tokens_before=100, details=SummaryFiles((), ()))
+    payload = NativeSummaryPayload(summary="original summary", tokens_before=100, details=None if damage == "marker-only" else SummaryFiles((), ()))
     intent = NativeIntent(witness, payload.payload_digest(witness), payload.metadata_digest())
     commit = intent.identity("c" * 32)
     entry = dict(type="compaction", id="cut", parentId="user", summary=payload.summary,
         firstKeptEntryId="user", tokensBefore=100,
         details=dict(readFiles=[], modifiedFiles=[], agentCommsCommit=FieldCodec.encode(commit)))
+    if damage == "marker-only":
+        entry["details"] = dict(agentCommsCommit=FieldCodec.encode(commit))
     entries.append(entry)
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     outcome = CommittedNativeOutcome("cut", FileRevision.from_stat(session.stat()), "cut", intent.metadata_digest)
@@ -270,7 +272,7 @@ def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
     source = replace(source, source=replace(source.source,
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
     originals = session.read_bytes(), inputs.path.read_bytes()
-    if damage is None:
+    if damage in {None, "marker-only"}:
         journal.summaries.reserve(str(session), source)
     else:
         with pytest.raises(CompactionJournalError, match="coverage floor"):

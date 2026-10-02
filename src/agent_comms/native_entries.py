@@ -15,7 +15,7 @@ from .pi_vocabulary import ThinkingLevel
 from .declared_family import DeclaredFamily
 from .pi_payloads import PiMessage, PiPayload
 from .native_compaction_request import NativeSummaryPayload
-from .pi_summary_payloads import ManagedSummaryFiles
+from .pi_summary_payloads import ManagedSummaryFiles, ManagedSummaryMetadata
 from .pi_rpc import unique_fields
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
@@ -514,7 +514,7 @@ class ManagedCompactionEntry(CompactionEntry, NativeSummaryPayload):
 
     summary: str
     first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
-    details: ManagedSummaryFiles
+    details: ManagedSummaryFiles | ManagedSummaryMetadata
 
     def to_wire(self):
         value = super().to_wire()
@@ -528,7 +528,7 @@ class ManagedCompactionEntry(CompactionEntry, NativeSummaryPayload):
         if operation is None:
             # A copied marker is not an original journal operation.
             return super().covered_prefix(evidence, branch, db)
-        return operation.covered_prefix(self, self, evidence, branch)
+        return operation.covered_prefix(self, evidence, branch)
 
 
 @dataclass(frozen=True, kw_only=True)
