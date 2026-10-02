@@ -476,10 +476,12 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return (info.model if info else None) or default
 
-    def attach_session(self, name: str, session_file: str, *, pid: int | None = None) -> Thread:
+    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""
         with _store_lock(self._wire_lock_path):
-            current = self.registry.require(name)
+            current = self.registry.require(original.name)
+            if current != original:
+                raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
                 current,
                 process_identity=(

@@ -7,12 +7,16 @@ Neither an absent epoch nor a later release proves that prompt bytes were unwrit
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .coordination_errors import StaleFence
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import JsonShapeFamily, JsonShapeMember
 from .thread_identity import AdmissionIdentity, GenerationCounter
+
+if TYPE_CHECKING:
+    from .native_session_reopen import NativeSessionIdentity
 
 
 class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmission"):
@@ -22,7 +26,7 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
     @abstractmethod
     def reservation_violation(self) -> bool: ...
 
-    def record(self, row, db, admission_generation: int) -> None:
+    def record(self, row, db, admission_generation: int, session: NativeSessionIdentity) -> None:
         raise StaleFence("native input admission was already bound")
 
     @abstractmethod
@@ -40,12 +44,14 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
     def reservation_violation(self) -> bool:
         return False
 
-    def record(self, row, db, admission_generation: int) -> None:
+    def record(self, row, db, admission_generation: int, session: NativeSessionIdentity) -> None:
         updated = row.update(
             db,
             where="input_id=? AND sent_owner_admission_generation IS NULL",
             parameters=(row.input_id,),
             sent_owner_admission_generation=RecordedNativeAdmission(admission_generation),
+            session_id=session.session_id,
+            session_file=session.session_file,
         )
         if updated.rowcount != 1:
             raise StaleFence("native input admission was already bound")

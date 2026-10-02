@@ -23,6 +23,7 @@ from .native_file_artifact import NativeFileArtifact
 from .turn_context import JournalProvenance
 
 if TYPE_CHECKING:
+    from .input_origin import InputProvenance
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -38,6 +39,9 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
 
     def original_sources(self):
         return tuple((source.reference, source) for source in self.wire_sources())
+
+    def input_sources(self) -> tuple[StoredInput, ...]:
+        return ()
 
     def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
@@ -174,8 +178,11 @@ class GoalTaskFact(ExactTaskFact):
 class InputTaskFact(ExactTaskFact):
     source: StoredInput
 
+    def input_sources(self) -> tuple[StoredInput, ...]:
+        return (self.source,)
+
     def original_sources(self):
-        return ((self.source.context_provenance(), self.source),)
+        return tuple((source.context_provenance(), source) for source in self.input_sources())
 
 
 @dataclass(frozen=True)
@@ -215,6 +222,28 @@ class RetainedTaskFacts:
     facts: tuple[ExactTaskFact, ...]
 
     journal_control_bytes: ClassVar[int] = 65536
+
+    def original_inputs(self, references: tuple[InputProvenance, ...]) -> tuple[StoredInput, ...]:
+        """Resolve exact ordered originals in this already captured payload.
+
+        Identity comes from the durable reference; content belongs to the
+        original InputTaskFact. Neither a current ledger read nor equal text
+        supplies a missing or ambiguous captured original.
+        """
+        sources: dict[str, list[StoredInput]] = {}
+        for fact in self.facts:
+            for source in fact.input_sources():
+                sources.setdefault(source.key, []).append(source)
+        originals = []
+        for reference in references:
+            candidates = tuple(
+                source for source in sources.get(reference.key, ())
+                if source.matches_original_provenance(reference)
+            )
+            if len(candidates) != 1:
+                raise RelationViolationError("Retained payload lacks a unique original input")
+            originals.append(candidates[0])
+        return tuple(originals)
 
     @staticmethod
     def canonical_journal_bytes(record: object) -> bytes:

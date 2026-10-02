@@ -43,7 +43,7 @@ class SelectedCompactionOutcome:
     @property
     def source_revision(self) -> SessionRevision:
         """Keep original inode/cut/input-proof custody available to the source owner."""
-        return self.attempt.source().reserved_revision
+        return self.attempt.request.source.reserved_revision
 
     def require_native_source(self, path: Path | str, through_offset: int) -> None:
         """Placement requires the original native inode and a complete captured cut."""
@@ -79,7 +79,7 @@ class CompactionOutcomeSnapshot:
             "WHERE session_file=? ORDER BY rowid", (session_file,)), JournalRowPosition)
         outcomes = []
         for attempt, position in rows:
-            if attempt.source().incarnation.resolved(registry) != incarnation.resolved(registry):
+            if attempt.request.source.incarnation.resolved(registry) != incarnation.resolved(registry):
                 continue
             projected = attempt.state.project_outcome(attempt, position.journal_rowid)
             if projected is None:

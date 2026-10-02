@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,6 +25,7 @@ from .compaction_records import (
     SessionJournalHistory,
 )
 from .field_codec import FieldCodec
+from .diagnostics import PublicationMeasurements
 from .input_disposition import InputDispositions, InputDocument
 from .selected_source import SelectedSource
 from .thread_identity import GenerationCounter, ThreadIncarnation
@@ -39,6 +40,65 @@ _returned_fresh_enrollments: WeakKeyDictionary[FreshPrivateSession, ReturnedFres
 
 
 class PrivateInputs(JournalRole):
+    def requires_raw_marker(self, session_file: Path) -> bool:
+        """The journal's allocated writer namespace requires prewrite custody.
+
+        This is a storage obligation, not a session selector or an enrollment.
+        Receipts for sources outside that namespace still require coverage.
+        """
+        return session_file.resolve(strict=False).is_relative_to(
+            (self.journal.path.parent / "native-sessions").resolve(strict=False)
+        )
+
+    def require_source_coverage(
+        self,
+        db: sqlite3.Connection,
+        session_file: Path,
+        source: SelectedSource,
+        inputs: InputDocument,
+        *,
+        fresh: FreshPrivateSession | None,
+        admission_generation: int | None,
+    ) -> None:
+        """The original private-input owner covers every selected raw input.
+
+        A returned mint covers only its original enrollment. Continued source
+        coverage comes from committed native/input receipts, irrespective of
+        today's routing name or the parent directory of the selected journal.
+        No marker, file observation or enrollment row can mint fresh custody.
+        """
+        canonical = str(session_file)
+        enrollment = EnrolledPrivateSession.one(db, session_file=canonical)
+        raw_ids = frozenset(
+            row.input_id for row in PrivateRawInput.select(
+                db, where="session_file=?", parameters=(canonical,)
+            )
+        )
+        if fresh is not None:
+            from .fresh_private_session import FreshPrivateSession
+
+            if type(fresh) is not FreshPrivateSession or enrollment is None:
+                raise CompactionJournalError("Returned enrolled fresh source required")
+            if fresh.path != session_file:
+                raise CompactionJournalError("Fresh private selected identity changed")
+            if admission_generation is not None:
+                GenerationCounter.require_positive(admission_generation)
+            self.require_coverage(enrollment, fresh, source, admission_generation)
+            if raw_ids:
+                raise CompactionJournalError("Fresh raw input remains UNKNOWN; never replay")
+            return
+        if enrollment is not None or raw_ids or self.requires_raw_marker(session_file):
+            from .continued_private_session import verify_continued_private_session
+
+            try:
+                verify_continued_private_session(
+                    self.journal.path.parent, session_file, source, raw_ids, inputs
+                )
+            except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
+                raise CompactionJournalError(
+                    "Selected source requires reviewed raw-history coverage floor"
+                ) from error
+
     def enroll(
         self,
         fresh: FreshPrivateSession,
@@ -109,7 +169,8 @@ class PrivateInputs(JournalRole):
 
     @contextmanager
     def admission(
-        self, session_file: Path, *, blocking: bool = True
+        self, session_file: Path, *, blocking: bool = True,
+        measurements: PublicationMeasurements | None = None,
     ) -> Iterator[PrivateInputSend]:
         """Acquire ALL input/journal custody before consuming raw admission.
 
@@ -118,13 +179,17 @@ class PrivateInputs(JournalRole):
         second connection gap between that checkpoint and the raw send.
         """
         canonical = str(session_file.resolve(strict=False))
-        with (
-            InputDispositions(
-                self.journal.path.parent / InputDispositions.filename
-            ).reading(blocking=blocking) as inputs,
-            self.journal.transaction(blocking=blocking, retain_exclusion=True) as db,
-        ):
-            self.require_clear(db, canonical, inputs)
+        observations = measurements if measurements is not None else PublicationMeasurements()
+        with ExitStack() as custody:
+            with observations.operation("original_input_document"):
+                inputs = custody.enter_context(InputDispositions(
+                    self.journal.path.parent / InputDispositions.filename
+                ).reading(blocking=blocking))
+            with observations.operation("compaction_journal_exclusion"):
+                db = custody.enter_context(self.journal.transaction(
+                    blocking=blocking, retain_exclusion=True))
+            with observations.operation("raw_source_clearance"):
+                self.require_clear(db, canonical, inputs)
             yield PrivateInputSend(self.journal, db, canonical, inputs)
 
     @contextmanager
@@ -143,8 +208,7 @@ class PrivateInputs(JournalRole):
         # header. A reservation requires an existing file; the journal lock
         # excludes a newly created/reserved file through the raw write too.
         canonical = str(session_file.resolve(strict=False))
-        private_sessions = (self.journal.path.parent / "native-sessions").resolve(strict=False)
-        if Path(canonical).is_relative_to(private_sessions) and private_input_id is None:
+        if self.requires_raw_marker(Path(canonical)) and private_input_id is None:
             raise CompactionJournalError("Private raw send requires durable prewrite marker")
         with self.admission(session_file) as admitted:
             if private_input_id is not None:

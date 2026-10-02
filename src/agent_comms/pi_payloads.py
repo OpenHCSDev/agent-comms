@@ -697,7 +697,6 @@ class TextDelta(PiDelta, declared_name="text_delta"):
         return bool(self.delta)
 
     def emit(self, session):
-        session.watchdog.output_started |= bool(self.delta)
         session.output.append(self.delta)
         from .agent_events import Chunk
 
@@ -715,7 +714,6 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
     def emit(self, session):
         if not self.delta:
             return ()
-        session.watchdog.output_started = True
         from .agent_events import Thinking
 
         return (Thinking(text=self.delta),)
@@ -725,7 +723,6 @@ class ToolDelta:
     progress = True
 
     def emit(self, session):
-        session.watchdog.output_started = True
         return ()
 
 

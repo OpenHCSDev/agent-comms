@@ -6,6 +6,7 @@ admission, native process, source proof and response publication remain real.
 import argparse
 import hashlib
 import shutil
+import shlex
 from dataclasses import replace
 import asyncio
 import json
@@ -42,7 +43,7 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.bus_publication import stable_thread_lookup
 
 
-def configured_stage(arguments, configured):
+def configured_stage(arguments, configured, snapshot):
     """Share the original installed/configured private receiving preparation."""
     from agent_comms.native_package import verify_native_package
 
@@ -50,33 +51,39 @@ def configured_stage(arguments, configured):
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
-    project, profile = stage/'project', stage/'config'
-    project.mkdir(mode=0o700); profile.mkdir(mode=0o700)
-    source_profile = Path(os.environ.get('AGENT_COMMS_NATIVE_CONFIG_DIR') or
-                          os.environ.get('PI_CODING_AGENT_DIR') or '~/.pi/agent').expanduser()
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.native_pi import NativePiRpcLaunch
+
+    project = stage/'project'
+    project.mkdir(mode=0o700)
+    retained = RetainedOwnerLaunch.capture(configured, snapshot)
+    # The original owner owns auth/settings/extension selection. Bootstrap is
+    # its existing OS-environment decoder, not a second fixture configuration.
+    _, environment = NativePiRpcLaunch.bootstrap(
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment)
+    source_profile = Path(environment['AGENT_COMMS_NATIVE_CONFIG_DIR'])
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
         original = source_profile/filename
         if original.exists():
-            assert original.stat().st_size < 1024 * 1024
-            data = original.read_bytes()
-            source_hashes[str(original)] = hashlib.sha256(data).hexdigest()
-            destination = profile/filename
-            destination.write_bytes(data); destination.chmod(0o600)
-    assert (profile/'auth.json').exists(), "Configured authentication is unavailable"
+            source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
     service = Comms(stage/'wire', private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
-    environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith(('AGENT_COMMS_', 'PI_')) and key != 'PYTHONPATH'}
+    binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
-        AGENT_COMMS_NATIVE_CONFIG_DIR=str(profile), PI_CODING_AGENT_DIR=str(profile),
-        AGENT_COMMS_AGENT_MODELS=configured.model,
-        AGENT_COMMS_AGENT_BIN='pi', AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
-        PATH=str(Path(sys.executable).parent)+os.pathsep+environment.get('PATH', ''))
+        AGENT_COMMS_AGENT_BIN=str(binary),
+        AGENT_COMMS_AGENT_ARGS=shlex.join(retained.arguments or ()),
+        AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
+        VIRTUAL_ENV=str(binary.parent.parent),
+        AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
+        PATH=str(binary.parent)+os.pathsep+environment.get('PATH', ''))
+    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+                'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY', 'PYTHONPATH'):
+        environment.pop(key, None)
     os.environ.clear(); os.environ.update(environment)
     return stage, project, service, root_id, source_hashes
 
@@ -100,14 +107,16 @@ async def configured_pure_channel(arguments):
 
     public = wire()
     original_names = (arguments.configured_owner, *arguments.configured_peers)
-    assert arguments.collective and len(original_names) == arguments.owners >= 2
+    assert arguments.collective and len(original_names) == arguments.owners >= 1
+    if arguments.configured_saved_preparation:
+        assert arguments.owners == 1 and not arguments.configured_peers
     assert len(set(original_names)) == len(original_names)
     snapshot = public.registry.snapshot()
     sources = tuple(snapshot.require(name) for name in original_names)
     assert all(source.model and source.session_file for source in sources)
     common_tags = set.intersection(*(set(source.tags) for source in sources))
     assert 'openhcs' in common_tags
-    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0])
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0], snapshot)
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
@@ -117,7 +126,8 @@ async def configured_pure_channel(arguments):
         # its native source lock. Its output stays under the owned profile.
         fork = await ForkSessionHelper.run(
             ForkSessionRequest(str(arguments.package), str(original), source.worktree),
-            cwd=Path(source.worktree), env=dict(os.environ),
+            cwd=Path(source.worktree),
+            env=dict(os.environ, PI_CODING_AGENT_DIR=str(stage/'native-forks')),
         )
         assert Path(fork.session_file).is_relative_to(stage)
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before
@@ -185,7 +195,7 @@ async def configured_pure_channel(arguments):
         await asyncio.gather(*(attachment.load_session(cwd=source.worktree, session_id=name)
             for name, source in zip(names, sources, strict=True)))
         overlap = False
-        async with asyncio.timeout(180):
+        async with asyncio.timeout(arguments.observation_seconds):
             while True:
                 with Coordination(str(service.root/'coordination.sqlite3')) as store:
                     with store.session.read():
@@ -201,7 +211,7 @@ async def configured_pure_channel(arguments):
                                   if original_ids.intersection(membership[row.input_id])]
                         dispatched = tuple(row for row in inputs if
                             row.sent_owner_admission_generation.reservation_violation()
-                            and row.session_id is None)
+                            and not row.reference.recorded)
                     # SQLite is last in the original lock order. Release its
                     # read snapshot before registry/bus/history observations;
                     # otherwise an observer can block publisher COMMIT while
@@ -281,14 +291,15 @@ async def configured_pure_channel(arguments):
                                 or any(row.covered_seq < originals[-1].seq for row in cursors)):
                             await asyncio.sleep(.1)
                             continue
-                        assert overlap, 'No overlapping actual dispatched native inputs observed'
+                        if len(names) > 1:
+                            assert overlap, 'No overlapping actual dispatched native inputs observed'
                         proof = {'recipients':len(names),'pure_channel':True,
                             'pending_originals_per_owner':len(originals),
                             'complete_ordered_native_membership':True,
                             'all_original_sealed_receipts':True,
                             'original_claim_count':len(claims),
                             'dm_or_mention_forcing_full':False,'triage_inputs':len(triage),
-                            'full_inputs':len(full),'overlapping_dispatched_native_inputs':True,
+                            'full_inputs':len(full),'overlapping_dispatched_native_inputs':len(names) > 1 and overlap,
                             'all_originals_completed':True,'common_accepted_time':True,
                             'channel_receipts':FieldCodec.encode(tuple(dict.fromkeys(receipts))),
                             'all_original_historical_proofs':True,'all_current_cursors_cover_source':True,
@@ -302,6 +313,29 @@ async def configured_pure_channel(arguments):
                     diagnostic = json.loads(diagnostics[0].read_text())
                     raise AssertionError(diagnostic.get('source_error',diagnostic.get('reason')))
                 await asyncio.sleep(.1)
+        if arguments.configured_saved_preparation:
+            from agent_comms.compaction_journal import CompactionJournal
+            from agent_comms.compaction_records import SelectedSummarySource
+            name, = names
+            selected = service.registry.require(name)
+            assert selected.session_file == settings[0]['owned_fork'], 'Ordinary ACP selected a different saved journal'
+            journal = CompactionJournal(service.root/'compaction-commits.sqlite3')
+            summaries = journal.summaries.history(selected.session_file)
+            proof['saved_preparation'] = {
+                'ordinary_acp_selected_original_fork': True,
+                'explicit_selected_execution_override': False,
+                'selected_summary_states': [attempt.state.declared_name for attempt in summaries],
+                'summary_source_digests': [hashlib.sha256(attempt.source_json.encode()).hexdigest()
+                                           for attempt in summaries],
+                'naturally_triggered_compaction': bool(summaries),
+                'configured_budget_changed': False,
+            }
+            # Current typed requests and immutable native proof bytes are distinct.
+            # No decoding, transformation or replay of historical proof strings.
+            assert all(isinstance(attempt.request, SelectedSummarySource) for attempt in summaries)
+            proof['saved_preparation']['cancel_continue'] = await configured_cancel_continue(
+                arguments, service, attachment, name, sender, stage
+            )
         facts = [fact for packet in packets for fact in decode_updates(packet['update'].get('_meta'))]
         assert facts and {packet['session_id'] for packet in packets} == set(names)
         proof['acp_fact_count'] = len(facts)
@@ -333,6 +367,85 @@ async def configured_pure_channel(arguments):
             print(json.dumps(receipt,indent=2),flush=True)
 
 
+async def configured_cancel_continue(arguments, service, attachment, name, sender, stage):
+    """Use ordinary originals and the existing joined ACP cancellation boundary."""
+    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
+    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_input_record import FullNativeExecution
+    from agent_comms.store_files import _store_lock
+
+    def publish(label):
+        with _store_lock(service._wire_lock_path):
+            return service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
+                f'{stage.name} {label}: Fresh isolated acceptance question, not a retry. '
+                'Please answer here with 10+2 only; do not resume inherited work or edit files.',
+                MessageType.INFO),
+                _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+
+    def observe(original):
+        with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            with store.session.read():
+                db = store.session._connection
+                claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
+                ids = {claim.assignment_id for claim in claims}
+                inputs = tuple(row for row in NativeRuntimeInput.select(db)
+                    if ids.intersection(row.execution.source_assignment_ids(db, row.input_id)))
+                execution_ids = {link.execution_id for claim in claims
+                    for link in ExecutionAssignmentLink.select(
+                        db, where='assignment_id=?', parameters=(claim.assignment_id,))}
+                receipts = tuple(receipt for execution_id in sorted(execution_ids)
+                    for receipt in PublicationReceipts.select(
+                        db, where='execution_id=?', parameters=(execution_id,)))
+                return claims, inputs, receipts
+
+    cancelled = publish('CANCEL_ORIGINAL')
+    async with asyncio.timeout(arguments.observation_seconds):
+        while True:
+            claims, inputs, _ = observe(cancelled)
+            admitted = tuple(row for row in inputs
+                if row.sent_owner_admission_generation.reservation_violation()
+                and not row.reference.recorded)
+            if admitted:
+                break
+            assert not (claims and all(claim.lifecycle.completed for claim in claims)), \
+                'Original completed before cancellation; cancellation was not exercised'
+            await asyncio.sleep(.03)
+        await attachment.cancel(name)
+        while service.registry.require(name).active_turn is not None:
+            await asyncio.sleep(.03)
+        cancelled_claims, cancelled_inputs, cancelled_receipts = observe(cancelled)
+        assert {row.input_id for row in admitted}.issubset({row.input_id for row in cancelled_inputs})
+        retained = {row.input_id: row for row in cancelled_inputs}
+        continuation = publish('NEW_CONTINUATION_ORIGINAL')
+        while True:
+            claims, inputs, receipts = observe(continuation)
+            if claims and all(claim.lifecycle.completed for claim in claims) and \
+                    service.registry.require(name).active_turn is None:
+                full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
+                assert len(full) == 1 and full[0].reference.recorded
+                assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
+                reply = service.bus.log.message_by_id(receipts[0].message_id)
+                assert reply.sender == name and '12' in reply.body
+                break
+            await asyncio.sleep(.1)
+        final_claims, final_inputs, final_receipts = observe(cancelled)
+        assert {row.input_id: row for row in final_inputs} == retained, \
+            'Cancellation was followed by replay or mutation of the original native attempt'
+        assert final_receipts == cancelled_receipts, 'Cancellation later published an extra original reply'
+        return {'cancelled_original': FieldCodec.encode(cancelled.reference),
+            'continued_original': FieldCodec.encode(continuation.reference),
+            'cancelled_admission_stages': [row.reference_stage.declared_name for row in admitted],
+            'cancelled_native_inputs': FieldCodec.encode(cancelled_inputs),
+            'cancelled_claims': FieldCodec.encode(cancelled_claims),
+            'cancelled_publications': FieldCodec.encode(cancelled_receipts),
+            'continuation_native_inputs': FieldCodec.encode(inputs),
+            'continuation_publications': FieldCodec.encode(receipts),
+            'joined_cancel_originals_retained': True,
+            'uncertain_original_replays': 0,
+            'new_original_completed_once': True}
+
+
 async def configured_mixed_routes(arguments):
     """The same installed owner/ACP path, using the actual configured provider.
 
@@ -351,9 +464,10 @@ async def configured_mixed_routes(arguments):
 
     assert arguments.owners == 1 and arguments.collective
     assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
-    configured = wire().registry.require(arguments.configured_owner)
+    snapshot = wire().registry.snapshot()
+    configured = snapshot.require(arguments.configured_owner)
     assert configured.model, "Configured owner has no selected model"
-    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured)
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
     service.registry.declare(Thread('human',frozenset(),str(project),role=ThreadRole.USER))
     service.registry.declare(Thread(name,frozenset({'team'}),str(project),
@@ -617,7 +731,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
 
 async def run(arguments):
-    if arguments.configured_pure_channel:
+    if arguments.configured_pure_channel or arguments.configured_saved_preparation:
         return await configured_pure_channel(arguments)
     if arguments.configured_owner:
         return await configured_mixed_routes(arguments)
@@ -1102,6 +1216,10 @@ if __name__=='__main__':
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
+    parser.add_argument('--configured-saved-preparation',action='store_true',
+                        help='One saved configured fork: ordinary ACP admission, cancel, then a distinct new original')
     parser.add_argument('--busy-reader',action='store_true')
     parser.add_argument('--configured-peers',nargs='*',default=[])
+    parser.add_argument('--observation-seconds',type=float,default=180,
+                        help='Bound this private observer; never alters native turn/provider policy')
     asyncio.run(run(parser.parse_args()))

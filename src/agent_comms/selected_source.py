@@ -1,4 +1,4 @@
-"""Current selected-summary source records; journals reset at installation."""
+"""Current selected-summary source proofs; original journals require stopped carry."""
 
 from __future__ import annotations
 
@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
-from .native_revision_text import NativeRevisionText
 from .private_path import FileRevision
+from .input_origin import InputProvenance
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation, TurnId
 
 if TYPE_CHECKING:
     from .input_disposition import InputDocument
+    from .retained_task_facts import RetainedTaskFacts
     from .reservation_rules import ReservationCheck
 
 class SessionRevisionUnavailable(ValueError):
@@ -91,11 +92,6 @@ class SessionRevision(SessionObservation):
     def current(self, session_file: str | None) -> bool:
         return self.observe(session_file).matches(self)
 
-    @property
-    def native_stamp(self) -> str:
-        """Pi's external five-field colon ABI; the sidecar is not in that ABI."""
-        return NativeRevisionText.encode(self.native)
-
     def same_input_proof(self, reserved: SessionRevision) -> bool:
         """Compare sidecar observations, not committed native-input evidence."""
         return self.input_proof == reserved.input_proof
@@ -118,36 +114,48 @@ class SelectedSource(DeclaredFamily, affix="Source"):
     turn: TurnId
     reserved_revision: SessionRevision
 
-    def interrupted_check(self, revision, inputs, incarnation, turn):
+    def interrupted_check(self, revision, inputs, incarnation, turn, retained):
         from .reservation_rules import InterruptedReservationCheck
 
         return InterruptedReservationCheck(
             source=self, revision=revision, incarnation=incarnation, turn=turn
         )
 
-    def matches_pending_input(self, key: str | None) -> bool:
+    def matches_pending_inputs(self, keys: tuple[str, ...]) -> bool:
         return True
 
-    def original_has_started(self, inputs: InputDocument) -> bool:
+    def original_has_started(self, inputs: InputDocument, retained: RetainedTaskFacts) -> bool:
         return False
+
+    def require_retained(self, retained: RetainedTaskFacts) -> None:
+        """A source without original input membership needs no input facts."""
+
+    @abstractmethod
+    def summary_outcome(self, result, journal):
+        """Bind the native result through this original source's admission contract."""
 
     @property
     @abstractmethod
-    def pending_input_key(self) -> str | None: ...
+    def pending_input_keys(self) -> tuple[str, ...]: ...
 
     @abstractmethod
     def reservation_check(
-        self, revision: SessionObservation, inputs: InputDocument
+        self, revision: SessionObservation, inputs: InputDocument, retained: RetainedTaskFacts
     ) -> ReservationCheck: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ManualSource(SelectedSource):
-    @property
-    def pending_input_key(self) -> None:
-        return None
+    """Owner compaction without an InputDocument original-admission grant."""
 
-    def reservation_check(self, revision, inputs):
+    def summary_outcome(self, result, journal):
+        return result.manual_summary(journal)
+
+    @property
+    def pending_input_keys(self) -> tuple[str, ...]:
+        return ()
+
+    def reservation_check(self, revision, inputs, retained):
         from .reservation_rules import ReservationCheck
 
         return ReservationCheck(source=self, revision=revision)
@@ -155,46 +163,79 @@ class ManualSource(SelectedSource):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SelectedAdmissionSource(SelectedSource):
-    ingress_key: str
+    originals: tuple[InputProvenance, ...]
     admission_generation: int
     correction_witness: str
     input_digest: TextDigest
-    original_digest: TextDigest
-
-    def __post_init__(self):
-        if not self.ingress_key or self.admission_generation <= 0 or not self.correction_witness:
-            raise ValueError("Selected source requires its exact reserved input")
 
     @property
-    def pending_input_key(self) -> str:
-        return self.ingress_key
+    def ingress_keys(self) -> tuple[str, ...]:
+        return tuple(row.key for row in self.originals)
 
-    def reservation_check(self, revision, inputs):
+    @classmethod
+    def capture(cls, owner, turn, admission, keys, inputs, text, revision):
+        """Derive the whole original witness once from its actual input document."""
+        rows = inputs.original_provenances(keys)
+        if not rows:
+            raise ValueError("Selected original input requires original receipts")
+        digest = TextDigest.of(text)
+        return cls(
+            owner=owner.process_identity, incarnation=owner.incarnation,
+            turn=turn, reserved_revision=revision, originals=rows,
+            admission_generation=admission, correction_witness=f"{admission}:{digest.value}",
+            input_digest=digest,
+        )
+
+    def __post_init__(self):
+        if (
+            not self.originals or any(not key for key in self.ingress_keys)
+            or len(set(self.ingress_keys)) != len(self.ingress_keys)
+            or self.admission_generation <= 0 or not self.correction_witness
+        ):
+            raise ValueError("Selected source requires its exact reserved input")
+
+    def summary_outcome(self, result, journal):
+        from .selected_summary_admission import SelectedAdmissionIdentity
+
+        return result.adaptive_summary(
+            journal, SelectedAdmissionIdentity(self, self.reserved_revision)
+        )
+
+    def require_retained(self, retained: RetainedTaskFacts) -> None:
+        retained.original_inputs(self.originals)
+
+    @property
+    def pending_input_keys(self) -> tuple[str, ...]:
+        return self.ingress_keys
+
+    def reservation_check(self, revision, inputs, retained):
         from .reservation_rules import InputReservationCheck
 
         return InputReservationCheck(
-            source=self, revision=revision, row=inputs.lookup(self.ingress_key)
+            source=self, revision=revision, rows=tuple(inputs.lookup(key) for key in self.ingress_keys),
+            retained=retained,
         )
 
-    def interrupted_check(self, revision, inputs, incarnation, turn):
+    def interrupted_check(self, revision, inputs, incarnation, turn, retained):
         from .reservation_rules import InterruptedInputCheck
 
         return InterruptedInputCheck(
             source=self,
             revision=revision,
-            row=inputs.lookup(self.ingress_key),
+            rows=tuple(inputs.lookup(key) for key in self.ingress_keys),
+            retained=retained,
             incarnation=incarnation,
             turn=turn,
         )
 
-    def matches_pending_input(self, key: str | None) -> bool:
-        return self.ingress_key == key
+    def matches_pending_inputs(self, keys: tuple[str, ...]) -> bool:
+        return self.ingress_keys == keys
 
-    def original_has_started(self, inputs: InputDocument) -> bool:
-        return inputs.lookup(self.ingress_key).proves_started(
+    def original_has_started(self, inputs: InputDocument, retained: RetainedTaskFacts) -> bool:
+        return all(inputs.lookup(original.key).proves_started(
             owner=self.incarnation,
             admission=self.admission_generation,
             turn=self.turn,
             sent_digest=self.input_digest,
-            original_digest=self.original_digest,
-        )
+            original=original,
+        ) for original in retained.original_inputs(self.originals))
