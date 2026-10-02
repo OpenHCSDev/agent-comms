@@ -160,14 +160,20 @@ class NativeTranscript:
     def tail(self, *, max_bytes: int | None = None):
         try:
             end = self.path.stat().st_size
-            floor = max(0, end - max_bytes) if max_bytes is not None else 0
-            for _, _, raw in _reverse_records(self.path, end, floor=floor):
-                try:
-                    yield NativeEntry.read(raw)
-                except (ValueError, TypeError, UnicodeError):
-                    continue
         except OSError:
             return
+        floor = max(0, end - max_bytes) if max_bytes is not None else 0
+        records = iter(_reverse_records(self.path, end, floor=floor))
+        while True:
+            try:
+                _, _, raw = next(records)
+            except (StopIteration, OSError):
+                return
+            try:
+                entry = NativeEntry.read(raw)
+            except (ValueError, TypeError, UnicodeError):
+                continue
+            yield entry
 
     def forward(self, after: int, through: int):
         with self.path.open("rb") as stream:

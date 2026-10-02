@@ -20,15 +20,11 @@ from typing import Any, cast
 
 from .field_codec import FieldCodec
 from .private_path import PrivateDirectoryRole, PrivateSocketRole, TrustedAncestorRole
-from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection, RecoveryRequest
+from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection, RecoveryRequest, UnavailableRecoveryProjection
 
 _MAX_REPLY = 4096
 _TIMEOUT = 0.75
-_UNAVAILABLE: dict[str, object] = {
-    "schema": 1,
-    "availability": "unavailable",
-    "reason": "gateway_unavailable",
-}
+_UNAVAILABLE = FieldCodec.encode(UnavailableRecoveryProjection("gateway_unavailable"))
 
 
 def _valid_projection(value: object, thread: str) -> bool:

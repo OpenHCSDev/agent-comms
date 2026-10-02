@@ -22,6 +22,7 @@ from .wire_metadata import WireRootIdText
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
+from .native_entries import NativeEvidenceScope
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
 from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution
@@ -42,6 +43,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     owner_thread: str
     owner_generation: int
     context: NativeContextProof
+    native_reference: NativeInputReference
     # Prelaunch binding facts: None means no binding was durably written
     # before launch (crash ordering), so equality cannot be established.
     expected_prompt_digest: str | None = None
@@ -53,10 +55,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
 
     @property
     def reference(self) -> NativeInputReference:
-        return NativeInputReference(
-            self.input_id, self.assignment_id, type(self.execution),
-            self.context.session_id, self.context.request_generation,
-        )
+        return self.native_reference
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -89,6 +88,7 @@ class FullHistoricalNativeInput(HistoricalNativeInput):
 @dataclass(frozen=True)
 class _HistoricalSource(TypedRow):
     input_id: str
+    assignment_id: str
     wire_seq: int
     message_id: str
 
@@ -99,6 +99,7 @@ def read_historical_native_inputs(
     wire_root_id: str,
     recipient_lookup: str,
     source_seq: int,
+    source_reads: NativeEvidenceScope | None = None,
 ) -> tuple[HistoricalNativeInput, ...]:
     """Return at most triage and FULL proof for one sealed selected source.
 
@@ -110,6 +111,12 @@ def read_historical_native_inputs(
     current-owner cursor additionally verifies the canonical bus prefix and
     requires a just-settled input in the live admission epoch.
     """
+    if source_reads is None:
+        with NativeEvidenceScope() as acquired:
+            return read_historical_native_inputs(
+                store, wire_root_id=wire_root_id, recipient_lookup=recipient_lookup,
+                source_seq=source_seq, source_reads=acquired,
+            )
     WireRootIdText.decode(wire_root_id)
     StableLookupText.decode(recipient_lookup)
     FieldCodec.decode(int, source_seq)
@@ -123,8 +130,9 @@ def read_historical_native_inputs(
         assert_native_runtime_schema(db)
         sources = _HistoricalSource.read(
             db.execute(
-                "SELECT n.input_id,c.wire_seq,c.message_id FROM native_runtime_input n "
-                "JOIN wake_claims c ON c.assignment_id=n.assignment_id "
+                "SELECT n.input_id,c.assignment_id,c.wire_seq,c.message_id FROM native_runtime_input n "
+                f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+                "JOIN wake_claims c ON c.assignment_id=member.assignment_id "
                 "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
                 "AND m.recipient_lookup=c.recipient_lookup "
                 "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
@@ -165,7 +173,8 @@ def read_historical_native_inputs(
             # The immutable SQL row is already present from the live event;
             # this check only corroborates its message-bearing context facts.
             observed = NativeContextProof.read_evidence(
-                session_file, row.input_id, request_generation=row.request_generation
+                session_file, row.input_id, request_generation=row.request_generation,
+                evidence=source_reads.for_source(session_file),
             )
         except (OSError, ValueError, NativePiUnavailable) as error:
             raise IdentityConflict("historical native context evidence is unavailable") from error
@@ -177,24 +186,27 @@ def read_historical_native_inputs(
             # corruption, not a failed equality join.
             if binding.identity != row.identity:
                 raise IdentityConflict("prelaunch binding does not match this live proof")
-            if binding.wire_root_id != wire_root_id or binding.source != MessageReference(source.wire_seq, source.message_id):
-                raise IdentityConflict("prelaunch binding names another canonical source")
-            equality = expected_prompt_matches_journal(session_file, binding)
+            if binding.wire_root_id != wire_root_id:
+                raise IdentityConflict("Prelaunch binding names another canonical wire root")
+            equality = expected_prompt_matches_journal(
+                session_file, binding, evidence=source_reads.for_source(session_file)
+            )
         else:
             equality = False
         evidence.append(
             row.execution.historical_proof(
                 row,
-                lifecycle=store.assignments.get(row.assignment_id).lifecycle,
+                lifecycle=store.assignments.get(source.assignment_id).lifecycle,
                 wire_root_id=wire_root_id,
                 source_seq=source.wire_seq,
                 source_message_id=source.message_id,
-                assignment_id=row.assignment_id,
+                assignment_id=source.assignment_id,
                 input_id=row.input_id,
                 owner_lookup=row.owner_lookup,
                 owner_thread=row.owner_thread,
                 owner_generation=row.owner_generation,
                 context=recorded,
+                native_reference=row.reference,
                 expected_prompt_digest=binding.expected_prompt_digest if binding is not None else None,
                 expected_prompt_equality_established=equality,
             )

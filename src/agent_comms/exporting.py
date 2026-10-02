@@ -22,6 +22,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import Message
+from .message_reference import MessageReference
 from .registration import Registration
 
 
@@ -46,8 +47,12 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
         return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
 
 
+class SelectableWireExportFormat(WireExportFormat):
+    """Formats whose complete input is the ordinary wire export selection."""
+
+
 @dataclass(frozen=True)
-class JsonlFormat(WireExportFormat):
+class JsonlFormat(SelectableWireExportFormat):
     importable: ClassVar[bool] = True
 
     def header(self, metadata: Mapping[str, object]) -> bytes:
@@ -58,7 +63,7 @@ class JsonlFormat(WireExportFormat):
 
 
 @dataclass(frozen=True)
-class TextFormat(WireExportFormat):
+class TextFormat(SelectableWireExportFormat):
     def header(self, metadata: Mapping[str, object]) -> bytes:
         return (
             f"# agent-comms wire export v{metadata['version']} (non-importable text view)\n"
@@ -113,6 +118,16 @@ class WireExportScope(DeclaredFamily, affix="Scope"):
 class EverythingScope(WireExportScope):
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         return ResolvedExportScope(self, lambda message: True)
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredSourceScope(WireExportScope):
+    """Immutable artifact selection, resolved by the original retained family."""
+
+    sources: tuple[MessageReference, ...]
+
+    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+        return ResolvedExportScope(self, lambda message: message.reference in self.sources)
 
 
 @dataclass(frozen=True, slots=True)

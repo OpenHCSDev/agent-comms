@@ -1,0 +1,18 @@
+{
+  "failed01": {
+    "retainedBytes": 97707,
+    "annotationsBytes": 32736,
+    "journalBytes": 70865,
+    "nativeBudgetBytes": 191712,
+    "nativeReason": "Mandatory exact task source exceeds the selected context budget",
+    "adaptiveTokens": 185067,
+    "adaptiveTriggerThreshold": 255616
+  },
+  "next": {
+    "tokensBefore": 185067,
+    "retainedBytes": 2242,
+    "annotationsBytes": 32736,
+    "budgetBytes": 122712,
+    "status": "PASS"
+  }
+}

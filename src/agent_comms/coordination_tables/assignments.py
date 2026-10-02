@@ -46,14 +46,19 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         from agent_comms.audience_manifest import FrozenRecipient
         from agent_comms.bus_publication import stable_thread_lookup
         from agent_comms.coordination_errors import IdentityConflict
-        from agent_comms.wake import WakeDecision
 
-        if self.source != MessageReference(initial.message.seq, initial.message.message_id):
-            raise IdentityConflict("wake frame does not match a committed source")
         if self.recipient_identity != FrozenRecipient(
             stable_thread_lookup(owner.created_at), owner.name
         ):
             raise IdentityConflict("wake frame does not match a committed recipient")
+        self.require_committed_source(initial)
+
+    def require_committed_source(self, initial) -> None:
+        from agent_comms.coordination_errors import IdentityConflict
+        from agent_comms.wake import WakeDecision
+
+        if self.source != MessageReference(initial.message.seq, initial.message.message_id):
+            raise IdentityConflict("wake frame does not match a committed source")
         expected = WakeDecision(self.recipient_lookup, self.audience, self.lifecycle.mode)
         selected = sum(
             recipient == self.recipient_identity and decision == expected
@@ -260,10 +265,15 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def references(cls):
         from agent_comms.coordination_tables.executions import ExecutionRecord
         from agent_comms.coordination_tables.participants import Participants
+        from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
+            ForeignKey(
+                ("execution_id", "exact_target"), ResponseObligation,
+                ("execution_id", "exact_target"), deferred=True,
+            ),
             ForeignKey(
                 ("execution_id", "assignment_id"),
                 ExecutionAssignmentLink,
@@ -376,7 +386,7 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
         SELECT 1 FROM executions e JOIN wake_claims c
           ON c.execution_id = e.execution_id
         WHERE e.execution_id = NEW.execution_id AND c.assignment_id = NEW.assignment_id
-          AND c.exact_target = e.exact_target
+          AND c.exact_target IS NOT NULL
           AND c.recipient_lookup = e.owner_lookup
     )
     BEGIN

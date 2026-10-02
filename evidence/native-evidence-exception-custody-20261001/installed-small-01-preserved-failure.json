@@ -1,0 +1,34 @@
+{
+  "elapsed_seconds": 21.969381665985566,
+  "owners": 3,
+  "history_rows": 120,
+  "bus_bytes": 388859,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/7eeb15a4a34cb87ab2f1050d4652bc08/2026-10-01T21-23-28-477Z_01a0f959-d25c-75ec-af6c-745743edaab0.jsonl",
+      "entry_id": "07b48e64"
+    },
+    {
+      "session": "wire/native-sessions/db36f49d21cfff66fd89f9be5a4a2536/2026-10-01T21-23-27-572Z_01a0f959-ced3-749f-b1a6-c3751febabb6.jsonl",
+      "entry_id": "e7e607ef"
+    },
+    {
+      "session": "wire/native-sessions/9aa7c950b23c8f9e50929c984e3c1383/2026-10-01T21-23-28-011Z_01a0f959-d08a-779b-905f-b35a0bf546f1.jsonl",
+      "entry_id": "b848664a"
+    }
+  ],
+  "simultaneous_triage_cursor_proofs": null,
+  "failure": "AssertionError: Settled triage lost an auxiliary cursor",
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/wt/comms-native-evidence-exception-custody-20261001/.observations/runtime/bin/python",
+  "acp_notification_count": 20,
+  "contention": [],
+  "cancellation": {},
+  "all_native_turns_active_before_provider_release": false,
+  "acp_fact_counts": {},
+  "original_receipt": "/home/ts/wt/ac498-01/receipt.json"
+}

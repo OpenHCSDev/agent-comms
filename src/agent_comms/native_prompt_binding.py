@@ -2,8 +2,8 @@
 
 Written to a separate sidecar store BEFORE Pi launches, immediately after the
 input reservation commits. The binding records the native request-envelope digest
-joined to the source sequence, sealed claim, stage, input ID, and owner
-incarnation. It confers no authority by itself: a binding without a recorded
+joined to the stage, input ID and owner incarnation. Original source
+membership belongs to the native execution declaration, not this binding. It confers no authority by itself: a binding without a recorded
 live proof is unproven, and equality is only ever reported after the private
 session journal's durable user-message digest matches the binding.
 """
@@ -26,9 +26,9 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_admission_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
-from .message_reference import MessageReference
 from .field_codec import FieldCodec
 from .native_pi import NativePiUnavailable, read_tracked_input_digest
+from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
@@ -62,15 +62,12 @@ class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
         }
     )
     stage: type[NativeInputExecution]
-    assignment_id: str
     execution_id: str | None
     attempt_ordinal: int | None
     owner_lookup: str
     owner_thread: str
     owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
     wire_root_id: str
-    source_seq: int
-    message_id: str
     expected_prompt_digest: str
     bound_at_ms: int = field(metadata={"sql": Column(check="bound_at_ms>0")})
 
@@ -85,16 +82,12 @@ class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
         except (TypeError, ValueError) as error:
             raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
 
-    @property
-    def source(self) -> MessageReference:
-        return MessageReference(self.source_seq, self.message_id)
-
     without_rowid = True
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
         "length(owner_lookup)=32 AND owner_thread<>'' AND length(wire_root_id)=32 "
-        "AND wire_root_id NOT GLOB '*[^0-9a-f]*' AND source_seq>0 AND message_id<>'' "
+        "AND wire_root_id NOT GLOB '*[^0-9a-f]*' "
         "AND length(expected_prompt_digest)=64 AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*'",
     )
 
@@ -146,7 +139,6 @@ def bind_expected_prompt(
     envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
     the bare prompt bytes.
     """
-    assignment = stage.assignment
     NativeInputIdText.decode(input_id)
     if not FieldCodec.decode(str, prompt):
         raise ValueError("prompt binding requires nonempty original text")
@@ -159,7 +151,7 @@ def bind_expected_prompt(
     with store.session.transaction() as db:
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
-        ParticipantOwner(owner, generation).require(store, assignment.recipient_lookup)
+        ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)
         reserved = NativeRuntimeInput.one(db, input_id=input_id)
         if reserved is None:
             raise IdentityConflict("prompt binding requires an already reserved input")
@@ -168,14 +160,18 @@ def bind_expected_prompt(
                 row=reserved,
                 stage=stage,
                 owner=ParticipantOwner(owner, generation).coordinator_identity(
-                    assignment.recipient_lookup
+                    stage.recipient_lookup
                 ),
             ).require_valid()
         except ReservationViolationError as error:
             raise IdentityConflict(
                 f"prompt binding identity differs from its reservation: {error}"
             ) from error
-        wire_root_id = _binding_wire_root(store, assignment)
+        stage.require_sources(db, input_id)
+        roots = {_binding_wire_root(store, original) for original in stage.assignments}
+        if len(roots) != 1:
+            raise IdentityConflict("Native sources belong to different canonical wire roots")
+        wire_root_id = next(iter(roots))
         path = binding_store_path(store)
         with sidecar_connection(path, PromptBinding) as sidecar:
             if PromptBinding.one(sidecar, input_id=input_id) is not None:
@@ -183,14 +179,11 @@ def bind_expected_prompt(
             expected = PromptBinding(
                 input_id=input_id,
                 stage=type(stage.execution),
-                assignment_id=assignment.assignment_id,
                 **stage.execution.binding_fields(),
-                owner_lookup=assignment.recipient_lookup,
+                owner_lookup=stage.recipient_lookup,
                 owner_thread=owner.name,
                 owner_generation=generation,
                 wire_root_id=wire_root_id,
-                source_seq=assignment.wire_seq,
-                message_id=assignment.message_id,
                 expected_prompt_digest=digest,
                 bound_at_ms=store.session.now(0),
             )
@@ -240,13 +233,15 @@ def expected_prompt_binding(
         yield PromptBinding.one(db, input_id=input_id)
 
 
-def expected_prompt_matches_journal(session_file: Path, binding: PromptBinding) -> bool:
+def expected_prompt_matches_journal(
+    session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None
+) -> bool:
     """Join the durable journal digest to the prelaunch binding digest.
 
     A mismatch, absence, or malformed journal is NOT equality: fail closed.
     """
     try:
-        observed = read_tracked_input_digest(session_file, binding.input_id)
+        observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)
     except (OSError, ValueError, NativePiUnavailable):
         return False
     return observed == binding.expected_prompt_digest

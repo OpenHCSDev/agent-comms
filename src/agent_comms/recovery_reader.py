@@ -5,7 +5,6 @@ from __future__ import annotations
 from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
-    IntegrityViolationError,
 )
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -58,26 +57,20 @@ class RecoveryReader:
             )
             assignments = tuple(self.assignments.get(link.assignment_id) for link in links)
             replay = ReplayAssessments.one(db, execution_id=execution_id)
-            obligation = ResponseObligation.one(db, execution_id=execution_id)
-            # Read-only projections do not grant Tx1, append, Tx2 or resolution.
-            intent = PublicationIntents.one(db, execution_id=execution_id)
-            receipt_row = PublicationReceipts.one(db, execution_id=execution_id)
-            if receipt_row is not None and intent is None:
-                raise IntegrityViolationError("publication receipt has no frozen intent")
-            receipt = None
-            if receipt_row is not None:
-                projection = ", ".join(
-                    f"{'r' if name in PublicationReceipts.columns() else 'i'}.{name}"
-                    for name in PublicationReceipt.columns()
-                )
-                (receipt,) = PublicationReceipt.read(
-                    db.execute(
-                        f"SELECT {projection} FROM {PublicationReceipts.declared_name} r "
-                        f"JOIN {PublicationIntents.declared_name} i ON r.execution_id=i.execution_id "
-                        "WHERE r.execution_id=?",
-                        (execution_id,),
-                    )
-                )
+            obligations = tuple(ResponseObligation.select(db, where="execution_id=?",
+                parameters=(execution_id,), order_by=("exact_target",)))
+            intents = tuple(PublicationIntents.select(db, where="execution_id=?",
+                parameters=(execution_id,), order_by=("exact_target",)))
+            projection = ", ".join(
+                f"{'r' if name in PublicationReceipts.columns() else 'i'}.{name}"
+                for name in PublicationReceipt.columns()
+            )
+            receipts = tuple(PublicationReceipt.read(db.execute(
+                f"SELECT {projection} FROM {PublicationReceipts.declared_name} r "
+                f"JOIN {PublicationIntents.declared_name} i "
+                "ON r.execution_id=i.execution_id AND r.exact_target=i.exact_target "
+                "WHERE r.execution_id=? ORDER BY r.exact_target", (execution_id,),
+            )))
             connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
             audit = next(
                 iter(
@@ -98,9 +91,9 @@ class RecoveryReader:
                 assignments,
                 links,
                 replay,
-                obligation,
-                intent,
-                receipt,
+                obligations,
+                intents,
+                receipts,
                 connectivity,
                 audit,
                 pointer.execution_id,

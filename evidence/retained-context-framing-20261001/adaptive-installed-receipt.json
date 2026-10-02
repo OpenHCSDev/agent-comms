@@ -1,0 +1,18 @@
+{
+  "source_bytes": 44661933,
+  "tokens_before": 185067,
+  "selected_context_window": 180000,
+  "provider_calls": 9,
+  "transport": "loopback only",
+  "native_commit": true,
+  "retained_payload_bytes": 70479,
+  "reservation_bytes": 71413,
+  "intent_bytes": 73690,
+  "complete_retained_summary": true,
+  "fresh_queued_input_answered": true,
+  "strict_reopen": true,
+  "read_files": 386,
+  "modified_files": 136,
+  "owner_idle": true,
+  "new_user_inputs": 2
+}

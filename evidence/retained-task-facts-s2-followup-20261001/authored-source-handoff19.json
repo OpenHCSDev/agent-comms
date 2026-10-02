@@ -1,0 +1,378 @@
+{
+  "owner": "Schrodinger481",
+  "production_checkpoint": "92096124f48622678cdbc151d88895ef989b2220",
+  "main_integrated": "65d6cfe965119f2f28f4a52c592f08929b116e7c",
+  "artifact_native_production_equal_to": "d1e6c4bbebbceaa6a13334af3a2fa124ac88b1d0",
+  "source_cases": {
+    "log": "authored-source16.log",
+    "exit_code": 0,
+    "passed": 13,
+    "seconds": 3.1
+  },
+  "retired_wire_boundary": {
+    "log": "authored-boundary18.log",
+    "exit_code": 0,
+    "passed": 1,
+    "seconds": 0.6
+  },
+  "debt_ratchet": {
+    "log": "authored-ratchet17.json",
+    "exit_code": 0,
+    "positive_numeric_delta": {}
+  },
+  "declarations": {
+    "message_schema_sha256": "6f832289b08108cf519823347de1788b9b8cf4e3239c813490880327d875f94d",
+    "catalog": [
+      {
+        "name": "comms_decision",
+        "label": "Record Decision",
+        "description": "Record a chosen alternative and valid rejected alternatives on its original wire message. Author and source turn come from your admitted execution. Defaults to current project/goal revision or current turn; corrections name the original reference and grant no execution.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "string",
+              "description": "Thread or channel receiving the original declaration"
+            },
+            "scope": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "current"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "explicit"
+                    },
+                    "scope": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "goal"
+                            },
+                            "project": {
+                              "type": "string"
+                            },
+                            "goal": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "revision"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "project",
+                            "goal"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "turn"
+                            },
+                            "project": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "project"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Current project/goal or explicit scope",
+              "default": {
+                "kind": "current"
+              }
+            },
+            "change": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "original"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "correction"
+                    },
+                    "original": {
+                      "type": "object",
+                      "properties": {
+                        "seq": {
+                          "type": "integer"
+                        },
+                        "message_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "seq",
+                        "message_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "original"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Original declaration or correction naming its original reference",
+              "default": {
+                "kind": "original"
+              }
+            },
+            "chosen": {
+              "type": "string",
+              "description": "Chosen alternative, preserving exact wording"
+            },
+            "rejected": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Nonempty unique valid rejected alternatives"
+            }
+          },
+          "required": [
+            "to",
+            "chosen",
+            "rejected"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "comms_constraint",
+        "label": "Record Constraint",
+        "description": "Declare an exact authored restriction on its original wire message; wording is retained verbatim. This records your admitted authorship, not inferred human authority. Defaults to current project/goal revision or current turn. Corrections name the original constraint reference; no execution or replay is authorized.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "string",
+              "description": "Thread or channel receiving the original declaration"
+            },
+            "scope": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "current"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "explicit"
+                    },
+                    "scope": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "goal"
+                            },
+                            "project": {
+                              "type": "string"
+                            },
+                            "goal": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "revision"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "project",
+                            "goal"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "turn"
+                            },
+                            "project": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "project"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Current project/goal or explicit scope",
+              "default": {
+                "kind": "current"
+              }
+            },
+            "change": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "original"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "correction"
+                    },
+                    "original": {
+                      "type": "object",
+                      "properties": {
+                        "seq": {
+                          "type": "integer"
+                        },
+                        "message_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "seq",
+                        "message_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "original"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Original declaration or correction naming its original reference",
+              "default": {
+                "kind": "original"
+              }
+            },
+            "text": {
+              "type": "string",
+              "description": "Exact authored restriction, never a paraphrase of another source"
+            }
+          },
+          "required": [
+            "to",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "wire_format": {
+    "census": "authored-source-format-census14.json",
+    "changed_field": "decision -> task",
+    "public_populated_rows_at_read": 0,
+    "frozen_fixture_affected_rows": 3,
+    "preimages_unchanged": true,
+    "outside_src_carry": "NOT IMPLEMENTED/ACCEPTED; preserveoriginal audiences andrecertify changedenvelope through existingwriter custody"
+  },
+  "human_source_pin": "NOT IMPLEMENTED; admittedagent Constraint doesnotclaimhuman authority",
+  "new_paid_calls": 0,
+  "new_native_processes": 0,
+  "public_mutations": 0,
+  "installed_ready": false,
+  "full_s2_ready": false
+}
