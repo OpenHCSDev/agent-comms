@@ -1,0 +1,41 @@
+[
+  {
+    "path": "/home/ts/wt/a520s102/wire/coordination.sqlite3",
+    "sha256": "b27d759689b57f5f790814342502d8897c001f3c77bdda53052727e22b30ded6",
+    "revision": {
+      "identity": {
+        "device": 2084,
+        "inode": 18221866
+      },
+      "size": 397312,
+      "mtime_ns": 1790936773309908313,
+      "ctime_ns": 1790936773309908313
+    }
+  },
+  {
+    "path": "/home/ts/wt/a520s102/wire/native_prompt_bindings.sqlite3",
+    "sha256": "5b6be7c96232c15e6e2ea1982f41b794c394d01db9af660778ffd485e7ba0329",
+    "revision": {
+      "identity": {
+        "device": 2084,
+        "inode": 18223963
+      },
+      "size": 12288,
+      "mtime_ns": 1790936773317908470,
+      "ctime_ns": 1790936773318908490
+    }
+  },
+  {
+    "path": "/home/ts/wt/a520s102/wire/compaction-commits.sqlite3",
+    "sha256": "eacffa12a4f33de6a0d73a754eec483006188b89524e14f35932eefe8eadcc1b",
+    "revision": {
+      "identity": {
+        "device": 2084,
+        "inode": 18221869
+      },
+      "size": 57344,
+      "mtime_ns": 1790936755007547966,
+      "ctime_ns": 1790936755007547966
+    }
+  }
+]

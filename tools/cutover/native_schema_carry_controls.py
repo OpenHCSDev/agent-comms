@@ -19,7 +19,7 @@ import sys
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import PrivateDirectoryRole
 from native_schema_carry import (
-    NativeSchemaDeclaration, RuntimeNativeFiles, capture_requests,
+    NativeSchemaDeclaration, RuntimeNativeFiles,
     carry_compaction, inventory, prepare, row_digest,
 )
 from publish_openhcs_recovery import digest
@@ -167,10 +167,17 @@ def run(base, source_python, root):
         raise AssertionError('Original preimages were not retained exactly')
     relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'),
                                       original, plan.target)
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_records import JournalTable
+    from agent_comms.typed_table import TypedTable
+    with CompactionJournal(root/'compaction-commits.sqlite3').transaction() as db:
+        installed_rows = {table.declared_name: len(table.select(db))
+                          for table in TypedTable.members_with(JournalTable)}
     result={'classification':'private-stopped-copy-installed-operator-control',
             'original_release':list(original.release_versions),
             'target_release':list(plan.target.release_versions),
-            'relation':relation, 'custody_refusals':refused, 'installation':receipt,
+            'relation':relation, 'installed_typed_rows':installed_rows,
+            'custody_refusals':refused, 'installation':receipt,
             'provider_calls':0, 'native_inputs':0, 'owner_signals':0,
             'public_cutover_qualified':False}
     write_original(base/'receipt.json',(json.dumps(result,indent=2)+'\n').encode())
