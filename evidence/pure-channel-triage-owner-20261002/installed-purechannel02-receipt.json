@@ -1,0 +1,96 @@
+{
+  "elapsed_seconds": 21.120126006018836,
+  "failure": null,
+  "settings": [
+    {
+      "source_owner": "openhcs-helper",
+      "private_owner": "purechannel-owner-0",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "off",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42932905,
+      "source_session_sha256": "4c7dad1d4669bce0258cbc6fbd17c382628657cac38c919f13f129c9f12eca11",
+      "owned_fork": "/home/ts/wt/p502c02/config/sessions/--home-ts-code-projects-openhcs--/2026-10-02T02-36-51-849Z_01a0fa78-bd0a-77d1-b2e0-273a3780d63f.jsonl",
+      "original_task_sha256": "86a9832a42b0e71bbfd659e29da6a28d03940d63d1236a9c7c52fc53dd2fc373"
+    },
+    {
+      "source_owner": "openhcs-helper2",
+      "private_owner": "purechannel-owner-1",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42948707,
+      "source_session_sha256": "f68d4241c054cf1533a664df8d39db64fb0b17eb7b93839ef30b8b1fdc3b327c",
+      "owned_fork": "/home/ts/wt/p502c02/config/sessions/--home-ts-code-projects-openhcs--/2026-10-02T02-36-53-847Z_01a0fa78-c4d7-7336-8bd1-32a36b98bc75.jsonl",
+      "original_task_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_owner": "openhcs-architecture-memory",
+      "private_owner": "purechannel-owner-2",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42044804,
+      "source_session_sha256": "a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb",
+      "owned_fork": "/home/ts/wt/p502c02/config/sessions/--home-ts-code-projects-openhcs--/2026-10-02T02-36-55-792Z_01a0fa78-cc70-71fe-92de-7f2bc4dc015f.jsonl",
+      "original_task_sha256": "079c2d9fcf2bc90817641ff295f5e0ce24b2c51af9cb8bdb91f3bea70a8a1500"
+    }
+  ],
+  "installed_interpreter": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-purechannel502-20261002/bin/python",
+  "original_sequences": [
+    1
+  ],
+  "proof": {
+    "recipients": 3,
+    "pure_channel": true,
+    "dm_or_mention_forcing_full": false,
+    "triage_inputs": 3,
+    "full_inputs": 3,
+    "overlapping_dispatched_native_inputs": true,
+    "all_originals_completed": true,
+    "common_accepted_time": true,
+    "channel_receipts": [
+      {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1a652a6b408cbbe795a7d80d9999380e3329a1f2e6b874f1d37f79b7c5b9d8022",
+        "exact_target": "#openhcs",
+        "seq": 2,
+        "message_id": "67f009e01478",
+        "received_at_ms": 1790908632757
+      },
+      {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1f62002742c62d0a27e5714482faabec8684c911f0a27533e42059e026cbd5f0e",
+        "exact_target": "#openhcs",
+        "seq": 4,
+        "message_id": "6c7d9b025108",
+        "received_at_ms": 1790908634358
+      },
+      {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1b8aedb753381198cb7b40f8b89a4e3cd023ad64f86971f4f1c3bd186f0824443",
+        "exact_target": "#openhcs",
+        "seq": 3,
+        "message_id": "08d64049e37d",
+        "received_at_ms": 1790908633963
+      }
+    ],
+    "all_original_historical_proofs": true,
+    "all_current_cursors_cover_source": true,
+    "acp_fact_count": 25
+  },
+  "public_inputs": 0,
+  "original_seq326_replays": 0,
+  "provider": "actual configured provider",
+  "all_owned_workers_retired": true,
+  "configured_sources_unchanged": true
+}
