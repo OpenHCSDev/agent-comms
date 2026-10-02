@@ -1,6 +1,6 @@
 {
   "scope": "new cleanup only; prior e9d9/1e1/Singer/Sch/Mendel/parent excluded",
-  "current_available_bytes": 19443404800,
+  "current_available_bytes": 19061739520,
   "deletion_window_df_delta_bytes": 3932684288,
   "concurrent_cleanup_caveat": "Observed df deltas include concurrent host activity. Exclusive native dependency blocks 1421737984 separately measured.",
   "environments_removed": 34,
@@ -1712,5 +1712,8 @@
     "nativef117: original-s2-s5-context activation donor",
     "reader493: native-evidence-exception observation donor",
     "485-488 env: runtime-batch-candidate .pth donor"
-  ]
+  ],
+  "generated_leaf_exclusive_allocated_bytes_deleted": 3915235328,
+  "net_worktree_allocated_bytes_retired": 646172672,
+  "measurement_warning": "Deletion-window df changes are shared host measurements, not exclusive attribution. Batch07 freed 710946816 exclusive allocated bytes while concurrent writes caused df to decline 62414848 bytes. Physical allocated leaf totals and current headroom are reported separately."
 }
