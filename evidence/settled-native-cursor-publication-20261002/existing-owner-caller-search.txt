@@ -1,0 +1,88 @@
+src/agent_comms/selected_result.py:15:from .native_source_cursor import NativeSourceCursor
+src/agent_comms/selected_result.py:39:            cls.cursor_status_for(participant, input_id),
+src/agent_comms/selected_result.py:44:    def cursor_status_for(participant, input_id) -> str:
+src/agent_comms/selected_result.py:48:            cursor = NativeSourceCursor(
+src/agent_comms/selected_result.py:56:                committed_input_id=input_id,
+src/agent_comms/native_runtime_input.py:290:class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
+src/agent_comms/acp_extension.py:266:class CursorAdvancedUpdate(AgentCommsUpdate):
+src/agent_comms/acp_extension.py:270:    def for_session(self, session_id: str) -> CursorAdvancedUpdate:
+src/agent_comms/acp.py:48:from agent_comms.native_source_cursor import NativeSourceCursor
+src/agent_comms/acp.py:440:                    cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance(
+src/agent_comms/acp.py:444:                        committed_input_id=None,
+tests/test_native_prompt_binding.py:43:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/test_native_prompt_binding.py:250:        current = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+tests/test_native_prompt_binding.py:301:        current = NativeSourceCursor(bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:312:        current = NativeSourceCursor(bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:348:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:437:        old = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:443:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:470:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:474:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).advance(
+tests/test_native_prompt_binding.py:478:                committed_input_id=turn.input_id,
+tests/test_native_prompt_binding.py:483:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:521:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_prompt_binding.py:539:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha-new")
+tests/test_native_prompt_binding.py:553:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha-new")
+src/agent_comms/native_source_cursor.py:30:class NativeSourceCursor:
+src/agent_comms/native_source_cursor.py:50:        committed_input_id: str | None,
+src/agent_comms/native_source_cursor.py:52:        committed_input_id = FieldCodec.decode(str | None, committed_input_id)
+src/agent_comms/native_source_cursor.py:60:            return self._advance_proven(identity, committed_input_id, source_reads,
+src/agent_comms/native_source_cursor.py:61:                StoreLockContention(2.0) if committed_input_id is not None else None)
+src/agent_comms/native_source_cursor.py:64:        self, identity: CursorOwner, committed_input_id: str | None,
+src/agent_comms/native_source_cursor.py:98:            if not identity.admits(db, proof, injected, prior, committed_input_id):
+tests/test_native_channel_reply_roundtrip.py:20:    CursorAdvancedUpdate,
+tests/test_native_channel_reply_roundtrip.py:251:                isinstance(fact, CursorAdvancedUpdate)
+tests/test_native_channel_reply_roundtrip.py:265:            if isinstance(fact, CursorAdvancedUpdate)
+tests/test_native_channel_reply_roundtrip.py:301:                lambda: any(isinstance(fact, CursorAdvancedUpdate)
+src/agent_comms/cursor_publication.py:4:the durable cursor. Every observation reads NativeSourceCursor's original proof.
+src/agent_comms/cursor_publication.py:16:    CursorAdvancedUpdate,
+src/agent_comms/cursor_publication.py:28:from .native_source_cursor import NativeSourceCursor
+src/agent_comms/cursor_publication.py:99:                cursor = NativeSourceCursor(bus, store, wire_root_id=self.root_id).read(
+src/agent_comms/cursor_publication.py:124:        return (CursorAdvancedUpdate(observed),)
+src/agent_comms/cursor_publication.py:145:                    field_meta=encode_updates(CursorAdvancedUpdate(observed, selected_status)),
+tests/test_runtime.py:45:        CursorAdvancedUpdate,
+tests/test_runtime.py:54:    fact = CursorAdvancedUpdate(
+src/agent_comms/cursor_owner.py:22:class CursorOwner(RegistryOwner):
+src/agent_comms/cursor_owner.py:95:        committed_input_id: str | None,
+src/agent_comms/cursor_owner.py:103:            if proof.input_id != committed_input_id:
+src/agent_comms/cursor_owner.py:107:        elif committed_input_id is not None and proof.input_id != committed_input_id:
+tests/test_native_source_cursor_certificate.py:25:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/test_native_source_cursor_certificate.py:106:        cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+tests/test_native_source_cursor_certificate.py:135:        cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+tests/test_native_source_cursor_certificate.py:160:        current = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+tests/test_native_source_cursor_certificate.py:187:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_acp_extension.py:13:    CursorAdvancedUpdate,
+tests/test_acp_extension.py:56:        CursorAdvancedUpdate(
+tests/test_acp_private_nk_delivery.py:17:    CursorAdvancedUpdate,
+tests/test_acp_private_nk_delivery.py:84:        (update for update in decode_updates(metadata) if isinstance(update, CursorAdvancedUpdate)),
+tests/test_acp_private_nk_delivery.py:529:            if isinstance(update, CursorAdvancedUpdate)
+tests/test_acp_private_nk_delivery.py:570:        "agent_comms.cursor_publication.NativeSourceCursor.read", replacement_during_read
+tests/test_private_idle_drain.py:23:    accept, cursor = acp._accept_visible_deliveries, acp.NativeSourceCursor.advance
+tests/test_private_idle_drain.py:37:    monkeypatch.setattr(acp.NativeSourceCursor, "advance", covered)
+tests/test_private_checkpoint_cursor_integration.py:27:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/test_private_checkpoint_cursor_integration.py:106:        current = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+tests/test_private_checkpoint_cursor_integration.py:169:        retained = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+tests/test_private_checkpoint_cursor_integration.py:181:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_private_checkpoint_cursor_integration.py:189:            NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+tests/test_selected_execution_native.py:25:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/test_selected_execution_native.py:236:            cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+tests/test_cursor_load_recovery.py:10:from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
+tests/test_cursor_load_recovery.py:54:                        isinstance(update, CursorAdvancedUpdate)
+tests/test_cursor_load_recovery.py:90:                if isinstance(update, CursorAdvancedUpdate)
+tests/test_native_source_cursor_scale.py:20:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/test_native_source_cursor_scale.py:85:        current = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+tests/test_native_source_cursor_scale.py:134:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_source_cursor_scale.py:169:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_source_cursor_scale.py:187:        valid = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+tests/test_native_source_cursor_scale.py:232:            NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+tests/test_native_source_cursor_scale.py:264:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+tests/test_native_source_cursor_scale.py:273:            NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(owner_name="alpha")
+tests/native_evidence_reader_installed_journey.py:27:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/native_evidence_reader_installed_journey.py:126:                (NativeSourceCursor,('advance',)),
+tests/test_coordinated_runtime.py:61:from agent_comms.native_source_cursor import NativeSourceCursor
+tests/test_coordinated_runtime.py:831:        cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
+tests/test_coordinated_runtime.py:973:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
+tests/test_coordinated_runtime.py:1092:            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
+tests/shared_bus_restart_native.py:384:    from agent_comms.native_source_cursor import NativeSourceCursor
+tests/shared_bus_restart_native.py:386:    original_advance = NativeSourceCursor._advance_proven
+tests/shared_bus_restart_native.py:398:    NativeSourceCursor._advance_proven = observe_advance
