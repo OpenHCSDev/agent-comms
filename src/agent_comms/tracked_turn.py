@@ -236,34 +236,42 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as custody:
-            self.custody = custody
-            self.native = await self.acquire_native(custody, reuse=False)
-            custody.push_async_callback(self.native_session.close)
-            await custody.enter_async_context(self.native.failures())
-            custody.callback(self.native.reader.pending.cancel_all)
-            if self.tool_socket is not None:
-                self.tool_socket.expected_pid = self.native.proc.pid
-            self.watchdog.reading()
+            retirement = self.startup.measurements.operation("native_custody_retirement")
+            # Exit this observation after every original resource callback.
+            custody.push(retirement)
             try:
+                self.custody = custody
+                self.native = await self.acquire_native(custody, reuse=False)
+                custody.push_async_callback(self.native_session.close)
+                await custody.enter_async_context(self.native.failures())
+                custody.callback(self.native.reader.pending.cancel_all)
+                if self.tool_socket is not None:
+                    self.tool_socket.expected_pid = self.native.proc.pid
+                self.watchdog.reading()
                 try:
-                    await self.attest()
-                    if self.prompt_send_boundary is not None:
-                        await self.prompt_send_boundary.prepare_context(self)
-                    await self.admit_prompt()
-                    while not self.finished:
-                        event = await self.next_event()
-                        async for update in self.consume_native_event(event):
-                            if self.observe_event is not None:
-                                await self.observe_event(update)
-                        if not self.finished and self.observe_event is not None:
-                            await self.observe_event(event)
-                    return self.result()
-                except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
-                    raise NativePiUnavailable(
-                        f"Native Pi operation failed: {type(error).__name__}: {error}"
-                    ) from error
-            except NativePiUnavailable as error:
-                self.admission.raise_native_failure(error, self.native.attestation)
+                    try:
+                        await self.attest()
+                        if self.prompt_send_boundary is not None:
+                            await self.prompt_send_boundary.prepare_context(self)
+                        await self.admit_prompt()
+                        while not self.finished:
+                            event = await self.next_event()
+                            async for update in self.consume_native_event(event):
+                                if self.observe_event is not None:
+                                    await self.observe_event(update)
+                            if not self.finished and self.observe_event is not None:
+                                await self.observe_event(event)
+                        return self.result()
+                    except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
+                        raise NativePiUnavailable(
+                            f"Native Pi operation failed: {type(error).__name__}: {error}"
+                        ) from error
+                except NativePiUnavailable as error:
+                    self.admission.raise_native_failure(error, self.native.attestation)
+            finally:
+                # LIFO starts the measurement immediately before cleanup. No
+                # await or manual close may separate this from stack retirement.
+                custody.callback(retirement.__enter__)
 
     async def resume_prepared(self, resources: AsyncExitStack) -> None:
         await super().resume_prepared(resources)
@@ -460,18 +468,21 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:
-        self.finished = True
+        with self.startup.measurements.operation("native_agent_settled"):
+            self.finished = True
 
     def result(self) -> NativeTurnResult:
-        proof = self.context_proof()
-        self.terminal.raise_failure(proof, self.provider, self.model)
-        if self.tool_socket is not None:
-            self.tool_socket.assert_complete()
-        response = self.terminal.require_response(self.text_parts)
-        if self.selected_tool_mode is not None:
-            self.selected_tool_mode.finish()
-        return NativeTurnResult(
-            response.strip(),
-            proof,
-            self.tool_socket.selected_call_id if self.tool_socket else None,
-        )
+        with self.startup.measurements.operation("native_terminal_result"):
+            with self.startup.measurements.operation("native_terminal_proof"):
+                proof = self.context_proof()
+            self.terminal.raise_failure(proof, self.provider, self.model)
+            if self.tool_socket is not None:
+                self.tool_socket.assert_complete()
+            response = self.terminal.require_response(self.text_parts)
+            if self.selected_tool_mode is not None:
+                self.selected_tool_mode.finish()
+            return NativeTurnResult(
+                response.strip(),
+                proof,
+                self.tool_socket.selected_call_id if self.tool_socket else None,
+            )
