@@ -23,6 +23,147 @@ def manifest(owner, generation=1):
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
+@pytest.mark.asyncio
+async def test_installed_context_callbacks_share_original_writer_custody(tmp_path):
+    """Both real event owners publish original observations without blocking.
+
+    Run once with the shared receiving interpreter and an original native root.
+    This provider-free recording fixture does not replay an input or claim a new
+    native observation. Its source segments remain the original SDK metadata.
+    """
+    import asyncio
+    from contextlib import ExitStack
+    import os
+    from pathlib import Path
+    import sys
+    import threading
+    import time
+
+    import agent_comms
+    from agent_comms.acp import CommsAgent
+    from agent_comms.agent_events import ContextObserved
+    from agent_comms.channel_input_batch import SingleInputBatch
+    from agent_comms.coordination_cohort import accept_delivery_cohort
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_turn_context import NativeContextManifestData
+    from agent_comms.pi_events import TurnContextObserved
+    from agent_comms.routing import TurnRouting
+    from agent_comms.selected_participant import SelectedParticipant
+    from agent_comms.turn_goal_account import TurnGoalAccount
+    from agent_comms.turn_goal_permission import InactiveGoalPermission
+    from agent_comms.turn_input_source import NoInputDependency, RoutedOriginalInput
+    from agent_comms.turn_progress import TurnProgress
+
+    installed = Path(agent_comms.__file__).resolve()
+    assert 'site-packages' in installed.parts, 'This journey requires installed application source'
+    original = Comms(Path(os.environ['CONTEXT_MANIFEST_ORIGINAL_ROOT']))
+    source_files = (original.root / 'registry.json', original.root / 'bus.jsonl')
+    source_hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in source_files}
+    source_snapshot = original.registry.snapshot()
+    observations = tuple((thread, item) for thread in source_snapshot.threads.values()
+        for item in original.bus.log.context_manifests(thread.name, original.registry))
+    observed_owner, observed = observations[0]
+    data = NativeContextManifestData(observed.counter, observed.segments)
+    comms, root_id = _root(tmp_path)
+    comms.agents.set_agent_info('Bob', model=observed_owner.model)
+    original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
+    owner = CommsAgent(comms, auto_wake=False)
+    lease = comms.agents.begin_turn('Alice', 'owned-context-recording515')
+    thread = comms.registry.require('Alice')
+    resources = ExitStack()
+    goals = TurnGoalAccount(comms=comms, owner=thread, turn=TurnId(lease.turn_id),
+        lease=lease, permit=None, open_store=owner.turns.goals.open_goal_store,
+        pending_origins=owner.turns.goals.pending_goal_origins, claims=resources)
+    progress = TurnProgress(comms=comms, sessions=owner.sessions, inputs=owner.inputs,
+        effects=owner, runtime=owner._runtime, emitted_errors=owner.turns.emitted_errors,
+        session_id='Alice', thread=thread, turn_lease=lease, routing=TurnRouting(),
+        original=RoutedOriginalInput(accepted_id=None, goal_permission=InactiveGoalPermission(),
+            prompt='', original_display=None, origins=(), dependency=NoInputDependency(),
+            batch=SingleInputBatch(())),
+        checkpoint=comms.transcripts.transcript_checkpoint('Alice'), finish_event=asyncio.Event(),
+        goals=goals, sync_goals=owner.turns.goals.sync_goal_execution)
+    results = []
+
+    async def publish_while_contended(consumer, event, *, cancel):
+        acquired, release = threading.Event(), threading.Event()
+        def hold_original_writer():
+            with comms.bus.log.locked():
+                acquired.set()
+                release.wait()
+        holder = threading.Thread(target=hold_original_writer)
+        holder.start()
+        assert await asyncio.to_thread(acquired.wait, 2)
+        watchdog = threading.Timer(2, release.set)
+        watchdog.start()
+        operation = asyncio.create_task(consumer.dispatch(event))
+        try:
+            started = time.monotonic()
+            await asyncio.sleep(0.03)
+            heartbeat = time.monotonic() - started
+            assert heartbeat < 0.5, 'Canonical writer blocked the application event loop'
+            assert not operation.done(), 'Publication must await the original locked writer'
+            if cancel:
+                operation.cancel()
+                await asyncio.sleep(0.03)
+                assert not operation.done(), 'Cancellation escaped before worker custody retired'
+            release.set()
+            if cancel:
+                with pytest.raises(asyncio.CancelledError):
+                    await operation
+            else:
+                await operation
+            results.append({'consumer':type(consumer).__name__, 'heartbeat_seconds':heartbeat,
+                            'cancelled_after_join':cancel})
+        finally:
+            release.set()
+            watchdog.cancel()
+            await asyncio.to_thread(holder.join)
+            if not operation.done():
+                operation.cancel()
+                try:
+                    await operation
+                except asyncio.CancelledError:
+                    pass
+
+    try:
+        with Coordination(str(comms.root / 'coordination.sqlite3')) as store:
+            for registered in comms.registry.snapshot().threads.values():
+                store.participants.register(stable_thread_lookup(registered.created_at),
+                    registered.name, registered.name, committed=True)
+            accept_delivery_cohort(comms.bus, root_id, original_message.seq, store)
+            await publish_while_contended(progress, ContextObserved(data), cancel=True)
+            async with SelectedParticipant.select(comms, store, root_id, 'Bob', 0) as selected:
+                await publish_while_contended(selected, TurnContextObserved(context=data), cancel=False)
+            selected_rows = comms.bus.log.context_manifests('Bob', comms.registry)
+            ordinary_rows = comms.bus.log.context_manifests('Alice', comms.registry)
+            assert len(selected_rows) == len(ordinary_rows) == 1
+            assert selected_rows[0].segments == ordinary_rows[0].segments == observed.segments
+            assert ordinary_rows[0].turn == RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
+            assert comms.bus.log.latest_sequence() == original_message.seq
+            assert comms.bus.log.full_history() == [original_message]
+            from subprocess import run
+            command = [str(Path(sys.executable).with_name('agent-comms')), '--root', str(comms.root),
+                       'context', 'Alice', '--turn', str(lease.identity.generation)]
+            output = run(command, capture_output=True, text=True, check=True)
+            cli = json.loads(output.stdout)
+            assert cli['manifests'] == FieldCodec.encode(ordinary_rows)
+            assert cli['text_recorded'] is False
+            assert {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_files} == source_hashes
+            (tmp_path / 'installed-context-callback-receipt.json').write_text(json.dumps({
+                'state':'PASS', 'installed_source':str(installed), 'original_root':str(original.root),
+                'original_source_hashes':source_hashes, 'source_owner':FieldCodec.encode(observed.thread),
+                'source_turn':FieldCodec.encode(observed.turn), 'recorded_segments_unchanged':True,
+                'callbacks':results, 'manifest_cli':command, 'manifest_cli_returncode':output.returncode,
+                'public_sequence_unchanged':True, 'original_files_unchanged':True,
+                'provider_calls':0, 'native_inputs':0,
+                'scope':'Actual installed recording owners/locks/CLI; captured SDK metadata, no fresh native/provider qualification'
+            }, indent=2) + '\n')
+    finally:
+        resources.close()
+        comms.agents.finish_turn(lease)
+        await owner.shutdown()
+
+
 def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path, monkeypatch):
     comms,root_id=_root(tmp_path)
     first=comms.messaging.send_initial_cohort('sender','#team','@Alice original question')
