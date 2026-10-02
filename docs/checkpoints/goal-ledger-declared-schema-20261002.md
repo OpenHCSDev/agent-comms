@@ -47,3 +47,11 @@ that continuation. Validation is pending its complete affected workflow.
 
 Patterns: MEMB-1 (manual format identity), MEMB-5 (schema derived from row owners),
 TIME-9 (strict current format remains sealed; one-shot stopped carry outside src).
+
+Source census reused refactor-audit ParsedModule over src/tests/tools: 719 Python
+files parsed, zero omissions; unique FailureReason/GoalLedgerTable/GoalAttemptSchema
+and GoalAttemptStore declarations, six existing goal table members, exactly one
+TypedTable field using FailureReason. Fifty-five direct lexical calls are recorded
+in evidence/goal-ledger-declared-schema-20261002/source-consumers.json. This is
+lexical evidence; imported/inherited/dynamic consumers were read in the source
+closure above, not declared absent by the AST.
