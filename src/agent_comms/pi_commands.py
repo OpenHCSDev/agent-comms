@@ -14,7 +14,8 @@ from uuid import uuid4
 from .turn_phase import ShutdownPhase
 
 from .native_turn_context import NativeContextData
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ThinkingLevel, CompactionReason, ThresholdCompactionReason
+from .message_reference import MessageReference
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -436,10 +437,12 @@ class AgentCommsSummarizeCompaction(PiCommand):
 class AgentCommsCompactionSettings(PiCommand):
     response_payload = CompactionSettingsData
     strict_response = True
-    version: int = 1
+    version: int = 2
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
+    purpose: type[CompactionReason] = ThresholdCompactionReason
+    boundary: tuple[MessageReference, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
