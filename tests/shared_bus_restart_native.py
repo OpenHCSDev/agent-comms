@@ -121,13 +121,15 @@ async def configured_pure_channel(arguments):
     snapshot = public.registry.snapshot()
     sources = tuple(snapshot.require(name) for name in original_names)
     assert all(source.model and source.session_file for source in sources)
+    if arguments.saved_source is not None:
+        assert len(sources) == 1, 'An explicit saved source belongs to one configured fork'
     common_tags = set.intersection(*(set(source.tags) for source in sources))
     assert 'openhcs' in common_tags
     stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0], snapshot)
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
-        original = Path(source.session_file)
+        original = arguments.saved_source or Path(source.session_file)
         before = hashlib.sha256(original.read_bytes()).hexdigest()
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
@@ -148,6 +150,7 @@ async def configured_pure_channel(arguments):
             'model':source.model, 'thinking':source.thinking_level.declared_name,
             'worktree':source.worktree, 'tags':sorted(source.tags),
             'source_session_bytes':original.stat().st_size,
+            'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
     service.registry.declare(Thread('human', frozenset(), str(project), role=ThreadRole.USER))
