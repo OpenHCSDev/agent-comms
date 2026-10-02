@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { convertToLlm } from '../messages.js';
 import { sessionEntryToContextMessages } from '../session-manager.js';
 import { serializeConversation } from './utils.js';
+import { estimateTextTokens } from '@earendil-works/pi-ai/utils/estimate';
 
 export class EntryMessageRange {
     constructor(store, leafId, start, end) { Object.assign(this, {store, leafId, start, end}); }
@@ -25,19 +26,34 @@ export class SummarySource {
     constructor() { if (new.target === SummarySource) throw new TypeError('Concrete summary source required'); }
     *pieces() { throw new Error('SummarySource.pieces must be implemented'); }
     byteLength() { let bytes = 0; for (const piece of this.pieces()) bytes += Buffer.byteLength(piece); return bytes; }
-    *chunks(byteLimit) {
-        if (!Number.isSafeInteger(byteLimit) || byteLimit < 4) throw new Error('Native policy source budget required');
-        let chunk = '', size = 0;
+    tokenLength() { let tokens = 0; for (const piece of this.pieces()) tokens += estimateTextTokens(piece); return tokens; }
+    *chunks(tokenLimit) {
+        if (!Number.isSafeInteger(tokenLimit) || tokenLimit < 1) throw new Error('Native policy source budget required');
+        let chunk = '';
         for (const piece of this.pieces()) {
             const bytes = Buffer.from(piece);
             let offset = 0;
             while (offset < bytes.length) {
-                let end = Math.min(offset + byteLimit - size, bytes.length);
+                let lower = offset, upper = bytes.length;
+                // Native's shared text estimator owns capacity. UTF-8 offsets
+                // own exact source traversal, never a second token formula.
+                while (lower < upper) {
+                    const middle = Math.ceil((lower + upper) / 2);
+                    let end = middle;
+                    while (end > offset && end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--;
+                    const text = bytes.subarray(offset, end).toString('utf8');
+                    if (estimateTextTokens(chunk + text) <= tokenLimit) lower = middle;
+                    else upper = middle - 1;
+                }
+                let end = lower;
                 while (end > offset && end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--;
-                if (end === offset) { yield chunk; chunk = ''; size = 0; continue; }
+                if (end === offset) {
+                    if (!chunk) throw new Error('Native source cannot admit one Unicode scalar');
+                    yield chunk; chunk = ''; continue;
+                }
                 chunk += bytes.subarray(offset, end).toString('utf8');
-                size += end - offset; offset = end;
-                if (size === byteLimit) { yield chunk; chunk = ''; size = 0; }
+                offset = end;
+                if (offset < bytes.length) { yield chunk; chunk = ''; }
             }
         }
         if (chunk) yield chunk;

@@ -1,0 +1,17 @@
+{
+  "installed_core": "ae660f2b2da660dfd2eab5c4b74ab29ffbf5d885",
+  "selected_attempt": "95fe2ad984974791b588623061e799f1",
+  "native_commit": "00811c7a6dc947c79f090f4b5317ebb8",
+  "native_entry": "608c415c",
+  "original_payload_metadata_digests_verified": true,
+  "preparation_member": "ready",
+  "result_member": "committed",
+  "adaptive_result": true,
+  "original_summary_bytes": 49113,
+  "source_revision_unchanged": true,
+  "new_summary_or_commit": false,
+  "provider_calls": 0,
+  "input_sent": false,
+  "source_overlay": false,
+  "scope": "actual installed helper and original committed result projection; not a second manual/adaptive compaction execution"
+}

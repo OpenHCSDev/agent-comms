@@ -9,7 +9,8 @@ export declare class EntryMessageRange implements Iterable<AgentMessage> {
 export declare abstract class SummarySource {
     abstract pieces(): IterableIterator<string>;
     byteLength(): number;
-    chunks(byteLimit: number): IterableIterator<string>;
+    tokenLength(): number;
+    chunks(tokenLimit: number): IterableIterator<string>;
     close(): void;
 }
 export declare class HistorySummarySource extends SummarySource {
