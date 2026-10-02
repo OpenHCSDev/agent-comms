@@ -224,6 +224,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         paths = self.protected_files().union(
             RuntimeCompactionFiles(ROOT).paths, RuntimeNativeFiles(ROOT).paths,
             (bus.path, bus.metadata_path),
+            self.task_carry.recovery_paths(),
         )
         return frozenset(path for path in paths if path.exists() or path.is_symlink())
 
