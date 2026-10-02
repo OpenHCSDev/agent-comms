@@ -195,9 +195,17 @@ def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp
         owner, TurnId("turn"), 1, keys, inputs.read(), "first\n\nsecond", revision
     )
     assert source.originals == inputs.read().original_provenances(keys)
-    assert tuple(ref.digest for ref in source.originals) == tuple(
+    retained = RetainedTaskFacts(tuple(InputTaskFact(row) for row in inputs.read().originals(keys)))
+    assert tuple(row.digest for row in retained.original_inputs(source.originals)) == tuple(
         row.digest for row in inputs.read().originals(keys)
     )
+    source.reservation_check(revision, inputs.read(), retained).require_valid()
+    changed = replace(retained, facts=(
+        InputTaskFact(replace(retained.facts[0].source, source_text="changed")),
+        retained.facts[1],
+    ))
+    with pytest.raises(ReservationViolationError, match="content_changed"):
+        source.reservation_check(revision, inputs.read(), changed).require_valid()
     assert FieldCodec.decode(SelectedSource, FieldCodec.encode(source)) == source
     assert source.pending_input_keys == keys
     assert not source.matches_pending_inputs(tuple(reversed(keys)))
