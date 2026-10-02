@@ -1,0 +1,88 @@
+{
+  "classification": "runtime/native6-original-source-carry",
+  "stores": [
+    {
+      "kind": "coordination",
+      "original_sha256": "4dba28c1949eb23b86585b0139f33764a2314d83fa0606f86bb195067c22cca8",
+      "candidate_sha256": "b56ab8605c524d6839efad3e2012764baed25d69aad2c6aaa03184a37ed539f9",
+      "evidence": {
+        "original_release": [
+          9,
+          3,
+          3,
+          6
+        ],
+        "target_release": [
+          9,
+          3,
+          3,
+          6
+        ],
+        "unchanged_rows_sha256": "89cb4d04f888842bd30e56283c49922061bff86222304f06ef847113b32e1a54",
+        "original_rows": {
+          "cohort_schema_meta": 1,
+          "claim_batch_receipts": 255,
+          "claim_batch_members": 1909,
+          "cohort_delivery_receipts": 1913,
+          "awareness_schema_meta": 1,
+          "awareness_claim_generations": 1909,
+          "wake_claims": 1909,
+          "execution_claims": 176,
+          "participants": 81,
+          "participant_aliases": 81,
+          "owner_generations": 81,
+          "attempts": 176,
+          "replay_assessments": 8,
+          "current_executions": 81,
+          "executions": 176,
+          "schema_meta": 1,
+          "publication_intents": 167,
+          "publication_receipts": 167,
+          "connectivity": 0,
+          "recovery_audit": 1,
+          "obligations": 176,
+          "response_schema_meta": 1,
+          "publication_append_dispatches": 167,
+          "native_runtime_schema_meta": 1,
+          "native_runtime_input": 902,
+          "current_native_cursor": 58,
+          "native_runtime_triage_sources": 726
+        }
+      }
+    },
+    {
+      "kind": "prompt_binding",
+      "original_sha256": "c3de47027964ab890ef06e494f5ff92c57bbb44aa05251e9dbc7bc5d65d72cd6",
+      "candidate_sha256": "c3de47027964ab890ef06e494f5ff92c57bbb44aa05251e9dbc7bc5d65d72cd6",
+      "evidence": {
+        "original_bindings": 902,
+        "unchanged_rows_sha256": "e76271378e16a28a267e0589ff49498b8375c60c3b41cba492f40f91c4d7fc5e"
+      }
+    },
+    {
+      "kind": "compaction",
+      "original_sha256": "ca3236a426574e04e6ca1beacd90fba4050b47b5406312ae83a262033cc9e776",
+      "candidate_sha256": "e16e50adfaba585662e5806f2b112dbc7e29e47495b13eee66fe64195d23658e",
+      "evidence": {
+        "created_empty_tables": [
+          "native_fork_creation"
+        ],
+        "original_identity_rows_sha256": "819d6fe8db4fafdbbeb09c265a8845e3199963a8f0424237b9464ce0e57afa1e",
+        "original_rows": {
+          "operations": 7,
+          "selected_summary_attempts": 15,
+          "publications": 7,
+          "private_raw_inputs": 639,
+          "enrolled_private_sessions": 0
+        },
+        "original_source_bytes_preserved": true,
+        "admission_receipts_minted": 0,
+        "input_replays": 0
+      }
+    }
+  ],
+  "original_preimages": "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/original-store-preimages02",
+  "retired": [],
+  "reconstructed_proofs": 0,
+  "input_replays": 0
+}

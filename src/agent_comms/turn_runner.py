@@ -246,7 +246,7 @@ class TurnRunner:
                 )
             else:
                 turn_id = uuid4().hex
-                turn_lease = self.comms.agents.begin_turn(
+                owner = self.comms.agents.begin_turn(
                     thread_name, turn_id, "Waiting for replies"
                 )
                 try:
@@ -256,7 +256,7 @@ class TurnRunner:
                     await self.inputs.drain_inbox(session_id)
                     await self.collect_replies(session_id, thread_name, sent_seq)
                 finally:
-                    await self.settle_turn(session_id, thread_name, turn_id, turn_lease)
+                    await self.settle_turn(session_id, thread_name, turn_id, owner.turn_lease)
             self.effects._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:

@@ -87,8 +87,9 @@ class PrivateInputs(JournalRole):
         """The original private-input owner covers every selected raw input.
 
         A returned mint covers only its original enrollment. Continued source
-        coverage comes from committed native/input receipts, irrespective of
-        today's routing name or the parent directory of the selected journal.
+        coverage comes from the original acquired source and corroborated
+        live-recorded ancestry. Input receipts still prove their own deliveries,
+        irrespective of today's routing name or the selected journal directory.
         No marker, file observation or enrollment row can mint fresh custody.
         """
         canonical = str(session_file)

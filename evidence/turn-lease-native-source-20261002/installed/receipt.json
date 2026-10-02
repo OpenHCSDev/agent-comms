@@ -1,0 +1,299 @@
+{
+  "state": "ACTUAL_CONFIGURED_SAVED_SDK_FORK_ACP_NATIVE_PASS",
+  "source_core": "7dd5c14cdd88f3046f44613d22d346ef9d2fe833",
+  "prefix": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002",
+  "installed_source_proof": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/task-aware520-fork-carry538-receiving-20261002/combined542/source-proof.json",
+  "installed_source_proof_sha256": "c2ecca62db75f895638e6355e749b4d445b02f07193a2e6c6a063b980f8970cd",
+  "sources": [
+    {
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/agent-comms.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "7dd5c14cdd88f3046f44613d22d346ef9d2fe833",
+          "requested_revision": "7dd5c14cdd88f3046f44613d22d346ef9d2fe833"
+        }
+      },
+      "inventory_sha256": "39caa2a4fba54256b0480508c6b5190e8b8b3f3a45bcd929af74f6ec32dd4fb6"
+    },
+    {
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/toad.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "5d9fe0d07fed728993b6131846ff3eba51f5e18a",
+          "requested_revision": "5d9fe0d07fed728993b6131846ff3eba51f5e18a"
+        }
+      },
+      "inventory_sha256": "9094e68964883f37eeab121f004501e3a984177926e656829b32397f8b564fcf"
+    },
+    {
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "3dd9899732b650e9c1e6e3a3942e8e48ed8e9bd6",
+          "requested_revision": "3dd9899732b650e9c1e6e3a3942e8e48ed8e9bd6"
+        }
+      },
+      "inventory_sha256": "acc0d6c5a6f41f67415b415eaa20e1d57182defd95345d60f3099929c3f63285"
+    },
+    {
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual-diff-view.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+          "requested_revision": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+        }
+      },
+      "inventory_sha256": "c1ab2e4c7a7595de81eeb8fef14f9fa9e45b603f84e810dc7c08fa9145793679"
+    }
+  ],
+  "native_manifest": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
+  "native_tree": "d8ceeee18889e372ff72b4d068750fb06e2688762bcb95a098892761a5fd548a",
+  "sdk": "0.12.1",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "off",
+  "elapsed_seconds": 51.98568065598374,
+  "scope": "Real installed Toad headless editor/ACP on canonical RuntimeServer; actual configured native SDK fork/input/answer. No physical st/LinuxDriver claim; no public acceptance or latency-fix claim.",
+  "source_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+  "source_sha256_unchanged": "1f7ade9e9d00eceb1eec18fb7879efa5d6681a7ffc433bf7884c5bfc2f924852",
+  "source_bytes": 41294021,
+  "fork_creation": {
+    "kind": "native_fork_creation",
+    "sessionId": "01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8",
+    "sessionFile": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl",
+    "source": {
+      "sessionId": "01a0c73e-ee8f-729a-b53b-1a999b6c2353",
+      "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl"
+    },
+    "sourceRevision": "2084:2659658:41294021:1790884840574751579:1790884840574751579",
+    "revision": "2084:2113347:41294062:1790967631975452734:1790967631975452734",
+    "prefixDigest": {
+      "value": "94925618fb1fad9df9c60cbe677de3493527d3687cd97a4ee2e10c8fa2fdad03"
+    },
+    "entryCount": 9500
+  },
+  "original_input": "acp:8df354aee41c460bb6461e289878b4f3",
+  "native_input": "32820fc44ae4a16400e6021c96d7e9c1",
+  "native_user": "be78f5ea",
+  "native_reply": "859404c6",
+  "turn_documents": [
+    {
+      "active": null,
+      "finished_turn_id": null
+    },
+    {
+      "active": {
+        "id": "964c186df01e48bb82833c459f648b2e",
+        "owner_pid": 480541,
+        "started_at": 1790967651.2780492,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 1,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "preparing",
+          "detail": "Bounded acceptance only. Do not resume inherited work, use tools or change files"
+        }
+      },
+      "finished_turn_id": null
+    },
+    {
+      "active": {
+        "id": "964c186df01e48bb82833c459f648b2e",
+        "owner_pid": 480541,
+        "started_at": 1790967651.2780492,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 1,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "prompt_acceptance",
+          "detail": ""
+        }
+      },
+      "finished_turn_id": null
+    },
+    {
+      "active": {
+        "id": "964c186df01e48bb82833c459f648b2e",
+        "owner_pid": 480541,
+        "started_at": 1790967651.2780492,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 1,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "model_wait",
+          "detail": ""
+        }
+      },
+      "finished_turn_id": null
+    },
+    {
+      "active": {
+        "id": "964c186df01e48bb82833c459f648b2e",
+        "owner_pid": 480541,
+        "started_at": 1790967651.2780492,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 1,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "settling_stats",
+          "detail": ""
+        }
+      },
+      "finished_turn_id": null
+    },
+    {
+      "active": {
+        "id": "964c186df01e48bb82833c459f648b2e",
+        "owner_pid": 480541,
+        "started_at": 1790967651.2780492,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 1,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "publishing",
+          "detail": ""
+        }
+      },
+      "finished_turn_id": null
+    },
+    {
+      "active": null,
+      "finished_turn_id": "964c186df01e48bb82833c459f648b2e"
+    }
+  ],
+  "runtime_info": {
+    "configured-source": {
+      "thread": "configured-source",
+      "model": "openai-codex/gpt-6.1-sol",
+      "session_name": null,
+      "context_used": 99413,
+      "context_size": 272000,
+      "ts": 1790967670.4370093
+    }
+  },
+  "agent_info_attachment_evidence": "Native returned saved identity accepted through reviewed before_agent_info\u2192OwnedTurn.attach_native_session. Runtime configuration/usage and final transcript cursor match the same SDK child; original turn lease retained through settlement. No direct hook-call instrumentation added.",
+  "transcript_updates": [
+    {
+      "kind": "transcript_changed",
+      "cursor": {
+        "session_file": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl",
+        "offset": 41297252,
+        "receipts": {
+          "root": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/wire",
+          "recipient": {
+            "name": "configured-source",
+            "created_at": 1790967635.90901
+          },
+          "sequence": 0
+        },
+        "outcomes": null
+      }
+    }
+  ],
+  "public_original_dispositions_observed_after": [
+    {
+      "kind": "not_sent",
+      "key": "acp:0d9d2784d0f34858947e138b375e83e5",
+      "sequence": null,
+      "owner": "openhcs-audit-merged-boundaries",
+      "admission": 1205,
+      "target": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "kind": "bound_unknown",
+      "key": "acp:da2b8cee98d44691b396a0f40e18147a",
+      "sequence": null,
+      "owner": "openhcs-helper",
+      "admission": 2022,
+      "target": "openhcs-helper",
+      "turn_id": "79cb9232873a4501a118cc25da9fca67",
+      "native_id": "b8507863b638dee82ac179b50536e151"
+    }
+  ],
+  "public_diagnostic_sha256": "a997603d0a073c1e9c9266fcc373be029cc3f6f1f52dea24646c9b99553cec0d",
+  "cleanup": {
+    "owned_original_processes_absent": [
+      480541,
+      481637
+    ],
+    "private_root_process_matches": [],
+    "same_uid_environ_permission_denied": [
+      68488,
+      216738,
+      445970,
+      1561676,
+      1786010,
+      1786012,
+      1953373
+    ],
+    "limit": "Other inaccessible processes are not classified; exact owned harness/native identities are absent."
+  },
+  "raw_files": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/terminal-receipt.json",
+      "sha256": "49845478c342925904bc773964653696f6140a03eeacf5efe56e25c2808af1ea"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/registry.json",
+      "sha256": "8f003cfd868dec8a62232b11c9448242b58176c517090f2a8d4977926afc91a8"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/runtime_info.json",
+      "sha256": "3dfd05104fe3884e9efb2100428963d65dc6281b224e2121b88f2eac574fb72e"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/activity_latest.json",
+      "sha256": "b020046aaf7c28e19162e5065d3048942c6514cc45a9c59ff01a8dca88f1b445"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/input_dispositions.json",
+      "sha256": "59d732715e68e1935f0f3e8899c2f8e1c6142003d332d1b4e3cf01d5e54fa8f3"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/964c186df01e48bb82833c459f648b2e.requests.jsonl",
+      "sha256": "d211d5b130ea3f46190a887ede812c31884aac796b01fa380345b5152b1f354a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/actual-human-ingress.json",
+      "sha256": "b03b547f0b9891d5669e8d5f008662899db0ed507f5c0304417b47ae40e3b2d2"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/original-reply-1.svg",
+      "sha256": "cfce65675d7f554fce2723fa9ca53447ee20b0d0547ee10525edb7bbea480020"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/installed-configured-sdk542-20261002/actual-acp.log",
+      "sha256": "9e4f93de43e5319fa74442211d26390520347127d062f0fcac8322cd41d9a175"
+    }
+  ],
+  "scratch": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002",
+  "public_inputs": 0,
+  "original_replays": 0,
+  "original_settings_observed_after": {
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "off",
+    "source_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+    "process": {
+      "pid": 282725,
+      "start_time": 43649042
+    }
+  }
+}

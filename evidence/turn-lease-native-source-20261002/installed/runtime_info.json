@@ -1,0 +1,10 @@
+{
+  "configured-source": {
+    "thread": "configured-source",
+    "model": "openai-codex/gpt-6.1-sol",
+    "session_name": null,
+    "context_used": 99413,
+    "context_size": 272000,
+    "ts": 1790967670.4370093
+  }
+}

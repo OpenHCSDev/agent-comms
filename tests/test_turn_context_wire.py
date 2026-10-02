@@ -53,6 +53,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     from agent_comms.turn_goal_permission import InactiveGoalPermission
     from agent_comms.turn_input_source import NoInputDependency, RoutedOriginalInput
     from agent_comms.turn_progress import TurnProgress
+    from agent_comms.owned_turn import OwnedTurn
 
     installed = Path(agent_comms.__file__).resolve()
     assert 'site-packages' in installed.parts, 'This journey requires installed application source'
@@ -68,19 +69,21 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     comms.agents.set_agent_info('Bob', model=observed_owner.model)
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
     owner = CommsAgent(comms, auto_wake=False)
-    lease = comms.agents.begin_turn('Alice', 'owned-context-recording515')
-    thread = comms.registry.require('Alice')
+    turn = OwnedTurn(owner.turns, 'Alice', 'Alice', '')
+    turn.registry_owner = comms.agents.begin_turn('Alice', 'owned-context-recording515')
+    lease, thread = turn.turn_lease, turn.thread
+    turn.routing = TurnRouting()
+    turn.checkpoint = comms.transcripts.transcript_checkpoint('Alice')
+    turn.original = RoutedOriginalInput(accepted_id=None, goal_permission=InactiveGoalPermission(),
+        prompt='', original_display=None, origins=(), dependency=NoInputDependency(),
+        batch=SingleInputBatch(()))
     resources = ExitStack()
     goals = TurnGoalAccount(comms=comms, owner=thread, turn=TurnId(lease.turn_id),
         lease=lease, permit=None, open_store=owner.turns.goals.open_goal_store,
         pending_origins=owner.turns.goals.pending_goal_origins, claims=resources)
     progress = TurnProgress(comms=comms, sessions=owner.sessions, inputs=owner.inputs,
         effects=owner, runtime=owner._runtime, emitted_errors=owner.turns.emitted_errors,
-        session_id='Alice', thread=thread, turn_lease=lease, routing=TurnRouting(),
-        original=RoutedOriginalInput(accepted_id=None, goal_permission=InactiveGoalPermission(),
-            prompt='', original_display=None, origins=(), dependency=NoInputDependency(),
-            batch=SingleInputBatch(())),
-        checkpoint=comms.transcripts.transcript_checkpoint('Alice'), finish_event=asyncio.Event(),
+        session_id='Alice', turn=turn, finish_event=asyncio.Event(),
         goals=goals, sync_goals=owner.turns.goals.sync_goal_execution)
     results = []
 

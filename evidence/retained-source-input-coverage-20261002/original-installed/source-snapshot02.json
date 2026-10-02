@@ -1,0 +1,46 @@
+{
+  "classification": "running-source read-only store snapshots; not stopped-public carry",
+  "source_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "snapshot_root": "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02",
+  "stores": {
+    "coordination.sqlite3": {
+      "source_sha256": "a6bb6536cf57a1062b9347be1e82be05088a67ea3d6f9b0d1d490c06082132b1",
+      "snapshot_sha256": "4dba28c1949eb23b86585b0139f33764a2314d83fa0606f86bb195067c22cca8",
+      "bytes": 5718016,
+      "rows": 11124,
+      "row_values_sha256": "d1a70f2cc3324ac47755ed18a2980141951f2a0883971e98e0c78092fd9be5c5",
+      "schema_sha256": "c04ac61624d3f4f06dd94dd5af3d23910e0d0db95ec6f8f866560fbe1c5e1ab6"
+    },
+    "native_prompt_bindings.sqlite3": {
+      "source_sha256": "bf9dfcc0467c565918226a4f7ae0624649ebd59b1e17faaf7520b4d3e5ae9d41",
+      "snapshot_sha256": "c3de47027964ab890ef06e494f5ff92c57bbb44aa05251e9dbc7bc5d65d72cd6",
+      "bytes": 253952,
+      "rows": 903,
+      "row_values_sha256": "e76271378e16a28a267e0589ff49498b8375c60c3b41cba492f40f91c4d7fc5e",
+      "schema_sha256": "ea4e854a0502d3db67055098d9beaa70477d40278d8ab5aed4e8acf7dfd65ca5"
+    },
+    "compaction-commits.sqlite3": {
+      "source_sha256": "6b775e2522ac32b1514bcf2afe95eb9cfd08879ad586d6a605d68095c91a81a5",
+      "snapshot_sha256": "ca3236a426574e04e6ca1beacd90fba4050b47b5406312ae83a262033cc9e776",
+      "bytes": 1880064,
+      "rows": 668,
+      "row_values_sha256": "1d6066818b6db0cf56987fb16d52882715c72a186e2aef35759ac0f6e0d23add",
+      "schema_sha256": "a38946cf766c2ea565350748281b456a0776e29aafbaa18ca4d1ab2561ae303f"
+    },
+    "registry.json": {
+      "source_sha256": "8ff4d60197dfcb3ad163e53316aacd9c855f03eaa51dafd855842bbc9e743c8d",
+      "snapshot_sha256": "8ff4d60197dfcb3ad163e53316aacd9c855f03eaa51dafd855842bbc9e743c8d",
+      "bytes": 285077
+    },
+    "input_dispositions.json": {
+      "source_sha256": "53d05db733fa7ac34c881fe5d53f253a135aec9caab26b7ba1e4d866ae450252",
+      "snapshot_sha256": "53d05db733fa7ac34c881fe5d53f253a135aec9caab26b7ba1e4d866ae450252",
+      "bytes": 1440488
+    }
+  },
+  "recorded_source_paths": "unaltered; native source and proof remain at original admitted paths",
+  "public_mutations": 0,
+  "inputs": 0,
+  "provider_calls": 0,
+  "prior_attempt": "snapshot01 comparison refused because sqlite3.Row address repr is not stable row-value order; no source write; preserved owned first backup until receipt retained"
+}
