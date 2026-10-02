@@ -59,11 +59,11 @@ class CompactionBoundary:
         from .retained_context import RetainedSegment
 
         with WireLog(self.root / "bus.jsonl").retained_sources(name, self.registry) as (
-            owner, snapshot, facts, inputs, export, source
+            owner, snapshot, facts, inputs, export
         ):
             pinned = facts.original_input_facts(inputs)
             authored = RetainedTaskFacts((*facts.facts, *pinned)).for_owner(owner, snapshot)
-            segment = RetainedSegment.capture(authored, source, owner, snapshot, export)
+            segment = RetainedSegment.capture(authored, owner, snapshot, export)
             keys = tuple(dict.fromkeys((*inputs.owner_originals(owner),
                                         *(row.key for fact in pinned for row in fact.input_sources()))))
             originals = inputs.retained_task_facts(keys)
@@ -176,9 +176,9 @@ class HeldCompaction:
         rows, input_facts = inputs.compaction_material(
             owner, pending_input_keys, self.boundary.future_queue
         )
-        bus_revision, facts = WireLog(
+        facts = WireLog(
             self.boundary.root / "bus.jsonl"
-        ).compaction_messages_unlocked(owner.incarnation)
+        ).retained_task_facts_unlocked(owner.incarnation)
         facts += owner.retained_task_facts()
         facts += input_facts
         facts += self.native_facts
@@ -190,7 +190,6 @@ class HeldCompaction:
             self.receipt.turn_id,
             self.receipt.goal_id,
             self.receipt.goal_revision,
-            bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
             RetainedTaskFacts(facts).for_owner(owner, snapshot),
             pending_inputs=inputs.original_provenances(pending_input_keys),

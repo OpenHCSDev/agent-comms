@@ -1,0 +1,14 @@
+{
+  "paths": {
+    "/home/ts/wt/s52901/wire/compaction-commits.sqlite3": "f87cfd03c7bc82aa2ab3503bea5d1761971fafe0d9989bd2b3e55fff472562c1",
+    "/home/ts/wt/s52901/forks/2026-10-02T10-58-28-021Z_01a0fc43-f836-776e-8542-e0f25712541a.jsonl": "c55ea4b8b3fd706b2f43a9ba1a722144f0253ef39449aad77b6c152f15f3c058"
+  },
+  "purpose": "Original failed provider attempt retained before distinct52902; no recovery or replay",
+  "summary_states": [
+    [
+      "5cbb208ef97b4fcaa081cbd0a6f31d75",
+      "{\"kind\":\"unknown\"}"
+    ]
+  ],
+  "unchanged_after_distinct_gate": true
+}

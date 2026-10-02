@@ -17,9 +17,12 @@ from .pi_commands import AgentCommsCompactionSettings, PiCommand
 from .pi_events import Response
 from .pi_rpc import PiRpcChannel
 from .pi_summary_payloads import SelectedModel
+from .pi_vocabulary import CompactionReason, ThresholdCompactionReason
+from .registration import Registration
+from .message_reference import MessageReference
 
 
-class SelectedPiProbeUnknownError(RuntimeError):
+class SelectedPiProbeUnknownError(NativePiUnavailable):
     """A sent or untrusted probe is not retry/commit/input authority."""
 
 
@@ -86,12 +89,14 @@ def _read_settings_response(
     return response.require_request(request).require_request(request)
 
 
-async def read_selected_compaction_decision(
+async def observe_selected_compaction_decision(
     persistent: PersistentPiSession,
     *,
     session_file: str,
     expected_package: Path,
     selected: SelectedModel,
+    purpose: type[CompactionReason] = ThresholdCompactionReason,
+    boundary: tuple[MessageReference, ...] = (),
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
@@ -102,13 +107,46 @@ async def read_selected_compaction_decision(
         session_id=source.session_id,
         session_file=source.session_file,
         selected=selected,
+        purpose=purpose,
+        boundary=boundary,
     )
     return await _exchange_observation(
-        persistent,
-        request,
-        source,
-        _read_settings_response,
-        expected_package=expected_package,
-        timeout=timeout,
-        max_response=16384,
+        persistent, request, source, _read_settings_response,
+        expected_package=expected_package, timeout=timeout, max_response=16384,
+    )
+
+
+async def read_selected_compaction_decision(
+    persistent: PersistentPiSession, *, session_file: str, expected_package: Path,
+    selected: SelectedModel, registry: Registration, thread_name: str,
+    purpose: type[CompactionReason] = ThresholdCompactionReason, timeout: float = 3.0,
+) -> PiCompactionDecision:
+    """Select authored evidence only when the actual native policy opts in."""
+    settings = await observe_selected_compaction_decision(
+        persistent, session_file=session_file, expected_package=expected_package,
+        selected=selected, purpose=purpose, timeout=timeout,
+    )
+    if settings.trigger or not settings.task_aware:
+        return settings
+    # Optional timing is opt-in. The ordinary hard/default path above never
+    # scans the wire or opens a cadence journal. Use the original authored read.
+    from .wire_log import WireLog
+    from .compaction_journal import CompactionJournal
+
+    def authored_boundary():
+        retained = WireLog(registry.store.path.with_name("bus.jsonl")).retained_context(thread_name, registry)
+        snapshot = registry.snapshot()
+        boundary = retained.retained.optional_boundary(snapshot.require(thread_name), snapshot)
+        if boundary and CompactionJournal(
+            registry.store.path.with_name("compaction-commits.sqlite3")
+        ).summaries.attempted_boundary(session_file, boundary):
+            return ()
+        return boundary
+
+    boundary = await asyncio.to_thread(authored_boundary)
+    if not boundary:
+        return settings
+    return await observe_selected_compaction_decision(
+        persistent, session_file=session_file, expected_package=expected_package,
+        selected=selected, purpose=purpose, boundary=boundary, timeout=timeout,
     )

@@ -1,0 +1,52 @@
+{
+  "final_native_inputs": [
+    {
+      "kind": "native_runtime_input",
+      "input_id": "ec1b9bb323efd0bfba7520d3bf88e4b2",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "6f55a07a32e3dc2335901971e7ca1a79",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "928032bbec40e617177dd3052b6f836f418f69a766f5905c8cdc73a65758e27f",
+      "sent_owner_admission_generation": null,
+      "session_id": null,
+      "session_file": null,
+      "session_entry_id": null,
+      "request_generation": null,
+      "llm_context_digest": null,
+      "verdict": null
+    }
+  ],
+  "elapsed_seconds": 54.82714978500735,
+  "failure": "CancelledError: ",
+  "settings": [
+    {
+      "source_owner": "openhcs-architecture-memory",
+      "private_owner": "purechannel-owner-0",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42044804,
+      "source_session_sha256": "a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb",
+      "owned_fork": "/home/ts/wt/a520s103/forks/2026-10-02T10-15-29-492Z_01a0fc1c-9fd4-75ca-a6a0-d06af9469084.jsonl",
+      "original_task_sha256": "079c2d9fcf2bc90817641ff295f5e0ce24b2c51af9cb8bdb91f3bea70a8a1500"
+    }
+  ],
+  "installed_interpreter": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-task-aware-timing02-20261002/bin/python",
+  "original_sequences": [
+    1
+  ],
+  "proof": {},
+  "public_inputs": 0,
+  "original_seq326_replays": 0,
+  "provider": "actual configured provider",
+  "all_owned_workers_retired": true,
+  "configured_sources_unchanged": true,
+  "bus_reads": [],
+  "retained_bus_bytes": 1866
+}

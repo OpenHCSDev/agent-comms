@@ -1,0 +1,15 @@
+{
+  "state": "HELD, NOT PINNED/PUBLISHED",
+  "source": "588793e7472dfd3adc4febcd3610da4e86863b73",
+  "capture_stock_recipe": "exit0; syntax checks only, not source behavior qualification",
+  "tree": "c6090db2877cbc80357f29ba00f35d9ad581d05d34bbc4a46b0d5b9ebb27ca6a",
+  "files": 19190,
+  "retired_disposable_bytes": 138399917,
+  "retired_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/task-timing-enable-native-20261002/fresh-unverified",
+  "borrowers": [],
+  "original_ea043_package_untouched": true,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "public_changes": false,
+  "dependency": "Arendt existing SessionContext/ContextBudget source closure for actual101 pseudo-compactionSummary raw native message; final build must batch that source with588."
+}

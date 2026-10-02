@@ -1,0 +1,83 @@
+{
+  "source_core": "155b00076312626e025861efc3ed14549adca5c0",
+  "public_mutations": 0,
+  "provider_calls": 0,
+  "original_inputs_replayed": 0,
+  "observation": "original certified wire prefix365 and successor366, not missing historical HeldCompaction capture",
+  "added_message_author": "openhcs-helper",
+  "rows": [
+    {
+      "owner": "openhcs-audit-open-prs",
+      "original365_input": "fcef3475d15a1079403474ad3988f02d",
+      "original365_turn": "b240dfe21d06042d02dc5805734f3687",
+      "later_committed_turn": "e0796755404a6817d598520725d0e07d",
+      "wire_fact_counts": [
+        8,
+        8
+      ],
+      "wire_facts_equal": true,
+      "original_request_to_later_intent_projected_retained_equal": true,
+      "complete_retained_count": 9,
+      "original_turn_commit_intent_exists": false,
+      "original_input_admitted": false,
+      "old_message_digest_at365": "742bfec6a4cd57262eb16bc2fe5aea456146209c4d5a7b2769e7dcc7773ea425",
+      "old_message_digest_at366": "1e09b70ed57959cbf71bef416487b5d163b061a1f3342df90935bb87bd59893c"
+    },
+    {
+      "owner": "openhcs-audit-merged-runtime",
+      "original365_input": "10e4e562c83bf5bea7b506893a2aaf1f",
+      "original365_turn": "5d816b2dda2b84186238c6f0b93d8506",
+      "later_committed_turn": "c64b5a0eb83cd781d2ae49316a6719ae",
+      "wire_fact_counts": [
+        8,
+        8
+      ],
+      "wire_facts_equal": true,
+      "original_request_to_later_intent_projected_retained_equal": true,
+      "complete_retained_count": 9,
+      "original_turn_commit_intent_exists": false,
+      "original_input_admitted": false,
+      "old_message_digest_at365": "45ad67c8cbf0e27c6b67c84e65a112e0acb624c2b8a5b4797d3ad4409909240b",
+      "old_message_digest_at366": "5610335bac24db679985db8578f901bd74aefbee49b2a8d07378c066e06aeb4c"
+    },
+    {
+      "owner": "openhcs-audit-merged-models",
+      "original365_input": "d79482f11aeda26ae21dd28681a0015d",
+      "original365_turn": "ca6afb5d67a7f5a72e31570194e3af0f",
+      "later_committed_turn": "56594e44a8dcd1887b2ea42b7cb01dbc",
+      "wire_fact_counts": [
+        8,
+        8
+      ],
+      "wire_facts_equal": true,
+      "original_request_to_later_intent_projected_retained_equal": true,
+      "complete_retained_count": 9,
+      "original_turn_commit_intent_exists": false,
+      "original_input_admitted": false,
+      "old_message_digest_at365": "abf18e719c3871e18c1242569b44c5001e3a6dddbebae55ed69f1e3b67a8fe2c",
+      "old_message_digest_at366": "e6588d3588de9c5f2cc4641bec6660f3887fe64368a215ef99cf55d6a3fbfc73"
+    },
+    {
+      "owner": "openhcs-architecture-memory",
+      "original365_input": "82035c1bab1f2f5fed8e9b1233fccdb4",
+      "original365_turn": "2a94d5b0d80fe8cd836e3bc75566693e",
+      "later_committed_turn": "6eed5e2073d073d7306fb0b5f53d1269",
+      "wire_fact_counts": [
+        13,
+        13
+      ],
+      "wire_facts_equal": true,
+      "original_request_to_later_intent_projected_retained_equal": true,
+      "complete_retained_count": 43,
+      "original_turn_commit_intent_exists": false,
+      "original_input_admitted": false,
+      "old_message_digest_at365": "112c9949795a4f6152bc068985ec257ca9fde5c88581c3e0bce8e4ff3c1d3b07",
+      "old_message_digest_at366": "5b7e5be7df4056f09099b27799ec2d8b5a0ed2c3d8bdd340c2839813bcb46837"
+    }
+  ],
+  "limits": [
+    "No full failed capture was persisted before commit intent begin.",
+    "Later successful operations are different turns and are not used as grants or reconstructed old captures.",
+    "This establishes a concrete redundant-source invalidation class, not the sole historical mismatch."
+  ]
+}

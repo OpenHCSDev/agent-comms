@@ -1,0 +1,14 @@
+{
+  "owner": "Schrodinger artifact builder; Einstein520 policy/journey owner",
+  "source": "f46f1b5c4e00cf9a9c212face29166e6c41d943b",
+  "purpose": "ONE normal stock immutable artifact for final coherent summary-generation policy; no provider calls/public writes",
+  "protected_native": [
+    "5184",
+    "7074",
+    "ea043"
+  ],
+  "expected_native_bytes": 138400000,
+  "expected_peak_scratch_bytes": 300000000,
+  "scratch": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/summary-generation-policy520-20261002",
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache"
+}
