@@ -1,4 +1,4 @@
-"""Continued private history must join every user to independent live evidence."""
+"""Retained ancestry and managed delivery keep their original, distinct witnesses."""
 
 import json
 import sqlite3
@@ -133,7 +133,9 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
 
 
 @pytest.mark.parametrize(
-    "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque",
+               "historical", "historical-tail", "historical-sidecar", "historical-raw",
+               "historical-generation", "historical-started", "historical-cycle"]
 )
 def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
     from agent_comms.assignment_states import TriagePendingAssignment
@@ -145,8 +147,32 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
 
     journal, session, inputs, source = continued
     inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
-    if damage != "no-marker":
+    if damage not in {"no-marker", "historical-sidecar"}:
         journal.private_inputs.reserve(session, "a" * 32)
+    if damage is not None and damage.startswith("historical"):
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries[0]["parentSession"] = str(session.with_name("old-source.jsonl"))
+        entries[1]["parentId"] = "older-tracked"
+        entries[1:1] = [
+            dict(type="message", id="older-untracked", parentId=None,
+                 message=dict(role="user", content=[dict(type="text", text="retained history")])),
+            dict(type="message", id="older-tracked", parentId="older-untracked",
+                 message=dict(role="user", inputId="b" * 32,
+                              inputDigest=native_request_digest("older"),
+                              content=[dict(type="text", text="older")])),
+        ]
+        if damage == "historical-tail":
+            entries.append(dict(type="message", id="unanchored", parentId="user",
+                                message=dict(role="user", content=[dict(type="text", text="later")])) )
+        if damage == "historical-cycle":
+            entries[1]["parentId"] = "user"
+        if damage == "historical-raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        if damage == "historical-started":
+            inputs.record("acp:historic", seq=None, owner="owner", admission=1, target="owner", text="changed")
+            inputs.bind("acp:historic", admission=1, turn_id="historic", native_id="b" * 32, text="changed")
+            inputs.started("acp:historic", turn_id="historic", native_id="b" * 32, text="changed")
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     if damage in {"extended", "null", "opaque"}:
         entries = [json.loads(line) for line in session.read_text().splitlines()]
         part = entries[1]["message"]["content"][0]
@@ -195,10 +221,10 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
                 owner_generation=1,
                 owner_token_digest="c" * 64,
                 sent_owner_admission_generation=RecordedNativeAdmission(1),
-                session_id=None if damage == "unsettled" else ("foreign-session" if damage == "foreign" else "session"),
+                session_id=None if damage == "unsettled" else ("foreign-session" if damage in {"foreign", "historical-sidecar"} else "session"),
                 session_file=None if damage == "unsettled" else str(session),
                 session_entry_id=None if damage == "unsettled" else "user",
-                request_generation=None if damage == "unsettled" else 1,
+                request_generation=None if damage == "unsettled" else (2 if damage == "historical-generation" else 1),
                 llm_context_digest=(
                     None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
                 ),
@@ -207,14 +233,17 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
             TriageNativeExecution().record_sources(db, "a" * 32, (store.assignments.get("claim"),))
     source = replace(source, source=replace(source.source,
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
-    if damage in {"context", "unsettled", "foreign"}:
+    if damage in {"context", "unsettled", "foreign", "historical-tail", "historical-sidecar",
+                  "historical-raw", "historical-generation", "historical-started", "historical-cycle"}:
         with pytest.raises(CompactionJournalError, match="coverage floor"):
             journal.summaries.reserve(str(session), source)
     else:
         journal.summaries.reserve(str(session), source)
     with sqlite3.connect(journal.path) as db:
-        assert db.execute("SELECT input_id,status FROM private_raw_inputs").fetchall() == (
-            [] if damage == "no-marker" else [("a" * 32, "unknown")]
+        assert db.execute("SELECT input_id,status FROM private_raw_inputs ORDER BY input_id").fetchall() == (
+            [] if damage in {"no-marker", "historical-sidecar"}
+            else [("a" * 32, "unknown"), ("b" * 32, "unknown")] if damage == "historical-raw"
+            else [("a" * 32, "unknown")]
         )
 
 

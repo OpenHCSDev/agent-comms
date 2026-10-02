@@ -55,7 +55,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         return ()
 
     def covered_prefix(self, evidence, branch, db):
-        """Without an original committed cut, every user still needs evidence."""
+        """This entry supplies no journaled compaction or creation coverage."""
         return frozenset()
 
     def retained_tool_facts(self, session, originals):
@@ -300,14 +300,19 @@ class NativeEvidenceRead:
         witness.require_current_file(self.source.path)
         return tuple(facts)
 
-    def branch(self, leaf_id, entries):
-        """Resolve original ancestry inside this acquired source, never a catalog."""
+    def entry_index(self, entries):
+        """Resolve original coordinates only inside this acquired read."""
         originals = {}
         for entry in entries:
             coordinates = entry.source_coordinates
             originals[coordinates.original_id] = (entry, coordinates.parent_id)
         if len(originals) != len(entries):
             raise ValueError("Native source has ambiguous original entry identities")
+        return originals
+
+    def branch(self, leaf_id, entries):
+        """Resolve original ancestry inside this acquired source, never a catalog."""
+        originals = self.entry_index(entries)
         branch = []
         identity = leaf_id
         while identity is not None:
@@ -318,6 +323,31 @@ class NativeEvidenceRead:
             branch.append(entry)
             identity = parent
         return tuple(reversed(branch))
+
+    def recorded_source_prefix(self, entries, contexts):
+        """Locate retained ancestry at corroborated live-recorded input anchors.
+
+        The coordinator binds each anchor to this exact admitted session path;
+        its native journal independently corroborates the recorded generation.
+        An ancestor is retained source, not an input-delivery receipt, a fork
+        creation, or a claim that every ancestor entered the model context.
+        Sidecar-only context records cannot supply these anchors.
+        """
+        originals = self.entry_index(entries)
+        covered = set()
+        for context in contexts:
+            if context.session_file != self.source.path:
+                raise ValueError("Recorded source anchor belongs to another session file")
+            pending = set()
+            identity = context.session_entry_id
+            while identity is not None and identity not in covered:
+                try:
+                    entry, identity = originals.pop(identity)
+                except KeyError as error:
+                    raise ValueError("Recorded source ancestry is missing or cyclic") from error
+                pending.add(entry.require_entry_id())
+            covered.update(pending)
+        return frozenset(covered)
 
     def covered_prefix(self, entries, db):
         from .compaction_records import NativeForkCreation
