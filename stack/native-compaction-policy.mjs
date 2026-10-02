@@ -121,10 +121,12 @@ export class CompactionPolicy {
         // on task evidence. Optional timing never recomputes a context limit.
         if (purpose === 'manual') return 'manual';
         if (session.storedContext.compactionRequired(session, settings)) return 'overflow';
-        return this.taskTimingEnabled(settings) && boundary.length ? 'task_boundary' : 'unneeded';
+        return this.taskTimingEnabled() && boundary.length ? 'task_boundary' : 'unneeded';
     }
-    taskTimingEnabled(settings) {
-        return this.taskAware && settings.enabled;
+    taskTimingEnabled() {
+        // Managed sessions disable Pi's autonomous compaction/retry. This
+        // explicit policy selects only the journaled owner operation.
+        return this.taskAware;
     }
     inputTokens(model, reserveTokens) {
         if (!(model.contextWindow > 0)) throw new Error('Compaction model context is unavailable');

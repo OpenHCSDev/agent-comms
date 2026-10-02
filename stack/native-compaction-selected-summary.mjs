@@ -41,7 +41,7 @@ function acSelectedCompactionSettings(command, session, conflict) {
         selected: command.selected,
         decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
             keepRecentTokens: settings.keepRecentTokens,
-            taskAware: policy.taskTimingEnabled(settings), boundary: command.boundary,
+            taskAware: policy.taskTimingEnabled(), boundary: command.boundary,
             reason: policy.decision(session, settings, command.purpose, command.boundary)}};
 }
 function acValidSummaryRequest(value) {
