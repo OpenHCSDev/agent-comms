@@ -16,10 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from agent_comms.coordination_schema import (
-    COORDINATION_SCHEMA_VERSION,
-    COORDINATION_SNAPSHOT_VERSION,
-)
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
     ExecutionOrigin,
@@ -31,8 +27,11 @@ from agent_comms.coordination_tables.recovery import ACPClientConnectivity, Owne
 
 from .attempt_states import AttemptState
 from .coordination_database import CoordinationStore
-from .coordination_errors import CoordinationReadUnavailable
-from .coordination_errors import IntegrityViolationError
+from .coordination_errors import (
+    CoordinationReadUnavailable,
+    IntegrityViolationError,
+    SchemaVersionError,
+)
 from .execution_states import ExecutionState
 from .obligation_states import ResponseState
 from .coordination_tables.responses import ResponseObligation
@@ -171,15 +170,10 @@ class RecoverySelection(TypedRow):
         cls, connection: sqlite3.Connection, owner_lookup: str, owner_thread: str
     ) -> RecoveryProjection:
         """Project this original connection's committed owner selection."""
-        versions = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
-        if versions != [SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)]:
-            return UnavailableRecoveryProjection("unsupported_schema")
-        meta = SchemaMeta.one(connection, singleton=1)
-        if meta != SchemaMeta(
-            singleton=1,
-            schema_version=COORDINATION_SCHEMA_VERSION,
-            snapshot_version=COORDINATION_SNAPSHOT_VERSION,
-        ):
+        (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
+        try:
+            SchemaMeta.require_current(connection, version.user_version)
+        except SchemaVersionError:
             return UnavailableRecoveryProjection("unsupported_schema")
 
         # Canonical owner scoping remains distinct from gateway peer authentication.

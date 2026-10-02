@@ -27,19 +27,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_comms.coordination_schema import (
-    COORDINATION_SCHEMA_VERSION,
-    COORDINATION_SNAPSHOT_VERSION,
-)
 from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.metadata import SchemaMeta
 from agent_comms.coordination_tables.participants import OwnerGenerations
 
 from .child_process import BoundedRun, ParentLifeline
 from .field_codec import FieldCodec
 from .coordination_database import CoordinationStore
 from .recovery_projection import RecoveryRequest, RecoverySelection
-from .typed_table import SQLiteJournalMode, SQLiteUserVersion
+from .typed_table import SQLiteJournalMode
 
 _MAX_REQUEST = 1024
 _MAX_REPLY = 4096
@@ -136,16 +131,6 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
             SQLiteJournalMode("delete")
         ]:
             raise GatewayUnavailableError("unsupported coordinator journal")
-        if SQLiteUserVersion.read(db.execute("PRAGMA user_version")) != [
-            SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
-        ]:
-            raise GatewayUnavailableError("unsupported coordinator schema")
-        if SchemaMeta.one(db, singleton=1) != SchemaMeta(
-            singleton=1,
-            schema_version=COORDINATION_SCHEMA_VERSION,
-            snapshot_version=COORDINATION_SNAPSHOT_VERSION,
-        ):
-            raise GatewayUnavailableError("unsupported coordinator snapshot")
         # owner_thread has no index: cap the entire registered-owner
         # cardinality before the exact-match join can scan it.
         owners = OwnerGenerations.read(

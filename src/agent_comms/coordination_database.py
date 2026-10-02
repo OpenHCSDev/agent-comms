@@ -60,6 +60,10 @@ class CoordinationStore:
                 db.execute("PRAGMA foreign_keys=ON")
                 db.execute("BEGIN")
                 try:
+                    # BEGIN is lazy. Acquire this resource's committed snapshot
+                    # before a consumer's schema decoder can reclassify BUSY as
+                    # unsupported data. No metadata or row absence is exported.
+                    db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
                     yield db
                 finally:
                     if db.in_transaction:
