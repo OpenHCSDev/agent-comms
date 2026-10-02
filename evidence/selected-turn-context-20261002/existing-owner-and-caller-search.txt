@@ -1,0 +1,18 @@
+src/agent_comms/selected_triage.py:26:    def output_values(cls) -> dict[str, str]:
+src/agent_comms/tracked_turn.py:156:            context_contributions=command.context_contributions,
+src/agent_comms/tracked_turn.py:218:                context_contributions=context_contributions,
+src/agent_comms/private_send_admission.py:152:                    context_contributions=self.prompt.contributions,
+src/agent_comms/optional_awareness_projection.py:239:class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
+src/agent_comms/selected_source_batch.py:96:    def response_segment(self, sender: str):
+src/agent_comms/selected_source_batch.py:135:class SelectedResponseSegment(ReplyRouteSegment):
+src/agent_comms/wake_injection.py:29:class SelectedWakeSegment(InstructionSegment):
+src/agent_comms/selected_turn.py:99:class SelectedTriageSegment(InstructionSegment):
+src/agent_comms/selected_turn.py:122:class SelectedWorkSegment(InstructionSegment):
+src/agent_comms/native_turn_context.py:11:class NativeContextManifestData(PiResponseData):
+src/agent_comms/native_turn_context.py:19:    def record(self, log, thread, lease) -> None:
+src/agent_comms/native_turn_context.py:25:        log.record_context(self.for_turn(thread.incarnation, turn))
+src/agent_comms/turn_context.py:112:class ContextSegment(DeclaredFamily, affix="Segment"):
+src/agent_comms/turn_context.py:458:class TurnContext:
+src/agent_comms/turn_progress.py:93:    async def observe_context(self, event):
+src/agent_comms/selected_participant.py:64:    @handles(TurnContextObserved)
+src/agent_comms/selected_participant.py:65:    async def observe_context(self, event: TurnContextObserved) -> None:

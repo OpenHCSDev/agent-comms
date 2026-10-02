@@ -89,7 +89,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     restored = updates[-1]
     assert restored.projection.items == ()
     assert restored.projection.restored == (QueueItem(second, "same text"),)
-    metadata = decode_updates(agent.sessions.metadata("beta", session_id="beta"))
+    metadata = decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
     assert (
         next(f for f in metadata if isinstance(f, QueueChangedUpdate)).projection
         == restored.projection
@@ -118,7 +118,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     assert agent.inputs.dispositions.read().rows["acp:" + exact].declared_name == "reserved"
     state = next(
         f
-        for f in decode_updates(agent.sessions.metadata("beta", session_id="beta"))
+        for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
         if isinstance(f, QueueChangedUpdate)
     )
     assert state.scope.admission.incarnation.name == "beta"

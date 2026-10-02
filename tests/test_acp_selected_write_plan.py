@@ -126,12 +126,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
         if prior_seq:
             with Coordination(str(root / "coordination.sqlite3")) as store:
-                _accept_visible_deliveries(
+                await _accept_visible_deliveries(
                     bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
                 )
         message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            _accept_visible_deliveries(
+            await _accept_visible_deliveries(
                 bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
             )
         request = SelectedWriteRequest(
@@ -351,7 +351,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
             bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
             with Coordination(str(root / "coordination.sqlite3")) as store:
-                _accept_visible_deliveries(
+                await _accept_visible_deliveries(
                     bus, root_id, store, stable_thread_lookup(61003.0), 0, owner_name="beta"
                 )
             options = encode_request(

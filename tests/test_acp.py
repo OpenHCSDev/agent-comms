@@ -166,14 +166,14 @@ class TestHandlers:
             "proj", model="test/model", context_used=38723, context_size=272000
         )
         reopened = canonical_agent(wire(agent._comms.root))
-        assert facts(reopened.sessions.metadata("proj"), CoordinationChangedUpdate)[
+        assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.set_agent_info(
             "proj", model="test/model", context_used=None, context_size=272000
         )
         assert (
-            facts(reopened.sessions.metadata("proj"), CoordinationChangedUpdate)[0].context_usage
+            facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
             is None
         )
 
