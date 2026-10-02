@@ -15,11 +15,11 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
-from agent_comms.compaction_identity import ReturnedSummaryTerminal
+from agent_comms.compaction_identity import ReturnedSummaryTerminal, SelectedCommitReference
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import SelectedSummaryAttempt
+from agent_comms.compaction_records import SelectedSummaryAttempt, SelectedSummarySource
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.compaction_states import CommittedOperation, DeclinedPrestartSummary, LinkedSummary
+from agent_comms.compaction_states import CommittedNativeOutcome, DeclinedPrestartSummary, LinkedSummary
 from agent_comms.compaction_summaries import _ReturnedTerminalAck
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
@@ -31,13 +31,15 @@ from agent_comms.store_files import _store_lock
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation, TurnId
 from agent_comms.pi_summary_payloads import SelectedModel
-from selected_summary_cases import admission_identity, summary_source
+from selected_summary_cases import admission_identity, summary_source, native_intent
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX journal and native input bind")
 
 
 def _source(identity):
-    return summary_source(identity.source, selected=SelectedModel("fake", "fake", 1000))
+    return FieldCodec.decode(SelectedSummarySource, summary_source(
+        identity.source, selected=SelectedModel("fake", "fake", 1000)
+    ))
 
 
 @pytest.fixture
@@ -79,15 +81,15 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
     comms, session, journal, operation_id, dispositions, identity, text = case
     if terminal == "linked":
         source = journal.summaries.get(operation_id).source_json
+        intent, owner, captured, _ = native_intent(session)
         commit_id = journal.operations.begin(
-            session,
-            {
-                "selectedSummaryOperationId": operation_id,
-                "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
-            },
-            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            session, intent, owner=owner, source=captured,
+            selected=SelectedCommitReference(operation_id, TextDigest.of(source).value),
+            inputs=dispositions.read(),
         )
-        journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+        journal.operations.resolve(commit_id, CommittedNativeOutcome(
+            "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+        ))
         token = journal.summaries.link_commit(operation_id, commit_id, admission=identity)
     else:
         token = journal.summaries.decline_prestart(
@@ -98,7 +100,7 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
         pickle.dumps(token)
     assert not native_input_admitted(comms.root, session)
     assert _assignment(case, token)
-    row = dispositions.read().rows.get(identity.source.ingress_key)
+    row = dispositions.read().rows.get(identity.source.ingress_keys[0])
     assert row is not None and row.native_id == "b" * 32 and row.unresolved
     assert not _assignment(case, token, native_id="c" * 32)
     assert not native_input_admitted(comms.root, session)
@@ -117,14 +119,14 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
 @pytest.mark.parametrize(
     "change",
     [
-        {"turn": TurnId("other")},
-        {"owner": ProcessIdentity(123456789, 1)},
-        {"incarnation": ThreadIncarnation("project", 2.0)},
-        {"ingress_key": "acp:" + "f" * 32},
-        {"admission_generation": 2},
-        {"correction_witness": "changed"},
-        {"input_digest": TextDigest("f" * 64)},
-        {"original_digest": TextDigest("f" * 64)},
+        lambda source: replace(source, turn=TurnId("other")),
+        lambda source: replace(source, owner=ProcessIdentity(123456789, 1)),
+        lambda source: replace(source, incarnation=ThreadIncarnation("project", 2.0)),
+        lambda source: replace(source, originals=(replace(source.originals[0], key="acp:" + "f" * 32),)),
+        lambda source: replace(source, admission_generation=2),
+        lambda source: replace(source, correction_witness="changed"),
+        lambda source: replace(source, input_digest=TextDigest("f" * 64)),
+        lambda source: replace(source, originals=(replace(source.originals[0], digest=TextDigest("f" * 64)),)),
     ],
 )
 def test_mismatch_consumes_token_without_binding_or_recovery(case, change):
@@ -134,10 +136,10 @@ def test_mismatch_consumes_token_without_binding_or_recovery(case, change):
     )
     assert token is not None
     assert not _assignment(
-        case, token, identity=replace(identity, source=replace(identity.source, **change))
+        case, token, identity=replace(identity, source=change(identity.source))
     )
     assert not _assignment(case, token)
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
     assert not native_input_admitted(comms.root, session)
 
 
@@ -176,12 +178,14 @@ def test_reserve_refuses_wrong_durable_original(case):
 
 def test_link_cannot_mint_without_committed_native_source_digest(case):
     comms, session, journal, operation_id, dispositions, identity, text = case
+    intent, owner, captured, _ = native_intent(session)
     commit_id = journal.operations.begin(
-        session,
-        {"selectedSummaryOperationId": operation_id},
-        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        session, intent, owner=owner, source=captured,
+        selected=SelectedCommitReference(operation_id), inputs=dispositions.read(),
     )
-    journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+    journal.operations.resolve(commit_id, CommittedNativeOutcome(
+        "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+    ))
     with pytest.raises(CompactionJournalError, match="source digest"):
         journal.summaries.link_commit(operation_id, commit_id, admission=identity)
     assert journal.summaries.get(operation_id).state.declared_name == "reserved"
@@ -198,7 +202,7 @@ def test_saved_source_drift_consumes_ack(case):
         stream.write("{}\n")
     assert not _assignment(case, token)
     assert not _assignment(case, token)
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
     assert not native_input_admitted(comms.root, session)
 
 
@@ -220,7 +224,7 @@ def test_forked_other_process_cannot_use_inherited_ack(case):
     assert os.read(read_fd, 1) == b"0"
     os.close(read_fd)
     assert os.waitpid(child, 0)[1] == 17 << 8
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
     assert not native_input_admitted(comms.root, session)
 
 
@@ -231,12 +235,12 @@ def test_changed_durable_original_after_reservation_refuses_burn(case):
     )
     assert token is not None
     saved = json.loads(dispositions.path.read_text())
-    saved["rows"][identity.source.ingress_key]["source_text"] = "different original"
+    saved["rows"][identity.source.ingress_keys[0]]["source_text"] = "different original"
     dispositions.path.write_text(json.dumps(saved))
     with pytest.raises(ReservationViolationError, match="content_changed"):
         _assignment(case, token)
     assert not _assignment(case, token)
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
     assert not native_input_admitted(comms.root, session)
 
 
@@ -253,7 +257,7 @@ def test_changed_journal_source_refuses_consumption(case):
         )
     assert not _assignment(case, token)
     assert not _assignment(case, token)
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
     assert not native_input_admitted(comms.root, session)
 
 
@@ -263,18 +267,18 @@ def test_bind_fault_after_durable_unknown_never_replays(case, monkeypatch):
         operation_id, "split_turn", admission=identity
     )
     assert token is not None
-    bind = dispositions.bind
+    bind = dispositions.bind_originals
 
     def bind_then_fail(*args, **kwargs):
         assert bind(*args, **kwargs)
         raise OSError("post-bind fault")
 
     monkeypatch.setattr(
-        type(dispositions), "bind", lambda self, *args, **kwargs: bind_then_fail(*args, **kwargs)
+        type(dispositions), "bind_originals", lambda self, *args, **kwargs: bind_then_fail(*args, **kwargs)
     )
     assert not _assignment(case, token)
     assert not _assignment(case, token)
-    assert dispositions.read().rows.get(identity.source.ingress_key).native_id == "b" * 32
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).native_id == "b" * 32
     assert not native_input_admitted(comms.root, session)
 
 
@@ -283,15 +287,15 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
     comms, session, journal, operation_id, dispositions, identity, text = case
     if terminal == "linked":
         source = journal.summaries.get(operation_id).source_json
+        intent, owner, captured, _ = native_intent(session)
         commit_id = journal.operations.begin(
-            session,
-            {
-                "selectedSummaryOperationId": operation_id,
-                "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
-            },
-            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            session, intent, owner=owner, source=captured,
+            selected=SelectedCommitReference(operation_id, TextDigest.of(source).value),
+            inputs=dispositions.read(),
         )
-        journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+        journal.operations.resolve(commit_id, CommittedNativeOutcome(
+            "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+        ))
     monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
     with pytest.raises(CompactionJournalUnknownError):
         if terminal == "linked":
@@ -310,7 +314,7 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
             identity,
         )
     assert not native_input_admitted(comms.root, session)
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
 
 
 @pytest.mark.parametrize("terminal", ["declined-prestart", "linked"])
@@ -338,7 +342,7 @@ def test_private_status_only_transaction_cannot_issue_admission_ack(case, termin
     with pytest.raises(CompactionJournalError):
         journal.summaries.decline_prestart(operation_id, "split_turn", admission=identity)
     assert not native_input_admitted(comms.root, session)
-    assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
+    assert dispositions.read().rows.get(identity.source.ingress_keys[0]).accepts_reservation
 
 
 def test_success_without_admission_does_not_create_later_receipt(case):
@@ -377,10 +381,11 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
 root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
 sys.path.insert(0,sys.argv[8])
-from selected_summary_cases import admission_identity, summary_source
+from selected_summary_cases import admission_identity, summary_source, native_intent
 from agent_comms.pi_summary_payloads import SelectedModel
 identity=admission_identity(session,text=text,key=key,turn='turn')
-source=summary_source(identity.source,selected=SelectedModel('fake','fake',1000))
+from agent_comms.compaction_records import SelectedSummarySource
+source=FieldCodec.decode(SelectedSummarySource,summary_source(identity.source,selected=SelectedModel('fake','fake',1000)))
 j=CompactionJournal(root/'compaction-commits.sqlite3')
 d=InputDispositions(root / InputDispositions.filename)
 assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
@@ -428,15 +433,15 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     comms, session, journal, operation_id, dispositions, identity, text = case
     if terminal == "linked":
         source = journal.summaries.get(operation_id).source_json
+        intent, owner, captured, _ = native_intent(session)
         commit_id = journal.operations.begin(
-            session,
-            {
-                "selectedSummaryOperationId": operation_id,
-                "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
-            },
-            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            session, intent, owner=owner, source=captured,
+            selected=SelectedCommitReference(operation_id, TextDigest.of(source).value),
+            inputs=dispositions.read(),
         )
-        journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+        journal.operations.resolve(commit_id, CommittedNativeOutcome(
+            "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+        ))
         token = journal.summaries.link_commit(operation_id, commit_id, admission=identity)
     else:
         token = journal.summaries.decline_prestart(
@@ -445,7 +450,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     assert _assignment(case, token)
     assert not native_input_admitted(comms.root, session), "bound UNKNOWN is not native start"
     assert dispositions.started(
-        identity.source.ingress_key, turn_id="turn", native_id="b" * 32, text=text
+        identity.source.ingress_keys[0], turn_id="turn", native_id="b" * 32, text=text
     )
     reopened = CompactionJournal(journal.path)
     assert native_input_admitted(comms.root, session)
@@ -460,7 +465,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
         session, text="Next original", key="acp:next", turn="next-turn"
     )
     assert dispositions.record(
-        next_identity.source.ingress_key,
+        next_identity.source.ingress_keys[0],
         seq=None,
         owner=next_identity.source.incarnation.name,
         admission=next_identity.source.admission_generation,
@@ -471,9 +476,9 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     assert [row.operation_id for row in reopened.summaries.blocking(session)] == [next_id]
     # A subsequent writer can bind ONLY the new reservation, despite historical
     # terminal rows remaining in the same table for audit and ID uniqueness.
+    intent, owner, captured, _ = native_intent(session)
     reopened.operations.begin(
-        session,
-        {"selectedSummaryOperationId": next_id},
-        inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+        session, intent, owner=owner, source=captured,
+        selected=SelectedCommitReference(next_id), inputs=dispositions.read(),
     )
     assert not native_input_admitted(comms.root, session)
