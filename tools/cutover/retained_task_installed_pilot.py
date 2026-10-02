@@ -70,7 +70,7 @@ def main():
         beta.name, 'USER original μ\nPreserve my exact multiline constraint.', worktree=beta.worktree)
     pin = service.messaging.pin_user_constraint(beta.name, subject.reference, worktree=beta.worktree)
     with service.bus.log.locked():
-        _, facts = service.bus.log.compaction_messages_unlocked(beta.incarnation)
+        facts = service.bus.log.retained_task_facts_unlocked(beta.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(beta, service.registry.snapshot())
     # The original model turn ended. Its unchanged scope is historical, not
     # promoted to a new accepted model lease by this carry.

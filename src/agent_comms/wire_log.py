@@ -144,26 +144,23 @@ class WireLog:
                 if manifest.thread.resolved(snapshot) == incarnation
             )
 
-    def compaction_messages_unlocked(self, recipient: ThreadIncarnation):
-        """One strict wire traversal supplies both the source cut and exact facts.
+    def retained_task_facts_unlocked(self, recipient: ThreadIncarnation):
+        """Capture exact task facts from their original addressed declarations.
 
         Caller owns the original bus lock. Outgoing declared decisions belong
         to their author's source too; unrelated messages cannot invalidate it.
         """
         marker = self._private_marker_unlocked()
-        return self._compaction_messages(self.verified_records_unlocked(marker), recipient)
+        return self._retained_task_facts(self.verified_records_unlocked(marker), recipient)
 
     @staticmethod
-    def _compaction_messages(records, recipient: ThreadIncarnation):
-        digest = hashlib.sha256()
+    def _retained_task_facts(records, recipient: ThreadIncarnation):
         facts = []
         lookup = stable_thread_lookup(recipient.created_at)
         for record in records:
             for message in record.compaction_messages_for(lookup):
-                digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())
-                digest.update(b"\n")
                 facts.extend(message.retained_task_facts())
-        return digest.hexdigest(), tuple(facts)
+        return tuple(facts)
 
     def retained_context(self, name: str, registry):
         """One certified source cut for read-only context inspection/export."""
@@ -182,7 +179,7 @@ class WireLog:
                     self._opened_wire_snapshot(need_sequence=False)
                 )
                 export = WireExportBoundary(metadata.last_seq, time.time())
-            digest, facts = self._compaction_messages(
+            facts = self._retained_task_facts(
                 self._snapshot_records(metadata, stream, boundary), owner.incarnation
             )
             originals = {original.key: original for fact in facts
@@ -191,7 +188,7 @@ class WireLog:
             input_facts = tuple(original.origin.retained_fact(original)
                                 for original in originals.values())
             retained = RetainedTaskFacts((*facts, *input_facts)).for_owner(owner, snapshot)
-            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
+            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, retained.source_digest.value),
                 owner, snapshot, export)
 
     def _assert_private_directory(self) -> None:

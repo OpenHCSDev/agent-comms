@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
@@ -26,7 +26,6 @@ class CompactionSource:
     turn_id: str
     goal_id: str | None
     goal_revision: int | None
-    bus_revision: str
     input_revision: str
     retained: RetainedTaskFacts
     pending_inputs: tuple[InputProvenance, ...]
@@ -43,8 +42,13 @@ class CompactionSource:
 
 
     def require_current(self, held: HeldCompaction) -> None:
-        if self != held.capture(self.pending_input_keys, self.settings_paths):
-            raise RelationViolationError("Compaction source changed; derive fresh evidence")
+        current = held.capture(self.pending_input_keys, self.settings_paths)
+        if self != current:
+            changed = tuple(item.name for item in fields(self) if item.compare
+                            and getattr(self, item.name) != getattr(current, item.name))
+            raise RelationViolationError(
+                f"Compaction source changed ({', '.join(changed)}); derive fresh evidence"
+            )
 
     def at_prepared_cut(self, witness: NativeWitness) -> CompactionSource:
         """Allocate a cut for these exact facts without changing their source.

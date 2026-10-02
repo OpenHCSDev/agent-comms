@@ -7,7 +7,7 @@ from test_private_bus_checkpoint import _root
 
 def facts_for(comms, owner):
     with comms.bus.log.locked():
-        return comms.bus.log.compaction_messages_unlocked(owner.incarnation)[1]
+        return comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
 
 
 def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_facts(tmp_path):

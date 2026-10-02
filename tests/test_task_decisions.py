@@ -72,7 +72,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     def captured(name):
         current = comms.registry.require(name)
         with comms.bus.log.locked():
-            _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
+            facts = comms.bus.log.retained_task_facts_unlocked(current.incarnation)
         return RetainedTaskFacts(facts).for_owner(current, comms.registry.snapshot())
 
     retained = captured(owner.name)
@@ -143,7 +143,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
     retained = RetainedTaskFacts(facts)
     current_owner = comms.registry.require(owner.name)
     assert retained.current_authored_sources(current_owner, comms.registry.snapshot()) == ()
@@ -188,7 +188,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         "change": {"kind": "correction", "original": result["reference"]}})
     rows = comms.bus.log.full_history()
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (rows[1],)
     assert next(f.source for f in retained.facts if isinstance(f, CurrentConstraintTaskFact)) == rows[1]
@@ -202,7 +202,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         "text": "A later peer cannot overwrite the human supersession.", "to": "#team",
         "change": {"kind": "correction", "original": corrected["reference"]}})
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (human,)
     retained.require_summary(retained.text + "\n\nOptional narrative")
@@ -237,7 +237,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
     with comms.bus.log.locked():
-        revision, facts = comms.bus.log.compaction_messages_unlocked(
+        facts = comms.bus.log.retained_task_facts_unlocked(
             alpha.incarnation
         )
     retained = RetainedTaskFacts(facts)
@@ -301,7 +301,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     })
     snapshot = comms.registry.snapshot()
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(
+        facts = comms.bus.log.retained_task_facts_unlocked(
             renamed.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
     rows = comms.bus.log.full_history()
@@ -390,7 +390,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     })
     snapshot = comms.registry.snapshot()
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(
+        facts = comms.bus.log.retained_task_facts_unlocked(
             owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
     assert len(retained.facts) == 3

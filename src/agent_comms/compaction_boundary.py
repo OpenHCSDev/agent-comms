@@ -127,9 +127,9 @@ class HeldCompaction:
         rows, input_facts = inputs.compaction_material(
             owner, pending_input_keys, self.boundary.future_queue
         )
-        bus_revision, facts = WireLog(
+        facts = WireLog(
             self.boundary.root / "bus.jsonl"
-        ).compaction_messages_unlocked(owner.incarnation)
+        ).retained_task_facts_unlocked(owner.incarnation)
         facts += owner.retained_task_facts()
         facts += input_facts
         facts += self.native_facts
@@ -141,7 +141,6 @@ class HeldCompaction:
             self.receipt.turn_id,
             self.receipt.goal_id,
             self.receipt.goal_revision,
-            bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
             RetainedTaskFacts(facts).for_owner(owner, snapshot),
             pending_inputs=inputs.original_provenances(pending_input_keys),

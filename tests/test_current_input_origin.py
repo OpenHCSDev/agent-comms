@@ -210,7 +210,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     def captured(name):
         owner = comms.registry.require(name)
         with comms.bus.log.locked():
-            _, wire_facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+            wire_facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
         input_facts = tuple(r.origin.retained_fact(r) for r in inputs.read().rows.values())
         return RetainedTaskFacts(wire_facts + input_facts).for_owner(owner, comms.registry.snapshot())
 
@@ -220,7 +220,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     assert retained.original_text_source(pin) == row
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     with comms.bus.log.locked():
-        _, wire_only = comms.bus.log.compaction_messages_unlocked(snapshot.require('beta').incarnation)
+        wire_only = comms.bus.log.retained_task_facts_unlocked(snapshot.require('beta').incarnation)
     with pytest.raises(RelationViolationError, match='original captured wording'):
         RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
