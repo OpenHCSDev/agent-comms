@@ -62,13 +62,13 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
         selected = info.model.for_compaction(owner.model)
         package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         bridge = await asyncio.to_thread(OwnerCompactionCommit, registry.store.path, package)
-        prepared = await asyncio.to_thread(
+        prepared = (await asyncio.to_thread(
             prepare_native_source,
             package,
             session,
             settings=PiCompactionSettings(1000, 10),
             context_window=selected.context_window,
-        )
+        )).require_ready()
         text = inputs.read().rows["acp:original"].source_text
         digest = TextDigest.of(text)
         operation = bridge.journal.summaries.reserve(

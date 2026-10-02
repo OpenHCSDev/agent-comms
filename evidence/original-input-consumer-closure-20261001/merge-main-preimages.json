@@ -1,0 +1,12 @@
+{
+  "at_utc": "2026-10-01T23:20:24.295654+00:00",
+  "scope": "owner-approved merge-only retained_task_facts conflict",
+  "producer_head": "34e3dd875e9282b8a71a9b16ca80fb0157f21b16",
+  "main_head": "9954cdd73dff20e590aebf15467a170f0a69e799",
+  "original_producer_sha256": "4b2b6f08bdc3fda95bff226bc05ba483eb4377e590c0638650b7923ba5c4ffe9",
+  "original_main_sha256": "7d806c5a64b8977ea980eef00e7bb7ba2f96cf540d2d40faca65f637df415294",
+  "preserved_main494_frame_block_sha256": "87b8d05afc949cc8b904961ecb60a5e9efba19fb4b6d1ab10137917a31f0f036",
+  "preserved_producer_original_text_source_block_sha256": "3504faa09854f17025f790bb8d471b96944f8d3aa842c9a614da8fc7800bcb70",
+  "resolution": "retain complete main494 frame block verbatim + existing481 original_sources mapping and Message|StoredInput original_text_source; no new behavior",
+  "source_originals": "git index2/index3 and immutable commits; no copy sized backup"
+}

@@ -1,0 +1,16 @@
+Command: ['rg', '-n', '^class (RuntimeInstallation|CarryNativeRuntimeInstallation|StoppedOwnerInstallation|NativeRuntimeSchemaMeta|NativeInputExecution|NativeRuntimeTable|NativeInputRecord|CoordinationSegment|SelectedSummarySource)\\b|runtime_installation\\.(unchanged_protected|retain_protected|install)|FieldCodec.decode\\(RuntimeInstallation', 'src', 'tools']
+
+tools/cutover/runtime_installation.py:12:class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
+tools/cutover/runtime_installation.py:48:class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
+tools/cutover/publish_retained_summary.py:261:        unchanged = self.runtime_installation.unchanged_protected(paths)
+tools/cutover/publish_retained_summary.py:265:            original_files = self.runtime_installation.retain_protected(paths, directory)
+tools/cutover/publish_retained_summary.py:273:            installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
+tools/cutover/native_schema_carry_controls.py:104:    assert FieldCodec.decode(RuntimeInstallation,FieldCodec.encode(installed))==installed
+tools/cutover/execute_retained_summary_foundation.py:32:    runtime = FieldCodec.decode(RuntimeInstallation,
+src/agent_comms/native_input_record.py:53:class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
+src/agent_comms/native_input_record.py:208:class NativeInputRecord(ABC):
+src/agent_comms/turn_context.py:283:class CoordinationSegment(InstructionSegment):
+src/agent_comms/owner_cutover.py:41:class StoppedOwnerInstallation(OwnerCutover):
+src/agent_comms/compaction_records.py:39:class SelectedSummarySource:
+src/agent_comms/native_runtime_input.py:29:class NativeRuntimeTable:
+src/agent_comms/native_runtime_input.py:34:class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSchema):

@@ -18,6 +18,10 @@ class CompactionResult(DeclaredFamily, affix="CompactionResult"):
     @abstractmethod
     def prompt_response(self) -> PromptResponse: ...
 
+    @abstractmethod
+    def adaptive_result(self) -> bool:
+        """Derive whether this original result committed a compaction."""
+
     async def after_terminal(self, runner, session_id: str) -> None:
         """A refused result publishes no committed transcript invalidation."""
 
@@ -26,6 +30,9 @@ class CompactionResult(DeclaredFamily, affix="CompactionResult"):
 class CommittedCompactionResult(CompactionResult):
     summary: str
     commit_id: str
+
+    def adaptive_result(self) -> bool:
+        return True
 
     def terminal_event(self):
         return ManualCompactionEnd(aborted=False, summary=self.summary)
@@ -50,6 +57,9 @@ class CommittedCompactionResult(CompactionResult):
 @dataclass(frozen=True)
 class RefusedCompactionResult(CompactionResult):
     error: str
+
+    def adaptive_result(self) -> bool:
+        return False
 
     def terminal_event(self):
         return ManualCompactionEnd(aborted=True, summary=self.error)

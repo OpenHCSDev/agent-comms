@@ -181,8 +181,8 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
             wait_seconds=0,
             ready=ready,
         )
-        assert result is not None and result.response_message_id
-        assert result.exact_target == "sender" and len(calls) == 1
+        assert result is not None and result.publications
+        assert tuple(receipt.exact_target for receipt in result.publications) == ("sender",) and len(calls) == 1
         assert comms.registry.status("beta") == StoppedThreadStatus()
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -226,12 +226,12 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
                 ExistingFileClaim(Path(resource)), b"after selected claim\n"
             ),
         )
-        assert result is not None and result.response_message_id
+        assert result is not None and result.publications
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
         claimed = Comms(root).bus.log.claim_projection()[str(resource)]
         assert (
             claimed.admission is not None
-            and claimed.admission.wake_assignment_id == result.assignment_id
+            and claimed.admission.wake_assignment_id == result.assignment_ids[0]
         )
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
 
@@ -449,7 +449,7 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         )
         alpha_result, beta_result = await asyncio.gather(alpha, beta)
         assert isinstance(alpha_result, foreground.NoWakeReceipt)
-        assert beta_result is not None and beta_result.response_message_id
+        assert beta_result is not None and beta_result.publications
         assert len(calls) == 1
         assert comms.views.channel_history("#team")[-1].body == "42"
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -614,7 +614,7 @@ raise SystemExit(f.main(sys.argv[1:]))
             assert json.loads(sender.stdout)["wire_seq"] == 1
             out, err = child.communicate(timeout=12)
             assert child.returncode == 0, (out, err)
-            assert json.loads(out.strip())["response_message_id"]
+            assert json.loads(out.strip())["publications"]
             assert comms.registry.status("beta") == StoppedThreadStatus()
             assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         finally:
@@ -734,7 +734,7 @@ raise SystemExit(f.main(sys.argv[1:]))
                 assert child.returncode == 0, f"{name}: {out}\n{err}"
                 outcomes[name] = json.loads(out.strip())
             assert outcomes["alpha"] == {"disposition": "NO_WAKE", "wire_seq": 1}
-            assert outcomes["beta"]["response_message_id"]
+            assert outcomes["beta"]["publications"]
             assert comms.views.channel_history("#team")[-1].body == "42"
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 assert (

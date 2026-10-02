@@ -1,0 +1,133 @@
+{
+  "state": "INSTALLED_CORE_NATIVE_ACP_THREE_SELECTED_COMMITS_PASS",
+  "core": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/runtime/lib/python3.14/site-packages/agent_comms",
+  "original_inputs_retried": 0,
+  "public_changes": [],
+  "paid_provider_calls": 0,
+  "commits": [
+    {
+      "round": 1,
+      "commit_id": "903e3150997d46969bb8a9691b3438ae",
+      "native_entry_id": "c269e46b",
+      "source_sha256": "eb50fce478b3fa3a453baf64c6771b259479ff5ef3872fd7d4db651cb599b27a",
+      "original_input": "acp:04c8d24f1ae244df8fab0ec2a8a2199b",
+      "selected_pin": {
+        "seq": 1,
+        "message_id": "b3b4a5a85587"
+      },
+      "actual_summary_provider_calls": 2
+    },
+    {
+      "round": 2,
+      "commit_id": "4be25f4a972b45a79cd84f216b32b5cc",
+      "native_entry_id": "9cd0592b",
+      "source_sha256": "58032c623aaf9b74db4f80bd62150b71ca6bc36d7619be1cac5e655a930ddd00",
+      "original_input": "acp:205aea8251b74712ab2adf0ab643b532",
+      "selected_pin": {
+        "seq": 1,
+        "message_id": "b3b4a5a85587"
+      },
+      "actual_summary_provider_calls": 1
+    },
+    {
+      "round": 3,
+      "commit_id": "0cd76ecfce7942e89217809a9ba2b5ea",
+      "native_entry_id": "9047be6d",
+      "source_sha256": "6fbe01d138ca5ba24bac959abf88f592b88a8d99cac4e203190ba04436be0b5f",
+      "original_input": "acp:5f44cba3fa1a4dd4b93e93be56de4935",
+      "selected_pin": {
+        "seq": 1,
+        "message_id": "b3b4a5a85587"
+      },
+      "actual_summary_provider_calls": 1
+    }
+  ],
+  "S4_model_recall": "NOT_MEASURED: controlled provider is not a recall model",
+  "installed_UI": false,
+  "phase": "closed_original_fixture",
+  "elapsed_seconds": 51.39754744799575,
+  "original_subject": {
+    "kind": "started",
+    "key": "acp:04c8d24f1ae244df8fab0ec2a8a2199b",
+    "sequence": null,
+    "owner": "direct-human",
+    "admission": 1,
+    "target": "direct-human",
+    "source_text": "S2_ORIGINAL_ROUND_1 \u03bb Never replay UNKNOWN.\nbounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. ",
+    "origin": {
+      "kind": "human",
+      "root_id": "af888efa7454469c995dc4b26c4949ca",
+      "author": {
+        "sender": "user",
+        "created_at": 1790873200.7555382,
+        "worktree": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72/sdk-source/project"
+      },
+      "admission": {
+        "incarnation": {
+          "name": "direct-human",
+          "created_at": 1790873195.2522736
+        },
+        "admission_generation": 1
+      },
+      "project": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72/sdk-source/project",
+      "goal": {
+        "kind": "absent"
+      }
+    },
+    "turn_id": "bc3033733df3440f9c44a3649c29c735",
+    "native_id": "0e29de47210f6145b2646966a1bb6f62",
+    "sent_text": "Coordination context: you are thread 'direct-human'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72/sdk-source/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: []\n\nS2_ORIGINAL_ROUND_1 \u03bb Never replay UNKNOWN.\nbounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source. bounded retained source."
+  },
+  "original_pin": {
+    "seq": 1,
+    "from": "user",
+    "to": "direct-human",
+    "ts": 1790873207.1808019,
+    "type": "info",
+    "text": "Pinned constraint from its original source",
+    "sender_role": "user",
+    "notice": true,
+    "task": {
+      "kind": "native_input_constraint_pin",
+      "scope": {
+        "kind": "project",
+        "project": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72/sdk-source/project"
+      },
+      "subject": {
+        "kind": "input",
+        "key": "acp:04c8d24f1ae244df8fab0ec2a8a2199b",
+        "origin": {
+          "kind": "human",
+          "root_id": "af888efa7454469c995dc4b26c4949ca",
+          "author": {
+            "sender": "user",
+            "created_at": 1790873200.7555382,
+            "worktree": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72/sdk-source/project"
+          },
+          "admission": {
+            "incarnation": {
+              "name": "direct-human",
+              "created_at": 1790873195.2522736
+            },
+            "admission_generation": 1
+          },
+          "project": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/actual-native72/sdk-source/project",
+          "goal": {
+            "kind": "absent"
+          }
+        }
+      },
+      "source_user": {
+        "name": "user",
+        "created_at": 1790873200.7555382
+      },
+      "recipient": {
+        "name": "direct-human",
+        "created_at": 1790873195.2522736
+      }
+    },
+    "id": "b3b4a5a85587"
+  },
+  "local_provider_posts": 8,
+  "retired_fixture_children": true
+}

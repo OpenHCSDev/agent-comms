@@ -1,0 +1,133 @@
+{
+  "captured_at_utc": "2026-10-01T22:54:26.382432+00:00",
+  "review_base": "e5919e2b397246cd3a2db8ef33cacdd2a73d39a2",
+  "authority": {
+    "record": 22782549,
+    "publication_date": "2026-09-29",
+    "sections": [
+      "main6.2",
+      "main6.5",
+      "Cor6.3",
+      "supp4.6",
+      "supp4.8"
+    ],
+    "download_receipt": "/home/ts/.cache/agent-scratch/oopsla-zenodo-latest-20261001/download-receipt.json",
+    "files_sha256": {
+      "paper1_oopsla_submission.pdf": "ff1bce7bdafe9cd23d6a7b292d28710d011b4b7f0a364170accf96b5849425cd",
+      "paper1_oopsla_submission.txt": "0d249fcef7f0b4222b485f34cdf510ce24718214bfa00ad2013d9a8cc3ffcd88",
+      "paper1_oopsla_supplementary.pdf": "17387873a273865939d786548a453d9d4cbdd3e53faf3d58a58e7ed3f62933bf",
+      "paper1_oopsla_supplementary.txt": "4e10ebbca9595b52c79eb1c003d1ece394c16861185ec58582444bbf38dd4fdf"
+    },
+    "pdf_md5_rechecked_against_receipt": true
+  },
+  "required_owner_consumer_relation": [
+    {
+      "owner": "StoppedOwnerInstallation / OwnerCutover",
+      "consumers": [
+        "PublishRetainedSummary.after_stopped",
+        "existing stop/custody/restart operator"
+      ],
+      "mechanism": "existing inherited lifecycle; no second installer or public mutation"
+    },
+    {
+      "owner": "RuntimeInstallation / PreserveRuntimeInstallation",
+      "consumers": [
+        "execute_retained_summary_foundation FieldCodec boundary",
+        "PublishRetainedSummary invariant/preimage/install calls",
+        "CarryNativeRuntimeInstallation"
+      ],
+      "mechanism": "declared family decode; Carry inherits retain_protected and super.install; unchanged_protected is genuinely changed-format behavior"
+    },
+    {
+      "owner": "RuntimeCompactionFiles / AcquiredRuntimeFiles / RetainedRuntimeFile",
+      "consumers": [
+        "RuntimeNativeFiles.acquire",
+        "plan preparation",
+        "matched-candidate guard",
+        "stopped install preimage checks"
+      ],
+      "mechanism": "inherited no-follow original acquisition; native paths/companion/UNKNOWN refusal is a capability extension, not copied acquisition"
+    },
+    {
+      "owner": "NativeRuntimeSchemaMeta / NativeRuntimeTable / TypedTable",
+      "consumers": [
+        "NativeSchemaDeclaration.observe",
+        "temporary receiving schema in carry_coordination",
+        "target metadata payload",
+        "plan target attestation"
+      ],
+      "mechanism": "create_schema supplies current schema and exact metadata; source/target artifacts attest original declared DDL; replaced manual receiving DDL loop and literal target metadata version removed"
+    },
+    {
+      "owner": "NativeInputExecution FULL/TRIAGE family",
+      "consumers": [
+        "carry_coordination typed stage acquisition",
+        "record_sources after exact row projection",
+        "existing current membership readers (Kepler490 scope)"
+      ],
+      "mechanism": "target behavior belongs to original family; fixed original4 anchor/link projection remains explicit one-use transformation, not a claim that all routes are inherited"
+    },
+    {
+      "owner": "PromptBinding / private_sidecar",
+      "consumers": [
+        "declaration capture",
+        "original prompt/native corroboration",
+        "carry_binding exact surviving-column projection",
+        "stopped binding _publish"
+      ],
+      "mechanism": "existing source identity and snapshot durability; current format only, original preimages frozen"
+    },
+    {
+      "owner": "Thread/ThreadIncarnation / RegistryOwner / CoordinationSegment / SelectedSummarySource",
+      "consumers": [
+        "identity header",
+        "manual/adaptive selected summary requests",
+        "native HistorySummarySource/TurnPrefixSummarySource and map/synthesis",
+        "current-thread/tool sender consumers"
+      ],
+      "mechanism": "readonly identity finding assigned to Sch499/Arendt489; controlling owner contribution must derive from captured owner for every consumer; no new identity type or alias"
+    }
+  ],
+  "deleted_copied_decisions": [
+    "carry_coordination receiving schema construction loop",
+    "carry_coordination literal target schema metadata version/tuple construction"
+  ],
+  "new_types": 0,
+  "remaining_explicit_routes": [
+    "fixed original4 anchor/source/binding/cursor projection into reviewed5 format",
+    "two durable store publication mechanisms (coordinator replacement; binding original sidecar protocol)"
+  ],
+  "reason_remaining_routes": "These are original artifact transformation/publication obligations, not native derivations. Their presence is recorded; batching, generation and local passes do not remove them. Frozen removed fields persist in original preimages.",
+  "charging_interpretation": {
+    "assumptions": "positive residual q after batching; finite feasible adoption Ka; continuing excess Ea(n)<=ra*n with ra<q",
+    "strict_crossover": "floor(Ka/(q-ra))+1",
+    "application": "prefer feasible existing-ancestor/capability derivation for shared behavior; no blanket composition ban or measured q/cost claim for this project",
+    "time_weighted": "supp4.8 compares K0 + sum(delta_t*k_t) with sum(delta_t*q_t); weights do not erase required relation"
+  },
+  "remaining_owner_boundary": {
+    "owner": "Arendt489 with Kepler490",
+    "pending": "frozen plural response/lifecycle original-target DDL and obligation/intent/receipt/dispatch mapping",
+    "current_guard": "all non-native coordination schema/rows remain invariant; changed unrelated format refuses, never silently drops or regenerates",
+    "installer_owner": "495",
+    "new_owner_proposal": "Arendt489 proposes native schema6: capture emitted session identity before writer, context proof later; original UNKNOWN NULL cells preserved. No6 carry until coherent source/DDL freeze."
+  },
+  "configured_user_gate": {
+    "owners": [
+      "Sch499",
+      "Heisenberg candidate canonical application fork",
+      "parent receiving publication"
+    ],
+    "requirement": "actual configured canonical failing-thread application fork and real-provider journey after coherent implementation; focused controls do not establish this",
+    "public_default": "parent498 published17 owners per newest user instruction; untouched",
+    "executed_by_this_change": false
+  },
+  "validation_order": "authoritative paper + existing declaration/consumer source reasoning; coherent code; bounded final installed-owner clone sanity afterward, with canonical user gate coordinated separately",
+  "validation": {
+    "receipt": "zenodo-owner-final-validation.json",
+    "strength": "actual installed native schema owner used by revised operator on a fresh clone of preserved original4 files; complete resulting schema/rows equal saved control07; canonical user gate remains separate"
+  },
+  "source_changes": [
+    "tools/cutover/native_schema_carry.py"
+  ],
+  "source_sha256": "f0c03b10fb23a488835258eff4b7ee12cec1b3312470f598bfd800604cbab69b"
+}

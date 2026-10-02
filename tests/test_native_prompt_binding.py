@@ -26,6 +26,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
@@ -261,9 +262,9 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         assert len(evidence) == 1 and isinstance(evidence[0].execution, TriageNativeExecution)
         binding = read_expected_prompt_binding(store, evidence[0].input_id)
         assert binding is not None
-        assert binding.source_seq == initial.message.seq
-        assert binding.message_id == initial.message.message_id
-        assert binding.stage is TriageNativeExecution and binding.assignment_id == evidence[0].assignment_id
+        assert binding.stage is TriageNativeExecution
+        assert evidence[0].source_seq == initial.message.seq
+        assert evidence[0].source_message_id == initial.message.message_id
         assert binding.owner_thread == "alpha" and binding.wire_root_id == root_id
         # The binding digest is the pinned NATIVE request digest of the exact
         # prompt bytes sent to Pi (not the bare text hash).
@@ -611,8 +612,9 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         )
         assert evidence == ()
         binding = store.session._connection.execute(
-            "SELECT input_id,session_id FROM native_runtime_input WHERE assignment_id IN "
-            "(SELECT assignment_id FROM wake_claims WHERE wire_seq=?)",
+            f"SELECT n.input_id,n.session_id FROM native_runtime_input n "
+            f"JOIN ({NativeRuntimeInput.source_membership_sql()}) m ON m.input_id=n.input_id "
+            "JOIN wake_claims c ON c.assignment_id=m.assignment_id WHERE c.wire_seq=?",
             (initial.message.seq,),
         ).fetchone()
         assert binding is not None and binding[1] is None

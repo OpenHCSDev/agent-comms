@@ -11,7 +11,6 @@ from agent_comms.coordination_errors import (
     RecoveryBlocked,
     PublicationUncertain,
     IdentityConflict,
-    ResponseAdmissionBlocked,
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
@@ -34,9 +33,9 @@ class RecoverySnapshot:
         metadata={"snapshot_name": "execution_claims"}
     )
     replay: ReplayAssessments | None
-    obligation: ResponseObligation | None
-    publication_intent: PublicationIntents | None
-    publication_receipt: PublicationReceipt | None
+    obligations: tuple[ResponseObligation, ...]
+    publication_intents: tuple[PublicationIntents, ...]
+    publication_receipts: tuple[PublicationReceipt, ...]
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: str | None
@@ -45,52 +44,52 @@ class RecoverySnapshot:
     is_current: bool
     snapshot_version: int = COORDINATION_SNAPSHOT_VERSION
 
-    def require_wire_response(self) -> ResponseObligation:
-        if not self.assignments or self.obligation is None:
-            raise IdentityConflict("wire response requires selected claims and obligation")
-        return self.obligation
+    def require_wire_responses(self) -> tuple[ResponseObligation, ...]:
+        if not self.assignments or not self.obligations:
+            raise IdentityConflict("wire response requires original claims and obligations")
+        return self.obligations
 
-    def require_final_response(self, recipient_lookup: str) -> ResponseObligation:
+    def require_wire_response(self, exact_target: str) -> ResponseObligation:
+        obligation = ResponseObligation.response_record(self.require_wire_responses(), exact_target)
+        if obligation is None:
+            raise IdentityConflict("response route is absent from original obligations")
+        return obligation
+
+    def require_final_response(self, recipient_lookup: str, exact_target: str) -> ResponseObligation:
         if self.execution.owner_lookup != recipient_lookup:
             raise StaleFence("response turn belongs to a different SQL recipient")
         self.execution.lifecycle.require_final_response()
         self.require_attempt().lifecycle.require_final_response()
-        if self.obligation is None:
-            raise ResponseAdmissionBlocked()
-        target = self.execution.require_response_target()
-        if self.obligation.exact_target != target:
-            raise ResponseAdmissionBlocked()
-        return self.obligation
+        return self.require_wire_response(exact_target)
 
-    def require_preparation(self) -> ResponseObligation:
-        obligation = self.require_wire_response()
+    def require_preparation(self, exact_target: str) -> ResponseObligation:
+        obligation = self.require_wire_response(exact_target)
         obligation.lifecycle.require_preparation()
         return obligation
 
     def require_existing_preparation(self, candidate) -> None:
-        obligation = self.require_wire_response()
+        obligation = self.require_wire_response(candidate.target)
         obligation.lifecycle.require_existing_preparation()
-        if self.publication_intent is None or not self.publication_intent.matches_request(
-            self.execution.execution_id, candidate
-        ):
+        intent = ResponseObligation.response_record(self.publication_intents, candidate.target)
+        if intent is None or not intent.matches_request(self.execution.execution_id, candidate):
             raise IdentityConflict("prepared response envelope conflicts")
 
-    def require_publishing_intent(self) -> tuple[PublicationIntents, ResponseObligation]:
-        if self.publication_intent is None or self.obligation is None:
+    def require_publishing_intent(self, exact_target: str) -> tuple[PublicationIntents, ResponseObligation]:
+        if len(self.publication_intents) != len(self.require_wire_responses()):
+            raise IdentityConflict("all original response bodies must be frozen before first append")
+        obligation = self.require_wire_response(exact_target)
+        obligation.lifecycle.require_publishing()
+        intent = ResponseObligation.response_record(self.publication_intents, exact_target)
+        if intent is None or intent.sender != self.execution.owner_thread:
             raise IdentityConflict("no frozen publishing intent for current owner")
-        self.obligation.lifecycle.require_publishing()
-        intent = self.publication_intent
-        if (intent.sender, intent.exact_target) != (
-            self.execution.owner_thread,
-            self.execution.exact_target,
-        ):
-            raise IdentityConflict("no frozen publishing intent for current owner")
-        return intent, self.obligation
+        return intent, obligation
 
-    def require_published_evidence(self):
-        if self.publication_intent is None or self.publication_receipt is None:
-            raise StaleFence("finished response has no frozen publication evidence")
-        return self.publication_intent, self.publication_receipt
+    def require_published_evidence(self, exact_target: str):
+        intent = ResponseObligation.response_record(self.publication_intents, exact_target)
+        receipt = ResponseObligation.response_record(self.publication_receipts, exact_target)
+        if intent is None or receipt is None:
+            raise StaleFence("response route has no frozen publication evidence")
+        return intent, receipt
 
     def completed_response(self) -> bool:
         return self.execution.lifecycle.completed
@@ -122,9 +121,9 @@ class RecoverySnapshot:
         execution_id = execution.execution_id
         related = (
             self.replay,
-            self.obligation,
-            self.publication_intent,
-            self.publication_receipt,
+            *self.obligations,
+            *self.publication_intents,
+            *self.publication_receipts,
             self.connectivity,
             self.last_recovery,
         )
@@ -183,63 +182,26 @@ class RecoverySnapshot:
             raise IntegrityViolationError("snapshot current pointer is inconsistent")
 
     def validate_response_route(self) -> None:
-        execution = self.execution
-        if execution.origin is ExecutionOrigin.WIRE:
-            if not self.assignments or self.obligation is None:
-                raise IntegrityViolationError("wire snapshots require an obligation")
-        elif self.obligation is not None or self.assignments:
-            raise IntegrityViolationError("claimless snapshots cannot have claims or obligation")
-        expected_target = execution.exact_target
-        target_records = (
-            *(assignment.lifecycle for assignment in self.assignments),
-            self.obligation,
-            self.publication_intent,
-            self.publication_receipt,
-        )
-        if any(
-            record is not None and record.exact_target != expected_target
-            for record in target_records
-        ):
-            raise IntegrityViolationError("snapshot exact targets disagree")
+        if self.execution.origin is ExecutionOrigin.WIRE:
+            if not self.assignments or not self.obligations:
+                raise IntegrityViolationError("wire snapshots require original obligations")
+        elif self.obligations or self.assignments:
+            raise IntegrityViolationError("claimless snapshots cannot have claims or obligations")
+        expected = {row.lifecycle.exact_target for row in self.assignments}
+        targets = tuple(row.exact_target for row in self.obligations)
+        if len(set(targets)) != len(targets) or set(targets) != expected:
+            raise IntegrityViolationError("response obligations differ from original claim routes")
+        for records in (self.publication_intents, self.publication_receipts):
+            routes = tuple(row.exact_target for row in records)
+            if len(set(routes)) != len(routes) or not set(routes) <= expected:
+                raise IntegrityViolationError("publication routes differ from original obligations")
 
     def validate_publication_receipt(self) -> None:
-        obligation = self.obligation
-        intent = self.publication_intent
-        receipt = self.publication_receipt
-        if obligation is not None:
+        for obligation in self.obligations:
+            target = obligation.exact_target
+            intent = ResponseObligation.response_record(self.publication_intents, target)
+            receipt = ResponseObligation.response_record(self.publication_receipts, target)
             obligation.lifecycle.validate_publication(intent, receipt)
-        elif intent is not None or receipt is not None:
-            raise IntegrityViolationError("publication requires an obligation")
-        if receipt is not None:
-            if intent is None or obligation is None:
-                raise IntegrityViolationError("published receipt requires intent and obligation")
-            if (obligation.lifecycle.receipt_message_id, obligation.lifecycle.receipt_seq) != (
-                receipt.message_id,
-                receipt.seq,
-            ):
-                raise IntegrityViolationError("obligation receipt does not match publication")
-            expected_envelope = (
-                intent.publication_key,
-                intent.expected_message_id,
-                intent.sender,
-                intent.exact_target,
-                intent.message_type,
-                intent.notice,
-                intent.timestamp,
-                intent.payload_digest,
-            )
-            actual_envelope = (
-                receipt.publication_key,
-                receipt.message_id,
-                receipt.sender,
-                receipt.exact_target,
-                receipt.message_type,
-                receipt.notice,
-                receipt.timestamp,
-                receipt.payload_digest,
-            )
-            if actual_envelope != expected_envelope:
-                raise IntegrityViolationError("receipt envelope does not match frozen intent")
 
     @projected(view="snapshot")
     def can_retry(self) -> bool:
@@ -257,7 +219,7 @@ class RecoverySnapshot:
 
         db = session._connection
         execution, attempt = self.execution, self.attempt
-        if self.publication_intent is not None:
+        if self.publication_intents:
             raise PublicationUncertain("publication requires bus-keyed receipt resolution")
         if (
             attempt is None
@@ -285,12 +247,11 @@ class RecoverySnapshot:
             updated_at_ms=now,
             reason_code=reason_code,
         )
-        if self.obligation is not None:
-            obligation = self.obligation
+        for obligation in self.obligations:
             ResponseObligation.update(
                 db,
-                where="execution_id=?",
-                parameters=(execution.execution_id,),
+                where="execution_id=? AND exact_target=?",
+                parameters=(execution.execution_id, obligation.exact_target),
                 lifecycle=response,
                 revision=obligation.revision + 1,
                 updated_at_ms=session.now(obligation.updated_at_ms),
@@ -318,10 +279,48 @@ class RecoverySnapshot:
             pointer_revision=self.pointer_revision + 1,
         )
 
+    def finish_publications(self, session) -> None:
+        """Release this one native attempt only when every original route settled."""
+        from .attempt_states import SucceededAttempt
+        from .execution_states import CompletedExecution
+        from .coordination_tables.executions import CurrentExecutions
+
+        if not all(row.lifecycle.published for row in self.require_wire_responses()):
+            return
+        attempt = self.require_current_attempt()
+        db, execution = session._connection, self.execution
+        AttemptRecord.update(
+            db, where="execution_id=? AND attempt_ordinal=? AND revision=?",
+            parameters=(execution.execution_id, attempt.attempt_ordinal, attempt.revision),
+            lifecycle=SucceededAttempt(), revision=attempt.revision + 1,
+            updated_at_ms=session.now(attempt.updated_at_ms),
+        )
+        ExecutionRecord.update(
+            db, where="execution_id=? AND revision=?",
+            parameters=(execution.execution_id, execution.revision),
+            lifecycle=CompletedExecution(attempt.attempt_ordinal),
+            revision=execution.revision + 1, updated_at_ms=session.now(execution.updated_at_ms),
+        )
+        for assignment in self.assignments:
+            WakeAssignment.update(
+                db, where="assignment_id=? AND revision=?",
+                parameters=(assignment.assignment_id, assignment.revision),
+                lifecycle=CompletedExecution.assignment_state().build(
+                    assignment.lifecycle.mode, assignment.lifecycle.execution_id,
+                    assignment.lifecycle.exact_target,
+                ), revision=assignment.revision + 1,
+                updated_at_ms=session.now(assignment.updated_at_ms),
+            )
+        CurrentExecutions.update(
+            db, where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
+            parameters=(execution.owner_lookup, self.pointer_revision, execution.execution_id),
+            execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
+        )
+
     def require_nonpublication_response(self) -> None:
-        if self.obligation is not None:
-            self.obligation.lifecycle.require_nonpublication()
+        for obligation in self.obligations:
+            obligation.lifecycle.require_nonpublication()
 
     @property
     def retry_authorized(self) -> bool:
-        return self.execution.retry_authorized(self.replay, self.obligation)
+        return self.execution.retry_authorized(self.replay, self.obligations)

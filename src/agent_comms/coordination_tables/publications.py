@@ -47,6 +47,20 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         """Compare the frozen intent once against the Message-owned content snapshot."""
         return self.expected_message == message.publication_snapshot
 
+    def validate_receipt(self, receipt: PublicationReceipt) -> None:
+        expected = (
+            self.execution_id, self.publication_key, self.expected_message_id,
+            self.sender, self.exact_target, self.message_type, self.notice,
+            self.timestamp, self.payload_digest,
+        )
+        observed = (
+            receipt.execution_id, receipt.publication_key, receipt.message_id,
+            receipt.sender, receipt.exact_target, receipt.message_type, receipt.notice,
+            receipt.timestamp, receipt.payload_digest,
+        )
+        if observed != expected:
+            raise IntegrityViolationError("receipt envelope does not match frozen intent")
+
     execution_id: str = dataclass_field(
         metadata={
             "snapshot_exclude": True,
@@ -71,7 +85,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         metadata={
             "snapshot_exclude": True,
             "sql": Column(
-                storage=ExactStorage,
+                primary_key=True, storage=ExactStorage,
                 check="""
       typeof(exact_target) = 'text' AND length(exact_target) BETWEEN 1 AND 256""",
             ),
@@ -196,9 +210,9 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         return (
             ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
-                ("execution_id", "obligation_intent_required"),
+                ("execution_id", "exact_target", "obligation_intent_required"),
                 ResponseObligation,
-                ("execution_id", "intent_settled"),
+                ("execution_id", "exact_target", "intent_settled"),
                 deferred=True,
             ),
         )
@@ -312,6 +326,7 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
             )
         }
     )
+    exact_target: str = dataclass_field(metadata={"sql": Column(primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256")})
     seq: int = dataclass_field(metadata={"sql": Column(unique=True, check="seq > 0")})
     message_id: str = dataclass_field(
         metadata={
@@ -334,11 +349,11 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(("execution_id",), PublicationIntents, ("execution_id",)),
+            ForeignKey(("execution_id", "exact_target"), PublicationIntents, ("execution_id", "exact_target")),
             ForeignKey(
-                ("execution_id", "obligation_receipt_required"),
+                ("execution_id", "exact_target", "obligation_receipt_required"),
                 ResponseObligation,
-                ("execution_id", "receipt_settled"),
+                ("execution_id", "exact_target", "receipt_settled"),
                 deferred=True,
             ),
         )
@@ -356,12 +371,12 @@ BEGIN
     SELECT RAISE(ABORT, 'publication receipt message mismatch')
     WHERE NEW.message_id != (
         SELECT expected_message_id FROM publication_intents
-        WHERE execution_id = NEW.execution_id
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
     );
     SELECT RAISE(ABORT, 'publication receipt requires publishing obligation')
     WHERE NOT EXISTS (
         SELECT 1 FROM obligations
-        WHERE execution_id = NEW.execution_id AND state = 'publishing'
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND state = 'publishing'
     );
 END"""
             ),

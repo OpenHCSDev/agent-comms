@@ -208,7 +208,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
         proof = NativeRuntimeInput.one(store.session._connection, input_id=second.input_id)
         assert proof is not None
         store.session._connection.execute(
-            f"INSERT INTO {CurrentNativeCursor.declared_name} VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            f"INSERT INTO {CurrentNativeCursor.declared_name} VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 root_id,
                 lookup,
@@ -218,7 +218,6 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
                 second_message.seq,
                 second_message.seq,
                 second.input_id,
-                proof.assignment_id,
                 type(proof.execution).declared_name,
                 proof.session_id,
                 proof.request_generation,

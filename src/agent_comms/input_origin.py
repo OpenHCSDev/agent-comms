@@ -36,11 +36,22 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
 
+    def matches_owner(self, recorded_name, incarnation):
+        return recorded_name == incarnation.name
+
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
     key: str
     origin: InputOrigin
+
+    def require_human_input(self):
+        self.origin.require_human()
+        return self
+
+    def require_original(self, inputs):
+        """Resolve the recorded author and key in the original input document."""
+        return inputs.lookup(self.key).require_original_provenance(self)
 
 
 @dataclass(frozen=True)
@@ -112,3 +123,10 @@ class HumanInputOrigin(InputOrigin):
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
         return (self.admission.incarnation.resolved(snapshot) == owner.incarnation
                 and (self.project, self.goal) == (owner.worktree, owner.goal_checkpoint))
+
+    def matches_owner(self, recorded_name, incarnation):
+        """The captured original birth survives a rename, unlike a neutral name."""
+        self.admission.incarnation.require_recorded()
+        incarnation.require_recorded()
+        return (recorded_name == self.admission.incarnation.name
+                and self.admission.incarnation.created_at == incarnation.created_at)

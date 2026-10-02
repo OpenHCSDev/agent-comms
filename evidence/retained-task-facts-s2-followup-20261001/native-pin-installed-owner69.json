@@ -1,0 +1,12 @@
+{
+  "owner": "Sch481",
+  "purpose": "tiny normal installed Core wheel and three genuine selected native commits on isolated original fixture",
+  "path": "/home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001",
+  "core": "a6dd79408e7a3422a72f71d8cdafa6896a83270a",
+  "wheel_sha256": "f4ddbc310189eec8aa43e83eca502476a4e5fd237fbc4b5414b11db70dbacd80",
+  "native_manifest": "776cd99e55d6917b77209b85e071529f5959b622ab666e6acaa16de6ed9b6a92",
+  "native_builds": 0,
+  "public_changes": [],
+  "protected": "Original fixture journals/UNKNOWN and failed proofs; shared native source package borrowed read-only, never cleaned by this operation",
+  "cleanup": "Remove own disposable runtime/wheel only after actual closure, retain original fixture/evidence"
+}

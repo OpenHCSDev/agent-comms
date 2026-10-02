@@ -266,11 +266,38 @@ class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
                                       help="Original sequence:message_id")
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
+    def original_source(self, ctx: Comms):
+        return self.source
+
+    def pin_original(self, ctx: Comms, source):
+        return ctx.messaging.pin_user_constraint(self.thread, source, worktree=self.worktree)
+
     def apply(self, ctx: Comms) -> Any:
         from .field_codec import FieldCodec
 
-        pin = ctx.messaging.pin_user_constraint(self.thread, self.source, worktree=self.worktree)
-        return {"pin": FieldCodec.encode(pin.reference), "source": FieldCodec.encode(self.source)}
+        source = self.original_source(ctx)
+        pin = self.pin_original(ctx, source)
+        return {"pin": FieldCodec.encode(pin.reference), "source": FieldCodec.encode(source)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-input-constraint"):
+    help = "Pin an original human input for its recipient"
+    source: str = option("--source", help="Original durable input key")
+
+    def original_source(self, ctx: Comms):
+        from .input_disposition import InputDispositions
+        from .errors import RelationViolationError
+
+        with InputDispositions(ctx.root / InputDispositions.filename).reading() as inputs:
+            try:
+                original = inputs.rows[self.source]
+            except KeyError as error:
+                raise RelationViolationError("Constraint lacks its original input") from error
+            return original.context_provenance().require_human_input()
+
+    def pin_original(self, ctx: Comms, source):
+        return ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)
 
 
 @dataclass(frozen=True, kw_only=True)

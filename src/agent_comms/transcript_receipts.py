@@ -271,13 +271,18 @@ class AssignedTranscriptSource:
                 )
             user = reader.input_ancestor(record) if not published else None
             if user is not None:
-                reference = NativeRuntimeInput.published_reply(self.root, reader, user, lookup)
-                if reference is not None:
-                    originals = self.rows("w.seq=?", (reference.seq,))
-                    published = bool(originals) and (
-                        originals[0].message.reference == reference
-                        and originals[0].audience.sender_lookup == lookup
+                references = NativeRuntimeInput.published_replies(self.root, reader, user, lookup)
+                if references:
+                    marks = ",".join("?" for _ in references)
+                    originals = self.rows(
+                        f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
                     )
+                    published = all(
+                        any(original.message.reference == ref
+                            and original.audience.sender_lookup == lookup for original in originals)
+                        for ref in references
+                    )
+
         events = entry.events(
             TranscriptProjection(
                 routing,
