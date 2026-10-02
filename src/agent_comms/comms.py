@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .active_route import CommsRoute
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
@@ -57,7 +61,7 @@ class Comms:
         self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
 
 
-def wire(root: Path | str | None = None) -> Comms:
+def wire(root: CommsRoute | Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     from .active_route import resolve_comms_route
 

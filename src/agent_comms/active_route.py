@@ -124,8 +124,10 @@ class ActiveRoute(CommsRoute):
         owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
 
 
-def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
+def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
     """Resolve one current selection without creating stores or reading registry."""
+    if isinstance(root, CommsRoute):
+        return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
     if "AGENT_COMMS_ROOT" in os.environ:

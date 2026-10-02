@@ -55,8 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
         route_guard.enter_context(route.admit_client())
-        comms = wire(route.root)
-        route.bind_owners(comms.owners)
+        comms = wire(route)
         _emit(command.apply(comms))
     except StoppedOwnerFailure as exc:
         # This JSON adapter is one-shot. It cannot silently discard acquired
