@@ -63,8 +63,7 @@ class SelectedParticipant(MroDispatch):
     @handles(TurnContextObserved)
     async def observe_context(self, event: TurnContextObserved) -> None:
         self.owner.require_active_turn()
-        lease = self.owner.thread.turn_lease
-        assert lease is not None
+        lease = self.owner.thread.require_turn_lease()
         event.context.record(self.bus.log, self.owner.thread, lease)
 
     @handles(NativePhaseChanged)

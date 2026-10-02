@@ -95,7 +95,14 @@ definitions have distinct native-compaction and delivery/AssignmentStore meaning
 `.artifacts/selected-context511-ast-raw` directory. The temporary analysis dependency
 target was removed and is not used for the published census.
 
-Production source is frozen at `47d16ba74bb8658e3aa35047025f2f4b6b5e6f79`.
+The installed assembly/transport checkpoint is
+`47d16ba74bb8658e3aa35047025f2f4b6b5e6f79`. A final minimal handler correction
+uses `Thread.require_turn_lease` in `SelectedParticipant.observe_context` too.
+The earlier edit changed `transition` instead; earlier prose claiming both
+callers were already corrected was wrong. `final-handler-owner-correction.json`
+records the exact before/after AST. Qualified 509 already uses this contract.
+This changes no prompt bytes, source, manifest identity, schema or native protocol;
+the unchanged suite and model journey are not repeated.
 The two action instruction assets intentionally retain their original final spaces
 and absence of a final newline: removing these whitespace warnings would change
 the required original prompt bytes.
