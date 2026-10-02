@@ -1,0 +1,71 @@
+{
+  "state": "PASS",
+  "installed_source": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "original_root": "/home/ts/wt/b509c01/wire",
+  "original_source_hashes": {
+    "/home/ts/wt/b509c01/wire/registry.json": "508654b7edde6e22e78fb52ed72cf55300adc892dca947d25a5e426c4b6e549b",
+    "/home/ts/wt/b509c01/wire/bus.jsonl": "907c15902b81cf3f90f0c76945a5206795e1deb27025168773fdb485c3afc2ab"
+  },
+  "source_owner": {
+    "name": "purechannel-owner-0",
+    "created_at": 1790920636.2530603
+  },
+  "source_turn": {
+    "kind": "recorded",
+    "identity": {
+      "value": "4fe5fa91d1b93b377f32d69cfffc84b7"
+    },
+    "occurrence": {
+      "incarnation": {
+        "name": "purechannel-owner-0",
+        "created_at": 1790920636.2530603
+      },
+      "generation": 1
+    }
+  },
+  "recorded_segments_unchanged": true,
+  "callbacks": [
+    {
+      "consumer": "TurnProgress",
+      "heartbeat_seconds": 0.03029674105346203,
+      "cancelled_after_join": true
+    },
+    {
+      "consumer": "SelectedParticipant",
+      "heartbeat_seconds": 0.030288785987067968,
+      "cancelled_after_join": false
+    }
+  ],
+  "manifest_cli": [
+    "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-stage/runtime/bin/agent-comms",
+    "--root",
+    "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/installed-context-callback515-direct/wire",
+    "context",
+    "Alice",
+    "--turn",
+    "1"
+  ],
+  "manifest_cli_returncode": 0,
+  "public_sequence_unchanged": true,
+  "original_files_unchanged": true,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "scope": "Actual installed recording owners/locks/CLI; captured SDK metadata, no fresh native/provider qualification",
+  "shared_candidate_head": "65a28ad2eff9285e3812953a7366af44c63c3a25",
+  "fixture_source_head": "daccabb1bd9c4e37ef1dd7e071f5da8ea8f6481d",
+  "source_proof_sha256": "5aaf3a94f34717393966a0e4cd561b127ce1a9311696c67a8c05b07053bacb37",
+  "installed_cli_output_observed": {
+    "manifest_count": 1,
+    "text_recorded": false,
+    "recorded_turn_generation": 1,
+    "matched_original_record": true
+  },
+  "checks_prevent": {
+    "writer_contention": "Synchronous canonical writer acquisition would block the event loop or finish without awaited publication",
+    "cancellation": "An unjoined acquired worker could publish after caller custody retires",
+    "publication": "Both real event owners must publish exactly once, preserving SDK metadata and original lease identity",
+    "cli": "Normal installed console must read the silent original row, not a source-overlay projection"
+  },
+  "qualification": "Matching installed recording owners/real locks/CLI; no new native producer/provider gate",
+  "runner_initial_failure": "pytest rejected repository xdist/coverage defaults before collecting any fixture; direct asyncio invocation then completed original journey once"
+}
