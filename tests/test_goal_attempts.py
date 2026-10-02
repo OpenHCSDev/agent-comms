@@ -14,12 +14,15 @@ from queue import Empty
 import pytest
 
 from agent_comms.goal_attempts import (
+    GoalAttemptSchema,
     GoalAttemptStore,
     ReservationConflictError,
     StaleAttemptError,
     StorageUncertainError,
     UnresolvedAttemptError,
 )
+from agent_comms.diagnostics import FailureReason
+from agent_comms.typed_table import StringEnumStorage
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -78,6 +81,31 @@ def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
     store = GoalAttemptStore.initialize(root)
     assert store.path.stat().st_mode & 0o777 == 0o600
     assert GoalAttemptStore(root).snapshot("missing") is None
+
+
+def test_generated_family_constraint_changes_goal_schema_identity(store, monkeypatch):
+    """A family-generated CHECK cannot leave the goal format marker unchanged."""
+    original = GoalAttemptSchema.current()
+    constraints = StringEnumStorage.constraints
+
+    def changed_constraint(cls, column, annotation=None):
+        declared = constraints(column, annotation)
+        if annotation is FailureReason:
+            return (*declared, f'"{column}" != \'future_failure\'')
+        return declared
+
+    monkeypatch.setattr(StringEnumStorage, "constraints", classmethod(changed_constraint))
+    assert GoalAttemptSchema.current() != original
+    with pytest.raises(StorageUncertainError, match="one-shot migration required"):
+        GoalAttemptStore(store.root)
+
+
+def test_goal_schema_marker_cannot_claim_a_different_declaration(store):
+    """Matching tables alone cannot authenticate an unrelated stored schema marker."""
+    with sqlite3.connect(store.path) as db:
+        db.execute("UPDATE goal_attempt_schema SET ddl_digest=?", ("0" * 64,))
+    with pytest.raises(StorageUncertainError, match="schema declaration"):
+        GoalAttemptStore(store.root)
 
 
 def test_one_reservation_across_two_independent_supervisors(store):
