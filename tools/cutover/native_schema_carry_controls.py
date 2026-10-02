@@ -45,10 +45,18 @@ def journal_observation(path):
             db.execute('ROLLBACK')
 
 
-def require_journal_preserved(before, after):
+def require_journal_preserved(before, after, original, target):
     from agent_comms.compaction_records import SelectedSummaryAttempt
 
     name = SelectedSummaryAttempt.declared_name
+    if original.version == target.version:
+        if any(after[key] != values for key, values in before.items()):
+            raise AssertionError('Original journal facts changed during additive carry')
+        added = target.compaction_columns.keys() - original.compaction_columns.keys()
+        if after.keys() != before.keys() | added or any(after[key] for key in added):
+            raise AssertionError('Added declaration members must remain empty')
+        return {'rows': {key: len(values) for key, values in before.items()},
+                'unchanged_tables_sha256': row_digest(before), 'created_empty_tables': sorted(added)}
     unchanged = {key:values for key,values in before.items() if key != name}
     if any(after[key] != values for key,values in unchanged.items()):
         raise AssertionError('Original operation/publication/enrollment/UNKNOWN rows changed')
@@ -66,13 +74,12 @@ def run_journal_inventory(base, source_python, inventory_path):
     base.mkdir(mode=0o700)
     original = original_declaration(source_python)
     target = NativeSchemaDeclaration.observe()
-    if original.release_versions != (9,3,3,5) or target.release_versions != (9,3,3,6):
-        raise ValueError('Matched original Native5 and current Native6 declarations required')
+    original.require_carry_target(target)
     before_sha = digest(inventory_path)
     candidate = base/'compaction-commits.sqlite3'
     shutil.copyfile(inventory_path, candidate)
     candidate.chmod(0o600)
-    requests = capture_requests(candidate, source_python, original)
+    requests = target.capture_requests(candidate, source_python, original)
     before = journal_observation(candidate)
     with closing(sqlite3.connect(candidate)) as db, db:
         db.execute('PRAGMA foreign_keys=OFF')
@@ -80,7 +87,7 @@ def run_journal_inventory(base, source_python, inventory_path):
         db.execute('BEGIN IMMEDIATE')
         evidence = carry_compaction(db, original, target, requests)
     after = journal_observation(candidate)
-    relation = require_journal_preserved(before, after)
+    relation = require_journal_preserved(before, after, original, target)
     if digest(inventory_path) != before_sha:
         raise AssertionError('Original running-source inventory changed')
     # The actual current journal entrypoint authenticates target DDL and reads
@@ -158,7 +165,8 @@ def run(base, source_python, root):
         receipt = installed.install(acquired, base/'original-preimages')
     if any(digest(base/'original-preimages'/name) != sha for name,sha in source_hashes.items()):
         raise AssertionError('Original preimages were not retained exactly')
-    relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'))
+    relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'),
+                                      original, plan.target)
     result={'classification':'private-stopped-copy-installed-operator-control',
             'original_release':list(original.release_versions),
             'target_release':list(plan.target.release_versions),
