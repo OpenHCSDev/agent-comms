@@ -17,7 +17,7 @@ def test_silent_active_turn_does_not_age_into_ready(tmp_path):
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    first = comms.agents.begin_turn("worker", "first", "Long-running work")
+    first = comms.agents.begin_turn("worker", "first", "Long-running work").turn_lease
     before = comms.registry.snapshot()
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     after = comms.registry.snapshot()

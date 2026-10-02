@@ -1,0 +1,140 @@
+[
+  {
+    "path": "tests/test_active_turn.py",
+    "line": 20,
+    "original": "comms.agents.begin_turn(\"worker\", \"first\", \"Long-running work\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_native_context_inspection.py",
+    "line": 149,
+    "original": "owner._comms.agents.begin_turn(peer.name, \"context-fixture-peer\", \"Independent context fixture\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_turn_context_wire.py",
+    "line": 71,
+    "original": "comms.agents.begin_turn('Alice', 'owned-context-recording515')",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 77,
+    "original": "comms.agents.begin_turn(name, turn_id)",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 501,
+    "original": "comms.agents.begin_turn(child, \"child-turn\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 547,
+    "original": "comms.agents.begin_turn(child, \"new-child-turn\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_history_view_declaration.py",
+    "line": 56,
+    "original": "comms.agents.begin_turn(\"beta\", \"ordinary-snapshot-active-participant\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_thread_identity.py",
+    "line": 95,
+    "original": "comms.agents.begin_turn(\"owner\", \"reused\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_thread_identity.py",
+    "line": 99,
+    "original": "comms.agents.begin_turn(\"renamed\", \"reused\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 36,
+    "original": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 40,
+    "original": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 52,
+    "original": "comms.agents.begin_turn(\"owner\", \"turn\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_agent_events.py",
+    "line": 192,
+    "original": "comms.agents.begin_turn(\"bot\", \"turn\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_agent_events.py",
+    "line": 230,
+    "original": "comms.agents.begin_turn(\"bot\", \"turn\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/selected_summary_recovery_installed_journey.py",
+    "line": 149,
+    "original": "service.agents.begin_turn('recovery523', f'prior-{kind}')",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/selected_summary_recovery_installed_journey.py",
+    "line": 171,
+    "original": "service.agents.begin_turn('recovery523', f'distinct-recovery-{kind}')",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_live_drain_failure.py",
+    "line": 71,
+    "original": "comms.agents.begin_turn(\"beta\", \"ordinary-unrelated-turn\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_message_notifications.py",
+    "line": 47,
+    "original": "comms.agents.begin_turn('beta', 'test-active-turn')",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_message_notifications.py",
+    "line": 75,
+    "original": "comms.agents.begin_turn('renamed', 'individual-active-turn')",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_selected_summary_exchange.py",
+    "line": 72,
+    "original": "comms.agents.begin_turn(\"owner\", \"native-summary-negative\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_selected_summary_exchange.py",
+    "line": 511,
+    "original": "comms.agents.begin_turn(\"summary-owner\", \"native-summary-exchange\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_goal_wait_certified_reply.py",
+    "line": 30,
+    "original": "comms.agents.begin_turn(\"peer\", \"original-work\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  },
+  {
+    "path": "tests/test_goal_wait_certified_reply.py",
+    "line": 110,
+    "original": "comms.agents.begin_turn(\"peer\", \"peer-work\")",
+    "migration": "derive returned RegistryOwner.turn_lease at fixture boundary"
+  }
+]
