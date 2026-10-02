@@ -178,6 +178,12 @@ class NativeSchemaDeclaration:
             return []
         return capture_requests(path, source_python, original)
 
+    def empty_journal_members(self, original):
+        if not original.compaction_columns.keys() <= self.compaction_columns.keys():
+            raise ValueError('Carry cannot discard original journal members')
+        return {name: (self.compaction_columns[name], [])
+                for name in self.compaction_columns.keys() - original.compaction_columns.keys()}
+
     def carry_journal_members(self, db, original):
         """Create declaration-owned empty members without rewriting old rows."""
         from agent_comms.compaction_records import JournalTable
@@ -192,18 +198,18 @@ class NativeSchemaDeclaration:
             name: rows(db, name, fields if tables[name].without_rowid else ('rowid', *fields))
             for name, fields in original.compaction_columns.items()
         }
-        added = self.compaction_columns.keys() - original.compaction_columns.keys()
-        rebuild(db, self.compaction, {name: (self.compaction_columns[name], []) for name in added})
+        additions = self.empty_journal_members(original)
+        rebuild(db, self.compaction, additions)
         self.require_compaction(db)
         for name, before in identities.items():
             fields = original.compaction_columns[name]
             if rows(db, name, fields if tables[name].without_rowid else ('rowid', *fields)) != before:
                 raise ValueError('Additive journal carry changed original row identities or facts')
-        if any(tables[name].select(db) for name in added):
+        if any(tables[name].select(db) for name in additions):
             raise ValueError('New journal members cannot contain inferred historical evidence')
         if db.execute('PRAGMA foreign_key_check').fetchall():
             raise ValueError('Carried journal relations violate foreign keys')
-        return {'created_empty_tables': sorted(added),
+        return {'created_empty_tables': sorted(additions),
                 'original_identity_rows_sha256': row_digest(identities),
                 'original_rows': {name: len(values) for name, values in identities.items()},
                 'original_source_bytes_preserved': True,
@@ -507,8 +513,7 @@ def carry_compaction(db, original, target, requests):
     original.require_compaction(db)
     before_rows = inventory(db)
     name = SelectedSummaryAttempt.declared_name
-    if set(original.compaction_columns) != set(target.compaction_columns):
-        raise ValueError('Carry cannot discard or invent journal table authorities')
+    additions = target.empty_journal_members(original)
     for table, fields in original.compaction_columns.items():
         expected = tuple(f for f in target.compaction_columns[table] if f != 'request') if table == name else target.compaction_columns[table]
         if fields != expected:
@@ -528,7 +533,8 @@ def carry_compaction(db, original, target, requests):
         request.journal_json()  # Existing retained-payload/control bound.
         values.append((rowid, operation_id, session_file, source_json,
                        request_field.encode(request), state))
-    rebuild(db, target.compaction, {name:(('rowid', *target.compaction_columns[name]), values)})
+    rebuild(db, target.compaction, {name:(('rowid', *target.compaction_columns[name]), values),
+                                    **additions})
     target.require_compaction(db)
     after_rows = inventory(db)
     untouched = {table:data for table,data in before_rows.items() if table != name}
@@ -546,7 +552,10 @@ def carry_compaction(db, original, target, requests):
                 SelectedCommitReference.from_intent(intent).require_source(attempt.source_json)
     if db.execute('PRAGMA foreign_key_check').fetchall():
         raise ValueError('Carry changed original journal references')
-    return {'attempts':len(values), 'original_selected_rows_sha256':row_digest(prior),
+    if any(rows(db, table) for table in additions):
+        raise ValueError('Added journal declarations acquired invented historical evidence')
+    return {'attempts':len(values), 'created_empty_tables':sorted(additions),
+            'original_selected_rows_sha256':row_digest(prior),
             'unchanged_tables_sha256':row_digest(untouched),
             'original_source_bytes_preserved':True, 'admission_receipts_minted':0,
             'input_replays':0}
