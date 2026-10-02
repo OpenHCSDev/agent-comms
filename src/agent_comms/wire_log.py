@@ -24,6 +24,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
+from .bus_projection import BusFileRevision
 from .envelope_claim_transitions import (
     ClaimProjection,
     apply_transition,
@@ -177,7 +178,7 @@ class WireLog:
                 snapshot = registry.snapshot()
                 owner = snapshot.require(name)
                 inputs = InputDispositions(self.path.parent / InputDispositions.filename).read()
-                metadata, _, stream, boundary = resources.enter_context(
+                metadata, _, stream, boundary, _ = resources.enter_context(
                     self._opened_wire_snapshot(need_sequence=False)
                 )
                 export = WireExportBoundary(metadata.last_seq, time.time())
@@ -232,7 +233,7 @@ class WireLog:
 
     def claim_projection(self) -> ClaimProjection:
         """Derive ownership exclusively from guarded, verified bus envelopes."""
-        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary):
+        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
             if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
             projection, _verified_sequence = self._claim_projection(
@@ -410,7 +411,8 @@ class WireLog:
                 boundary = stream.seek(0, 2) if stream is not None else 0
                 if stream is not None:
                     stream.seek(0)
-            yield metadata, through, stream, boundary
+                revision = BusFileRevision.capture(stream) if stream is not None else None
+            yield metadata, through, stream, boundary, revision
 
     @contextmanager
     def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
@@ -419,8 +421,21 @@ class WireLog:
         Uncertified streams retain the same complete validation algorithm.
         This resource is a fixed read, not a current append/admission permit.
         """
-        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary):
+        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
             yield self._snapshot_records(metadata, stream, boundary)
+
+    @contextmanager
+    def projection_snapshot(self):
+        """Lend one opened source cut to disposable indexes after bus release.
+
+        The index may seek this stream within its original revision. If index
+        acquisition fails, the strict record iterator reads that SAME cut.
+        Its stream remains owned here; no projection acquires bus authority.
+        """
+        with self._opened_wire_snapshot(need_sequence=False) as (
+            metadata, _, stream, boundary, revision,
+        ):
+            yield metadata, revision, stream, self._snapshot_records(metadata, stream, boundary)
 
     @staticmethod
     def _snapshot_records(metadata, stream, boundary):
@@ -436,7 +451,7 @@ class WireLog:
         self, *, need_sequence: bool = True
     ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
         """Public page accounting borrows the one original opened byte boundary."""
-        with self._opened_wire_snapshot(need_sequence=need_sequence) as (metadata, through, stream, boundary):
+        with self._opened_wire_snapshot(need_sequence=need_sequence) as (metadata, through, stream, boundary, _):
             records = (
                 (
                     page_row
