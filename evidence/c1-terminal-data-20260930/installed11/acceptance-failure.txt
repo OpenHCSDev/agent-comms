@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/l0a_native_installed_pilot.py", line 310, in main
-    await acceptance(app, pilot, agent, comms, entered, release,
-                     hold_next, requests)
-  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/input_visibility_native_installed_pilot.py", line 94, in acceptance
-    assert await pilot.click(SendNow)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError

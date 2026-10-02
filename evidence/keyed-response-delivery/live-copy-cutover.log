@@ -1,9 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ts/wt/comms-keyed-response-delivery-20260928/.scratch/live_copy.py", line 29, in <module>
-    print(json.dumps(module.convert(copy,old),indent=2))
-                     ~~~~~~~~~~~~~~^^^^^^^^^^
-  File "/home/ts/wt/comms-keyed-response-delivery-20260928/tools/convert_response_delivery_once.py", line 81, in convert
-    snapshot = store.snapshots.get(private["response"]["execution_id"])
-  File "/home/ts/wt/comms-keyed-response-delivery-20260928/.venv/lib/python3.14/site-packages/agent_comms/recovery_reader.py", line 46, in get
-    raise IdentityConflict("unknown execution")
-agent_comms.coordination_errors.IdentityConflict: unknown execution

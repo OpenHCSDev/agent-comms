@@ -1,8 +1,0 @@
-Resolved 2 packages in 290ms
-   Building agent-comms @ file:///home/ts/wt/comms-fork-first-input-native-20260929
-      Built agent-comms @ file:///home/ts/wt/comms-fork-first-input-native-20260929
-Prepared 1 package in 200ms
-Uninstalled 1 package in 9ms
-Installed 1 package in 7ms
- - agent-comms==0.1.0 (from file:///home/ts/wt/comms-ordinary-cold-core340-20260929)
- + agent-comms==0.1.0 (from file:///home/ts/wt/comms-fork-first-input-native-20260929)

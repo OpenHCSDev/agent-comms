@@ -1,7 +1,0 @@
-{
-  "traceback_absent": true,
-  "importerror_absent": true,
-  "agent_label_present": true,
-  "inner_exit_zero": true,
-  "bounded_observation_outer_exit": 124
-}

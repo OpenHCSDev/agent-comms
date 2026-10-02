@@ -1,9 +1,0 @@
-{
-  "normal_launcher": "/home/ts/.local/bin/toad-comms agent-comms-ux",
-  "bounded_observation_seconds": 12,
-  "outer_timeout_expected": true,
-  "inner_exit_zero": true,
-  "traceback": false,
-  "import_error": false,
-  "owner_label_present": true
-}

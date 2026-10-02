@@ -1,6 +1,0 @@
-native_revision_retirement session Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.native_revision_retirement credentials Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.native_strict_reopen Done(text='Saved native session failed strict reopen validation.', ok=False, reason_code='compaction_reopen_invalid', diagnostic=None) Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.ordinary_native_response_bytes=2097409
-.....
-8 passed in 41.94s

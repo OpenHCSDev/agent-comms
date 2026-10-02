@@ -1,5 +1,0 @@
-native_crash_recovery={"boundary": "before-schema-sync", "inputs": 2, "provider_calls": 1, "first_generation_preserved": true, "uncertain_input_replayed": false}
-.native_crash_recovery={"boundary": "after-schema-publish", "inputs": 2, "provider_calls": 1, "first_generation_preserved": true, "uncertain_input_replayed": false}
-.native_crash_recovery={"boundary": "after-schema-unlink", "inputs": 2, "provider_calls": 1, "first_generation_preserved": true, "uncertain_input_replayed": false}
-.
-3 passed, 6 deselected in 15.68s

@@ -1,3 +1,0 @@
-native_strict_reopen Done(text='Saved native session failed strict reopen validation.', ok=False, reason_code='compaction_reopen_invalid', diagnostic=None) Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.....
-5 passed in 25.67s

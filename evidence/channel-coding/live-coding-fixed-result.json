@@ -1,9 +1,0 @@
-{
-  "root": "/var/tmp/agent-comms-coding-check-8ed4bz42",
-  "worktree": "/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/live-coding-fixed",
-  "package": "/var/tmp/agent-comms-pi-native-coding-20260927-x_nsd3jh/node_modules/@earendil-works/pi-coding-agent",
-  "source_seq": 1,
-  "started_at": 1790553320.8142257,
-  "error": "ValueError(\"Unknown fields for EditTool: ['edits']\")",
-  "finished_at": 1790553330.8858104
-}

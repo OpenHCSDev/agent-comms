@@ -1,9 +1,0 @@
-B actual native request provider_calls 1
-B published actual reply provider_calls 1
-A automatically observed native reply provider_calls 2
-A ACP feedback proves exact reply injection provider_calls 2
-Canonical reply and any rejected-result alert published provider_calls 2
-Fresh channel source admitted without retrying rejected input provider_calls 3
-ACP proves fresh source after rejected triage provider_calls 3
-.
-1 passed, 3 deselected in 24.31s

@@ -1,8 +1,0 @@
-Using CPython 3.14.2
-   Updating https://github.com/OpenHCSDev/agent-comms.git (3889a22089318e07bb71285b639cdb98a6146063)
-   Updating https://github.com/OpenHCSDev/toad.git (9861dcdba1af5991f648654f3641cb1688a605ca)
-    Updated https://github.com/OpenHCSDev/agent-comms.git (3889a22089318e07bb71285b639cdb98a6146063)
-    Updated https://github.com/OpenHCSDev/toad.git (9861dcdba1af5991f648654f3641cb1688a605ca)
-Resolved 71 packages in 1.62s
-Updated agent-comms v0.1.0 (829ce551) -> v0.1.0 (3889a220)
-Updated batrachian-toad v0.6.20 (33dbf564) -> v0.6.20 (9861dcdb)

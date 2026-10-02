@@ -1,1 +1,0 @@
-This goal was paused by the owner. Do not resume or continue it; wait for the owner to explicitly resume it using the goal controls.

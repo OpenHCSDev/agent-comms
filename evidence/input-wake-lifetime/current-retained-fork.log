@@ -1,5 +1,0 @@
-RETAINED_FORK_RESULT {"source_bytes": 41333152, "first_input_started": 1, "reply_received": true, "local_http_posts": 1, "elapsed_seconds": 10.93, "provider": "loopback-controlled", "context_window": 272000, "original_replayed": false, "python": "/home/ts/.local/share/agent-comms/runtime-indexed-proof-controls-20260929/bin/python"}
-RETAINED_FORK_WORKER Owner launch: retained-child
-
-.
-1 passed in 11.94s

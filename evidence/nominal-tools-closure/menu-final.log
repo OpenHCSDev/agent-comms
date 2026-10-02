@@ -1,1 +1,0 @@
-{"action": "comms_stop", "subject": "sender", "stopped": true, "installed_toad": "/home/ts/wt/comms-t2-boundary-sol-20260928/.artifacts/paired-installed/lib/python3.14/site-packages/toad/__init__.py", "installed_core": "/home/ts/wt/comms-t2-boundary-sol-20260928/.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/__init__.py", "mocked_calls": false}

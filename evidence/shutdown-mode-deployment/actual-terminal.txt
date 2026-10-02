@@ -1,1 +1,0 @@
-PASS actual PTY resize/mode-return->controlled UI IndexError->unmount remove_mode: original failure remains, all resources destroyed, no shutdown RuntimeError

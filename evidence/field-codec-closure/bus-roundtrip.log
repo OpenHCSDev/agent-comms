@@ -1,5 +1,0 @@
-ERROR: not found: /home/ts/wt/comms-field-codec-closure-20260928/tests/test_envelope_bus_integration.py::test_release_is_one_row_and_fences_next_owner
-(no match in any of [<Module test_envelope_bus_integration.py>])
-
-
-no tests ran in 0.12s

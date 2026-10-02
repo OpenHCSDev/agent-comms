@@ -1,7 +1,0 @@
-{
-  "toad": "/home/ts/.local/share/agent-comms/runtime-compaction-policy-b3a9c06/bin/toad",
-  "agent-comms": "/home/ts/.local/share/agent-comms/runtime-compaction-policy-b3a9c06/bin/agent-comms",
-  "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-compaction-policy-b3a9c06/bin/agent-comms-acp",
-  "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-compaction-policy-b3a9c06/bin/agent-comms-agent",
-  "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-compaction-policy-b3a9c06/bin/agent-comms-nk-foreground"
-}

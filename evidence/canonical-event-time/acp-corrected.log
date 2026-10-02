@@ -1,9 +1,0 @@
-ACP initialize
-ACP load
-ACP loaded; snapshot
-ACP cleanup
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:132: KeyboardInterrupt
-(to show a full traceback on KeyboardInterrupt use --full-trace)
-5 deselected in 44.83s

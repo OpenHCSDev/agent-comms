@@ -1,3 +1,0 @@
-AST name/attribute audit across src/, tests/, stack/: zero references to ThreadRegistry, TurnClaimFence, live_owner_with_epoch, claim_live_turn_with_epoch, owner_epochs, _snapshot_unlocked, viewer_epoch, peer_epoch.
-Saved disk keys owner_epochs/owner_epoch_counter remain boundary encoding only.
-Toad audited trees: toad-live-pins-20260928, toad-refactor-integration-20260927, toad-export-caller-migration-20260928; no removed registry/fence/epoch/display member references.

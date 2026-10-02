@@ -1,8 +1,0 @@
-{
-  "base": "01a9b7dd9bc95d7b311d087e3e95df1f13f7e9fe",
-  "head": "310feb9e8b76eaa1103bca506329d7eb1ab53a38",
-  "nonzero_deltas": {
-    "ClassSize:src/agent_comms/native_entries.py::NativeEntry": 17,
-    "ClassSize:src/agent_comms/transcript_events.py::TranscriptEvent": 2
-  }
-}

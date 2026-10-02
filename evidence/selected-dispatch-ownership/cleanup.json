@@ -1,7 +1,0 @@
-{
-  "checked_process_refs": [],
-  "removed_owned_derivatives": [
-    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/installed"
-  ],
-  "preserved": "source, branch, wheel, evidence and global native-current-d3967e8b6ee0cf28"
-}

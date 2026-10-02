@@ -1,9 +1,0 @@
-{
-  "activated": false,
-  "imports_after_deleted_tool_dispatch": "pass",
-  "commits": {
-    "agent-comms": "942f9824ff095775fe709563eaf3c14119b2f5ad",
-    "batrachian-toad": "db8efd6da6061399e0e357e8432c86047b7ae062",
-    "textual": "1738abd8e3524b7e86171b70256d7f7e52fdb724"
-  }
-}

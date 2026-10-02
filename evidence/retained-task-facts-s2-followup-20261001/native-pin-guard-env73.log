@@ -1,4 +1,0 @@
-Using Python 3.14.2 environment at: /home/ts/.cache/agent-scratch/s2-direct-native-pin-20261001/runtime
-Resolved 6 packages in 2ms
-Installed 1 package in 2ms
- + pytest-asyncio==1.4.0

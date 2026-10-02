@@ -1,4 +1,0 @@
-ERROR: file or directory not found: tests/test_display_basis.py
-
-
-no tests ran in 0.01s

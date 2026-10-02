@@ -1,2 +1,0 @@
-/home/ts/wt/comms-q8-journal-transactions-20260929/.venv/lib/python3.14/site-packages/agent_comms/compaction_journal.py
-native package: /home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent

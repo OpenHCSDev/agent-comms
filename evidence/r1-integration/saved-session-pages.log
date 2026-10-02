@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ts/wt/comms-c0-integration-20260928/evidence/r1-integration/read_saved_sessions.py", line 12, in <module>
-    from agent_comms.thread_role import UserRole
-ModuleNotFoundError: No module named 'agent_comms.thread_role'

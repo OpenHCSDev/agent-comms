@@ -1,9 +1,0 @@
-{
-  "original_run": "/home/ts/wt/k490c02",
-  "inspection": "read-only original late source/receipt/message; no replay or provider",
-  "original_late_source_seq": 4,
-  "completed_claim": "cohort-v1:aa8028d46e81f6c49642960bcde8e5b48719d56dec0d9d5df583104853f89db3",
-  "receipt_seq": 7,
-  "reply_target": "human",
-  "late_answer_23_verified": true
-}

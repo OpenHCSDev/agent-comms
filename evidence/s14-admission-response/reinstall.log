@@ -1,7 +1,0 @@
-Resolved 2 packages in 298ms
-   Building agent-comms @ file:///home/ts/wt/comms-remaining-plan-closure-20260929
-      Built agent-comms @ file:///home/ts/wt/comms-remaining-plan-closure-20260929
-Prepared 1 package in 222ms
-Uninstalled 1 package in 10ms
-Installed 1 package in 7ms
- ~ agent-comms==0.1.0 (from file:///home/ts/wt/comms-remaining-plan-closure-20260929)

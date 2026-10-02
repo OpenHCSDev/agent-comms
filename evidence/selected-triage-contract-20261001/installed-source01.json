@@ -1,8 +1,0 @@
-{
-  "core_files_equal": 305,
-  "prefix": "/home/ts/wt/comms-selected-triage-contract-20261001/.artifacts/runtime-triage488",
-  "native_manifest_sha256": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
-  "dependency_donor": "accepted default484 wheel installation",
-  "core_source_overlay": false,
-  "source_state": "coherent PR488 batch, not default"
-}

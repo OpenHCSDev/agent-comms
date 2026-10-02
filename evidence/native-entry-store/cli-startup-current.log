@@ -1,3 +1,0 @@
-{"id":"state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"fixture","name":"fixture","api":"openai-completions","provider":"fixture","baseUrl":"http://127.0.0.1:1/v1","reasoning":false,"input":["text"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":32000,"maxTokens":4096},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"steeringMode":"one-at-a-time","followUpMode":"one-at-a-time","sessionFile":"/home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/startup/source.jsonl","sessionId":"native-startup","autoCompactionEnabled":true,"messageCount":60,"pendingMessageCount":0,"nativeInputProofCapability":"pi-native-input-v1-live-only"}}
-
-

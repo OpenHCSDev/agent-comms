@@ -1,9 +1,0 @@
-{
-  "all_views_open_before_send": true,
-  "original_inputs_retried": 0,
-  "phase": "original_durable",
-  "original": {
-    "seq": 1,
-    "message_id": "d8f7f63c617d"
-  }
-}

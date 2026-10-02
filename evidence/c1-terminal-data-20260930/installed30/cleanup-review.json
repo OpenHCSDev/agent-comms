@@ -1,9 +1,0 @@
-{
-  "observed_ns": 289347689451547,
-  "remaining_owned_processes": [],
-  "original_owner_wait_error": "psutil.TimeoutExpired 10s pid125683 after canonical ownerstop",
-  "owned_ui_retirement": "one birth/parent/cwd attested pidfd SIGTERM; terminal143",
-  "manual_signals": 1,
-  "public_signals": 0,
-  "original_data_preserved": true
-}

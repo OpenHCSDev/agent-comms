@@ -1,6 +1,0 @@
-B actual native request provider_calls 1
-B published actual reply provider_calls 1
-A automatically observed native reply provider_calls 2
-A ACP feedback proves exact reply injection provider_calls 2
-.
-1 passed in 14.37s

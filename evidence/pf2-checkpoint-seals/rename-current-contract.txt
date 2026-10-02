@@ -1,5 +1,0 @@
-command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_acp_private_nk_delivery.py', '-k', 'rename']
-........                                                                 [100%]
-8 passed, 20 deselected in 4.96s
-
-exit: 0

@@ -1,9 +1,0 @@
-{
-  "observed_at": "2026-09-27T22:39:38.720747+00:00",
-  "active_test_audit_pids": [],
-  "removed": [
-    "/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts",
-    "/tmp/ac-a8-ra-20260927"
-  ],
-  "preserved": "source, all original worktrees and commits, retained evidence and recipes"
-}

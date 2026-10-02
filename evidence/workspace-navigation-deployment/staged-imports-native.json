@@ -1,8 +1,0 @@
-{
-  "installed_core": "/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/agent_comms/__init__.py",
-  "installed_toad": "/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/toad/__init__.py",
-  "installed_textual": "/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/textual/__init__.py",
-  "native_cli": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
-  "native_complete_manifest_verified": true,
-  "activated": false
-}

@@ -1,2 +1,0 @@
-Current production Python identifiers: 0 obsolete names / epoch identifiers
-

@@ -1,3 +1,0 @@
-{"root": ".artifacts/d22-integrated-current", "messages": 120, "finite_current_json": true, "identities_and_envelope_digests_retained": true}
-{"root": ".artifacts/d22-integrated-current/history/source-0", "messages": 8400, "finite_current_json": true, "identities_and_envelope_digests_retained": true}
-{"root": ".artifacts/d22-integrated-current/history/source-1", "messages": 20, "finite_current_json": true, "identities_and_envelope_digests_retained": true}

@@ -1,6 +1,0 @@
-PHYSICAL_PARENT_STATS SessionStatsData(session_id='c9c3cbe803e640ae9e6dfd89361a9e20', session_file='/var/tmp/ac-sealed-test-5v9ly7d9/sessions/enrolled-c9c3cbe803e640ae9e6dfd89361a9e20.jsonl', context_usage=PiContextUsage(tokens=7888, context_window=32768))
-PHYSICAL_PARENT_STATE StateData(session_id='c9c3cbe803e640ae9e6dfd89361a9e20', session_file='/var/tmp/ac-sealed-test-5v9ly7d9/sessions/enrolled-c9c3cbe803e640ae9e6dfd89361a9e20.jsonl', session_name=None, native_input_proof_capability='pi-native-input-v1-live-only', model=PiModel(provider='response-local', id='fixture', name='Local response fixture', context_window=32768), thinking_level='off', message_count=2, pending_message_count=0, is_streaming=False, is_compacting=False)
-FIRST_SEND_LATENCY_SECONDS 0.013855330995284021
-ACTUAL_WORKER_LOG 
-.
-1 passed in 14.71s

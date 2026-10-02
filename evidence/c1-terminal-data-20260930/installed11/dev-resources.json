@@ -1,8 +1,0 @@
-{
-  "owner": "Einstein joint actual input visibility gate",
-  "purpose": "Existing terminal ANSI reviewer only; no installed candidate/production override",
-  "resources": {
-    "pyte": "/home/ts/wt/toad-cleanup-tc2-sdk-20260929/.venv/lib/python3.14/site-packages/pyte",
-    "wcwidth": "/home/ts/wt/toad-cleanup-tc2-sdk-20260929/.venv/lib/python3.14/site-packages/wcwidth"
-  }
-}
