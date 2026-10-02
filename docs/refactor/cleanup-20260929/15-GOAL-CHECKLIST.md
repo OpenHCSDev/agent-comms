@@ -26,12 +26,30 @@ natural compaction, triage cancellation and distinct continuation passed;
 they are NOT in this default package. Mendel510 owns current-producer historical
 carry, including immutable original proof/source/UNKNOWN preservation.
 
-Arendt516 migrates all launch-config/auth/settings consumers through existing
-types. Heisenberg311 owns Live/Rendered/Measured body state and every readiness/
+Core516 and510 are now merged, with paired Toad315 also merged. The qualified
+next package is Corec601 / Toadc7f5 / Text2382 / Native5184; it is not the default
+yet. Arendt's existing launch owner replaces duplicate config/auth/settings
+readers (70 production lines deleted). Mendel's current-source historical carry
+passed against installed Native6 readers, preserving639 inputs/bindings, four
+original source proofs, three native commit/publication links and394 UNKNOWN.
+Parent owns the fresh stopped publication; Arendt/Mendel prepare the existing
+operator inputs without another build or provider repeat.
+
+Einstein520 owns the genuinely unimplemented S1 task-aware timing, extending
+existing authored task/source and native policy owners. Hard budget admission
+remains independent; task completion is not inferred from assistant stop or goal
+status. Singer515 is merged and Sch518 shares its installed candidate: actual joined
+manifest callbacks/CLI and idle-owner failure/recovery passed; final existing
+fixture checks and ready receipts are finishing. These are not yet live.
+
+Heisenberg311 owns Live/Rendered/Measured body state and every readiness/
 interaction consumer; Kepler23 delivered complete-subtree strips on disjoint
 Textual source. Restored history must paint its existing lines, not rebuild
 widgets. Actual frame delivery/motion inspection correlated with profiling is
 final acceptance, not screenshot/readability or capture FPS.
+His all-three-body source/style/resize/retirement/reentry/disposal checks passed;
+the public-workload motion/profile recording is now running and being inspected
+during execution. No final fluidity acceptance is claimed yet.
 
 The full original goal remains active. Historical checkpoint notes below
 record earlier states and do not override this section.

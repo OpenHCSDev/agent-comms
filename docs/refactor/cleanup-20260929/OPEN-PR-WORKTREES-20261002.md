@@ -1,22 +1,20 @@
 # Handoff: open PRs, owners and worktrees
 
-Checked GitHub and local worktrees at **2026-10-02T07:54:22.695127+00:00**. 9 open PRs, 8 drafts.
+Checked GitHub and local worktrees at **2026-10-02T08:29:58.233999+00:00**. 7 open PRs, 6 drafts.
 
 ## Open PRs
 
 | PR | Owner | Open for | Worktree | Branch | Scope |
 |---|---|---|---|---|---|
-| [agent-comms #432](https://github.com/OpenHCSDev/agent-comms/pull/432) (draft) | Parent | 55.5 hours | [comms-cleanup-live-integration-20260929](/home/ts/wt/comms-cleanup-live-integration-20260929) | `refactor/cleanup-live-integration-20260929` | Integration checklist, operator artifacts and standing instructions. Do not merge this broad draft wholesale. |
-| [agent-comms #510](https://github.com/OpenHCSDev/agent-comms/pull/510) (draft) | Mendel | 3.5 hours | [comms-native-compaction-source-carry-20261002](/home/ts/wt/comms-native-compaction-source-carry-20261002) | `fix/native-compaction-source-carry-20261002` | Outside-src Native6 carry tool. Preserve original source proofs, history and uncertain inputs; await the corrected Native6 producer for stopped qualification. |
-| [agent-comms #515](https://github.com/OpenHCSDev/agent-comms/pull/515) (draft) | Singer | 1.2 hours | [comms-context-manifest-resource-20261002](/home/ts/wt/comms-context-manifest-resource-20261002) | `fix/context-manifest-resource-owner-20261002` | Existing NativeContextManifestData owns joined worker resource and both event-family callers; delete selected forwarding helper. |
-| [agent-comms #516](https://github.com/OpenHCSDev/agent-comms/pull/516) (draft) | Arendt | 0.7 hours | [comms-async-bus-read-publication-custody-20261002](/home/ts/wt/comms-async-bus-read-publication-custody-20261002) | `fix/native-launch-configuration-owner-20261002` | Whole native launch-config/auth/settings migration, including current Native6 |
-| [agent-comms #518](https://github.com/OpenHCSDev/agent-comms/pull/518) (draft) | Schrodinger | 0.4 hours | [comms-stopped-cutover-failure-custody-20261002](/home/ts/wt/comms-stopped-cutover-failure-custody-20261002) | `fix/stopped-cutover-failure-custody-20261002` | Retain stopped failure custody and operation-owned disposition; no input replay |
-| [textual #22](https://github.com/OpenHCSDev/textual/pull/22) | Heisenberg | 3.3 hours | [textual-intrinsic-placement-after18-20261001](/home/ts/wt/textual-intrinsic-placement-after18-20261001) | `perf/native-scene-after21-20261002` | Native layout/scene/raster continuation paired with Toad308. |
-| [textual #23](https://github.com/OpenHCSDev/textual/pull/23) (draft) | Kepler; Heisenberg integration | 0.8 hours | [textual-native-subtree-strips-20261002](/home/ts/wt/textual-native-subtree-strips-20261002) | `feat/native-subtree-strips-20261002` | Complete body strip rendering and original input preparation hook |
-| [toad #309](https://github.com/OpenHCSDev/toad/pull/309) (draft) | compaction499-live-architecture-memory; plan only | 2.1 hours | Planning only; no current matching checkout | `feat/context-tree-inspector-20261002` | User requested planning-only context Tree/detail pane. No implementation now; temporary worktree intentionally deleted. |
-| [toad #311](https://github.com/OpenHCSDev/toad/pull/311) (draft) | Heisenberg | 1.6 hours | [toad-viewport-raster-cpu-continuation-20261001](/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001) | `perf/sidebar-style-after308-20261002` | Full performance continuation after merged308; shared Styles invalidation is pushed in paired Textual22. |
+| [agent-comms #520](https://github.com/OpenHCSDev/agent-comms/pull/520) (draft) | Einstein | 0.3 hours | [comms-retained-human-main-20261001](/home/ts/wt/comms-retained-human-main-20261001) | `feat/task-aware-compaction-timing-20261002` | S1 task-aware compaction timing through existing authored task/source and native policy owners. |
+| [agent-comms #518](https://github.com/OpenHCSDev/agent-comms/pull/518) (draft) | Schrodinger | 0.9 hours | [comms-stopped-cutover-failure-custody-20261002](/home/ts/wt/comms-stopped-cutover-failure-custody-20261002) | `fix/stopped-cutover-failure-custody-20261002` | Retain stopped failure custody and operation-owned disposition; no input replay |
+| [agent-comms #432](https://github.com/OpenHCSDev/agent-comms/pull/432) (draft) | Parent | 56.1 hours | [comms-cleanup-live-integration-20260929](/home/ts/wt/comms-cleanup-live-integration-20260929) | `refactor/cleanup-live-integration-20260929` | Integration checklist, operator artifacts and standing instructions. Do not merge this broad draft wholesale. |
+| [toad #311](https://github.com/OpenHCSDev/toad/pull/311) (draft) | Heisenberg | 2.1 hours | [toad-viewport-raster-cpu-continuation-20261001](/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001) | `perf/sidebar-style-after308-20261002` | Full performance continuation after merged308; shared Styles invalidation is pushed in paired Textual22. |
+| [toad #309](https://github.com/OpenHCSDev/toad/pull/309) (draft) | compaction499-live-architecture-memory; plan only | 2.7 hours | Planning only; no matching checkout | `feat/context-tree-inspector-20261002` | User requested planning-only context Tree/detail pane. No implementation now; temporary worktree intentionally deleted. |
+| [textual #23](https://github.com/OpenHCSDev/textual/pull/23) (draft) | Kepler; Heisenberg integration | 1.3 hours | [textual-native-subtree-strips-20261002](/home/ts/wt/textual-native-subtree-strips-20261002) | `feat/native-subtree-strips-20261002` | Complete body strip rendering and original input preparation hook |
+| [textual #22](https://github.com/OpenHCSDev/textual/pull/22) | Heisenberg | 3.9 hours | [textual-intrinsic-placement-after18-20261001](/home/ts/wt/textual-intrinsic-placement-after18-20261001) | `perf/native-scene-after21-20261002` | Native layout/scene/raster continuation paired with Toad308. |
 
-Exact remote/local heads, creation/update times and uncommitted status are in [the JSON snapshot](OPEN-PR-WORKTREES-20261002.json). No open textual-diff-view PRs were found.
+Exact remote/local heads, creation/update times and local status are in [the JSON snapshot](OPEN-PR-WORKTREES-20261002.json).
 
 ## Current release
 
@@ -49,15 +47,16 @@ and original receiving evidence preserved.
 
 ## Current worker ownership
 
-- Arendt: merged513 declaration owner; full Native6 lifecycle489 integrated with506 and currentmain. Latest reported joined acquisition0e50; Einstein owns the complete configured Native6 workflow and candidate; it passed198.515s. Arendt516 separately owns launch configuration.
-- Einstein: Native6 same-child preparation/compaction506 and the single configured saved-fork/cancel/continue journey after packaging and carry.
-- Mendel: merged514 goal installer/carry; Native6 original-proof carry510. Original sessions,341 UNKNOWN inputs and native proof links remain protected.
-- Kepler: receiving312 and the one urgent Native5 package; Native6 packaging is complete; Kepler now owns disjoint Textual23 complete-body strips, directly coordinated with Heisenberg. No duplicate provider journey.
-- Schrodinger: actual installed goal/native/ACP/physical workflow. Inspect frames during provider and control transitions, not only after exit.
-- Heisenberg: entire remaining Toad311/Textual22 performance scope. Existing frame_enqueued/frame_flushed observer, recorder and profile must yield a frame-delivery timeline and timed motion sequences. Latest60fps capture was reviewed after completion; it does not prove smoothness.
-- Singer: merged511 context assembly/manifests; existing granted async manifest closure and remaining S5 ownership evidence.
+- Parent: Core516/510 and Toad315 merged; fresh stopped publication of their already-qualified matching package is next. Default remains Core9ccc.
+- Arendt: launch-configuration migration complete; existing paired publication preparation. No new build or provider repeat.
+- Mendel: current-source historical Native6 carry complete; fresh stopped source/preimages and existing carry member for publication.
+- Einstein: S1 task-aware timing520 through existing authored task/source and native policy owners.
+- Schrodinger: stopped failure-custody518. Actual idle-owner failure/recovery passed; final corrected fixture checks finishing on the same installed candidate as515.
+- Singer:515 merged after actual installed callback/cancellation/CLI journey. It is absent from516's frozen package; next518 candidate contains it. Remaining S5/S2 source closure continues separately.
+- Heisenberg:311 full remaining performance; native retained body checks passed, actual live-workload motion/profile recording now underway with concurrent inspection.
+- Kepler:Text23 complete-subtree strips delivered; performance integration remains Heisenberg. Two verified disposable receiving prefixes retired, net24.9MB.
 
-Read their actual threads before reporting activity or assigning overlapping work. They coordinate shared-file ownership directly.
+Read their actual threads before reporting activity or assigning overlapping work. Shared-file ownership is direct.
 
 ## Visual performance verification
 
@@ -73,7 +72,7 @@ Reuse a finished isolated checkout by switching to a new branch. Create another 
 
 ## Protected artifacts and cleanup
 
-- Receiving312 worktree contains both the current default508 and new goal513/514 prefix. Do not remove either while in use.
+- Receiving worktree contains the current default9ccc goal/async/sidebar prefix and qualified516 prefix. Preserve both and every active borrower. Verified obsolete0e50/selected509 prefixes were retired; historical receipts remain.
 - Heisenberg worktree contains original recorded performance evidence and current paired source. Clean only disposable output after borrower/process checks.
 - Sch worktree retains merged307 native queue/click evidence and current goal journey.
 - Preserve `/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23`; it is the currently used native package.

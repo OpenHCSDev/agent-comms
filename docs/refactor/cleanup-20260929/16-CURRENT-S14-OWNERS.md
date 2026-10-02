@@ -1,3 +1,25 @@
+# Current ownership update — 2026-10-02T08:29Z
+
+The authoritative current checklist is [15-GOAL-CHECKLIST.md](15-GOAL-CHECKLIST.md)
+and the current open-PR/worktree snapshot is [OPEN-PR-WORKTREES-20261002.md](OPEN-PR-WORKTREES-20261002.md).
+The sections below retain earlier evidence and scopes; their old "current" headings
+are historical, not an instruction to reopen completed work.
+
+Default: Core9ccc/Toadf07f/Text2382/Native5184, actual installed native goal and
+physical default-read journeys passed. Core516/510 and Toad315 are merged;
+their already-qualified Corec601/Toadc7f5 package is the next stopped publication,
+owned by parent with Arendt/Mendel preparing the existing operators.
+
+Singer515 is merged after the installed joined callback/cancellation/CLI journey.
+Sch518 owns stopped-failure restoration through the original lifetime; its shared
+installed candidate includes515. Einstein520 owns genuinely unimplemented S1
+through existing authored task/source and compaction policy owners. Heisenberg311
+owns retained rendered body performance and its actual public-workload motion/profile
+run; Kepler23 delivered native subtree strips. No broader performance acceptance or
+new default activation is claimed here. S3/S4 and the full original backlog remain open.
+
+---
+
 # Current owners and release disposition
 
 Updated 2026-10-01 after Core476/477 and Toad266/267/268/269 merged.

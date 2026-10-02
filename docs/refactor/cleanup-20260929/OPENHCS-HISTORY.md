@@ -27,3 +27,16 @@ composes capabilities through C3 MRO; inheritance and composition are not opposi
 Decompose a large class when a real behavior can have an owner and be shared. An
 abstraction is load bearing when consumers rely on its behavior and the old decisions
 are deleted. Tests and the actual installed path confirm the implementation last.
+
+## Reminders for active work
+
+- Find the existing owner before inventing a class.
+- One fact, one owner. A typed mirror is still a mirror.
+- An abstraction earns its place by deleting decisions from its consumers.
+- Migrate the whole family; a mismatch on one path warrants tracing all paths.
+- Returning to rendered history is paint, not parse.
+- A test result is evidence. Tristan's actual workflow is the delivery target.
+- Ship a coherent working checkpoint. Keep unrelated work moving.
+
+Have a concrete architectural judgment and implement it. These reminders are not
+a new approval process or a reason to create another layer of coordination.
