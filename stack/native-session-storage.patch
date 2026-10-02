@@ -1421,13 +1421,6 @@
  /**
   * Context compaction for long sessions.
   *
-@@ -41,4 +41,4 @@
--        ...(first.reasoning !== undefined || second.reasoning !== undefined
-+        ...(first.reasoning !== undefined && second.reasoning !== undefined
--            ? { reasoning: (first.reasoning ?? 0) + (second.reasoning ?? 0) }
-+            ? { reasoning: first.reasoning + second.reasoning }
-             : {}),
-         totalTokens: first.totalTokens + second.totalTokens,
 @@ -5,37 +7,14 @@
   * and after compaction the session is reloaded.
   */
@@ -1470,6 +1463,13 @@
  // ============================================================================
  // Message Extraction
  // ============================================================================
+@@ -61,4 +40,4 @@
+-        ...(first.reasoning !== undefined || second.reasoning !== undefined
++        ...(first.reasoning !== undefined && second.reasoning !== undefined
+-            ? { reasoning: (first.reasoning ?? 0) + (second.reasoning ?? 0) }
++            ? { reasoning: first.reasoning + second.reasoning }
+             : {}),
+         totalTokens: first.totalTokens + second.totalTokens,
 @@ -116,43 +95,20 @@
      }
      return undefined;
