@@ -1,0 +1,16 @@
+{
+  "started_at": 1790950445.5790756,
+  "returned_at": 1790950447.3852139,
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "message": {
+    "seq": 396,
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790950445.5800812,
+    "type": "info",
+    "text": "testing the new history-loading build; please reply tersely if you receive this",
+    "sender_role": "user",
+    "id": "32b7e800d523"
+  },
+  "purpose": "one fresh configured real channel journey after327; no uncertain attempt replayed"
+}

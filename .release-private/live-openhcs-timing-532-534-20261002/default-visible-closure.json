@@ -1,0 +1,119 @@
+{
+  "scope": "Ordinary default entrypoint saved-history startup and final visible Ready inspected after recorder terminal; no scrolling motion or during-capture approval",
+  "receipt": "/home/ts/.cache/agent-scratch/327-default-history-20261002/capture/receipt.json",
+  "receipt_sha256": "a3b8a72516079022ba3a7114f7aeb400fb1b7a5c6b12e272426a31d56ed3d2f8",
+  "capture_complete": true,
+  "complete": true,
+  "duration_seconds": 27.81605025101453,
+  "original_owner_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 4190555,
+      "start_time": 42598608
+    },
+    "original_owner_alive": true
+  },
+  "original_owner_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 4190555,
+      "start_time": 42598608
+    },
+    "original_owner_alive": true
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 2438,
+        "start_ticks": 42615502,
+        "returncode": 0
+      },
+      {
+        "pid": 2442,
+        "start_ticks": 42615719,
+        "returncode": 0
+      },
+      {
+        "pid": 2444,
+        "start_ticks": 42615730,
+        "returncode": 0
+      },
+      {
+        "pid": 2445,
+        "start_ticks": 42615736,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2469,
+        "start_ticks": 42615807,
+        "returncode": 0
+      },
+      {
+        "pid": 2471,
+        "start_ticks": 42615820,
+        "returncode": 0
+      },
+      {
+        "pid": 2472,
+        "start_ticks": 42615844,
+        "returncode": 0
+      },
+      {
+        "pid": 2473,
+        "start_ticks": 42615863,
+        "returncode": 255
+      },
+      {
+        "pid": 2892,
+        "start_ticks": 42617265,
+        "returncode": 0
+      },
+      {
+        "pid": 2897,
+        "start_ticks": 42617293,
+        "returncode": 0
+      },
+      {
+        "pid": 2937,
+        "start_ticks": 42617334,
+        "returncode": 0
+      },
+      {
+        "pid": 3197,
+        "start_ticks": 42618572,
+        "returncode": 0
+      },
+      {
+        "pid": 3203,
+        "start_ticks": 42618603,
+        "returncode": 0
+      },
+      {
+        "pid": 3209,
+        "start_ticks": 42618690,
+        "returncode": 0
+      },
+      {
+        "pid": 3222,
+        "start_ticks": 42618881,
+        "returncode": 0
+      },
+      {
+        "pid": 3373,
+        "start_ticks": 42619123,
+        "returncode": 0
+      }
+    ]
+  },
+  "image_inspected": "/home/ts/.cache/agent-scratch/327-default-history-20261002/capture/after.png",
+  "image_sha256": "2c13c05071c5ac81a9ebf4d37516f6b4d91a3ccc873cc3d22d1545b11d0c8065",
+  "visible": "openhcs-helper saved inbound history, Ready session detail and Ready peer statuses",
+  "mounted_observer": "before/observers/after exports complete,25nativewriter completion events; no motion performance claim"
+}

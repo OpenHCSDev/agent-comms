@@ -1,0 +1,73 @@
+{
+  "state": "Actual configured default327 channel journey complete for ten running recipients",
+  "source_message": {
+    "seq": 396,
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790950445.5800812,
+    "type": "info",
+    "text": "testing the new history-loading build; please reply tersely if you receive this",
+    "sender_role": "user",
+    "id": "32b7e800d523"
+  },
+  "commit_seconds": 1.806138277053833,
+  "reply_count": 10,
+  "reply_seconds": [
+    {
+      "sender": "openhcs-audit-merged-models",
+      "seconds": 31.003230571746826
+    },
+    {
+      "sender": "openhcs-architecture-memory",
+      "seconds": 31.91946506500244
+    },
+    {
+      "sender": "compaction501-live-architecture-memory",
+      "seconds": 32.04199481010437
+    },
+    {
+      "sender": "openhcs-helper2",
+      "seconds": 41.71538233757019
+    },
+    {
+      "sender": "openhcs-audit-merged-runtime",
+      "seconds": 41.73604726791382
+    },
+    {
+      "sender": "openhcs-helper",
+      "seconds": 41.76093125343323
+    },
+    {
+      "sender": "openhcs-audit-open-prs",
+      "seconds": 50.24036169052124
+    },
+    {
+      "sender": "openhcs-pr159-viewer-bind-owner",
+      "seconds": 50.51870274543762
+    },
+    {
+      "sender": "compaction499-live-architecture-memory",
+      "seconds": 50.54725956916809
+    },
+    {
+      "sender": "openhcs-audit-merged-boundaries",
+      "seconds": 50.58094644546509
+    }
+  ],
+  "original_claims": {
+    "triage_pending": 2,
+    "completed": 10
+  },
+  "peer_claims": {
+    "triage_pending": 20,
+    "ignored": 90
+  },
+  "external_pending": [
+    "Linnaeus",
+    "openhcs-headless-bootstrap-worker"
+  ],
+  "observed_at": 1790950542.3193848,
+  "original385_replayed": false,
+  "limits": "One real configured channel input. 31\u201351s still too slow; no controlled latency or scrolling gain claimed.",
+  "new_alerts": []
+}
