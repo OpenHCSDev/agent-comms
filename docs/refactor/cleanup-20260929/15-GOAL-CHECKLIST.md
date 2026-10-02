@@ -1,31 +1,30 @@
-## Goal schema source and preserving installer merged — 2026-10-02
+## Current delivery state — 2026-10-02
 
-Core513 merged57aeb5e and514 mergeda8a3ba05. Merged src/tools are
-byte-identical to staged9ccc. The existing declaration family owns schema
-identity; literal6 and both copied marker construction sites are deleted.
-The existing RuntimeInstallation automatically authenticates/carries changed
-goal constraints during the same stopped publication, preserving492 factrows
-and physical row identities in the actual copied493-row original ledger.
-This is verified source carry, not installed native/UI acceptance.
+Core509/511/513/514 and Toad308/310/312 are merged. The combined installed
+package passed the actual configured saved-fork native set/complete/send and
+physical goal Edit/Clear journey, preserving492 original fact rows and rowids.
+Core506 also passed its198.515s configured saved-fork natural compaction,
+retained-UNKNOWN cancellation and distinct continuation; it is ready, not live.
 
-Kepler312 has the one normal69 Native5 goal package. Sch owns one affected
-saved-fork/native/ACP/physical goal journey; parent owns the one-use publication.
-Default remains508. All19 observed public executable owners were idle, using
-exact508; client3149961 remains open and requires fresh draft/lifetime checks.
-No public store mutation, stop or replay occurred.
+The urgent513/514 publication exposed EXDEV: the shared carry staged under
+/home and renamed into /var/tmp. No database replacement or default-link
+publication occurred. All39 protected files match their preimages. All19
+original owners were restored through the existing normal configured508 start
+path and verified alive/idle. Transient extinct process environments were not
+claimed retained. Failed publication receipts and staged candidates remain.
+Mendel owns destination-filesystem atomic publication for every carry consumer.
+Schrodinger owns the lifecycle failure-custody gap through existing batch types.
+Parent owns the corrected one-use publication and actual default verification.
 
-The latest performance video exists at60fps, but its visual assessment was
-unreviewed/deferred. Heisenberg inspected frames after completion. This fails
-the existing requirement to inspect every integration run while active.
-Heisenberg owns actual application frame-delivery timeline and motion review
-through the existing recorder/frame-flush observer, including held/reverse/End,
-idle and CPU correlation. Captured FPS is not delivered FPS; no smoothness
-or overall CPU gain claim is established. Full311/Textual22 scope continues.
+Arendt516 uses existing launch configuration types, removes three setup copies,
+and migrates auth/settings readers. No independent new config authority.
+Heisenberg311 owns body state/readiness/interaction; Kepler23 delivered the
+complete-subtree strips API on disjoint Textual source. Restored history must
+paint existing strips instead of rebuilding widgets. Actual frame delivery and
+motion inspection, correlated with profiling, remain final acceptance.
 
-Full Native6 lifecycle489/preparation506/carry510 continues independently.
-All original T2/T3/T4 and S1/S3/S4/S5/workspace scope remains active below.
-Historical checkpoint notes follow; current state above supersedes their
-then-current source/installation status.
+The full original goal remains active. Historical checkpoint notes below
+record earlier states and do not override this section.
 
 ## Working checkpoints merged; publication and runtime work continue — 2026-10-02
 
