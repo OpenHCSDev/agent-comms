@@ -5,3 +5,7 @@
 Existing OwnerRestartRequest owns aggregate selection; NativeThreadExecution owns candidate eligibility and ExternalThreadExecution inherits the empty candidate set. Delete independent audience criteria in publication capture and fresh validation, the related historical publisher and stopped task/index/routing/thread-retirement consumers. Inspect the single-owner queued restart check for the same candidate fact. Keep explicit selection/lease/incarnation/idle/fence checks, which are distinct custody facts. No new selection class/guard/store or altered external execution.
 
 Read source and existing refactor-audit AST before editing, then implement the whole family. Final validation is one proportionate batch against the installed actual20-participant snapshot (19managed+1external), without signals/provider/input, and original affected local admission controls. Reuse the same holder only after failed39568 terminal. New reviewed operation/receipt after qualification; never repeat the existing receipt.
+
+## Named request boundary
+
+Queued restart is an explicit named request, not implicit whole-batch participation. Its existing native capability, live-process and captured selection checks remain. Deriving it from implicit restart_candidates would incorrectly couple explicit requests to default batch membership. The inspected one-line queue migration was removed before qualification. Final source changes only the five publisher/carry tool files; the accepted installed library/prefix/native/UI remain unchanged.

@@ -166,7 +166,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner = comms.registry.require(name)
         owner.execution.require_native()
         status = snapshot.statuses[owner.name]
-        if not owner.execution.restart_candidates(owner, status):
+        if not owner.role.executable or not status.active or not owner.process_alive:
             raise RelationViolationError("Queued restart requires a live agent owner")
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
