@@ -19,7 +19,15 @@ imports, before root creation or native/source effects. The evidence harness
 now constructs the original CommsAgent directly with the existing private
 protocol tuple; no test helper or pytest is loaded.
 
-Lovelace owns the successful physical Tree observation through this same held
-owner. Its receipt and the final owned-child/runtime retirement receipt are
-pending. No prompt or provider request is dispatched. This check does not
-attribute the historical terminal tail or claim general latency acceptance.
+The local harness reached its 180-second hold limit and exited with TimeoutError
+(exit1). Its original finally.shutdown completed. `owner-terminal.json` retains
+that actual partial receipt; it contains no fabricated PASS. `owner-postexit.json`
+independently verifies both exact process identities absent and both original
+source/proof hashes unchanged after shutdown. No second owner or input was run.
+
+Lovelace owns the physical Tree observation through this same held owner. Its
+successful RPC and operation timestamps must establish the scope completed
+before this deadline; that paired receipt remains pending. The harness dispatches
+no prompt; it does not instrument unrelated startup network traffic. This check
+does not attribute the historical terminal
+tail or claim general latency acceptance.
