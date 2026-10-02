@@ -1,0 +1,11 @@
+# Native operation observation and retirement
+
+Integration owner Mendel; reuse existing checkout. Source main732e8670. Preserve every original input, UNKNOWN, saved source and qualified release proof. Parent owns public337 publication; no new provider probe, worktree, environment or native copy.
+
+Read complete settlement/publication/native operation/child retirement families against original418/407 timelines. Native model finished is not AgentSettled. Original 8.45–15.82 second tail ends after TrackedTurnSession.complete and its AsyncExitStack; acquisition return precedes PrivateSendAdmission.verify. Merged544 observations have not yet reached default and will be supplied by the next parent-owned actual channel run. Do not invent attribution to provider or global SQL lock.
+
+Concrete source relationships under review: TurnSession/native event dispatch, final tracked context proof, NativeCustody/PersistentPiSession borrow and retirement, child process/group/IO retirement, owner tool sockets, selected triage/full operation boundaries and ordinary turn settlement. ChildProcess.stop already joins one stop task; repeated close callers are not automatically repeated process scans. Tool permissions and native launch identity distinguish legitimate acquisitions.
+
+Independent unsafe acquisition in this SAME custody family: NativeCustody.inspect_context base launches through a prepare callback, while BorrowedNative and RetainedNative already implement observation of an existing child. ContextRuntimeRequest/TurnRunner inspection must derive legal observation from custody, not start a child simply to browse. Coordinate309 caller and Arendt (source claim released); no prepare flag or new request/catalog merely to disguise this decision. Preserve explicit preparation/start owners.
+
+Existing NRA AST parser for declarations/all consumer roots first; implement whole owner/caller batch. Retain real concurrency, birth/group/lease/source fences and cancellation cleanup. Batch only proportionate affected sanity and existing installed-path validation last. No timing claim without the original spans. Patterns IDEN-1, IMPL-12/13, BOUND-2; read their actual examples, not just category headings.
