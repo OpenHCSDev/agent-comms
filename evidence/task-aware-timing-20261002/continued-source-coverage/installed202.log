@@ -1,0 +1,225 @@
+{
+  "final_native_inputs": [
+    {
+      "kind": "native_runtime_input",
+      "input_id": "319c8cddedecd5368d21f55036aadda8",
+      "stage": "full",
+      "execution_id": "wirev1fb162e0ddbf678568d8ea79239edb5cdcbbb4999598ade3d6679d4835121414c",
+      "attempt_ordinal": 1,
+      "owner_lookup": "54fbaa19c3a1ac6b53f9985ffe5c3f53",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "4224a453d65e87ad9ee353af2476e8d0a7004290cd4a058eb44c504130b5859d",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a",
+      "session_file": "/home/ts/wt/a520s202/forks/2026-10-02T15-41-21-251Z_01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a.jsonl",
+      "session_entry_id": "08ef3be4",
+      "request_generation": 3,
+      "llm_context_digest": "334a308dfbbdb6912d6cb76a92f742b13cb570c26a1ba11d896753445c7c38e5",
+      "verdict": null
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "91516672cf6428656e9dec04f991a7bb",
+      "stage": "full",
+      "execution_id": "wirev10da98bac6e960b044dd33ad8128b73ceba878c0469cd6394e4b1e506805f7636",
+      "attempt_ordinal": 1,
+      "owner_lookup": "54fbaa19c3a1ac6b53f9985ffe5c3f53",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "69f824ad1b4ada4352163ef42ea77e359467b332aad0f209ebd52bb2d43fe422",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a",
+      "session_file": "/home/ts/wt/a520s202/forks/2026-10-02T15-41-21-251Z_01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a.jsonl",
+      "session_entry_id": "6086a144",
+      "request_generation": 5,
+      "llm_context_digest": "242443e569986c3df29751f4626cb5943ecb4b902af81306c08240d27eaf3f46",
+      "verdict": null
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "c20b9696dae1d6afea4006fe2288bee2",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "54fbaa19c3a1ac6b53f9985ffe5c3f53",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "facc0d35f934c5a2c6dd444fb083ca69350299d80dfa7955b179df38817815b4",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a",
+      "session_file": "/home/ts/wt/a520s202/forks/2026-10-02T15-41-21-251Z_01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a.jsonl",
+      "session_entry_id": "f2aa4d91",
+      "request_generation": 1,
+      "llm_context_digest": "9c9962aea007e17ff95d9d67dcfed0d4dc59d60a5a842695f2240e3f0e86714d",
+      "verdict": "full"
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "d42cf9df302d93d0b544055832068ae2",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "54fbaa19c3a1ac6b53f9985ffe5c3f53",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "6d0956dd3943a4a0482fc913f25ea9271e7619f987cfe81d8e76c8b97da0af4c",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a",
+      "session_file": "/home/ts/wt/a520s202/forks/2026-10-02T15-41-21-251Z_01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a.jsonl",
+      "session_entry_id": "531183ca",
+      "request_generation": 4,
+      "llm_context_digest": "bbd734887522c0a44190a1be264e6abf13dce276d4105ef7a9970e09368bd548",
+      "verdict": "full"
+    }
+  ],
+  "elapsed_seconds": 205.95891086000483,
+  "failure": "AssertionError: Optional compaction did not publish continuous ACP progress and completion",
+  "settings": [
+    {
+      "source_owner": "openhcs-architecture-memory",
+      "private_owner": "purechannel-owner-0",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42203292,
+      "source_session_file": "/home/ts/wt/a520s102/forks/2026-10-02T10-04-06-010Z_01a0fc12-31fb-7183-99dc-e9c4b8b28618.jsonl",
+      "source_session_sha256": "df8981df8bfb19082ef9f3cee5c70a4a1dcb3863286e9beaabfc0442a42957c6",
+      "owned_fork": "/home/ts/wt/a520s202/forks/2026-10-02T15-41-21-251Z_01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a.jsonl",
+      "original_task_sha256": "079c2d9fcf2bc90817641ff295f5e0ce24b2c51af9cb8bdb91f3bea70a8a1500"
+    }
+  ],
+  "installed_interpreter": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-fork-creation520-installed-20261002/bin/python",
+  "original_sequences": [
+    1
+  ],
+  "proof": {
+    "recipients": 1,
+    "pure_channel": true,
+    "pending_originals_per_owner": 1,
+    "complete_ordered_native_membership": true,
+    "all_original_sealed_receipts": true,
+    "original_claim_count": 1,
+    "dm_or_mention_forcing_full": false,
+    "triage_inputs": 1,
+    "full_inputs": 1,
+    "overlapping_dispatched_native_inputs": false,
+    "all_originals_completed": true,
+    "common_accepted_time": true,
+    "channel_receipts": [
+      {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1fb162e0ddbf678568d8ea79239edb5cdcbbb4999598ade3d6679d4835121414c",
+        "exact_target": "#openhcs",
+        "seq": 3,
+        "message_id": "46ab2c98a9bb",
+        "received_at_ms": 1790955721291
+      }
+    ],
+    "all_original_historical_proofs": true,
+    "all_current_cursors_cover_source": true,
+    "actual_coverage_cursor_envelopes": [
+      {
+        "scope": {
+          "session_id": "purechannel-owner-0",
+          "wire_root_id": "cc4e5c9a2e9741e6b19d137704e32925",
+          "admission": {
+            "incarnation": {
+              "name": "purechannel-owner-0",
+              "created_at": 1790955684.881874
+            },
+            "admission_generation": 3
+          },
+          "owner_pid": 141849
+        },
+        "revision": 7,
+        "observation": {
+          "kind": "verified",
+          "cursor": {
+            "kind": "current_native_cursor",
+            "wire_root_id": "cc4e5c9a2e9741e6b19d137704e32925",
+            "recipient_lookup": "54fbaa19c3a1ac6b53f9985ffe5c3f53",
+            "owner_thread": "purechannel-owner-0",
+            "owner_generation": 1,
+            "owner_admission_generation": 3,
+            "covered_seq": 3,
+            "injected_seq": 1,
+            "input_id": "319c8cddedecd5368d21f55036aadda8",
+            "stage": "full",
+            "session_id": "01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a",
+            "request_generation": 3
+          }
+        }
+      }
+    ],
+    "actual_current_cursors": [
+      {
+        "kind": "current_native_cursor",
+        "wire_root_id": "cc4e5c9a2e9741e6b19d137704e32925",
+        "recipient_lookup": "54fbaa19c3a1ac6b53f9985ffe5c3f53",
+        "owner_thread": "purechannel-owner-0",
+        "owner_generation": 1,
+        "owner_admission_generation": 3,
+        "covered_seq": 3,
+        "injected_seq": 1,
+        "input_id": "319c8cddedecd5368d21f55036aadda8",
+        "stage": "full",
+        "session_id": "01a0fd46-f5e4-76df-9d6a-0da0ed35fb2a",
+        "request_generation": 3
+      }
+    ],
+    "current_original_owner_epochs_alive": true,
+    "refresh_native_input_replays": 0,
+    "task_timing": {
+      "explicit_authored_boundary": [
+        {
+          "seq": 2,
+          "message_id": "ba53224e4386"
+        }
+      ],
+      "new_original_reference": {
+        "seq": 4,
+        "message_id": "50c98e57ed22"
+      },
+      "optional_attempt": "c67f402b9b074e828a800820b505e104",
+      "committed": true,
+      "same_saved_owner_continued": true,
+      "once_channel_reply": "b7116a075f3d",
+      "native_saved_entries": 9563,
+      "provider_configuration_copied": false,
+      "old_input_replays": 0,
+      "default_activation": false
+    }
+  },
+  "public_inputs": 0,
+  "original_seq326_replays": 0,
+  "provider": "actual configured provider",
+  "all_owned_workers_retired": true,
+  "configured_sources_unchanged": true,
+  "bus_reads": [],
+  "retained_bus_bytes": 61955,
+  "compaction_events": []
+}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-retained-human-main-20261001/tests/shared_bus_restart_native.py", line 1446, in <module>
+    asyncio.run(run(parser.parse_args()))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/tests/shared_bus_restart_native.py", line 952, in run
+    return await configured_pure_channel(arguments)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/tests/shared_bus_restart_native.py", line 348, in configured_pure_channel
+    assert {'start', 'progress', 'end'} <= {event['phase'] for event in compaction_events}, \
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Optional compaction did not publish continuous ACP progress and completion

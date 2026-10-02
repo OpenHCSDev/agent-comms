@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .field_codec import FieldCodec
+from .compaction_identity import NativeCommitIdentity
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
@@ -46,6 +47,22 @@ class SummaryFiles(PiPayload):
             [path.encode("utf-8").hex() for path in paths]
             for paths in (self.read_files, self.modified_files)
         ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ManagedSummaryMetadata(PiPayload):
+    """A marker-only native commit preserves absent file-operation metadata."""
+
+    strict_fields = True
+    agent_comms_commit: NativeCommitIdentity = field(metadata={"wire_name": "agentCommsCommit"})
+
+    def commit_metadata(self):
+        return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ManagedSummaryFiles(SummaryFiles, ManagedSummaryMetadata):
+    """Published file operations reuse the original summary file algorithm."""
 
 
 @dataclass(frozen=True)

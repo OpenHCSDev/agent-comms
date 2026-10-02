@@ -59,3 +59,63 @@ No fresh configured-provider fork or replay is needed to investigate this cause.
 
 Patterns: IDEN-1 (usage versus retained size), IDEN-2 (two meanings of summary
 tokens), TIME-7 (a second prompt allowance), BOUND-2 (bypassing the context owner).
+
+## Native artifact and final sanity
+
+The normal stock recipe produced immutable native `ad533a9f08581561` from corrected
+source `d5236843`. Full tree and import inventory are verified in the builder's
+`evidence/summary-generation-policy520-native-20261002/artifact-receipt.json`.
+The first patch-anchor failure is preserved separately; no provider input was
+sent by either preparation. This artifact changes three compiled production
+files: 20 lines deleted, 13 added. No native schema changes.
+
+The affected compiled batch passed in 0.267 seconds: short source (27 bytes) and
+map/synthesis source (765000 bytes) kept the same 4096 generation target, complete
+progress and original accumulated provider usage of 5534 per response. Shared
+Responses decoding distinguishes absent reasoning, measured zero and measured
+1000. This is native/SDK sanity with controlled responses, not subscription
+endpoint enforcement or configured saved-owner S1 completion.
+
+After AST: 58 files parsed, zero errors, zero remaining `requireSummaryOutput`
+declarations or references. Source and compiled `CompactionPolicy` are two
+representations of the same build declaration, not separate semantic owners.
+The original529 receipt hash is recorded unchanged. The installed RPC check
+remains pending the matching wheel and package resources.
+
+## Installed receiving result
+
+One local HTTP request through the installed native selected RPC reported output
+5534. The summary returned, native compaction committed once, and the typed
+journal link, original source digest and exact retained facts were checked.
+The installed Core is builder `beb54a1a`, native `ad533a9f08581561`; no source
+overlay, paid call, configured-model experiment, public input or529 replay.
+
+The existing test then failed on its obsolete `ReopenNative.session_file` query,
+after the affected budget path had succeeded. Whole once-admission is **not**
+reported as passed. Both fixture consumers now query the existing native
+identity; no runtime alias was added. Earlier invocation failed before summary
+because five fixture calls still used the removed launcher argument/scalar
+ingress. They were migrated together through the current plural source contract.
+These original failures are retained. No extra compaction is run to repair a
+fixture assertion. The actual worker and provider server are closed.
+
+The canonical scoped result is `summary-budget-source/installed-budget-receipt.json`
+under this feature's evidence directory. Arendt's combined529 receiving owns the
+next distinct configured saved-source/continuation journey. The optional S1
+compaction and next answer remain unfinished; this budget correction ships
+independently when the parent accepts its scoped proof.
+
+## Configured continuation passed on the combined receiving
+
+Arendt529 completed the configured Sol/high saved-history journey on combined
+Core761864c8/nativead533: 42,924,939-byte original source, a peer reply during
+manual summary, one native commit, then one distinct human input Started once
+and answered. Terminal exit0, elapsed162.082 seconds. The original source hash
+is unchanged; native children closed; public inputs and input replays are zero.
+Original52901 remains UNKNOWN and unchanged. The authored receipt is preserved
+in `summary-budget-source/configured529-continuation.json`.
+
+This closes the budget/source-continuation blocker in the actual configured
+SDK/ACP/native path. It does not convert the earlier controlled fixture exit1
+into a whole-test pass, or claim optional task-boundary timing, physical UI or
+provider latency. No repeat was issued by this owner.

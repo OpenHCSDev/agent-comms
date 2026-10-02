@@ -462,7 +462,9 @@ class TurnRunner:
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
-                result = await execution.run()
+                result = await execution.run(
+                    on_compaction=partial(self.effects._emit_event, session_id)
+                )
                 while not inbox.empty():
                     command = inbox.get_nowait()
                     if not isinstance(command, dict) or not (input_id := command.get("_input_id")):

@@ -12,7 +12,7 @@ import hashlib
 
 from acp import spawn_agent_process
 from acp.exceptions import RequestError
-from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+from agent_comms.native_fork import ForkSessionRequest
 from contextlib import nullcontext
 from uuid import uuid4
 import threading
@@ -121,7 +121,9 @@ async def main(package: Path, evidence: Path, source: Path, *, cancel_only=False
             config.mkdir(mode=0o700)
             fork_environment = {key: value for key, value in os.environ.items()
                                 if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
-            fork = await ForkSessionHelper.run(ForkSessionRequest(str(package), str(source), str(project), str(config / 'sessions')),
+            comms = Comms(Path(bus) / "wire")
+            from agent_comms.compaction_journal import CompactionJournal
+            fork = await CompactionJournal(comms.root / 'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(str(package), str(source), str(project), str(config / 'sessions')),
                                                cwd=project, env=fork_environment)
             retained = Path(fork.session_file)
             before = retained.read_bytes()
@@ -134,7 +136,6 @@ async def main(package: Path, evidence: Path, source: Path, *, cancel_only=False
                             "maxTokens": 943717, "compat": {"maxTokensField": "max_tokens"}}],
             }}}))
             (config / "auth.json").write_text(json.dumps({"openrouter": {"type": "api_key", "key": "offline-only-fixture"}}))
-            comms = Comms(Path(bus) / "wire")
             root_id = comms.messaging.initialize_private_initial_protocol()
             comms.owners.pin_private_nk_launch(comms.root, root_id, package)
             comms.registry.declare(Thread("budget-native", frozenset(), str(project), session_file=str(retained),

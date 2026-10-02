@@ -1,0 +1,10 @@
+{
+  "source": "5e0e6ed6e39b7092914279c90fc7416a12fd0818",
+  "result": "70 passed, 2 skipped in 2.63s",
+  "kind": "source sanity only",
+  "risk": "Fork creation authenticates original copied prefix; later untracked and UNKNOWN private input refuse, inherited marker is not child commit. Original fresh O_EXCL enrollment remains distinct.",
+  "native_artifact": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
+  "installed_configured_journey": "pending",
+  "original_201": "preserved, unqualified, no replay/no retroactive creation",
+  "public_changes": false
+}

@@ -1,0 +1,56 @@
+{
+  "revision": "bdf0b454ba45c0f9c4baeae74331660555669b75",
+  "tool": "refactor-audit Package.load",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "parsed": 356,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 127,
+      "kind": "Attribute",
+      "source": "settings.boundary_current"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 57,
+      "kind": "FunctionDef",
+      "source": "def boundary_current(self, retained, owner, registry):\n    return self.reason.boundary_current(retained, self.boundary, owner, registry)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 58,
+      "kind": "Attribute",
+      "source": "self.reason.boundary_current"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 131,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef boundary_current(cls, retained, boundary, owner, registry):\n    return True"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 180,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef boundary_current(cls, retained, boundary, owner, registry):\n    return bool(boundary) and retained.optional_boundary(owner, registry) == boundary"
+    }
+  ],
+  "limits": [
+    "Syntactic attribute names do not prove dynamic dispatch; native and generated code not parsed. Family semantic read covers each recorded boundary_current site."
+  ]
+}
