@@ -14,10 +14,10 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wake_policy import WakePolicy
 
-COORDINATION_SCHEMA_VERSION: Final = 8
+COORDINATION_SCHEMA_VERSION: Final = 9
 
 
-COORDINATION_SNAPSHOT_VERSION: Final = 2
+COORDINATION_SNAPSHOT_VERSION: Final = 3
 
 
 class CoordinatorTable:
@@ -136,7 +136,8 @@ SELECT e.execution_id,
      AND e.current_attempt_ordinal < e.max_attempts
      AND EXISTS (SELECT 1 FROM replay_assessments r
        WHERE r.execution_id = e.execution_id AND r.retry_authorized = 1)
-     AND (e.origin != 'wire' OR EXISTS (SELECT 1 FROM obligations o
-       WHERE o.execution_id = e.execution_id AND o.retryable = 1))
+     AND (e.origin != 'wire' OR (EXISTS (SELECT 1 FROM obligations o
+       WHERE o.execution_id=e.execution_id) AND NOT EXISTS (SELECT 1 FROM obligations o
+       WHERE o.execution_id=e.execution_id AND o.retryable != 1)))
   THEN 1 ELSE 0 END AS authorized
 FROM executions e;""").format(**_schema_context())

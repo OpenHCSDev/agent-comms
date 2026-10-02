@@ -37,6 +37,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_private_inputs import PrivateInputs
 from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -334,7 +335,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert beta is not None and beta.disposition is CompletedAssignment
-    assert beta.exact_target == "#team" and beta.response_message_id
+    assert tuple(receipt.exact_target for receipt in beta.publications) == ("#team",) and beta.publications
     assert len(beta_calls) == 2
     assert "engage only if this concerns your assigned task" in beta_calls[0][1]
     assert "expected: this is yours" in beta_calls[1][1]
@@ -438,7 +439,9 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
-    assert outcome is not None and outcome.exact_target == "sender"
+    assert outcome is not None and tuple(
+        receipt.exact_target for receipt in outcome.publications
+    ) == ("sender",)
     assert len(calls) == 1  # direct FULL, no separate triage invocation
     assert "expected: this is yours" in calls[0][1]
     assert '"audience":"direct"' in calls[0][1]
@@ -663,17 +666,17 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
-    assert outcome is not None and outcome.response_message_id
+    assert outcome is not None and outcome.publications
     assert len(calls) == 1
     assert initial.message.body in calls[0][1]
     assert ("Selected source decisions through " in calls[0][1]) is available
     if available:
-        assert outcome.assignment_id in calls[0][1]
+        assert outcome.assignment_ids[0] in calls[0][1]
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
-                (outcome.assignment_id,),
+                f"SELECT COUNT(*) FROM ({NativeRuntimeInput.source_membership_sql()}) WHERE assignment_id=?",
+                (outcome.assignment_ids[0],),
             ).fetchone()[0]
             == 1
         )
@@ -707,14 +710,14 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     assert await asyncio.to_thread(OptionalAwarenessProjection._build_slot.acquire, True, 2)
     OptionalAwarenessProjection._build_slot.release()
     assert entered.is_set()
-    assert outcome is not None and outcome.response_message_id
+    assert outcome is not None and outcome.publications
     assert len(calls) == 1 and "late context must not appear" not in calls[0][1]
     assert "Optional awareness omitted; original delivered alone" in caplog.text
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
-                (outcome.assignment_id,),
+                f"SELECT COUNT(*) FROM ({NativeRuntimeInput.source_membership_sql()}) WHERE assignment_id=?",
+                (outcome.assignment_ids[0],),
             ).fetchone()[0]
             == 1
         )
@@ -747,10 +750,10 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         admission_generation=1,
     )
     try:
-        assert await projection.render(first_initial, assignment, owner, 1024) == ""
+        assert await projection.render(first_initial, assignment, owner) == ""
         assert entered.is_set()
         for _ in range(40):
-            assert await projection.render(first_initial, assignment, owner, 1024) == ""
+            assert await projection.render(first_initial, assignment, owner) == ""
         assert len(calls) == 1  # no queued/retired builder fleet
         assert await asyncio.wait_for(asyncio.to_thread(lambda: 42), timeout=1) == 42
         second_base = tmp_path / "second"
@@ -765,7 +768,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
             ).run(),
             timeout=3,
         )
-        assert original is not None and original.response_message_id
+        assert original is not None and original.publications
         assert len(native_calls) == 1
     finally:
         release.set()
@@ -774,7 +777,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
 
 
 @pytest.mark.parametrize("kind", ["complete", "incomplete", "oversize"])
-async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
+async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
@@ -801,7 +804,7 @@ async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
         owner_name="beta",
         native_package=tmp_path,
     ).run()
-    assert outcome is not None and outcome.response_message_id
+    assert outcome is not None and outcome.publications
     assert len(calls) == 1 and initial.message.body in calls[0][1]
     assert ("Selected source decisions through " in calls[0][1]) is (kind == "complete")
     assert ("Nonbinding rows omitted: 0" in calls[0][1]) is (kind == "complete")
@@ -821,7 +824,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
-    assert outcome is not None and outcome.response_message_id
+    assert outcome is not None and outcome.publications
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
     assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -829,7 +832,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
             message for message in comms.bus.log.full_history()
-            if message.message_id == outcome.response_message_id
+            if message.reference in tuple(receipt.reference for receipt in outcome.publications)
         )
         # The published own reply is nonbinding for beta, but belongs to the
         # certified scanned prefix. It cannot become a second injected source.
@@ -878,7 +881,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         )
         assert [type(row.execution) for row in rows] == [TriageNativeExecution, FullNativeExecution]
         assert len({row.input_id for row in rows}) == 2
-        assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_id
+        assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_ids[0]
         assert rows[0].execution == TriageNativeExecution()
         assert rows[0].decision is FullSelectedTriage
         assert rows[1].execution.require_attempt().execution_id and rows[1].execution.require_attempt().attempt_ordinal == 1
@@ -1163,7 +1166,8 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
-            "JOIN native_runtime_input i ON i.assignment_id=c.assignment_id "
+            f"JOIN ({NativeRuntimeInput.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
+            "JOIN native_runtime_input i ON i.input_id=m.input_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
         assert tuple(row) == ("deferred", None)
@@ -1235,7 +1239,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
-    assert outcome is not None and outcome.response_message_id
+    assert outcome is not None and outcome.publications
     assert len(calls) == 1
     assert len(comms.bus.dm_history("sender", "beta")) == 2
 
@@ -2055,7 +2059,7 @@ async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, mon
             await execution.run()
         finish.set()
         result = await asyncio.wait_for(task, 10)
-        assert result.response_message_id
+        assert result.publications
         with pytest.raises(IdentityConflict, match="cannot be reused"):
             await execution.run()
         assert len(calls) == 1

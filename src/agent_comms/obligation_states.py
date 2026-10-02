@@ -65,7 +65,12 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
             raise IntegrityViolationError("publication intent is invalid for obligation state")
         if intent is None and self.requires_intent:
             raise IntegrityViolationError("publishing and published obligations require intent")
-        if (receipt is not None) != self.published:
+        self.validate_receipt(receipt)
+        if receipt is not None:
+            intent.validate_receipt(receipt)
+
+    def validate_receipt(self, receipt) -> None:
+        if receipt is not None:
             raise IntegrityViolationError("publication receipt exists iff published")
 
 
@@ -133,6 +138,12 @@ class PublishedResponse(ResponseState):
     @property
     def receipt_seq(self):
         return self.seq
+
+    def validate_receipt(self, receipt) -> None:
+        if receipt is None:
+            raise IntegrityViolationError("publication receipt exists iff published")
+        if (receipt.message_id, receipt.seq) != (self.message_id, self.seq):
+            raise IntegrityViolationError("obligation receipt does not match publication")
 
     @classmethod
     def load(cls, message_id, seq):

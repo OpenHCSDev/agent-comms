@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_contracts import (
@@ -31,6 +33,10 @@ from agent_comms.obligation_states import (
 )
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
+from agent_comms.wake import derive_exact_reply_target
+
+if TYPE_CHECKING:
+    from agent_comms.selected_source_batch import SelectedSource
 
 
 class ExecutionStore:
@@ -54,13 +60,15 @@ class ExecutionStore:
         owner_thread: str,
         max_attempts: int,
         *,
-        assignment_ids: tuple[str, ...] = (),
-        exact_target: str | None = None,
+        sources: tuple[SelectedSource, ...] = (),
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         origin = ExecutionOrigin(origin)
-        if origin is ExecutionOrigin.WIRE and (not assignment_ids or not exact_target):
-            raise IdentityConflict("wire execution requires ordered claims and target")
-        if origin is not ExecutionOrigin.WIRE and (assignment_ids or exact_target is not None):
+        for source in sources:
+            source.assignment.require_committed_source(source.delivery)
+        assignment_ids = tuple(source.assignment.assignment_id for source in sources)
+        if origin is ExecutionOrigin.WIRE and not sources:
+            raise IdentityConflict("wire execution requires ordered original sources")
+        if origin is not ExecutionOrigin.WIRE and sources:
             raise IdentityConflict("claimless execution cannot bind claims")
         with self.session.transaction() as db:
             row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
@@ -72,14 +80,14 @@ class ExecutionStore:
                     e.owner_lookup,
                     e.owner_thread,
                     e.max_attempts,
-                    e.exact_target,
+                    tuple(sorted(row.exact_target for row in snapshot.obligations)),
                     tuple(link.assignment_id for link in snapshot.links),
                 ) != (
                     origin,
                     owner_lookup,
                     owner_thread,
                     max_attempts,
-                    exact_target,
+                    tuple(sorted({derive_exact_reply_target(source.delivery.message) for source in sources})),
                     assignment_ids,
                 ):
                     raise IdentityConflict("execution identity conflicts")
@@ -96,7 +104,6 @@ class ExecutionStore:
                 execution_id=execution_id,
                 origin=origin,
                 lifecycle=QueuedExecution(),
-                exact_target=exact_target,
                 owner_thread=owner_thread,
                 owner_lookup=owner_lookup,
                 revision=1,
@@ -105,8 +112,15 @@ class ExecutionStore:
                 created_at_ms=now,
                 updated_at_ms=now,
             ).insert(db)
-            for ordinal, assignment_id in enumerate(assignment_ids):
+            routes = {}
+            for ordinal, source in enumerate(sources):
+                assignment_id = source.assignment.assignment_id
                 assignment = self.assignments.get(assignment_id)
+                if assignment != source.assignment:
+                    raise IdentityConflict("original selected assignment changed before engagement")
+                assignment.require_committed_source(source.delivery)
+                exact_target = derive_exact_reply_target(source.delivery.message)
+                routes.setdefault(exact_target, None)
                 if (
                     assignment.recipient_lookup != owner_lookup
                     or assignment.lifecycle.execution_id is not None
@@ -125,7 +139,7 @@ class ExecutionStore:
                     updated_at_ms=self.session.now(assignment.updated_at_ms),
                 )
                 ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
-            if origin is ExecutionOrigin.WIRE:
+            for exact_target in routes:
                 ResponseObligation(
                     execution_id,
                     exact_target,
@@ -184,15 +198,15 @@ class ExecutionStore:
                 reason_code=reason_code,
                 updated_at_ms=now,
             )
-            if before.obligation is not None:
+            for obligation in before.obligations:
                 ResponseObligation.update(
                     db,
-                    where="execution_id=?",
-                    parameters=(execution_id,),
+                    where="execution_id=? AND exact_target=?",
+                    parameters=(execution_id, obligation.exact_target),
                     lifecycle=FailedResponse(),
-                    revision=before.obligation.revision + 1,
+                    revision=obligation.revision + 1,
                     reason_code=reason_code,
-                    updated_at_ms=self.session.now(before.obligation.updated_at_ms),
+                    updated_at_ms=self.session.now(obligation.updated_at_ms),
                 )
             for assignment in before.assignments:
                 WakeAssignment.update(

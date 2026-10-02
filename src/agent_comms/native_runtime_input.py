@@ -11,7 +11,6 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
@@ -39,8 +38,18 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[4]
+    version: Literal[5] = field(default=5, kw_only=True)
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        """Create this owner's current declarations on an explicitly fresh store."""
+        from .coordinated_runtime_schema import _schema, _digest
+
+        schema = _schema()
+        for statement in schema.values():
+            db.execute(statement)
+        cls(singleton=1, ddl_digest=_digest(schema)).insert(db)
 
     @classmethod
     def triggers(cls) -> dict[str, str]:
@@ -63,6 +72,12 @@ class PublishedReplyRevision(TypedRow):
 
 @dataclass(frozen=True)
 class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+    @classmethod
+    def source_membership_sql(cls) -> str:
+        return " UNION ALL ".join(
+            member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution)
+        )
+
     def __post_init__(self):
         self.execution
 
@@ -116,7 +131,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 return PublishedReplyRevision(0, 0)
             return PublishedReplyRevision.read(
                 db.execute(
-                    "SELECT COALESCE(MAX(o.receipt_seq),0) AS through_seq, COUNT(*) AS inputs "
+                    "SELECT COALESCE(MAX(o.receipt_seq),0) AS through_seq, COUNT(DISTINCT n.input_id) AS inputs "
                     f"FROM {cls.declared_name} n JOIN {ExecutionRecord.declared_name} e "
                     "ON e.execution_id=n.execution_id AND e.owner_lookup=n.owner_lookup "
                     "AND e.current_attempt_ordinal=n.attempt_ordinal "
@@ -129,7 +144,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )[0]
 
     @classmethod
-    def published_reply(cls, root, reader, user, owner_lookup):
+    def published_replies(cls, root, reader, user, owner_lookup):
         """Join the original tracked input to its exact published execution.
 
         This is a read-only projection of existing records. It never enrolls a
@@ -143,10 +158,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         session_id = reader.session_id
         with cls._publication_read(root) as db:
             if db is None:
-                return None
+                return ()
             rows = cls.select(db, where="input_id=? AND execution_id IS NOT NULL", parameters=(user.input_id,))
             if not rows:
-                return None
+                return ()
             original = rows[0]
             if (
                 original.owner_lookup,
@@ -154,23 +169,21 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 original.session_id,
                 original.session_entry_id,
             ) != (owner_lookup, str(reader.path), session_id, user.id):
-                return None
+                return ()
             attempt = original.execution.require_attempt()
             execution = ExecutionRecord.one(db, execution_id=attempt.execution_id)
             if not attempt.matches_execution(execution, original.owner_lookup):
-                return None
-            return next(
-                (
-                    MessageReference(
-                        obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
-                    )
-                    for obligation in ResponseObligation.select(
-                        db, where="execution_id=?", parameters=(attempt.execution_id,)
-                    )
-                    if obligation.lifecycle.published
-                ),
-                None,
+                return ()
+            obligations = ResponseObligation.select(
+                db, where="execution_id=?", parameters=(attempt.execution_id,)
             )
+            if not obligations or not all(row.lifecycle.published for row in obligations):
+                return ()
+            return tuple(sorted(
+                (MessageReference(row.lifecycle.receipt_seq, row.lifecycle.receipt_message_id)
+                 for row in obligations),
+                key=lambda reference: reference.seq,
+            ))
 
     input_id: str = field(
         metadata={
@@ -180,9 +193,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         }
     )
     stage: type[NativeInputExecution] = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage"))})
-    assignment_id: str = field(
-        metadata={"sql": Column(references=(WakeAssignment, "assignment_id"))}
-    )
     execution_id: str | None = field(
         metadata={"sql": Column(references=(ExecutionRecord, "execution_id"))}
     )
@@ -208,7 +218,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     )
 
     without_rowid = True
-    unique = (("stage", "assignment_id"), ("execution_id", "attempt_ordinal"))
+    unique = (("execution_id", "attempt_ordinal"),)
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
@@ -257,7 +267,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             f"{name}_identity_guard": f"""CREATE TRIGGER {name}_identity_guard
             BEFORE UPDATE ON {name}
             WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
-                OR NEW.assignment_id IS NOT OLD.assignment_id
                 OR NEW.execution_id IS NOT OLD.execution_id
                 OR NEW.attempt_ordinal IS NOT OLD.attempt_ordinal
                 OR NEW.owner_lookup IS NOT OLD.owner_lookup
@@ -310,16 +319,15 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     input_id: str | None = field(
         metadata={"sql": Column(references=(NativeRuntimeInput, "input_id")), "native_context": str}
     )
-    assignment_id: str | None = field(metadata={"native_context": str})
     stage: type[NativeInputExecution] | None = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage")), "native_context": type[NativeInputExecution]})
     session_id: str | None = field(metadata={"native_context": str})
     request_generation: int | None = field(metadata={"native_context": int})
 
     without_rowid = True
     checks = (
-        "(injected_seq=0 AND input_id IS NULL AND assignment_id IS NULL AND stage IS NULL "
+        "(injected_seq=0 AND input_id IS NULL AND stage IS NULL "
         "AND session_id IS NULL AND request_generation IS NULL) OR "
-        "(injected_seq>0 AND input_id IS NOT NULL AND assignment_id IS NOT NULL "
+        "(injected_seq>0 AND input_id IS NOT NULL "
         "AND stage IS NOT NULL "
         "AND session_id IS NOT NULL AND request_generation>0)",
     )

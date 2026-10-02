@@ -7,7 +7,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from .assignment_states import IgnoredAssignment, TriagePendingAssignment
+from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
 from .coordination_tables.assignments import WakeAssignment
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, TextRepresentation
@@ -73,7 +73,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
         from .selected_result import CoordinatedTurn
 
         participant.consume_reply_wait()
-        return CoordinatedTurn.ignored(participant, session, input_id)
+        return CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
 
 
 @dataclass(frozen=True)
@@ -135,7 +135,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     def continue_turn(self, participant, session, input_id):
         from .selected_result import CoordinatedTurn
 
-        return CoordinatedTurn.failed(participant, session, input_id)
+        return CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
 
 
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):

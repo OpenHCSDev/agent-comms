@@ -334,18 +334,32 @@ def next_sealed_assignment(
     Saturated settled pages cannot hide later work. Observation grants no turn;
     the execution still checks live ownership and verifies its original source.
     """
+    pending = pending_sealed_assignments(store, recipient_lookup, owner_name, after_seq=after_seq)
+    return next(iter(pending), None)
+
+
+def pending_sealed_assignments(
+    store: Coordination, recipient_lookup: str, owner_name: str, *, after_seq: int = 0,
+) -> tuple[WakeAssignment, ...]:
+    """Snapshot pending sealed work once, excluding arrivals after this read.
+
+    Page reads share the same original coordinator transaction. Settled rows
+    do not impose an arbitrary work horizon; no historical input is revived.
+    The returned assignments retain each original source and frozen decision.
+    """
+    pending = []
     cursor = after_seq
-    for _ in range(10):
-        selected = sealed_cohort_assignments(store, recipient_lookup, after_seq=cursor, limit=100)
-        for assignment in selected:
-            if assignment.recipient == owner_name and (
-                assignment.lifecycle.triage_pending or assignment.lifecycle.full_pending
-            ):
-                return assignment
-        if len(selected) < 100:
-            return None
-        cursor = selected[-1].wire_seq
-    raise IdentityConflict(f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}")
+    with store.session.read():
+        while True:
+            selected = sealed_cohort_assignments(
+                store, recipient_lookup, after_seq=cursor, limit=100,
+            )
+            pending.extend(assignment for assignment in selected
+                           if assignment.recipient == owner_name
+                           and (assignment.lifecycle.triage_pending or assignment.lifecycle.full_pending))
+            if len(selected) < 100:
+                return tuple(pending)
+            cursor = selected[-1].wire_seq
 
 
 def sealed_cohort_assignments(

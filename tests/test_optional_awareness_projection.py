@@ -22,6 +22,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import WakeCandidateIndex
@@ -253,8 +254,8 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
             owner_name="member000",
             native_package=root,
         ).run()
-        assert outcome is not None and outcome.response_message_id
-        assert outcome.assignment_id == assignment.assignment_id and len(calls) == 1
+        assert outcome is not None and outcome.publications
+        assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
         assert initial.message.body in calls[0][1]
         assert "Selected source decisions through " not in calls[0][1]
 
@@ -271,8 +272,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
             assignment.recipient_lookup,
             owner.name,
             1,
-            assignment_ids=(assignment.assignment_id,),
-            exact_target="sender",
+            sources=(SelectedSource(assignment, initial),),
         )
         current = store.assignments.get(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
@@ -325,15 +325,14 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         older, old_claim = _accepted(comms, store, root_id, "member000", "older")
         newer, new_claim = _accepted(comms, store, root_id, "member000", "newer")
         owner = _owner(comms, "member000")
-        for number, assignment in enumerate((old_claim, new_claim)):
+        for number, (assignment, delivery) in enumerate(((old_claim, older), (new_claim, newer))):
             store.executions.create(
                 f"reply{number}",
                 ExecutionOrigin.WIRE,
                 assignment.recipient_lookup,
                 owner.name,
                 1,
-                assignment_ids=(assignment.assignment_id,),
-                exact_target="sender",
+                sources=(SelectedSource(assignment, delivery),),
             )
         index.maintain(rebuild=True)
         current = store.assignments.get(new_claim.assignment_id)
@@ -396,8 +395,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
             old_claim.recipient_lookup,
             "member000",
             1,
-            assignment_ids=(old_claim.assignment_id,),
-            exact_target="sender",
+            sources=(SelectedSource(old_claim, old),),
         )
         store.participants.advance_generation(
             old_claim.recipient_lookup, "member000", expected_generation=1
@@ -513,8 +511,8 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
         outcome = await runtime.SelectedExecution(
             root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
         ).run()
-        assert outcome is not None and outcome.response_message_id
-        assert outcome.assignment_id == assignment.assignment_id and len(calls) == 1
+        assert outcome is not None and outcome.publications
+        assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
         assert current.message.body in calls[0][1]
         assert "Selected source decisions through " in calls[0][1]
         assert assignment.assignment_id in calls[0][1]
@@ -639,8 +637,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             assignment.recipient_lookup,
             owner.name,
             1,
-            assignment_ids=(assignment.assignment_id,),
-            exact_target="#team",
+            sources=(SelectedSource(assignment, initial),),
         )
         assignment = store.assignments.get(assignment.assignment_id)
         index.maintain(rebuild=True)

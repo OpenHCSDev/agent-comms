@@ -34,7 +34,10 @@ class FullSourceProof(SourceProofRequirement):
 
 class TriageSourceProof(FullSourceProof):
     def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
-        return any(
+        # A mandatory full input can consider pending triage peers in the same
+        # batch. Its original bound source proof is stronger than a triage-only
+        # verdict; never manufacture a second triage input to cover it.
+        return super().proves_source(evidence) or any(
             proof.proves_triage_source(evidence)
             for proof in evidence
         )

@@ -8,36 +8,50 @@ from .bus_publication import CommittedDelivery
 from .channel_targets import is_channel_target
 from .coordination_errors import IdentityConflict
 from .messages import Message
+from .coordination_tables.responses import ResponseObligation
 from .wake import derive_exact_reply_target
 
 
 @dataclass(frozen=True)
 class ResponseConversation:
     responder: FrozenRecipient
-    exact_target: str
+    obligation: ResponseObligation
     sources: tuple[CommittedDelivery, ...]
 
     @classmethod
-    def capture(cls, bus, snapshot):
+    def capture(cls, bus, snapshot, obligation: ResponseObligation):
+        if obligation.execution_id != snapshot.execution.execution_id:
+            raise IdentityConflict("Response obligation belongs to another execution")
         marker = bus.log._private_marker_unlocked()
+        assignments = tuple(
+            assignment for assignment in snapshot.assignments
+            if assignment.lifecycle.exact_target == obligation.exact_target
+        )
         sources = bus.log.delivery_cohorts_unlocked(
-            marker.root_id, tuple(assignment.wire_seq for assignment in snapshot.assignments))
-        if not sources:
-            raise IdentityConflict("Response has no committed conversation source")
+            marker.root_id, tuple(assignment.wire_seq for assignment in assignments)
+        )
+        if not sources or len(sources) != len(assignments):
+            raise IdentityConflict("Response obligation has no complete original conversation")
+        originals = {assignment.source for assignment in assignments}
+        if {source.message.reference for source in sources} != originals:
+            raise IdentityConflict("Response conversation lost an original source")
+        if any(derive_exact_reply_target(source.message) != obligation.exact_target
+               for source in sources):
+            raise IdentityConflict("Response obligation differs from its original routes")
         return cls(
             FrozenRecipient(snapshot.execution.owner_lookup, snapshot.execution.owner_thread),
-            snapshot.execution.exact_target,
+            obligation,
             sources,
         )
 
     def audience(self, message: Message):
         if message.sender != self.responder.canonical_thread:
             raise IdentityConflict("Response conversation sender changed")
-        if message.target != self.exact_target:
+        if message.target != self.obligation.exact_target:
             raise IdentityConflict("Response conversation route changed")
         members = {}
         for source in self.sources:
-            if derive_exact_reply_target(source.message) != self.exact_target:
+            if derive_exact_reply_target(source.message) != self.obligation.exact_target:
                 raise IdentityConflict("Response conversation differs from original route")
             audience = source.audience
             participants = list(audience.recipients)
@@ -51,8 +65,8 @@ class ResponseConversation:
                     raise IdentityConflict("Conversation participant identity changed")
         members.pop(self.responder.recipient_lookup, None)
         recipients = tuple(members.values())
-        if not is_channel_target(self.exact_target):
-            recipients = tuple(m for m in recipients if m.canonical_thread == self.exact_target)
+        if not is_channel_target(self.obligation.exact_target):
+            recipients = tuple(m for m in recipients if m.canonical_thread == self.obligation.exact_target)
         revision = hashlib.sha256(
             "\n".join(source.audience.digest for source in self.sources).encode()
         ).hexdigest()

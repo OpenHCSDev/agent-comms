@@ -23,7 +23,6 @@ from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
-from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.recovery import (
     ACPClientConnectivity,
     ConnectivityFacet,
@@ -106,20 +105,14 @@ class AttemptStore:
             )
             if updated.rowcount != 1:
                 raise IntegrityViolationError("retry safety revocation lost its assessment")
-        if (
-            execution.origin is ExecutionOrigin.WIRE
-            and snapshot.obligation is not None
-            and snapshot.obligation.lifecycle.deferred
-        ):
-            ResponseObligation.update(
-                db,
-                where="execution_id=?",
-                parameters=(request.execution_id,),
-                lifecycle=PendingResponse(),
-                revision=snapshot.obligation.revision + 1,
-                reason_code=None,
-                updated_at_ms=self.session.now(snapshot.obligation.updated_at_ms),
-            )
+        for obligation in snapshot.obligations:
+            if obligation.lifecycle.deferred:
+                ResponseObligation.update(
+                    db, where="execution_id=? AND exact_target=?",
+                    parameters=(request.execution_id, obligation.exact_target),
+                    lifecycle=PendingResponse(), revision=obligation.revision + 1,
+                    reason_code=None, updated_at_ms=self.session.now(obligation.updated_at_ms),
+                )
         if execution.lifecycle.retry:
             for assignment in snapshot.assignments:
                 WakeAssignment.update(
@@ -242,7 +235,7 @@ class AttemptStore:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if snapshot.publication_intent is not None:
+            if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
             before = snapshot.replay
             ReplayAssessments(

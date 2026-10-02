@@ -29,6 +29,7 @@ from .child_process import ProcessIdentity
 from .comms import Comms
 from .coordinated_runtime import SelectedExecution
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .native_pi import _private_session_dir, _trusted_package
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
@@ -190,8 +191,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "status": "terminal",
                 "name": owner.name,
                 "disposition": result.disposition.declared_name if result else None,
-                "response_id": result.response_message_id if result else None,
-                "route": result.exact_target if result else None,
+                "publications": FieldCodec.encode(result.publications) if result else [],
             }
         )
         return 0

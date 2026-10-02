@@ -43,6 +43,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     owner_thread: str
     owner_generation: int
     context: NativeContextProof
+    native_reference: NativeInputReference
     # Prelaunch binding facts: None means no binding was durably written
     # before launch (crash ordering), so equality cannot be established.
     expected_prompt_digest: str | None = None
@@ -54,10 +55,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
 
     @property
     def reference(self) -> NativeInputReference:
-        return NativeInputReference(
-            self.input_id, self.assignment_id, type(self.execution),
-            self.context.session_id, self.context.request_generation,
-        )
+        return self.native_reference
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -90,6 +88,7 @@ class FullHistoricalNativeInput(HistoricalNativeInput):
 @dataclass(frozen=True)
 class _HistoricalSource(TypedRow):
     input_id: str
+    assignment_id: str
     wire_seq: int
     message_id: str
 
@@ -131,8 +130,9 @@ def read_historical_native_inputs(
         assert_native_runtime_schema(db)
         sources = _HistoricalSource.read(
             db.execute(
-                "SELECT n.input_id,c.wire_seq,c.message_id FROM native_runtime_input n "
-                "JOIN wake_claims c ON c.assignment_id=n.assignment_id "
+                "SELECT n.input_id,c.assignment_id,c.wire_seq,c.message_id FROM native_runtime_input n "
+                f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+                "JOIN wake_claims c ON c.assignment_id=member.assignment_id "
                 "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
                 "AND m.recipient_lookup=c.recipient_lookup "
                 "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
@@ -186,8 +186,8 @@ def read_historical_native_inputs(
             # corruption, not a failed equality join.
             if binding.identity != row.identity:
                 raise IdentityConflict("prelaunch binding does not match this live proof")
-            if binding.wire_root_id != wire_root_id or binding.source != MessageReference(source.wire_seq, source.message_id):
-                raise IdentityConflict("prelaunch binding names another canonical source")
+            if binding.wire_root_id != wire_root_id:
+                raise IdentityConflict("Prelaunch binding names another canonical wire root")
             equality = expected_prompt_matches_journal(
                 session_file, binding, evidence=source_reads.for_source(session_file)
             )
@@ -196,16 +196,17 @@ def read_historical_native_inputs(
         evidence.append(
             row.execution.historical_proof(
                 row,
-                lifecycle=store.assignments.get(row.assignment_id).lifecycle,
+                lifecycle=store.assignments.get(source.assignment_id).lifecycle,
                 wire_root_id=wire_root_id,
                 source_seq=source.wire_seq,
                 source_message_id=source.message_id,
-                assignment_id=row.assignment_id,
+                assignment_id=source.assignment_id,
                 input_id=row.input_id,
                 owner_lookup=row.owner_lookup,
                 owner_thread=row.owner_thread,
                 owner_generation=row.owner_generation,
                 context=recorded,
+                native_reference=row.reference,
                 expected_prompt_digest=binding.expected_prompt_digest if binding is not None else None,
                 expected_prompt_equality_established=equality,
             )

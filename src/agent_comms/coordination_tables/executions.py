@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.coordination_errors import ResponseAdmissionBlocked
-
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
@@ -120,7 +118,7 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
-    def retry_authorized(self, replay: ReplayAssessments | None, obligation) -> bool:
+    def retry_authorized(self, replay: ReplayAssessments | None, obligations) -> bool:
         if replay is None:
             return False
         return (
@@ -128,7 +126,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             and replay.allows_retry
             and (
                 self.origin is not ExecutionOrigin.WIRE
-                or (obligation is not None and obligation.lifecycle.retryable)
+                or (bool(obligations) and all(row.lifecycle.retryable for row in obligations))
             )
         )
 
@@ -162,18 +160,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
     updated_at_ms: int = dataclass_field(
         metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
     )
-    exact_target: str | None = dataclass_field(
-        default=None,
-        metadata={
-            "sql": Column(check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256")
-        },
-    )
-
-    def require_response_target(self) -> str:
-        if self.exact_target is None:
-            raise ResponseAdmissionBlocked()
-        return self.exact_target
-
     @projected(view="snapshot", name="status")
     def snapshot_status(self):
         return self.lifecycle.declared_name
@@ -197,13 +183,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         require_optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
-        if self.origin is ExecutionOrigin.WIRE:
-            if self.exact_target is None:
-                raise IntegrityViolationError("wire execution requires an exact target")
-            require_nonempty(self.exact_target, "exact_target")
-            require_bounded(self.exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
-        elif self.exact_target is not None:
-            raise IntegrityViolationError("claimless execution requires null target")
 
     status: str = dataclass_field(
         init=False,
@@ -307,28 +286,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             ),
         },
     )
-    completed_wire_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="CASE WHEN status = 'completed' AND origin = 'wire' THEN execution_id END"
-            ),
-        },
-    )
-    required_obligation_terminal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="CASE WHEN status = 'completed' AND origin = 'wire' THEN 1 END"
-            ),
-        },
-    )
     deferred_replay_id: str | None = dataclass_field(
         init=False,
         default=None,
@@ -359,36 +316,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             ),
         },
     )
-    deferred_obligation_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "                   AND origin = 'wire' THEN execution_id END"
-                )
-            ),
-        },
-    )
-    deferred_obligation_required: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "                   AND origin = 'wire' THEN 1 END"
-                )
-            ),
-        },
-    )
     checks = (
         (
             "(status IN ({unstarted_execution_names}) AND current_attempt_ord"
@@ -400,10 +327,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         (
             "status != 'deferred' OR current_attempt_ordinal IS NULL\n"
             "           OR current_attempt_ordinal < max_attempts"
-        ),
-        (
-            "(origin = 'wire' AND exact_target IS NOT NULL)\n"
-            "      OR (origin != 'wire' AND exact_target IS NULL)"
         ),
     )
     unique = (
@@ -418,7 +341,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
         from agent_comms.coordination_tables.attempts import ReplayAssessments
         from agent_comms.coordination_tables.participants import Participants
-        from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
             ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
@@ -446,24 +368,9 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                 deferred=True,
             ),
             ForeignKey(
-                ("wire_execution_id",), ResponseObligation, ("execution_id",), deferred=True
-            ),
-            ForeignKey(
-                ("completed_wire_id", "required_obligation_terminal"),
-                ResponseObligation,
-                ("execution_id", "success_terminal"),
-                deferred=True,
-            ),
-            ForeignKey(
                 ("deferred_replay_id", "deferred_replay_required"),
                 ReplayAssessments,
                 ("execution_id", "retry_authorized"),
-                deferred=True,
-            ),
-            ForeignKey(
-                ("deferred_obligation_id", "deferred_obligation_required"),
-                ResponseObligation,
-                ("execution_id", "retryable"),
                 deferred=True,
             ),
         )
@@ -479,7 +386,7 @@ BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
             "execution_frozen_facts": (
                 """CREATE TRIGGER execution_frozen_facts BEFORE UPDATE ON executions
 WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
- OR NEW.exact_target IS NOT OLD.exact_target OR NEW.owner_lookup IS NOT OLD.owner_lookup
+ OR NEW.owner_lookup IS NOT OLD.owner_lookup
  OR NEW.owner_thread IS NOT OLD.owner_thread OR NEW.max_attempts != OLD.max_attempts
  OR NEW.created_at_ms != OLD.created_at_ms OR NEW.revision != OLD.revision + 1
  OR NEW.updated_at_ms < OLD.updated_at_ms OR
@@ -490,6 +397,20 @@ WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
   json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))
 BEGIN SELECT RAISE(ABORT, 'execution transition rewrites frozen authority'); END"""
             ),
+            "execution_response_finality": """CREATE TRIGGER execution_response_finality
+BEFORE UPDATE OF lifecycle ON executions
+WHEN NEW.origin = 'wire'
+BEGIN
+    SELECT RAISE(ABORT, 'wire execution requires original response obligations')
+    WHERE NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id);
+    SELECT RAISE(ABORT, 'completed execution requires all original responses')
+    WHERE json_extract(NEW.lifecycle, '$.kind') = 'completed' AND EXISTS (
+      SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND success_terminal != 1);
+    SELECT RAISE(ABORT, 'deferred execution requires all original responses retryable')
+    WHERE json_extract(NEW.lifecycle, '$.kind') = 'deferred'
+      AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS (
+      SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND retryable != 1);
+END""",
             "execution_failure_receipt_guard": (
                 """CREATE TRIGGER execution_failure_receipt_guard BEFORE UPDATE OF lifecycle
 ON executions

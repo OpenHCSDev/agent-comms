@@ -25,13 +25,17 @@ from agent_comms.typed_table import (
 
 @dataclass(frozen=True, slots=True)
 class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligations"):
-    """One-to-one response obligation whose identity is its execution ID."""
+    """One original reply-route obligation within an execution."""
+
+    @staticmethod
+    def response_record(records, exact_target):
+        return next((row for row in records if row.exact_target == exact_target), None)
 
     execution_id: str = dataclass_field(
         metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
     )
     exact_target: str = dataclass_field(
-        metadata={"sql": Column(check="length(exact_target) BETWEEN 1 AND 256")}
+        metadata={"sql": Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")}
     )
     lifecycle: ResponseState = dataclass_field(metadata={"snapshot_exclude": True})
     reason_code: str | None = dataclass_field(
@@ -167,10 +171,10 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         ),
     )
     unique = (
-        ("execution_id", "success_terminal"),
-        ("execution_id", "retryable"),
-        ("execution_id", "intent_settled"),
-        ("execution_id", "receipt_settled"),
+        ("execution_id", "exact_target", "success_terminal"),
+        ("execution_id", "exact_target", "retryable"),
+        ("execution_id", "exact_target", "intent_settled"),
+        ("execution_id", "exact_target", "receipt_settled"),
     )
 
     @classmethod
@@ -236,8 +240,8 @@ END""",
             "obligation_target_matches_execution_insert": """CREATE TRIGGER obligation_target_matches_execution_insert
 BEFORE INSERT ON obligations
 WHEN NOT EXISTS (
-    SELECT 1 FROM executions WHERE execution_id = NEW.execution_id
-      AND origin = 'wire' AND exact_target = NEW.exact_target
+    SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id
+    WHERE e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target
 )
 BEGIN
     SELECT RAISE(ABORT, 'obligation target does not match wire execution');
@@ -245,8 +249,8 @@ END""",
             "obligation_target_matches_execution_update": """CREATE TRIGGER obligation_target_matches_execution_update
 BEFORE UPDATE OF exact_target ON obligations
 WHEN NOT EXISTS (
-    SELECT 1 FROM executions WHERE execution_id = NEW.execution_id
-      AND origin = 'wire' AND exact_target = NEW.exact_target
+    SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id
+    WHERE e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target
 )
 BEGIN
     SELECT RAISE(ABORT, 'obligation target does not match wire execution');
@@ -280,7 +284,7 @@ BEGIN
     SELECT RAISE(ABORT, 'published obligation requires matching receipt')
     WHERE json_extract(NEW.lifecycle, '$.kind') = 'published' AND NOT EXISTS (
         SELECT 1 FROM publication_receipts
-        WHERE execution_id = NEW.execution_id
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
           AND message_id = json_extract(NEW.lifecycle, '$.message_id') AND seq = json_extract(NEW.lifecycle, '$.seq')
     );
 END""",
@@ -292,21 +296,21 @@ BEGIN
 END""",
             "obligation_receipt_requires_published": """CREATE TRIGGER obligation_receipt_requires_published
 BEFORE UPDATE OF lifecycle ON obligations
-WHEN EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id = OLD.execution_id)
+WHEN EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
  AND json_extract(NEW.lifecycle, '$.kind') != 'published'
 BEGIN
     SELECT RAISE(ABORT, 'frozen receipt requires published obligation');
 END""",
             "obligation_state_with_intent": """CREATE TRIGGER obligation_state_with_intent
 BEFORE UPDATE OF lifecycle ON obligations
-WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id)
+WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
   AND json_extract(NEW.lifecycle, '$.kind') NOT IN ({intent_response_names})
 BEGIN
     SELECT RAISE(ABORT, 'frozen intent cannot return to pending obligation');
 END""",
             "obligation_target_frozen": """CREATE TRIGGER obligation_target_frozen
 BEFORE UPDATE OF exact_target ON obligations
-WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id)
+WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
 BEGIN
     SELECT RAISE(ABORT, 'publication target is frozen');
 END""",

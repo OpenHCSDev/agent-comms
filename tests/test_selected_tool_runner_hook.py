@@ -18,6 +18,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_input_record import FullNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
 from agent_comms.selected_actions import SelectedExistingFileWrite
@@ -57,11 +58,13 @@ def nominal_broker_stub(monkeypatch):
         with store.session.read():
             row = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
         assert row is not None
-        assert row.assignment_id == admission.wake_assignment_id
+        assert admission.wake_assignment_id in row.execution.source_assignment_ids(
+            store.session._connection, input_id
+        )
         assert row.owner_thread == owner
         assert row.owner_lookup == admission.recipient_lookup
         assert row.attempt_ordinal == admission.attempt_ordinal == 1
-        assert row.stage == "full" and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
+        assert row.stage is FullNativeExecution and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
         assert (
             comms.registry.snapshot().admission_generations[owner]
             == admission.owner_admission_generation
@@ -139,7 +142,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=private_root
         ).run()
-    ).response_message_id
+    ).publications
     assert len(calls) == 1
     assert "normal read, bash, edit and write tools." in calls[0][1]
     assert "selected_claimed_write" not in calls[0][1]
@@ -170,7 +173,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         native_package=private_root,
         selected_tool_intent=SelectedToolIntent(),
     ).run()
-    assert result is not None and result.response_message_id
+    assert result is not None and result.publications
     assert len(calls) == 1
     assert path.read_text(encoding="utf-8") == "after"
     assert (root / "native-sessions").is_dir()
@@ -205,7 +208,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         native_package=private_root,
         selected_tool_intent=intent_type(),
     ).run()
-    assert result is not None and result.response_message_id
+    assert result is not None and result.publications
     assert len(calls) == len(kwargs_seen) == len(bound) == 1
     admission, owner, session_dir, input_id = bound[0]
     assert owner == "beta" and admission.source_seq == initial.message.seq

@@ -80,6 +80,25 @@ class CodingToolOwner:
     input_id: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
 
+    def for_original(self, assignment, operation_id) -> CodingToolOwner:
+        """Project the same native grant onto an actually included original."""
+        from .native_runtime_input import NativeRuntimeInput
+
+        with self.store.session.read():
+            native = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)
+            if native is None or assignment.assignment_id not in native.execution.source_assignment_ids(
+                self.store.session._connection, self.input_id
+            ):
+                raise SelectedToolDenied("Tool original is absent from the reserved native batch")
+        return replace(self, admission=replace(
+            self.admission,
+            source_seq=assignment.wire_seq,
+            source_message_id=assignment.message_id,
+            wake_assignment_id=assignment.assignment_id,
+            wake_revision=assignment.revision,
+            operation_id=operation_id,
+        ))
+
     def admit(self, call: CodingCall) -> None:
         verify_sent_full_input(self.store, self.admission, self.owner_name, self.input_id)
         verify_selected_wake(self.comms, self.store, self.admission, self.owner_name)

@@ -40,15 +40,12 @@ def _insert(db, key="1"):
     return PromptBinding(
         input_id=key * 32,
         stage=TriageNativeExecution,
-        assignment_id="claim",
         execution_id=None,
         attempt_ordinal=None,
         owner_lookup="2" * 32,
         owner_thread="owner",
         owner_generation=1,
         wire_root_id="3" * 32,
-        source_seq=1,
-        message_id="message",
         expected_prompt_digest="a" * 64,
         bound_at_ms=1,
     ).insert(db)
@@ -95,7 +92,7 @@ def test_symlink_ancestor_refused(path):
     [
         "CREATE TRIGGER unrelated_insert_suppressor BEFORE INSERT ON prompt_binding "
         "BEGIN SELECT RAISE(IGNORE); END",
-        "CREATE INDEX unrelated_index ON prompt_binding(assignment_id)",
+        "CREATE INDEX unrelated_index ON prompt_binding(owner_thread)",
         "CREATE VIEW unrelated_view AS SELECT * FROM prompt_binding",
         "CREATE TABLE unrelated_table (x)",
         "DROP TRIGGER prompt_binding_delete_guard",
@@ -290,10 +287,10 @@ if len(sys.argv) > 2:
             os.kill(os.getpid(), signal.SIGKILL)
     s.os.fsync = crash
     with s.sidecar_connection(p, PromptBinding) as db:
-        PromptBinding(input_id='1'*32,stage=TriageNativeExecution,assignment_id='claim',
+        PromptBinding(input_id='1'*32,stage=TriageNativeExecution,
             execution_id=None,attempt_ordinal=None,owner_lookup='2'*32,
             owner_thread='owner',owner_generation=1,wire_root_id='3'*32,
-            source_seq=1,message_id='message',expected_prompt_digest='a'*64,
+            expected_prompt_digest='a'*64,
             bound_at_ms=1).insert(db)
 print('OK', flush=True)
 """

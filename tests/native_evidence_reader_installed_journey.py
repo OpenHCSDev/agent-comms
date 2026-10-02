@@ -135,9 +135,10 @@ async def main():
                                               native_package=PACKAGE,session_file=saved).run()
             assert 'site-packages' in native_package.__file__
             with Coordination(str(root/'coordination.sqlite3')) as verified:
+                (publication,) = result.publications
                 receipt=verified.session._connection.execute(
                     'SELECT message_id,seq FROM publication_receipts WHERE message_id=?',
-                    (result.response_message_id,),
+                    (publication.message_id,),
                 ).fetchone()
             assert receipt is not None
             with comms.bus.log._record_snapshot() as (_,records):

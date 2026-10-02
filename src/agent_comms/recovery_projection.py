@@ -31,8 +31,11 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
 
 from .attempt_states import AttemptState
+from .coordination_errors import IntegrityViolationError
 from .execution_states import ExecutionState
 from .obligation_states import ResponseState
+from .coordination_tables.responses import ResponseObligation
+from .coordination_tables.publications import PublicationReceipts
 from .recovery_states import RecoveryCondition
 from .typed_table import SQLiteJournalMode, SQLiteUserVersion, TypedRow
 
@@ -79,12 +82,11 @@ class ProjectedExecution:
     is_current: bool = field(metadata={"wire_name": "isCurrent"})
     attempt: ProjectedAttempt | None
     can_retry: bool = field(metadata={"wire_name": "canRetry"})
-    publication: str | None
+    publications: tuple[str, ...]
 
     def __post_init__(self):
-        if self.publication is not None and self.publication not in {
-            member.publication() for member in ResponseState.members_with(ResponseState)
-        }:
+        allowed = {member.publication() for member in ResponseState.members_with(ResponseState)}
+        if any(value not in allowed for value in self.publications):
             raise ValueError("unknown publication status")
 
 
@@ -119,7 +121,7 @@ class AvailableRecoveryProjection:
     last_recovery: ProjectedRecovery | None = field(metadata={"wire_name": "lastRecovery"})
     connectivity: ProjectedConnectivity | None
 
-    schema: Literal[1] = field(default=1, metadata={"wire_required": True, "wire_order": -2})
+    schema: Literal[2] = field(default=2, metadata={"wire_required": True, "wire_order": -2})
     availability: Literal["available"] = field(
         default="available", metadata={"wire_required": True, "wire_order": -1}
     )
@@ -131,7 +133,7 @@ class AvailableRecoveryProjection:
 @dataclass(frozen=True, slots=True)
 class UnavailableRecoveryProjection:
     reason: ProjectionFailure
-    schema: Literal[1] = field(default=1, metadata={"wire_required": True, "wire_order": -2})
+    schema: Literal[2] = field(default=2, metadata={"wire_required": True, "wire_order": -2})
     availability: Literal["unavailable"] = field(
         default="unavailable", metadata={"wire_required": True, "wire_order": -1}
     )
@@ -153,8 +155,6 @@ class RecoverySelection(TypedRow):
     lease_expires_at_ms: int | None
     backend_done: bool | None
     process_dead: bool | None
-    state: type[ResponseState] | None
-    receipts: Literal[0, 1]
     retry_authorized: bool
 
     def __post_init__(self):
@@ -241,14 +241,11 @@ def _read_in_transaction(
         connection.execute(
             "SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, "
             "a.attempt_ordinal, a.phase, a.lease_expires_at_ms, a.backend_done, a.process_dead, "
-            "o.state, (SELECT count(*) FROM publication_receipts r "
-            "WHERE r.execution_id = e.execution_id) AS receipts, "
             "(SELECT authorized FROM retry_disposition_basis b "
             "WHERE b.execution_id = e.execution_id) AS retry_authorized "
             "FROM executions e "
             "LEFT JOIN attempts a ON a.execution_id = e.execution_id "
             "AND a.attempt_ordinal = e.current_attempt_ordinal AND a.owner_lookup = e.owner_lookup "
-            "LEFT JOIN obligations o ON o.execution_id = e.execution_id "
             "WHERE e.owner_lookup = ? "
             "ORDER BY (e.execution_id = ?) DESC, e.updated_at_ms DESC, e.execution_id ASC LIMIT 1",
             (owner_lookup, pointer.execution_id),
@@ -284,15 +281,24 @@ def _read_in_transaction(
             if selected.attempt_ordinal is not None
             else None
         )
-        publication: str | None
+        obligations = tuple(ResponseObligation.select(connection,
+            where="execution_id=?", parameters=(execution_id,), order_by=("exact_target",)))
+        receipts = tuple(PublicationReceipts.select(connection,
+            where="execution_id=?", parameters=(execution_id,), order_by=("exact_target",)))
         if origin is ExecutionOrigin.WIRE:
-            if selected.state is None or selected.state.published != (selected.receipts == 1):
+            if not obligations:
                 return UnavailableRecoveryProjection("invalid_store")
-            publication = selected.state.publication()
-        else:
-            if selected.state is not None or selected.receipts != 0:
+            for obligation in obligations:
+                receipt = ResponseObligation.response_record(receipts, obligation.exact_target)
+                try:
+                    obligation.lifecycle.validate_receipt(receipt)
+                except IntegrityViolationError:
+                    return UnavailableRecoveryProjection("invalid_store")
+            if not {row.exact_target for row in receipts} <= {row.exact_target for row in obligations}:
                 return UnavailableRecoveryProjection("invalid_store")
-            publication = None
+        elif obligations or receipts:
+            return UnavailableRecoveryProjection("invalid_store")
+        publications = tuple(row.lifecycle.publication() for row in obligations)
         projected = ProjectedExecution(
             status,
             origin,
@@ -303,7 +309,7 @@ def _read_in_transaction(
                 attempt=observed_attempt,
                 is_current=is_current,
             ),
-            publication,
+            publications,
         )
         audits = ProjectedRecovery.read(
             connection.execute(
