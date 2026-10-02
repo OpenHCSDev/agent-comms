@@ -1,0 +1,465 @@
+{
+  "head": "92d0243612a07f2de7984126df1eaa91a3fe2074",
+  "parser": "NRA audit.findings.Package.load",
+  "parse_failures": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 83,
+      "name": "NativePhaseChanged",
+      "context": "",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 356,
+      "name": "record_request_progress",
+      "context": "TurnSession",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 205,
+      "name": "request_observer",
+      "context": "stream_agent_events",
+      "syntax": "arg"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 294,
+      "name": "request_observer",
+      "context": "TurnSession.__init__",
+      "syntax": "arg"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 301,
+      "name": "request_observer",
+      "context": "TurnSession.__init__",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 301,
+      "name": "request_observer",
+      "context": "TurnSession.__init__",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 331,
+      "name": "NativePhaseChanged",
+      "context": "TurnSession.native_phase_changes",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 346,
+      "name": "observe_request",
+      "context": "TurnSession.consume_native_event",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 363,
+      "name": "request_observer",
+      "context": "TurnSession.record_request_progress",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 364,
+      "name": "request_observer",
+      "context": "TurnSession.record_request_progress",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 334,
+      "name": "NativePhaseChanged",
+      "context": "TurnSession.native_phase_changes",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 252,
+      "name": "request_observer",
+      "context": "stream_agent_events",
+      "syntax": "keyword"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 252,
+      "name": "request_observer",
+      "context": "stream_agent_events",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 96,
+      "name": "record_request_progress",
+      "context": "",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 64,
+      "name": "NativePhaseChanged",
+      "context": "DurableTurn.excursion",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 69,
+      "name": "ModelWaitPhase",
+      "context": "DurableTurn.model",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 419,
+      "name": "request_observer",
+      "context": "OwnedTurn.stream",
+      "syntax": "keyword"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 419,
+      "name": "record_request_progress",
+      "context": "OwnedTurn.stream",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 191,
+      "name": "ModelWaitPhase",
+      "context": "Prompt.on_response",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 146,
+      "name": "ModelRequestProgress",
+      "context": "",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 87,
+      "name": "observe_request",
+      "context": "PiEvent",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 149,
+      "name": "observe_request",
+      "context": "ModelRequestProgress",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 150,
+      "name": "record_request_progress",
+      "context": "ModelRequestProgress.observe_request",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 196,
+      "name": "ModelWaitPhase",
+      "context": "RetryAttemptEvent.apply",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 165,
+      "name": "ModelWaitPhase",
+      "context": "AutoRetryEnd.apply",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 266,
+      "name": "ModelWaitPhase",
+      "context": "CompactionEnd.apply",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 695,
+      "name": "ModelWaitPhase",
+      "context": "SummarizationRetryFinished.apply",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 173,
+      "name": "request_observer",
+      "context": "PrivateSendAdmission.execute",
+      "syntax": "keyword"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 174,
+      "name": "record_request_progress",
+      "context": "PrivateSendAdmission.execute",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 88,
+      "name": "NativePhaseChanged",
+      "context": "SelectedParticipant.native_phase",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 89,
+      "name": "NativePhaseChanged",
+      "context": "SelectedParticipant.native_phase",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 92,
+      "name": "NativePhaseChanged",
+      "context": "SelectedParticipant.record_native_phase",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 155,
+      "name": "request_observer",
+      "context": "TrackedTurnSession.__init__",
+      "syntax": "arg"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 196,
+      "name": "request_observer",
+      "context": "TrackedTurnSession.execute",
+      "syntax": "arg"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 162,
+      "name": "request_observer",
+      "context": "TrackedTurnSession.__init__",
+      "syntax": "keyword"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 233,
+      "name": "request_observer",
+      "context": "TrackedTurnSession.execute",
+      "syntax": "keyword"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 162,
+      "name": "request_observer",
+      "context": "TrackedTurnSession.__init__",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 233,
+      "name": "request_observer",
+      "context": "TrackedTurnSession.execute",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 154,
+      "name": "ModelWaitPhase",
+      "context": "",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 50,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.input_started",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 56,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.tool_ended",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 93,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.model_progress",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 166,
+      "name": "ModelWaitPhase",
+      "context": "CompactionPhase",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 75,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.on",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 266,
+      "name": "ModelWaitPhase",
+      "context": "ToolRunningPhase.tool_ended",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 290,
+      "name": "ModelWaitPhase",
+      "context": "ToolRunningPhase.stalled",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 244,
+      "name": "record_request_progress",
+      "context": "TurnProgress",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 240,
+      "name": "NativePhaseChanged",
+      "context": "TurnProgress.native_phase",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 241,
+      "name": "NativePhaseChanged",
+      "context": "TurnProgress.native_phase",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 245,
+      "name": "record_request_progress",
+      "context": "TurnProgress.record_request_progress",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 94,
+      "name": "ModelWaitPhase",
+      "context": "StatsRequest.settle",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 77,
+      "name": "ModelWaitPhase",
+      "context": "ProgressWatchdog.observe",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 29,
+      "name": "ModelWaitPhase",
+      "context": "test_native_progress_roundtrip_and_phase_clock",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 25,
+      "name": "ModelWaitPhase",
+      "context": "test_native_progress_roundtrip_and_phase_clock",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 54,
+      "name": "ModelWaitPhase",
+      "context": "test_stream_measurements_do_not_republish_unchanged_source_state",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 24,
+      "name": "ModelWaitPhase",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 41,
+      "name": "ModelWaitPhase",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 28,
+      "name": "NativePhaseChanged",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects.consume",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 43,
+      "name": "NativePhaseChanged",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 58,
+      "name": "ModelWaitPhase",
+      "context": "test_new_excursion_declares_both_transitions_without_dispatch_edits",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 71,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 74,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 52,
+      "name": "ModelWaitPhase",
+      "context": "test_new_excursion_declares_both_transitions_without_dispatch_edits",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 68,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 72,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics",
+      "syntax": "Name"
+    }
+  ],
+  "limits": [
+    "Spelling/import/annotation source mapping, not dynamic dispatch proof. Native producer JS unchanged; existing API emits originalrecords."
+  ]
+}
