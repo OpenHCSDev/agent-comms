@@ -166,49 +166,53 @@ async def configured_pure_channel(arguments):
                         dispatched = tuple(row for row in inputs if
                             row.sent_owner_admission_generation.reservation_violation()
                             and row.session_id is None)
-                        active = tuple(name for name in names
-                            if service.registry.require(name).active_turn is not None)
-                        observed = {'elapsed_seconds':time.perf_counter()-begun,
+                    # SQLite is last in the original lock order. Release its
+                    # read snapshot before registry/bus/history observations;
+                    # otherwise an observer can block publisher COMMIT while
+                    # awaiting a registry lock held by that publisher.
+                    active = tuple(name for name in names
+                        if service.registry.require(name).active_turn is not None)
+                    observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
                             'dispatched_unproven_inputs':[{'owner':row.owner_thread,
                                 'stage':row.reference_stage.declared_name,'input_id':row.input_id}
                                 for row in dispatched],
                             'claims':[{'owner':row.recipient,'revision':row.revision,
                                 'disposition':row.lifecycle.declared_name} for row in claims]}
-                        if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
-                            timeline.append(observed)
-                        overlap |= len({row.owner_thread for row in dispatched}) >= 2
-                        triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
-                        full = [row for row in inputs if row.reference_stage is FullNativeExecution]
-                        if len(claims) == len(names) and all(row.lifecycle.completed for row in claims) and not active:
-                            assert len(triage) == len(full) == len(names)
-                            assert all(row.verdict is FullSelectedTriage for row in triage)
-                            assert all(row.session_id and row.session_entry_id for row in inputs)
-                            assert len({row.accepted_at_ms for row in claims}) == 1
-                            assert all(row.lifecycle.mode.triage for row in claims)
-                            receipts = []
-                            for claim in claims:
-                                rows = PublicationReceipts.select(db, where='execution_id=?',
-                                    parameters=(claim.lifecycle.execution_id,))
-                                assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
-                                reply = service.bus.log.message_by_id(rows[0].message_id)
-                                assert reply.sender == claim.recipient and '12' in reply.body
-                                receipts.extend(rows)
-                                history = read_historical_native_inputs(store,wire_root_id=root_id,
-                                    recipient_lookup=claim.recipient_lookup,source_seq=originals[0].seq)
-                                assert len(history) == 2 and all(
-                                    item.expected_prompt_equality_established for item in history)
-                            cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
-                            assert len(cursors) == len(names) and all(
-                                row.covered_seq >= originals[0].seq for row in cursors)
-                            assert overlap, 'No overlapping actual dispatched native inputs observed'
-                            proof = {'recipients':len(names),'pure_channel':True,
-                                'dm_or_mention_forcing_full':False,'triage_inputs':len(triage),
-                                'full_inputs':len(full),'overlapping_dispatched_native_inputs':True,
-                                'all_originals_completed':True,'common_accepted_time':True,
-                                'channel_receipts':FieldCodec.encode(receipts),
-                                'all_original_historical_proofs':True,'all_current_cursors_cover_source':True}
-                            break
+                    if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
+                        timeline.append(observed)
+                    overlap |= len({row.owner_thread for row in dispatched}) >= 2
+                    triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
+                    full = [row for row in inputs if row.reference_stage is FullNativeExecution]
+                    if len(claims) == len(names) and all(row.lifecycle.completed for row in claims) and not active:
+                        assert len(triage) == len(full) == len(names)
+                        assert all(row.verdict is FullSelectedTriage for row in triage)
+                        assert all(row.session_id and row.session_entry_id for row in inputs)
+                        assert len({row.accepted_at_ms for row in claims}) == 1
+                        assert all(row.lifecycle.mode.triage for row in claims)
+                        receipts = []
+                        for claim in claims:
+                            rows = PublicationReceipts.select(db, where='execution_id=?',
+                                parameters=(claim.lifecycle.execution_id,))
+                            assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
+                            reply = service.bus.log.message_by_id(rows[0].message_id)
+                            assert reply.sender == claim.recipient and '12' in reply.body
+                            receipts.extend(rows)
+                            history = read_historical_native_inputs(store,wire_root_id=root_id,
+                                recipient_lookup=claim.recipient_lookup,source_seq=originals[0].seq)
+                            assert len(history) == 2 and all(
+                                item.expected_prompt_equality_established for item in history)
+                        cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
+                        assert len(cursors) == len(names) and all(
+                            row.covered_seq >= originals[0].seq for row in cursors)
+                        assert overlap, 'No overlapping actual dispatched native inputs observed'
+                        proof = {'recipients':len(names),'pure_channel':True,
+                            'dm_or_mention_forcing_full':False,'triage_inputs':len(triage),
+                            'full_inputs':len(full),'overlapping_dispatched_native_inputs':True,
+                            'all_originals_completed':True,'common_accepted_time':True,
+                            'channel_receipts':FieldCodec.encode(receipts),
+                            'all_original_historical_proofs':True,'all_current_cursors_cover_source':True}
+                        break
                 diagnostics = list((service.root/'diagnostics').glob('*.json'))
                 if diagnostics:
                     diagnostic = json.loads(diagnostics[0].read_text())

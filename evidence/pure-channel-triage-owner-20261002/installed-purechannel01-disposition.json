@@ -1,0 +1,74 @@
+{
+  "state": "observation deadline, not native terminal failure; preserved private original partial publications",
+  "production": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+  "root": "/home/ts/wt/p502c01/wire",
+  "native_inputs": 6,
+  "proved_native_inputs": 6,
+  "full_triage": 3,
+  "created_full_executions": 3,
+  "backend_done_process_dead": 3,
+  "publication_receipts": 0,
+  "database_locked_original_activity": [
+    {
+      "thread": "purechannel-owner-0",
+      "state": "idle",
+      "detail": "",
+      "ts": 1790908144.2701404,
+      "diagnostic": {
+        "kind": "unavailable_drain",
+        "owner": {
+          "incarnation": {
+            "name": "purechannel-owner-0",
+            "created_at": 1790908117.3009374
+          },
+          "generation": 5
+        },
+        "error_type": "OperationalError",
+        "reason": "database is locked"
+      }
+    },
+    {
+      "thread": "purechannel-owner-2",
+      "state": "idle",
+      "detail": "",
+      "ts": 1790908149.6608725,
+      "diagnostic": {
+        "kind": "unavailable_drain",
+        "owner": {
+          "incarnation": {
+            "name": "purechannel-owner-2",
+            "created_at": 1790908121.6452367
+          },
+          "generation": 7
+        },
+        "error_type": "OperationalError",
+        "reason": "database is locked"
+      }
+    },
+    {
+      "thread": "purechannel-owner-1",
+      "state": "idle",
+      "detail": "",
+      "ts": 1790908154.842971,
+      "diagnostic": {
+        "kind": "unavailable_drain",
+        "owner": {
+          "incarnation": {
+            "name": "purechannel-owner-1",
+            "created_at": 1790908119.396512
+          },
+          "generation": 6
+        },
+        "error_type": "OperationalError",
+        "reason": "database is locked"
+      }
+    }
+  ],
+  "fixture_source_cause": "Observer held SQLite read snapshot while registry.require and bus/history calls; inverse original wire/bus/registry/SQLite order obstructed publication COMMIT",
+  "fix_owner": "existing driver configured_pure_channel; close SQLite-only observation scope before registry/bus/history; production unchanged",
+  "original_root_sha256": "653e6b6430f1d55036235cad1d112d670ab62213e6a0de22c28d77af6581508b",
+  "input_replays": 0,
+  "private_workers_retired": true,
+  "source_originals_unchanged": true,
+  "next": "new separate fresh owned private02 after fixture source fix; no replays or repairs of01 or public326"
+}
