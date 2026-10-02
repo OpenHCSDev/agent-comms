@@ -142,3 +142,43 @@ operation-owned async resource path, not a consumer-only thread wrapper or a
 connection transferred across threads. Singer keeps cursor proof/participant
 behavior; this draft owns its acquisition/scheduling API. These unfinished
 relations keep the draft non-Ready.
+
+## Incoming 503/507 closure — owned async cursor operation
+
+Normal main integration includes the qualified plural-source and cursor owners
+from #503/#507. Kepler owns migration of `SelectedParticipant.sources`/selection
+to the bounded captured originals and async resource contract; no competing
+scalar selector or copied assignment state is being added.
+
+The existing `Coordination` owner now lends a complete `run_async` operation.
+Its worker opens and closes a connection to the same canonical database; only
+the operation result returns. This is resource callback custody, like the
+existing LockedStore update callback, not a selectable lifecycle policy. The
+existing `join_retirement` accepts its executor Future and retains acquired
+operation custody through cancellation until the connection has closed. No
+SQLite connection is transferred, no background task can later publish after
+the caller releases custody, and no new store or executor registry is created.
+
+`NativeSourceCursor` owns async read/advance/refresh operations using that
+resource. Each invokes the existing read/advance algorithm and its original
+CursorOwner, prefix, participant, native receipt and final publication fences.
+Refresh derives the current registry admission and participant inside that
+same complete operation; it cannot resume an input. No proof predicate or
+2-second auxiliary physical wait policy changed.
+
+All ACP consumers await the original operation: CursorPublication observation
+and refresh, no-selected-input drain projection, and CoordinatedTurn capture
+for completed/ignored/rejected outcomes. Trusted metadata is now async, with
+all session new/load/rename, subscribe and identity publication consumers
+migrated together. Existing test callers have matching async signatures; no
+tests have run during this source pass. CursorDelivery stays on the connection
+event loop and publishes the original observation, never a worker copy of its
+ordering/bookkeeping. The small outer registry scope checks remain explicit
+remaining event-loop acquisition work, not a claim of total async closure.
+
+This checkpoint removes three consumer-built cursor acquisition lifetimes;
+the cursor operation owner supplies them once. Remaining relations are the
+plural selection contribution, bounded goal/foreground addressed iteration,
+full async durability acquisition and current keyed-publication lookup. Final
+validation stays last after their coherent closure. Native5/durable formats,
+original UNKNOWN inputs and all native history remain unchanged.

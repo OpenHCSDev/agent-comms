@@ -811,7 +811,7 @@ async def _exec_error(fd: int, command: str) -> None:
         loop.remove_reader(fd)
 
 
-async def join_retirement(task: asyncio.Task):
+async def join_retirement(task: asyncio.Future):
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
     while not task.done():
