@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import secrets
-from collections.abc import Generator
+from collections.abc import Awaitable, Callable, Generator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 
-from .agent_events import NativePhaseChanged
+from .agent_events import CompactionEvent, NativePhaseChanged
 from .pi_events import TurnContextObserved
 from .bus_publication import stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
@@ -43,6 +43,13 @@ class SelectedParticipant(MroDispatch):
     batch: SelectedSourceBatch
     provider: str
     model: str
+    on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
+
+    @handles(CompactionEvent)
+    async def publish_compaction(self, event: CompactionEvent) -> None:
+        """Lend the same native observation to this acquired output resource."""
+        if self.on_compaction is not None:
+            await self.on_compaction(event)
 
     @handles(ObservedAttestation)
     async def native_source(self, event: ObservedAttestation) -> None:
@@ -94,7 +101,7 @@ class SelectedParticipant(MroDispatch):
 
     @classmethod
     @asynccontextmanager
-    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int):
+    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
         owner, participant, pending = await Coordination.run_async(
             store.session.path,
@@ -121,6 +128,7 @@ class SelectedParticipant(MroDispatch):
                 batch,
                 provider,
                 model,
+                on_compaction=on_compaction,
             )
             await Coordination.run_async(store.session.path, selected.require_current)
             await Coordination.run_worker(lambda: selected.transition(

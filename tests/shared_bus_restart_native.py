@@ -546,6 +546,13 @@ async def configured_task_timing_continuation(arguments):
                 await asyncio.sleep(.1)
         proof['task_timing'] = await configured_task_timing(
             arguments, service, attachment, name, sender, stage, addend=21)
+        from agent_comms.acp_extension import CompactionChangedUpdate
+        events = tuple(item.event for packet in packets
+                       for item in decode_updates(packet['update'].get('_meta'))
+                       if isinstance(item, CompactionChangedUpdate))
+        assert {'start', 'progress', 'end'} <= {event.phase for event in events}, \
+            'Optional compaction did not publish continuous ACP progress and completion'
+        proof['continuous_compaction_phases'] = [event.phase for event in events]
         # The original shared effect records the second new reference in its receipt.
     except BaseException as error:
         failure = f'{type(error).__name__}: {error}'
