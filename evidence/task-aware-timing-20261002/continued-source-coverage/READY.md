@@ -9,3 +9,7 @@ Source normal-merged current main8f0e4d92. Its536 dispatcher changed, so the aff
 Native9f12/SDK0.12.1 are required. Existing stopped carry must add the declaration-derived fork creation table EMPTY before readers open older journals. No old proof/UNKNOWN rewriting, retrospective201 admission or compatibility reader. Optional policy remains explicitly opt-in/off by default; ordinary537 is independent.
 
 This closes S1 implementation and affected configured native/ACP acceptance. It does not claim UI activation, physical compaction presentation, speed improvement, S3 caching or S4 comparative benefit/default activation.
+
+## Normal main537 integration
+
+Published96ab1520 normally merges main537. The continued-source and journal readers use the existing CoordinationStore observation lifetime; original fork/cut coverage and uncertain-input decisions remain intact. Native9f12 is unchanged. The exact normal wheel/SDK projection passed source-resource equality (342 resources), dependency checking and full native trust. No prompt or provider call was repeated. Mendel owns the declaration-derived EMPTY NativeForkCreation carry; its joined installed read remains required before public activation. Optional receiving remains off.

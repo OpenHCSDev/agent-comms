@@ -1,7 +1,7 @@
 {
   "state": "Ready S1 optional authored-task implementation; not default activated",
-  "source": "85201a5ba58a42ab203fcf44c98ef0ff6da3aea0",
-  "integrated_main": "8f0e4d92",
+  "source": "96ab15203a24494ad75dccd0e25f4bb05181b87a",
+  "integrated_main": "cca41ab5",
   "tested_installed_core": "058b72ed",
   "native_manifest": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
   "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-9f12ddf4e22d6d7a/node_modules/@earendil-works/pi-coding-agent",
@@ -54,8 +54,10 @@
   ],
   "remaining_activation_dependency": "Matched native9f12 and existing stopped declaration-derived EMPTY new journal table carry. Mendel owns carry; ordinary537 release remains independent.",
   "remaining_plan_scope": "S3 cache and S4 comparative benefit/default activation remain unfinished, not claimed by this S1 checkpoint.",
-  "main_integration_risk": "536 changed original MRO dispatch; focused9-case crossing sanity retained. Other accepted main custody/scorer changes integrated normally; no repeated configured provider journey.",
+  "main_integration_risk": "537 replaced direct SQLite read lifetimes with original CoordinationStore.observing; cut/fork coverage and UNKNOWN decisions unchanged. Exact joined installed source/native trust passed. Existing empty-table carry and its installed read remain the activation dependency; no repeated provider journey.",
   "excluded_native_test_numstat": [
     "26\t4\tstack/test-native-compaction-progress.mjs"
-  ]
+  ],
+  "installed_joined_core": "96ab15203a24494ad75dccd0e25f4bb05181b87a",
+  "installed_joined_proof": "evidence/task-aware-timing-20261002/continued-source-coverage/main537-installed-source.json"
 }
