@@ -1,5 +1,7 @@
 """Normal prepared bundle: selected RPC -> native commit -> one original bind."""
 
+from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.selected_session import SavedSelectedSession
 import asyncio
 import hashlib
 import json
@@ -161,7 +163,7 @@ async def owner_fixture(
         file = fixture["sessionFile"]
         persistent = retained_native_host(
             child,
-            NativePiRpcLaunch(("node",), tmp_path, {}, Path(file).parent, Path(file), package),
+            NativePiRpcLaunch(("node",), tmp_path, {}, SavedSelectedSession(Path(file).parent, identity=NativeSessionIdentity(fixture["sessionId"], file)), package, configuration=RestartEnvironment.inherit({})),
             NativeSessionIdentity(fixture["sessionId"], file),
         )
         registry = Registration(tmp_path / "registry.json")

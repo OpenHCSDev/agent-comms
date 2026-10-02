@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .native_arguments import NativeArguments
+from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
@@ -394,13 +395,11 @@ class NativePiRpcLaunch:
     session: SelectedSession
     package: Path
 
-    @classmethod
-    def bootstrap(cls, cli, arguments, cwd, environment):
-        """One bootstrap/environment algorithm after original package validation.
+    configuration: RestartEnvironment = field(kw_only=True)
 
-        The caller retains source-selection and input custody. This method only
-        constructs the acquired process resource; it never enrolls a session.
-        """
+    @classmethod
+    def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):
+        """Encode the held launch configuration at the native process boundary."""
         env = dict(environment)
         for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             env.pop(name, None)
@@ -409,10 +408,7 @@ class NativePiRpcLaunch:
         env["PATH"] = os.pathsep.join(
             (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
         )
-        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(Path(
-            env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-            or env.get("PI_CODING_AGENT_DIR") or "~/.pi/agent"
-        ).expanduser().resolve())
+        env.update(configuration.encode_native())
         argv = (
             "node", "--no-global-search-paths",
             "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
@@ -422,9 +418,9 @@ class NativePiRpcLaunch:
         return argv, env
 
     @classmethod
-    def _build(cls, cli, arguments, cwd, environment, session, package):
-        argv, env = cls.bootstrap(cli, arguments, cwd, environment)
-        return cls(argv, cwd, env, session, package)
+    def _build(cls, cli, arguments, cwd, environment, session, package, configuration):
+        argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration)
+        return cls(argv, cwd, env, session, package, configuration=configuration)
 
     @classmethod
     def package_for_command(cls, command: str) -> Path:
@@ -494,7 +490,7 @@ class NativePiRpcLaunch:
         session = SelectedSession.for_launch(saved.parent if saved else cwd, saved, package)
         if saved is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(cli, arguments, cwd, env, session, package)
+        return cls._build(cli, arguments, cwd, env, session, package, RestartEnvironment.inherit(env))
 
     @classmethod
     def tracked(
@@ -555,8 +551,8 @@ class NativePiRpcLaunch:
         arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
-        env = session.launch_environment(agent_dir, environment)
-        return cls._build(cli, tuple(arguments), worktree, env, session, package)
+        env, configuration = session.launch_environment(agent_dir, environment)
+        return cls._build(cli, tuple(arguments), worktree, env, session, package, configuration)
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

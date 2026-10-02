@@ -1,0 +1,98 @@
+{
+  "source": "d92bc51bafb9c482d9d2458abae4c2d42878d78c",
+  "parsed": 311,
+  "omitted": [],
+  "consumers": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 146,
+      "function": "auth_revision",
+      "external_names": [
+        "'PI_CODING_AGENT_DIR'"
+      ],
+      "calls": []
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 96,
+      "function": "open",
+      "external_names": [],
+      "calls": [
+        "auth_revision"
+      ]
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 72,
+      "function": "current_auth",
+      "external_names": [],
+      "calls": [
+        "backend.auth_revision"
+      ]
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 78,
+      "function": "choices",
+      "external_names": [],
+      "calls": [
+        "backend.auth_revision"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 96,
+      "function": "main",
+      "external_names": [
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'PI_CODING_AGENT_DIR'"
+      ],
+      "calls": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 477,
+      "function": "managed",
+      "external_names": [
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'PI_CODING_AGENT_DIR'"
+      ],
+      "calls": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 531,
+      "function": "tracked",
+      "external_names": [],
+      "calls": [
+        "cls.private_environment"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 616,
+      "function": "private_environment",
+      "external_names": [
+        "'PI_CODING_AGENT_DIR'",
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'PI_CODING_AGENT_DIR'",
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'PI_CODING_AGENT_DIR'"
+      ],
+      "calls": []
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 35,
+      "function": "maybe_compact_owner_turn",
+      "external_names": [
+        "'AGENT_COMMS_NATIVE_CONFIG_DIR'",
+        "'PI_CODING_AGENT_DIR'"
+      ],
+      "calls": []
+    }
+  ],
+  "limits": "Lexical AST references; dynamic imports and external native package calls read separately. Native6 selected_session additional boundary remains in #489."
+}

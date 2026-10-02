@@ -328,3 +328,41 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             if owner.process_alive:
                 comms.owners.stop(owner.name)
         assert all(not owner.process_alive for owner in originals)
+
+
+def test_native_configuration_retains_original_home_across_writable_fork(tmp_path, monkeypatch):
+    from agent_comms.owner_launch import RestartEnvironment
+
+    original = tmp_path / "original-home"
+    canonical = original / "credentials"
+    canonical.mkdir(parents=True)
+    auth = canonical / "auth.json"
+    auth.write_text("original credentials")
+    configuration = RestartEnvironment.inherit({
+        "HOME": str(original), "PI_CODING_AGENT_DIR": "~/agent",
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": "~/credentials",
+    })
+    revision = configuration.auth_revision()
+    fork = configuration.for_agent(tmp_path / "fork-policy")
+    monkeypatch.setenv("HOME", str(tmp_path / "different-home"))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "different-agent"))
+    assert fork.native_config == canonical
+    assert fork.agent_directory == tmp_path / "fork-policy"
+    assert fork.auth_revision() == revision
+    assert fork.encode_native() == {
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": str(canonical),
+        "PI_CODING_AGENT_DIR": str(tmp_path / "fork-policy"),
+    }
+    assert str(canonical / "models.json") in fork.settings_paths(tmp_path)
+    assert str(tmp_path / "fork-policy/settings.json") in fork.settings_paths(tmp_path)
+    assert auth.read_text() == "original credentials"
+
+
+def test_native_configuration_uses_original_pi_directory_when_not_explicit(tmp_path):
+    from agent_comms.owner_launch import RestartEnvironment
+
+    configuration = RestartEnvironment.inherit({
+        "HOME": str(tmp_path), "PI_CODING_AGENT_DIR": "~/configured-agent",
+    })
+    assert configuration.native_config == configuration.agent_directory == tmp_path / "configured-agent"
+    assert configuration.for_agent(tmp_path / "output").native_config == tmp_path / "configured-agent"

@@ -1,0 +1,65 @@
+{
+  "source_head": "c6019afd34313db81504a364e3cc4024470a3034",
+  "receiving_main": "c80fcae5",
+  "parsed_production": 311,
+  "parsed_tests": 355,
+  "omitted_production": [],
+  "omitted_tests": [],
+  "external_configuration_declarations": [
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 64,
+      "external_name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 68,
+      "external_name": "PI_CODING_AGENT_DIR"
+    }
+  ],
+  "explicit_launch_constructors": [
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 31,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 166,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 82,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 98,
+      "positional_arguments": 5,
+      "configuration_passed": true
+    }
+  ],
+  "interpretation": "Existing RestartEnvironment declares native discovery and writable directory. NativePiRpcLaunch/RetainedOwnerLaunch retain the decoded configuration. Current Native6 SelectedSession projects writable resources; selected settings and auth consumers use owner behavior. #516 owns this complete configuration migration; #489 implementation is independently merged via #506. AST lexical references do not prove dynamic dispatch."
+}

@@ -18,6 +18,7 @@ from .fresh_private_session import FreshPrivateSession, create_fresh_private_ses
 from .maintenance_barrier import MaintenanceBarrier
 from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
 from .native_pi import NativePiUnavailable, _session_location
+from .owner_launch import RestartEnvironment
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ class SelectedSession:
     def require_launch_header(self) -> None:
         pass
 
-    def launch_environment(self, agent_dir: Path, original) -> dict[str, str]:
+    def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = dict(os.environ)
         for name in (
             "PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD",
@@ -79,15 +80,9 @@ class SelectedSession:
         ):
             environment.pop(name, None)
         environment.update(original or {})
-        # Preserve canonical credentials/global discovery before retry isolation
-        # replaces Pi's writable agent directory. The launch owns normalization.
-        environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = (
-            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-            or environment.get("PI_CODING_AGENT_DIR") or "~/.pi/agent"
-        )
-        environment["PI_CODING_AGENT_DIR"] = str(agent_dir)
+        configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
         environment["PI_OFFLINE"] = "1"
-        return environment
+        return environment, configuration
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.
@@ -283,7 +278,7 @@ class FirstSelectedSession(SavedSelectedSession):
         self.creation.verify_selected_startup()
         FreshPrivateSession.require_launch_header(self.path, self.creation.selected_thinking_level)
 
-    def launch_environment(self, agent_dir: Path, original) -> dict[str, str]:
+    def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         # Original selected-source first-start isolation is a distinct leaf
         # capability, not the configuration of ordinary saved continuation.
         if os.name != "posix":
@@ -291,12 +286,15 @@ class FirstSelectedSession(SavedSelectedSession):
         import pwd
 
         username = pwd.getpwuid(os.geteuid()).pw_name
-        return {
+        environment = {
             "HOME": str(agent_dir), "USER": username, "LOGNAME": username,
             "PATH": os.defpath, "LANG": "C.UTF-8", "TMPDIR": str(self.directory),
-            "PI_OFFLINE": "1", "PI_CODING_AGENT_DIR": str(agent_dir),
-            "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
+            "PI_OFFLINE": "1", "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
         }
+        configuration = RestartEnvironment(
+            home=str(agent_dir), native_config=agent_dir, agent_directory=agent_dir
+        )
+        return environment, configuration
 
     def admit(self, actual: NativeSessionIdentity, runtime_revision) -> Path:
         saved = super().admit(actual, runtime_revision)
