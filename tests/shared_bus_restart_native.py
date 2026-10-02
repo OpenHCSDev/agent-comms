@@ -135,6 +135,12 @@ async def configured_pure_channel(arguments):
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
     service.registry.declare(Thread('human', frozenset(), str(project), role=ThreadRole.USER))
+    if arguments.busy_reader:
+        service.registry.declare(Thread('history-sender', frozenset(), str(project)))
+        service.registry.declare(Thread('history-recipient', frozenset(), str(project)))
+        for index in range(arguments.history):
+            service.messaging.send_initial_cohort('history-sender', 'history-recipient',
+                f'Original private retained history {index}: ' + 'history ' * 400)
     packets, timeline = [], []
     class Observation:
         async def session_update(self, **kwargs):
@@ -144,6 +150,23 @@ async def configured_pure_channel(arguments):
     attachment.on_connect(Observation())
     originals, proof, failure = [], {}, None
     begun = time.perf_counter()
+    reading = asyncio.Event()
+    read_spans = []
+
+    def read_original_bus():
+        started = time.perf_counter()
+        history = service.bus.log.full_history()
+        service.bus.channel_activity()
+        service.bus.last_sent_timestamps()
+        service.bus.pending_counts_all(names)
+        return {'seconds': time.perf_counter() - started, 'messages': len(history)}
+
+    async def observe_original_bus():
+        while not reading.is_set():
+            read_spans.append(await asyncio.to_thread(read_original_bus))
+            await asyncio.sleep(.05)
+
+    observer = asyncio.create_task(observe_original_bus()) if arguments.busy_reader else None
     try:
         sender = service.registry.require('human')
         with _store_lock(service._wire_lock_path):
@@ -283,22 +306,28 @@ async def configured_pure_channel(arguments):
         failure = f'{type(error).__name__}: {error}'
         raise
     finally:
-        await attachment.shutdown()
-        for name in reversed(names):
-            await asyncio.to_thread(service.owners.stop, name)
-        (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
-        (stage/'native-overlap-timeline.json').write_text(json.dumps(timeline,indent=2)+'\n')
-        with Coordination(str(service.root/'coordination.sqlite3')) as store:
-            final_inputs = NativeRuntimeInput.select(store.session._connection)
-        receipt = {'final_native_inputs':FieldCodec.encode(final_inputs),'elapsed_seconds' :time.perf_counter()-begun,'failure':failure,
-            'settings':settings,'installed_interpreter':sys.executable,
-            'original_sequences':[row.seq for row in originals],'proof':proof,
-            'public_inputs':0,'original_seq326_replays':0,'provider':'actual configured provider',
-            'all_owned_workers_retired':all(not service.registry.require(name).process_alive for name in names),
-            'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
-                for path,digest in source_hashes.items())}
-        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-        print(json.dumps(receipt,indent=2),flush=True)
+        reading.set()
+        try:
+            if observer is not None:
+                await observer
+        finally:
+            await attachment.shutdown()
+            for name in reversed(names):
+                await asyncio.to_thread(service.owners.stop, name)
+            (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
+            (stage/'native-overlap-timeline.json').write_text(json.dumps(timeline,indent=2)+'\n')
+            with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                final_inputs = NativeRuntimeInput.select(store.session._connection)
+            receipt = {'final_native_inputs':FieldCodec.encode(final_inputs),'elapsed_seconds' :time.perf_counter()-begun,'failure':failure,
+                'settings':settings,'installed_interpreter':sys.executable,
+                'original_sequences':[row.seq for row in originals],'proof':proof,
+                'public_inputs':0,'original_seq326_replays':0,'provider':'actual configured provider',
+                'all_owned_workers_retired':all(not service.registry.require(name).process_alive for name in names),
+                'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                    for path,digest in source_hashes.items()),
+                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
+            (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+            print(json.dumps(receipt,indent=2),flush=True)
 
 
 async def configured_mixed_routes(arguments):
@@ -1070,5 +1099,6 @@ if __name__=='__main__':
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
+    parser.add_argument('--busy-reader',action='store_true')
     parser.add_argument('--configured-peers',nargs='*',default=[])
     asyncio.run(run(parser.parse_args()))
