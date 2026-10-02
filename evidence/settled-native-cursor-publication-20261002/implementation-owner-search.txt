@@ -1,0 +1,42 @@
+src/agent_comms/acp.py:166:    async def publish_pending_compaction(self, session_id: str, thread_name: str) -> int:
+src/agent_comms/acp.py:444:                        committed_input_id=None,
+src/agent_comms/acp.py:571:        def observe(event: Any) -> None:
+src/agent_comms/selected_result.py:56:                committed_input_id=input_id,
+src/agent_comms/selected_result.py:72:def publish_native_failure(
+src/agent_comms/proven_source_coverage.py:50:    source_witness: PrefixWitness = field(kw_only=True)
+src/agent_comms/proven_source_coverage.py:53:class SourceCoverage:
+src/agent_comms/proven_source_coverage.py:142:            source_witness=witness,
+src/agent_comms/proven_source_coverage.py:238:            if witness is not None and page.source_witness != witness:
+src/agent_comms/proven_source_coverage.py:240:            witness, covered = page.source_witness, page.covered_seq
+src/agent_comms/proven_source_coverage.py:256:                    source_witness=witness,
+src/agent_comms/cursor_publication.py:53:    def needs_refresh(self) -> bool:
+src/agent_comms/cursor_publication.py:54:        return self.published is None or self.published.observation.needs_refresh
+src/agent_comms/cursor_publication.py:83:    def observe(
+src/agent_comms/cursor_publication.py:127:    async def publish(
+src/agent_comms/cursor_publication.py:154:    async def refresh(self, session_id: str, thread_name: str) -> None:
+src/agent_comms/cursor_publication.py:155:        if self.delivery(session_id).needs_refresh:
+src/agent_comms/cursor_publication.py:171:                        committed_input_id=None,
+src/agent_comms/acp_extension.py:197:    def needs_refresh(self) -> bool:
+src/agent_comms/acp_extension.py:204:    def needs_refresh(self) -> bool:
+src/agent_comms/acp_extension.py:213:class EmptyCursorObservation(CursorObservation):
+src/agent_comms/acp_extension.py:215:    def needs_refresh(self) -> bool:
+src/agent_comms/acp_extension.py:515:    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
+src/agent_comms/native_source_cursor.py:30:class NativeSourceCursor:
+src/agent_comms/native_source_cursor.py:44:    def advance(
+src/agent_comms/native_source_cursor.py:50:        committed_input_id: str | None,
+src/agent_comms/native_source_cursor.py:52:        committed_input_id = FieldCodec.decode(str | None, committed_input_id)
+src/agent_comms/native_source_cursor.py:60:            return self._advance_proven(identity, committed_input_id, source_reads,
+src/agent_comms/native_source_cursor.py:61:                StoreLockContention(2.0) if committed_input_id is not None else None)
+src/agent_comms/native_source_cursor.py:63:    def _advance_proven(
+src/agent_comms/native_source_cursor.py:64:        self, identity: CursorOwner, committed_input_id: str | None,
+src/agent_comms/native_source_cursor.py:79:            if sources.witness_unlocked() != coverage.source_witness:
+src/agent_comms/native_source_cursor.py:97:            if not identity.admits(db, proof, injected, prior, committed_input_id):
+src/agent_comms/native_source_cursor.py:176:                witness = coverage.source_witness
+src/agent_comms/native_source_cursor.py:191:    def _require_source(
+src/agent_comms/cursor_owner.py:22:class CursorOwner(RegistryOwner):
+src/agent_comms/cursor_owner.py:89:    def admits(
+src/agent_comms/cursor_owner.py:95:        committed_input_id: str | None,
+src/agent_comms/cursor_owner.py:113:        if committed_input_id is not None and proof.input_id != committed_input_id:
+src/agent_comms/input_drain.py:225:    async def observe(self, session_id: str) -> None:
+src/agent_comms/input_drain.py:290:    async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
+src/agent_comms/input_drain.py:307:        pushed = await self._drain_private_if_changed(session_id, private_root)

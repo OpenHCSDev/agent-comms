@@ -2,6 +2,7 @@
 
 import json
 import os
+import pytest
 
 from unittest import TestCase
 
@@ -19,7 +20,8 @@ from agent_comms.selected_turn import SelectedPrompt
 from agent_comms.threads import Thread
 
 
-def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending(tmp_path):
+@pytest.mark.asyncio
+async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending(tmp_path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
@@ -46,9 +48,9 @@ def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pendi
         )
         snapshot = pending_sealed_assignments(store, lookup, "receiver")
         assert tuple(row.wire_seq for row in snapshot) == tuple(row.seq for row in originals)
-        with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
+        async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
             assert selected.batch.assignments == snapshot
-            prompt = SelectedPrompt(selected).triage()
+            prompt = SelectedPrompt(selected).triage().text
             from agent_comms.wake_policy import WakePolicy
 
             # The original instruction is shared by the whole captured batch,

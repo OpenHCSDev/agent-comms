@@ -1,0 +1,957 @@
+[
+  {
+    "elapsed_seconds": 6.684212666004896,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-0",
+        "stage": "triage",
+        "input_id": "c245263bea7ff11b1908009cc108127c"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 7.2721542860381305,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "triage",
+        "input_id": "3c894db31874cf330849460b622f2d1d"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "stage": "triage",
+        "input_id": "c245263bea7ff11b1908009cc108127c"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 7.388474135019351,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "triage",
+        "input_id": "3c894db31874cf330849460b622f2d1d"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "triage",
+        "input_id": "4913661ec591c4c4c27ce1b270808538"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "stage": "triage",
+        "input_id": "c245263bea7ff11b1908009cc108127c"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 9.268735064018983,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "triage",
+        "input_id": "3c894db31874cf330849460b622f2d1d"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "triage",
+        "input_id": "4913661ec591c4c4c27ce1b270808538"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 9.379613239027094,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "triage",
+        "input_id": "3c894db31874cf330849460b622f2d1d"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "triage",
+        "input_id": "4913661ec591c4c4c27ce1b270808538"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 10.510091397038195,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "triage",
+        "input_id": "4913661ec591c4c4c27ce1b270808538"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 2,
+        "disposition": "deferred"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 2,
+        "disposition": "deferred"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 10.623749706021044,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 11.037068994017318,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-0",
+        "stage": "full",
+        "input_id": "535827b336168340ea1c7b848c6af790"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 12.423401965992525,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "full",
+        "input_id": "0c1d016c021a459e822f68759d23eefc"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "stage": "full",
+        "input_id": "535827b336168340ea1c7b848c6af790"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 12.535826419014484,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "full",
+        "input_id": "0c1d016c021a459e822f68759d23eefc"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "stage": "full",
+        "input_id": "535827b336168340ea1c7b848c6af790"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "full",
+        "input_id": "d4eece9aee310bf4b9733ba3888e7008"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 15.501333545020316,
+    "active_owners": [
+      "purechannel-owner-0",
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "full",
+        "input_id": "0c1d016c021a459e822f68759d23eefc"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "full",
+        "input_id": "d4eece9aee310bf4b9733ba3888e7008"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 15.79658299102448,
+    "active_owners": [
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "full",
+        "input_id": "0c1d016c021a459e822f68759d23eefc"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "stage": "full",
+        "input_id": "d4eece9aee310bf4b9733ba3888e7008"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 3,
+        "disposition": "engaged"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 16.757286187028512,
+    "active_owners": [
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [
+      {
+        "owner": "purechannel-owner-1",
+        "stage": "full",
+        "input_id": "0c1d016c021a459e822f68759d23eefc"
+      }
+    ],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 17.049946501036175,
+    "active_owners": [
+      "purechannel-owner-1",
+      "purechannel-owner-2"
+    ],
+    "dispatched_unproven_inputs": [],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 3,
+        "disposition": "engaged"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      }
+    ]
+  },
+  {
+    "elapsed_seconds": 17.167665108048823,
+    "active_owners": [],
+    "dispatched_unproven_inputs": [],
+    "claims": [
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-1",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-0",
+        "revision": 4,
+        "disposition": "completed"
+      },
+      {
+        "owner": "purechannel-owner-2",
+        "revision": 4,
+        "disposition": "completed"
+      }
+    ]
+  }
+]

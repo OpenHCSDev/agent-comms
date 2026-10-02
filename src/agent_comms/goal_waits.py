@@ -62,13 +62,12 @@ class GoalWait:
         )
 
     def has_reply(self, bus: WireLog) -> bool:
-        with bus.certified_read() as source:
-            return any(
-                self.matches(original)
-                for original in source.addressed_deliveries(
-                    stable_thread_lookup(self.owner_created_at), self.after_seq, frozenset()
-                )
+        return any(
+            self.matches(original)
+            for original in bus.addressed_sources(
+                stable_thread_lookup(self.owner_created_at), self.after_seq
             )
+        )
 
 
 @dataclass(frozen=True, slots=True)

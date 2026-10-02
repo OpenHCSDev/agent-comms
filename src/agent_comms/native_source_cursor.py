@@ -8,6 +8,7 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
+from functools import partial
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -34,6 +35,51 @@ class NativeSourceCursor:
         if type(bus) is not MessageBus or type(store) is not Coordination:
             raise ValueError("current native cursor needs actual private stores")
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
+
+    @classmethod
+    async def read_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str):
+        return await Coordination.run_async(
+            bus.log.path.parent / "coordination.sqlite3",
+            partial(cls._read_owned, bus, wire_root_id, owner_name),
+        )
+
+    @classmethod
+    def _read_owned(cls, bus, wire_root_id, owner_name, store):
+        return cls(bus, store, wire_root_id=wire_root_id).read(owner_name=owner_name)
+
+    @classmethod
+    async def advance_async(
+        cls, bus: MessageBus, *, wire_root_id: str, owner: Thread,
+        owner_admission_generation: int, owner_generation: int,
+        committed_input_id: str | None,
+    ):
+        return await Coordination.run_async(
+            bus.log.path.parent / "coordination.sqlite3",
+            partial(cls._advance_owned, bus, wire_root_id, owner,
+                    owner_admission_generation, owner_generation, committed_input_id),
+        )
+
+    @classmethod
+    def _advance_owned(cls, bus, wire_root_id, owner, admission, generation, input_id, store):
+        return cls(bus, store, wire_root_id=wire_root_id).advance(
+            owner=owner, owner_admission_generation=admission,
+            owner_generation=generation, committed_input_id=input_id,
+        )
+
+    @classmethod
+    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str):
+        return await Coordination.run_async(
+            bus.log.path.parent / "coordination.sqlite3",
+            partial(cls._refresh_owned, bus, wire_root_id, owner_name),
+        )
+
+    @classmethod
+    def _refresh_owned(cls, bus, wire_root_id, owner_name, store):
+        owner, admission = bus._registry.live_owner_with_admission(owner_name)
+        person = store.participants.get(stable_thread_lookup(owner.created_at))
+        return cls._advance_owned(
+            bus, wire_root_id, owner, admission, person.participant_generation, None, store
+        )
 
     def _coverage(self, lookup: str, contention: StoreLockContention | None = None) -> SourceCoverage:
         return SourceCoverage(
@@ -66,7 +112,6 @@ class NativeSourceCursor:
         contention: StoreLockContention | None,
     ) -> CurrentNativeCursor | None:
         sources = self._coverage(identity.lookup, contention)
-        witness = sources.witness()
         coverage = sources.prefix(source_reads=source_reads)
         proof = sources.last_proof(
             coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
@@ -77,7 +122,7 @@ class NativeSourceCursor:
             _response_boundary(self.bus, blocking=False, contention=contention) as registry,
             self.store.session.transaction() as db,
         ):
-            if sources.witness_unlocked() != witness:
+            if sources.witness_unlocked() != coverage.source_witness:
                 raise IdentityConflict("current cursor canonical source changed before commit")
             identity.require_live(
                 self.bus, registry, "current cursor owner or private root changed"
@@ -172,9 +217,9 @@ class NativeSourceCursor:
         sources = self._coverage(identity.lookup)
         witness = None
         if cursor is not None:
-            witness = sources.witness()
             with NativeEvidenceScope() as source_reads:
-                self._require_source(identity, cursor, sources, source_reads)
+                coverage = self._require_source(identity, cursor, sources, source_reads)
+                witness = coverage.source_witness
         with _response_boundary(self.bus, blocking=False) as registry:
             if cursor is not None and sources.witness_unlocked() != witness:
                 raise IdentityConflict("current cursor canonical source changed while reading")
@@ -192,7 +237,7 @@ class NativeSourceCursor:
     def _require_source(
         self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,
         source_reads: NativeEvidenceScope,
-    ) -> None:
+    ) -> ProvenSourceCoverage:
         if cursor.owner_identity != owner.participant_identity:
             raise IdentityConflict("current native cursor owner identity differs")
         coverage = sources.prefix(through_seq=cursor.covered_seq, source_reads=source_reads)
@@ -211,3 +256,4 @@ class NativeSourceCursor:
             raise IdentityConflict("current native cursor proof differs from journal")
         if proof is not None and proof.owner_identity != owner.participant_identity:
             raise IdentityConflict("current native cursor proof belongs to another owner")
+        return coverage

@@ -1,0 +1,17 @@
+{
+  "owner": "Kepler Core503/paired receiving package; parent activation",
+  "core": "4701ee10a54d8151724f102cd1861a97ce385452",
+  "toad": "ce788178a143bbab3f6fda43b5a73ccda2d53f77",
+  "textual": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+  "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+  "native": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "prefix": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002",
+  "state": "Core503 original batch path verified, wholecursor gate FAILED named Arendt489; receiving main295 source refresh pending",
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "private_fixtures": [
+    "/home/ts/wt/b503c01"
+  ],
+  "protected_existing_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-batch490-20261001",
+  "allocation_budget_mib": 256,
+  "scope": "Core503 pending batch certification only; parent default untouched"
+}

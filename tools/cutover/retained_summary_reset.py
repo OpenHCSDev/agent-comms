@@ -128,6 +128,22 @@ class RuntimeCompactionFiles:
             yield resource
 
 
+class RuntimeGoalFiles(RuntimeCompactionFiles):
+    @property
+    def paths(self):
+        original = self.root / 'goal-private' / 'goal_attempts.sqlite3'
+        return tuple(Path(str(original) + suffix)
+                     for suffix in ('', '-journal', '-wal', '-shm'))
+
+    def acquire(self):
+        directory = self.paths[0].parent
+        if directory.exists() or directory.is_symlink():
+            PrivateDirectoryRole.require(directory.lstat())
+        if any(path.exists() or path.is_symlink() for path in self.paths[1:]):
+            raise RuntimeError('Goal ledger companion requires its original stopped recovery')
+        return super().acquire()
+
+
 class RuntimeCompactionReset(RuntimeCompactionFiles):
     def retain_and_remove(self, destination: Path):
         with self.acquire() as acquired:

@@ -1,0 +1,42 @@
+{
+  "qualification": "original channel membership/native proof/response/history/current ACP coverage verified read-only; raw driver timeout retained",
+  "core": "ca4bcfa5efdcde807a4da26309222760939aefc1",
+  "toad": "26b425a3b68ab02d38ef842d75fc587c267c6ea1",
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "installed_python": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-async-selected509-20261002/bin/python",
+  "stage": "/home/ts/wt/b509c01",
+  "raw_receipt_sha256": "d75df10ff2d798d1a4ca66303ce28e329d516500343df5fb7af4f99e739fde35",
+  "raw_failure": "TimeoutError: ",
+  "original_claims_completed": 9,
+  "original_triage_full_decisions": 3,
+  "original_full_native_proofs": 3,
+  "original_sealed_receipts": 3,
+  "channel_reply_receipts": 3,
+  "all_original_native_prompt_memberships": true,
+  "all_historical_native_prompt_and_context_proofs": true,
+  "actual_acp_current_cursor_stages": [
+    "triage",
+    "triage",
+    "triage"
+  ],
+  "current_cursor_coverage": [
+    656,
+    656,
+    656
+  ],
+  "actual_acp_cursor_matches_current_original_proof": true,
+  "original_last_sequence": 653,
+  "bus_reads": 180,
+  "retained_bus_bytes": 2951312,
+  "overlapping_original_native_dispatch": true,
+  "diagnostics": 0,
+  "protected_files": 16,
+  "protected_files_unchanged": true,
+  "configured_sources_unchanged": true,
+  "owned_workers_retired": true,
+  "provider_repeat": 0,
+  "public_inputs": 0,
+  "public_mutations": 0,
+  "cause": "Fixture required a past FULL cursor indefinitely. NativeSourceCursor advances monotonically with later proven peer-reply TRIAGE; original FULL proof remains with historical inputs and publication receipts.",
+  "limits": "No complete Native6/saved-session continuation, full-compaction/performance or physical TUI claim. Raw driver exit was 1, not retroactively changed."
+}

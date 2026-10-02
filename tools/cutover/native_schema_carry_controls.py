@@ -14,6 +14,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 import subprocess
+import sys
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import PrivateDirectoryRole
@@ -119,7 +120,7 @@ def run(base, source_python, root):
     plan = prepare(root, base/'matched-candidate', original, source_python)
     if source_hashes != {name:digest(root/name) for name in source_hashes}:
         raise AssertionError('Original stores changed during candidate preparation')
-    installed = CarryNativeRuntimeInstallation(plan)
+    installed = CarryNativeRuntimeInstallation(goal_schema=original.goal, plan=plan)
     if FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installed)) != installed:
         raise AssertionError('Canonical runtime installation declaration does not round-trip')
     refused = []
@@ -168,15 +169,90 @@ def run(base, source_python, root):
     return result
 
 
+def goal_journey(base, original_db, declaration):
+    """Actual original ledger -> preserving member -> strict target store."""
+    from contextlib import closing
+    import sqlite3
+    from native_schema_carry import inventory, row_digest, rows
+    from retained_summary_reset import RuntimeGoalFiles
+    from runtime_installation import PreserveRuntimeInstallation
+    from publish_openhcs_recovery import retain_file
+    from agent_comms.goal_attempts import GoalAttemptSchema, GoalAttemptStore, StorageUncertainError
+    base = base.absolute()
+    base.mkdir(mode=0o700)
+    root = base / 'root'
+    root.mkdir(mode=0o700)
+    goal_root = root / 'goal-private'
+    goal_root.mkdir(mode=0o700)
+    path = goal_root / 'goal_attempts.sqlite3'
+    retain_file(original_db, path)
+    original_sha = digest(path)
+    with closing(sqlite3.connect(path.as_uri()+'?mode=ro', uri=True)) as db:
+        before = inventory(db)
+    try:
+        GoalAttemptStore(goal_root)
+    except StorageUncertainError:
+        pass
+    else:
+        raise AssertionError('Original incompatible ledger unexpectedly admitted')
+    source_schema = json.loads(declaration.read_text())
+    installation = PreserveRuntimeInstallation(goal_schema=source_schema)
+    assert FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installation)) == installation
+    # Wrong declaration must not turn into a guessed migration.
+    with RuntimeGoalFiles(root).acquire() as acquired:
+        try:
+            PreserveRuntimeInstallation(goal_schema={}).synchronize_goal(acquired, base/'wrong-preimage')
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Unknown goal declaration was transformed')
+        assert digest(path) == original_sha
+        receipt = installation.synchronize_goal(acquired, base/'originals')
+    assert digest(base/'originals/goal-private/goal_attempts.sqlite3') == original_sha
+    store = GoalAttemptStore(goal_root)
+    with closing(sqlite3.connect(path.as_uri()+'?mode=ro', uri=True)) as db:
+        after = inventory(db)
+        marker = GoalAttemptSchema.select(db)
+    facts = before.keys() - {GoalAttemptSchema.declared_name}
+    assert all(before[name] == after[name] for name in facts)
+    assert marker == [GoalAttemptSchema.current()]
+    for goal_id, *_ in before['generation']:
+        assert store.snapshot(goal_id) is not None
+    with RuntimeGoalFiles(root).acquire() as acquired:
+        matched = installation.synchronize_goal(acquired, base/'must-not-recarry')
+        acquired.require_original()
+    assert not (base/'must-not-recarry').exists()
+    result = {'state': 'original-goal-ledger-carry-passed', 'target_python': sys.executable,
+              'target_package': __import__('agent_comms').__file__,
+              'original_db': str(original_db), 'original_copy_sha256': original_sha,
+              'source_declaration_sha256': digest(declaration), 'installation': receipt,
+              'unchanged_fact_rows': sum(len(before[name]) for name in facts),
+              'unchanged_fact_rows_sha256': row_digest({name: before[name] for name in sorted(facts)}),
+              'matched_declaration_preserved': matched,
+              'refusals': ['original-strict-schema', 'unauthenticated-declaration'],
+              'native_inputs': 0, 'provider_calls': 0, 'public_mutations': 0, 'owner_stops': 0,
+              'strength': 'copied running-source inventory; actual RuntimeInstallation and strict GoalAttemptStore; not stopped public carry or native/UI journey'}
+    (base/'receipt.json').write_text(json.dumps(result, indent=2)+'\n')
+    return {'state': result['state'], 'receipt': str(base/'receipt.json')}
+
+
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('base',type=Path)
-    parser.add_argument('--source-python',required=True,type=Path)
+    parser.add_argument('--source-python',type=Path)
     source=parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--stopped-original',type=Path)
     source.add_argument('--running-journal-inventory',type=Path)
+    source.add_argument('--goal-original-db',type=Path)
+    parser.add_argument('--goal-original-declaration',type=Path)
     args=parser.parse_args()
-    if args.running_journal_inventory:
+    if args.goal_original_db:
+        if not args.goal_original_declaration:
+            parser.error('Goal carry requires authentic original declaration')
+        result=goal_journey(args.base,args.goal_original_db,args.goal_original_declaration)
+    elif not args.source_python:
+        parser.error('Native carry requires authentic source interpreter')
+    elif args.running_journal_inventory:
         result=run_journal_inventory(args.base.absolute(),args.source_python,args.running_journal_inventory)
     else:
         result=run(args.base.absolute(),args.source_python,args.stopped_original.absolute())

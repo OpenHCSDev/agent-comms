@@ -312,15 +312,15 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
 @dataclass(frozen=True)
 class GoalAttemptSchema(GoalLedgerTable, TypedTable):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[6]
+    ddl_digest: str
+
+    @classmethod
+    def current(cls) -> GoalAttemptSchema:
+        return cls(1, GoalLedgerTable.schema_digest())
 
 
 def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
-    schema = {
-        name: sql
-        for table in TypedTable.members_with(GoalLedgerTable)
-        for name, sql in table.schema_objects().items()
-    }
+    schema = GoalLedgerTable.declared_schema()
     actual = SQLiteSchemaObject.read(
         conn.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
@@ -328,8 +328,8 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
     )
     if {row.name: row.sql for row in actual} != schema:
         raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
-    if GoalAttemptSchema.one(conn, singleton=1) != GoalAttemptSchema(1, 6):
-        raise StorageUncertainError("Unsupported goal attempt schema version.")
+    if GoalAttemptSchema.select(conn) != [GoalAttemptSchema.current()]:
+        raise StorageUncertainError("Unsupported goal attempt schema declaration.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,7 +560,7 @@ class GoalAttemptStore:
                 conn.execute("BEGIN IMMEDIATE")
                 for table in TypedTable.members_with(GoalLedgerTable):
                     table.create(conn)
-                GoalAttemptSchema(1, 6).insert(conn)
+                GoalAttemptSchema.current().insert(conn)
                 conn.commit()
             cls._sync_paths(path, directory)
         except (sqlite3.Error, OSError) as error:

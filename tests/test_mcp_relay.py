@@ -335,7 +335,7 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
             await proxy.subscribe()
             proxies.append(proxy)
         assert proxies[0]._controller_token != proxies[1]._controller_token
-        assert "controllerToken" not in owner.sessions.metadata(session_id)["agentComms"]
+        assert "controllerToken" not in (await owner.sessions.metadata(session_id))["agentComms"]
         request = pi.ConfirmUiRequest(
             id="only-one-child",
             title="Approve once?",

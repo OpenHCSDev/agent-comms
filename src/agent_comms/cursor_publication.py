@@ -23,7 +23,6 @@ from .acp_extension import (
 )
 from .comms import Comms
 from .coordination_errors import CoordinationError
-from .coordinator import Coordination
 from .message_bus import MessageBus
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
@@ -79,7 +78,7 @@ class CursorPublication:
             owner.pid,
         )
 
-    def observe(
+    async def observe(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False
     ) -> CursorEnvelope:
         if self.root_id is None:
@@ -90,15 +89,13 @@ class CursorPublication:
         if scope is None:
             return unavailable
         try:
-            with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
-                bus = MessageBus(
-                    self.comms.root / "bus.jsonl",
-                    self.comms.registry,
-                    private_response_writes=True,
-                )
-                cursor = NativeSourceCursor(bus, store, wire_root_id=self.root_id).read(
-                    owner_name=thread_name
-                )
+            bus = MessageBus(
+                self.comms.root / "bus.jsonl", self.comms.registry,
+                private_response_writes=True,
+            )
+            cursor = await NativeSourceCursor.read_async(
+                bus, wire_root_id=self.root_id, owner_name=thread_name
+            )
         except BlockingIOError:
             current = self.scope(thread_name, session_id)
             if defer_busy and current == scope:
@@ -116,10 +113,10 @@ class CursorPublication:
             EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
         )
 
-    def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:
+    async def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:
         if self.root_id is None:
             return ()
-        observed = self.observe(thread_name, session_id)
+        observed = await self.observe(thread_name, session_id)
         self.delivery(session_id).trusted_read(observed)
         return (CursorAdvancedUpdate(observed),)
 
@@ -128,7 +125,7 @@ class CursorPublication:
     ) -> None:
         delivery = self.delivery(session_id)
         try:
-            observed = self.observe(thread_name, session_id, defer_busy=True)
+            observed = await self.observe(thread_name, session_id, defer_busy=True)
         except BlockingIOError:
             # Busy observation is not a new fact. A settled native operation
             # requires another read when the lock clears, without input replay.
@@ -152,4 +149,16 @@ class CursorPublication:
 
     async def refresh(self, session_id: str, thread_name: str) -> None:
         if self.delivery(session_id).needs_refresh:
+            # Resume only the cursor projection. The immutable native receipt
+            # supplies its original admission; no claim or input is resumed.
+            try:
+                bus = MessageBus(
+                    self.comms.root / "bus.jsonl", self.comms.registry,
+                    private_response_writes=True,
+                )
+                await NativeSourceCursor.refresh_async(
+                    bus, wire_root_id=self.root_id, owner_name=thread_name
+                )
+            except (OSError, ValueError, sqlite3.Error, CoordinationError):
+                pass  # The publication below still reports the original observation.
             await self.publish(session_id, thread_name)
