@@ -1,0 +1,383 @@
+{
+  "scope": "changed measurement owners and all their visible calls; before artifact names full test/production lexical consumer scope",
+  "parse_omissions": [],
+  "dynamic_resolution": "not inferred from lexical AST",
+  "files": [
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "sha256": "760f34ab15d7cde733eff7490d71ddf557a890babfca7284f53a88f1281a2003",
+      "declarations": [
+        {
+          "name": "RecordedAnswers",
+          "line": 26,
+          "bases": [],
+          "members": []
+        },
+        {
+          "name": "RecordedNativeProbes",
+          "line": 31,
+          "bases": [],
+          "members": []
+        },
+        {
+          "name": "Condition",
+          "line": 35,
+          "bases": [
+            "str",
+            "Enum"
+          ],
+          "members": []
+        },
+        {
+          "name": "Measurement",
+          "line": 44,
+          "bases": [
+            "str",
+            "Enum"
+          ],
+          "members": []
+        },
+        {
+          "name": "AnswerScore",
+          "line": 54,
+          "bases": [],
+          "members": []
+        },
+        {
+          "name": "ScoreView",
+          "line": 60,
+          "bases": [
+            "ABC"
+          ],
+          "members": [
+            "scored_answers",
+            "outcomes",
+            "questions",
+            "correct",
+            "stale",
+            "missing",
+            "public_totals",
+            "totals",
+            "measurement_totals"
+          ]
+        },
+        {
+          "name": "ScoredRound",
+          "line": 110,
+          "bases": [
+            "ScoreView"
+          ],
+          "members": [
+            "identity",
+            "scored_answers",
+            "public"
+          ]
+        },
+        {
+          "name": "ScoredScenario",
+          "line": 132,
+          "bases": [
+            "ScoreView"
+          ],
+          "members": [
+            "identity",
+            "scored_answers",
+            "public"
+          ]
+        },
+        {
+          "name": "Question",
+          "line": 157,
+          "bases": [],
+          "members": [
+            "__post_init__",
+            "score",
+            "public"
+          ]
+        },
+        {
+          "name": "RecallRound",
+          "line": 183,
+          "bases": [],
+          "members": [
+            "__post_init__",
+            "public",
+            "probe_text",
+            "score_native",
+            "score"
+          ]
+        },
+        {
+          "name": "RecallScenario",
+          "line": 234,
+          "bases": [],
+          "members": [
+            "__post_init__",
+            "read",
+            "public",
+            "score",
+            "score_native"
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "line": 400,
+          "callee": "FieldCodec.decode"
+        },
+        {
+          "line": 418,
+          "callee": "scenario.public"
+        },
+        {
+          "line": 212,
+          "callee": "probe.observe"
+        },
+        {
+          "line": 248,
+          "callee": "FieldCodec.decode"
+        },
+        {
+          "line": 275,
+          "callee": "ScoredScenario(self, condition, tuple(scored)).public"
+        },
+        {
+          "line": 417,
+          "callee": "RecallScenario.read"
+        },
+        {
+          "line": 422,
+          "callee": "scenario.score(args.condition, decode_answers(args.answers.read_text())).public"
+        },
+        {
+          "line": 424,
+          "callee": "FieldCodec.decode"
+        },
+        {
+          "line": 427,
+          "callee": "scenario.score_native"
+        },
+        {
+          "line": 74,
+          "callee": "self.public_totals"
+        },
+        {
+          "line": 78,
+          "callee": "self.public_totals"
+        },
+        {
+          "line": 82,
+          "callee": "self.public_totals"
+        },
+        {
+          "line": 86,
+          "callee": "self.public_totals"
+        },
+        {
+          "line": 125,
+          "callee": "self.public_totals"
+        },
+        {
+          "line": 126,
+          "callee": "self.measurement_totals"
+        },
+        {
+          "line": 151,
+          "callee": "self.public_totals"
+        },
+        {
+          "line": 152,
+          "callee": "self.measurement_totals"
+        },
+        {
+          "line": 213,
+          "callee": "self.probe_text"
+        },
+        {
+          "line": 218,
+          "callee": "self.score"
+        },
+        {
+          "line": 420,
+          "callee": "item.probe_text"
+        },
+        {
+          "line": 150,
+          "callee": "item.public"
+        },
+        {
+          "line": 199,
+          "callee": "question.public"
+        },
+        {
+          "line": 251,
+          "callee": "item.public"
+        },
+        {
+          "line": 270,
+          "callee": "item.score_native"
+        },
+        {
+          "line": 273,
+          "callee": "item.score"
+        },
+        {
+          "line": 422,
+          "callee": "scenario.score"
+        },
+        {
+          "line": 260,
+          "callee": "item.score"
+        },
+        {
+          "line": 208,
+          "callee": "question.public"
+        },
+        {
+          "line": 227,
+          "callee": "question.score"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "sha256": "75bda85edd37a53e06964f24a9c124f79a52ff97fad411b7d5c3f5c0822bf710",
+      "declarations": [
+        {
+          "name": "RecallMeasurementTests",
+          "line": 31,
+          "bases": [
+            "unittest.TestCase"
+          ],
+          "members": [
+            "setUp",
+            "test_conditions_share_the_same_oracle",
+            "test_old_answers_fail_after_correction_and_goal_replacement",
+            "test_missing_answers_are_not_silently_removed_from_denominator",
+            "test_nearly_matching_identifier_and_invented_completion_are_wrong",
+            "test_new_question_uses_existing_scoring_contract",
+            "test_round_and_scenario_totals_derive_from_their_outcomes",
+            "test_caller_cannot_supply_an_independent_total",
+            "test_unknown_round_or_question_is_rejected",
+            "test_invalid_or_duplicate_recorded_answers_are_rejected",
+            "test_export_omits_answer_metadata_and_entrypoint_runs_without_provider",
+            "test_held_out_probe_uses_public_questions_only",
+            "test_frozen_research_and_goal_traces_keep_distinctions_and_denominators",
+            "test_scenario_loader_rejects_ambiguous_or_missing_source_oracles",
+            "test_cli_uses_frozen_scenario_for_public_probe_export"
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "line": 217,
+          "callee": "FieldCodec.decode"
+        },
+        {
+          "line": 218,
+          "callee": "scenario.score_native"
+        },
+        {
+          "line": 50,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 55,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 61,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 72,
+          "callee": "extended.score"
+        },
+        {
+          "line": 77,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 86,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 114,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 116,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 190,
+          "callee": "RecallScenario.read"
+        },
+        {
+          "line": 226,
+          "callee": "scenario.rounds[1].score_native"
+        },
+        {
+          "line": 229,
+          "callee": "bad_answer.observe"
+        },
+        {
+          "line": 143,
+          "callee": "RecallScenario.read"
+        },
+        {
+          "line": 153,
+          "callee": "scenario.score"
+        },
+        {
+          "line": 154,
+          "callee": "scored.measurement_totals"
+        },
+        {
+          "line": 163,
+          "callee": "scored.public"
+        },
+        {
+          "line": 167,
+          "callee": "scenario.score(Condition.TASK_MEMORY, RecordedAnswers(answers)).measurement_totals"
+        },
+        {
+          "line": 204,
+          "callee": "first.probe_text"
+        },
+        {
+          "line": 42,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 74,
+          "callee": "original.score"
+        },
+        {
+          "line": 94,
+          "callee": "self.scenario.score"
+        },
+        {
+          "line": 191,
+          "callee": "item.probe_text"
+        },
+        {
+          "line": 167,
+          "callee": "scenario.score"
+        },
+        {
+          "line": 138,
+          "callee": "question.public"
+        },
+        {
+          "line": 135,
+          "callee": "item.probe_text"
+        },
+        {
+          "line": 161,
+          "callee": "item.probe_text"
+        }
+      ]
+    }
+  ]
+}
