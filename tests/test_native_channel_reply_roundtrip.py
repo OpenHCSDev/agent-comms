@@ -297,6 +297,28 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             await asyncio.sleep(1.2)
             assert 7 <= len(requests) <= 8 and not failures
             assert len(comms.views.channel_history("#team")) == 3
+            # The real request reader owns every timing sample. They must
+            # survive independently of registry phase changes and publication.
+            observations = [json.loads(line)
+                            for path in (comms.root / "diagnostics").glob("*.requests.jsonl")
+                            for line in path.read_text().splitlines()]
+            native = [row for row in observations if "native" in row]
+            assert {row["native"]["inputId"] for row in native} == {
+                row["input_id"] for row in request_inputs
+            }
+            for original in request_inputs:
+                samples = [row for row in native
+                           if row["native"]["inputId"] == original["input_id"]]
+                assert {"preparing", "dispatch", "first_event", "finished"} <= {
+                    row["native"]["stage"] for row in samples
+                }
+                assert all(row["turn"]["identity"]["incarnation"]["name"] == original["owner"]
+                           for row in samples)
+                assert len({tuple(row["native_process"].items()) for row in samples}) == 1
+            print("Native original timing samples", len(native), "inputs", len(request_inputs),
+                  "maximum parent receipt lag seconds",
+                  max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
+                      for row in native), flush=True)
             return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(

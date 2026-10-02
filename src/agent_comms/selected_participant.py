@@ -28,7 +28,6 @@ from .native_attestation import ObservedAttestation
 from .private_registry_guard import _require_no_private_owner_rename
 from .participant_store import ParticipantSnapshot
 from .turn_phase import PreparingPhase, TurnPhase
-from .diagnostics import record_request_progress
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 
 
@@ -92,10 +91,6 @@ class SelectedParticipant(MroDispatch):
 
     def record_native_phase(self, event: NativePhaseChanged) -> None:
         current = self.comms.registry.require(self.owner.thread.name).turn_state.phase
-        lease = self.owner.thread.require_turn_lease()
-        for observation in event.phase.request_observations:
-            record_request_progress(self.comms.root, lease, observation,
-                                    native_process=event.native_process)
         self.transition(current.observed(event.phase))
 
     @classmethod
