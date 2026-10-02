@@ -1,0 +1,425 @@
+{
+  "limits": "All declared Core production Python roots parsed through existing NRA Package. Nominal imports/references are source leads, not dynamic resolution proof. Native JavaScript and external SDK are outside this Python AST. No runtime behavior inferred from omitted roots.",
+  "before": {
+    "revision": "dd79dabc1b92a3706271bd80bc4472584facb1b7",
+    "modules_parsed": 311,
+    "parse_failures": [],
+    "declarations": [
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 35,
+        "name": "HistoricalNativeInput",
+        "bases": [
+          "NativeInputRecord",
+          "DeclaredFamily"
+        ],
+        "methods": [
+          "proves_triage_source",
+          "reference"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 306,
+        "name": "NativeInputEvidenceRead",
+        "bases": [
+          "NativeEvidenceRead"
+        ],
+        "methods": [
+          "decode_rows"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 322,
+        "name": "NativeEvidenceScope",
+        "bases": [
+          "ExitStack"
+        ],
+        "methods": [
+          "__init__",
+          "borrow",
+          "for_source",
+          "close",
+          "__exit__"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 31,
+        "name": "NativeSourceCursor",
+        "bases": [],
+        "methods": [
+          "__init__",
+          "read_async",
+          "_read_owned",
+          "advance_async",
+          "_advance_owned",
+          "refresh_async",
+          "_refresh_owned",
+          "_coverage",
+          "advance",
+          "_advance_proven",
+          "_publish",
+          "read",
+          "_require_source"
+        ]
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 53,
+        "name": "SourceCoverage",
+        "bases": [],
+        "methods": [
+          "__init__",
+          "witness_unlocked",
+          "witness",
+          "read",
+          "_page",
+          "_receipt",
+          "_selected_proven",
+          "native_inputs",
+          "evidence",
+          "last_proof",
+          "prefix"
+        ]
+      }
+    ],
+    "scope_references": [
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 102,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 114,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 336,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 111,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 239,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 105,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 220,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 169,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 84,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 186,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 195,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 205,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 216,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 92,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 197,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 218,
+        "name": "NativeEvidenceScope"
+      }
+    ],
+    "scope_imports": [
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 25,
+        "module": "native_entries",
+        "name": "NativeEvidenceScope",
+        "alias": null
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 20,
+        "module": "native_entries",
+        "name": "NativeEvidenceScope",
+        "alias": null
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 29,
+        "module": "native_entries",
+        "name": "NativeEvidenceScope",
+        "alias": null
+      }
+    ],
+    "factory": [
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 330,
+        "method": "__init__",
+        "source": "def __init__(self) -> None:\n    super().__init__()\n    self.readers: dict[Path, NativeEvidenceRead] = {}"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 348,
+        "method": "for_source",
+        "source": "def for_source(self, path: Path) -> NativeEvidenceRead:\n    path = Path(path).absolute()\n    if path not in self.readers:\n        self.close()\n        self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))\n    return self.readers[path]"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 355,
+        "method": "close",
+        "source": "def close(self) -> None:\n    try:\n        super().close()\n    finally:\n        self.readers.clear()"
+      }
+    ]
+  },
+  "after": {
+    "revision": "d5bef7397877ec56d000a1941c225835b1678b34",
+    "modules_parsed": 311,
+    "parse_failures": [],
+    "declarations": [
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 35,
+        "name": "HistoricalNativeInput",
+        "bases": [
+          "NativeInputRecord",
+          "DeclaredFamily"
+        ],
+        "methods": [
+          "proves_triage_source",
+          "reference"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 306,
+        "name": "NativeInputEvidenceRead",
+        "bases": [
+          "NativeEvidenceRead"
+        ],
+        "methods": [
+          "decode_rows"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 322,
+        "name": "NativeEvidenceScope",
+        "bases": [
+          "ExitStack"
+        ],
+        "methods": [
+          "__init__",
+          "borrow",
+          "for_source",
+          "close",
+          "__exit__"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 31,
+        "name": "NativeSourceCursor",
+        "bases": [],
+        "methods": [
+          "__init__",
+          "read_async",
+          "_read_owned",
+          "advance_async",
+          "_advance_owned",
+          "refresh_async",
+          "_refresh_owned",
+          "_coverage",
+          "advance",
+          "_advance_proven",
+          "_publish",
+          "read",
+          "_require_source"
+        ]
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 53,
+        "name": "SourceCoverage",
+        "bases": [],
+        "methods": [
+          "__init__",
+          "witness_unlocked",
+          "witness",
+          "read",
+          "_page",
+          "_receipt",
+          "_selected_proven",
+          "native_inputs",
+          "evidence",
+          "last_proof",
+          "prefix"
+        ]
+      }
+    ],
+    "scope_references": [
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 102,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 114,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 336,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 111,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 239,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 105,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 220,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 169,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 84,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 186,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 195,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 205,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 216,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 92,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 197,
+        "name": "NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 218,
+        "name": "NativeEvidenceScope"
+      }
+    ],
+    "scope_imports": [
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 25,
+        "module": "native_entries",
+        "name": "NativeEvidenceScope",
+        "alias": null
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 20,
+        "module": "native_entries",
+        "name": "NativeEvidenceScope",
+        "alias": null
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 29,
+        "module": "native_entries",
+        "name": "NativeEvidenceScope",
+        "alias": null
+      }
+    ],
+    "factory": [
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 330,
+        "method": "__init__",
+        "source": "def __init__(self) -> None:\n    super().__init__()\n    self.readers: dict[Path, NativeInputEvidenceRead] = {}"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 348,
+        "method": "for_source",
+        "source": "def for_source(self, path: Path) -> NativeInputEvidenceRead:\n    path = Path(path).absolute()\n    if path not in self.readers:\n        self.close()\n        self.readers[path] = self.enter_context(NativeInputEvidenceRead.open(path))\n    return self.readers[path]"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 355,
+        "method": "close",
+        "source": "def close(self) -> None:\n    try:\n        super().close()\n    finally:\n        self.readers.clear()"
+      }
+    ]
+  }
+}

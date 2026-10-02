@@ -1,6 +1,7 @@
 # Scoped native input evidence — ready checkpoint
 
 PR534 changes the existing NativeEvidenceScope acquisition to NativeInputEvidenceRead.
+Production source checkpoint: `d5bef7397877ec56d000a1941c225835b1678b34`.
 Production: one file, four lines deleted/four added. Its complete production consumers
 are HistoricalNativeInput, SourceCoverage and NativeSourceCursor. Full history rendering
 and retained task readers retain their separate existing full-history acquisition.
@@ -44,3 +45,10 @@ The measured saved-state read is not a new native/ACP/UI journey and does not pr
 public 38–49s reply latency fixed. No additional original-message probe or paid turn was
 sent. Parent owns paired installation and configured-channel acceptance; Arendt owns
 native cold restore/get_state. Preserve all original385 and private530 proofs/UNKNOWN.
+
+Before/after declaration and consumer output: `scope-before-after-ast.json`.
+Existing NRA parsed all 311 production modules at each exact revision, zero failures.
+All three scope import consumers are unchanged; only their existing scope factory
+and precise resource annotations now select the input-proof decoder. Dynamic dispatch
+is not established by this AST inventory; semantics and the installed read establish
+the affected factory path.
