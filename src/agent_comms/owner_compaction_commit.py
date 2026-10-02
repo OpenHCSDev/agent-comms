@@ -49,7 +49,6 @@ class OwnerCompactionCommit:
         selected: SelectedModel, settings: PiCompactionDecision, *,
         instructions: str | None = None,
         pending_input_keys: tuple[str, ...] = (),
-        before_summary: Callable[[], None] | None = None,
         on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
         reason: str = "adaptive",
@@ -79,8 +78,6 @@ class OwnerCompactionCommit:
             attestation = owner.compaction_attestation(owner_generation, prepared.witness)
             attestation.require_registry(self.registry, owner)
             settings.require_current(await decision())
-            if before_summary is not None:
-                before_summary()
             result = await SelectedSummarySlot(
                 owner.name, prepared.witness.session_id
             ).run_selected_summary(
@@ -184,15 +181,44 @@ class OwnerCompactionCommit:
         """
         with self.boundary.hold(owner, owner_generation, witness, settled=False) as held:
             for attempt in self.journal.summaries.history(witness.session_file):
-                if not attempt.state.reconcile_unchanged_source:
-                    continue
-                attempt.request.interrupted_check(
+                check = attempt.request.interrupted_check(
                     SessionRevision.observe(witness.session_file),
                     self.inputs._read_unlocked(),
                     owner.incarnation,
                     TurnId(held.receipt.turn_id),
-                ).require_valid()
-                self.journal.summaries.retire_unchanged(attempt)
+                )
+                self.journal.summaries.retire_unchanged(attempt, check)
+
+    def settle_selected_refusal(self, owner, owner_generation, source, declined) -> None:
+        """Settle a fresh correlated no-write refusal, never its original input.
+
+        Unlike interrupted recovery this is the still-current operation. The
+        same original source and journal transition owners enforce both paths.
+        """
+        with self.boundary.hold(
+            owner, owner_generation, source.native,
+            pending_input_keys=source.pending_input_keys,
+        ) as held:
+            source.require_current(held)
+            attempt = self.journal.summaries.get(declined.operation_id)
+            attempt.require_session(source.native.session_file)
+            CommitReservationCheck(
+                source=attempt.request.source,
+                revision=SessionRevision.observe(source.native.session_file),
+                incarnation=owner.incarnation,
+                owner=owner.process_identity,
+                turn=TurnId(held.receipt.turn_id),
+                pending_input_keys=source.pending_input_keys,
+            ).require_valid()
+            check = attempt.request.reservation_check(
+                SessionRevision.observe(source.native.session_file),
+                self.inputs._read_unlocked(),
+            )
+            check.require_valid()
+            self.journal.summaries.refuse(attempt.operation_id, declined.reason)
+            self.journal.summaries.retire_unchanged(
+                self.journal.summaries.get(attempt.operation_id), check
+            )
 
 
     def commit(
