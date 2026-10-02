@@ -9,7 +9,7 @@ When that context is admissible, `ReadyContext.install` decodes the same history
 again. The SDK's initial settings lookup reads selector metadata, so it is not
 a third full body decode.
 
-The existing `SessionContext` owns restoration. It will acquire the selected
+The existing `SessionContext` owns restoration. It acquires the selected
 messages once, pass that resource to the existing `ContextBudget`, and install
 those same messages only when admission selects `ReadyContext`. A compaction
 context retains its existing empty resident messages. Later budget decisions
