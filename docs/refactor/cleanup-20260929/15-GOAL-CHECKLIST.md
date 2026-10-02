@@ -1,3 +1,47 @@
+## Fresh public ten-owner wave: latency still unresolved — 2026-10-02
+
+Actual fresh327id017fc0e520e7 is separate from failed326 despite identical
+wording. The authoritative snapshot now has7 channel responses/receipts328–334,
+three model IGNORE decisions and two expected external-CLI pending entries.
+Those seven replies took62.455–246.509 seconds after shared claim acceptance.
+Reply generation after creation is not the entire delay: FULL execution creation
+alone starts13.431–166.974 seconds after acceptance, including triage preparation
+and model work. Evidence public327-observation.json. No failure is invented and
+no old326 input replayed. Current user screen export confirms the Checked/no
+response labels under each Received reply describe OTHER recipients of that
+reply; original327 is a different row. Sch owns source criterion +clear original
+handling inspection, not a duplicate UI outcome.
+
+Sch505 traces four competing relevance criteria, including task-only triage
+and unconditional no-ack coordination guidance, which can suppress an explicit
+current user connectivity request. Existing WakePolicy/InstructionFile owns one
+criterion and every frame/selected/coordination consumer must derive from it.
+No forcedFULL, phrase classifier or changed normal channel reply fanout.
+
+Arendt489 pushed new missing startup/admission observations; ten saved-owner
+private gate does NOT reproduce the huge public delay (slot max4.288s, get_state
+2.559s, admission0.102s, pipe<1ms). Three sources require journaled compaction
+before admission. These are actual negative findings, not a latency fix or Ready.
+Einstein now owns independent existing compaction-policy/pre-turn caller closure,
+coordinating shared builders with Arendt; no replay/threshold workaround. Arendt
+retains physical latency and missing-cursor relation.
+
+Kepler503 nominal bulk source certification deleted18lines/added29 and has
+actual9 original claims/6native proofs/3replies +20ACP facts/overlap on3saved
+owners. WHOLE gate FAILED because one current cursor was absent, with unproven
+followup inputs preserved; no observer-race or caught-error claim without proof.
+That gap stays with489 and does not block independent merged checkpoints.
+
+Core504 merged5395eb6 (existing context history/rename/oldturn-diff44+/17−)
+and Toad295 mergedb4a7424c (prepared-batch restore12+/10−). Both are qualified
+scoped checkpoints, NOT default-live yet. Kepler owns one independent normal69
+receiving pair from those merged heads; parent owns quiet/default publication.
+Full remaining performance moved to298/Text21; meaningful new298 sidebar resource
+reuse11deleted/33added uses original prepared-row frames and both existing callers,
+no new cache/state type. Busy actual public workload video/profile still required.
+Mendel297 owns remaining original C0 command-source/catalog/submission closure.
+Full original goal remains ACTIVE, without shrinking scope.
+
 ## Channel and scrolling checkpoint DEFAULT INSTALLED — 2026-10-02
 
 Core502 merged1282a422, Toad294 mergedb9ebd4c; paired qualified Toad284
