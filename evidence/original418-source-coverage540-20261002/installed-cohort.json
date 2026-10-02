@@ -1,0 +1,15 @@
+{
+  "core_source": "a7f237205bcd4ebfaa081187d7cd25db8554b3b7",
+  "source_file_count": 339,
+  "files_byte_equal": true,
+  "wheel_sha256": "8242b420a09b31d8a718e7f894534db6a7a1b7f4175a73c72184da83ef9a400a",
+  "sdk": "0.12.1",
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "source_proof": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/coverage540-installed/source-proof.json",
+  "source_proof_sha256": "dabfd731a1c2c97bd16c66e79546bc10b2d87274ccd04591816ab49ff09b3893",
+  "native_manifest_sha256": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
+  "native_tree_pin": "# agent-comms-native-tree-v1 d8ceeee18889e372ff72b4d068750fb06e2688762bcb95a098892761a5fd548a",
+  "production_writer": "Einstein;914aa844 has zero production delta from a7f23720",
+  "public_activation": "not performed",
+  "admission": "original unresolved NotSent refusal; not an accepted queued input"
+}
