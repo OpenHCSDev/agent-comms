@@ -2,6 +2,7 @@
 
 Run directly to export public history/questions. --answers scores supplied JSON;
 --native-probes reads original input/context/answer/checkpoint references.
+--native-checkpoint measures an original committed cut without a model call.
 Oracle metadata is omitted from exported questions.
 Exact-match scoring deliberately measures identifiers/state, not prose quality.
 """
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import unique_fields
-from retained_native_fixture import RecordedNativeProbe
+from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
 
 @dataclass(frozen=True)
@@ -275,7 +276,12 @@ class RecallScenario:
         result = ScoredScenario(self, condition, tuple(scored)).public()
         return dict(result, native_probes=evidence,
                     scope="recorded original native probes; condition label is not construction proof",
-                    canonical_availability="original retained facts reported; not independently scored",
+                    canonical_availability={
+                        item.identity: evidence[item.identity]["canonical_availability"]
+                        if item.identity in evidence else {
+                            "evaluated": False, "reason": "No original native probe supplied"
+                        } for item in self.rounds
+                    },
                     provider_prompt_presence="not measured; native user/context proof reported")
 
 
@@ -409,11 +415,17 @@ def main() -> None:
     recorded = parser.add_mutually_exclusive_group()
     recorded.add_argument("--answers", type=Path)
     recorded.add_argument("--native-probes", type=Path)
+    recorded.add_argument("--native-checkpoint", type=Path,
+                          help="RecordedNativeCheckpoint reference to an original managed cut")
+    parser.add_argument("--previous-checkpoint", type=Path,
+                        help="Original ancestor cut; reports source changes, not revision authority")
     recorded.add_argument("--probe-prompts", action="store_true")
     parser.add_argument(
         "--condition", type=Condition, choices=tuple(Condition), default=Condition.BOUNDED
     )
     args = parser.parse_args()
+    if args.previous_checkpoint is not None and args.native_checkpoint is None:
+        parser.error("--previous-checkpoint requires --native-checkpoint")
     scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
     result = scenario.public()
     if args.probe_prompts:
@@ -425,6 +437,14 @@ def main() -> None:
             "rounds": json.loads(args.native_probes.read_text(), object_pairs_hook=unique_fields)
         })
         result = scenario.score_native(args.condition, probes)
+    if args.native_checkpoint is not None:
+        checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
+            args.native_checkpoint.read_text(), object_pairs_hook=unique_fields
+        ))
+        previous = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
+            args.previous_checkpoint.read_text(), object_pairs_hook=unique_fields
+        )) if args.previous_checkpoint is not None else None
+        result = checkpoint.inspect(previous)
     print(json.dumps(result, indent=2))
 
 
