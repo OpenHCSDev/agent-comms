@@ -3,6 +3,8 @@
 Read the current project prompt at `.pi/APPEND_SYSTEM.md` when available and the
 standing owner decisions in `docs/DECISIONS.md`. Follow the latest NRA and
 refactor-audit skills. Current owner instructions supersede old plan holds.
+Keep the short reminders at the top of that prompt in context after compaction.
+Use ordinary language: what changed, what still fails, what happens next.
 
 - Work in persistent isolated worktrees under `/home/ts/wt`. Preserve the dirty
   main checkout, other agents' work, native sessions and uncertain input records.
