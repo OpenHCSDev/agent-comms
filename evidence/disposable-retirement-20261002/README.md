@@ -9,3 +9,9 @@ Native `dist`, extensions, package metadata and locks remain in place with befor
 Worktrees were clean, had no initialized submodules, were ancestors of their repository's `origin/main`, and passed reverse Git metadata and process/import consumer checks. Removal used ordinary `git worktree remove`; no force was used. Branches/common object stores survive. All ignored original logs/reports were copied and hash verified under the persistent raw receipt directory before removal.
 
 Raw screens, preservation manifests and receipts remain under `.artifacts/cleanup-aggressive-20261002` in this worktree. Source/unreviewed work, saved sessions, UNKNOWN dispositions, active buses and public entrypoints were not modified. UV/scientific caches and other agents' active/claimed paths were excluded. No tests, builds, providers or additional agents were launched.
+
+## Continuation and correction
+
+Continued with 17 more unused environment prefixes and five more native dependency leaves. The two remaining operational environment consumers were preserved. The current cumulative counts and deletion-window byte readings are in `receipt.json`.
+
+A post-retirement registry check found `pr17-direct-dm-wake-review` still declares the old harness worktree despite being inactive. Its exact HEAD/branch and original `.coverage` bytes were restored at the original path; no public bus fields were changed. Eleven worktrees remain retired. Future worktree checks cover all registered current worktree declarations, including inactive threads; active-only checks were insufficient. The restored allocated bytes are deducted in the conservative net figure. Earlier raw receipts remain intact as historical records.

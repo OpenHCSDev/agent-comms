@@ -1,12 +1,12 @@
 {
   "scope": "new cleanup only; prior e9d9/1e1/Singer/Sch/Mendel/parent excluded",
-  "current_available_bytes": 18803441664,
-  "deletion_window_df_delta_bytes": 2768056320,
+  "current_available_bytes": 19855646720,
+  "deletion_window_df_delta_bytes": 3995099136,
   "concurrent_cleanup_caveat": "Observed df deltas include concurrent host activity. Exclusive native dependency blocks 1421737984 separately measured.",
-  "environments_removed": 17,
+  "environments_removed": 34,
   "computed_caches_removed": 79,
-  "flat_fully_merged_worktrees_removed": 12,
-  "unused_native_dependency_leaves_removed": 10,
+  "flat_fully_merged_worktrees_removed": 11,
+  "unused_native_dependency_leaves_removed": 15,
   "native_dist_extensions_locks_preserved_hash_checked": true,
   "source_feature_loss": false,
   "saved_sessions_unknown_bus_or_default_mutations": false,
@@ -952,6 +952,601 @@
           "allocated": 58630144
         }
       ]
+    },
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch05-retired-environment-group-receipt.json",
+      "before_available_bytes": 18662289408,
+      "after_available_bytes": 19463290880,
+      "observed_df_delta_bytes": 801001472,
+      "exclusive_before_bytes": 802070528,
+      "removed": [
+        {
+          "path": "/home/ts/wt/toad-receiving-authored474-20261001/.artifacts/runtime-authored474-20261001",
+          "wt": "/home/ts/wt/toad-receiving-authored474-20261001",
+          "allocated": 83955712,
+          "exclusive": 23826432,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 83955712,
+          "exclusive_before_bytes": 32133120,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-authored474-20261001/.artifacts/runtime-authored474-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-00-runtime-authored474-20261001-activation.json",
+              "sha256": "0c2369d94c2aaa93f8ac95b2e938924a5b6028ab46f4857ea04d8e25f1a8b583"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-authored474-20261001/.artifacts/runtime-authored474-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-00-runtime-authored474-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-first-ui-end-keypad-20260930/.artifacts/installed-first-ui-end-keypad",
+          "wt": "/home/ts/wt/toad-first-ui-end-keypad-20260930",
+          "allocated": 85340160,
+          "exclusive": 25702400,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 85340160,
+          "exclusive_before_bytes": 37138432,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-first-ui-end-keypad-20260930/.artifacts/installed-first-ui-end-keypad/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-01-installed-first-ui-end-keypad-activation.json",
+              "sha256": "575c361e6d7df90ac428f9fcfbfbb3ab8abf1f0721ff541c0e45e85d3968b82a"
+            },
+            {
+              "original": "/home/ts/wt/toad-first-ui-end-keypad-20260930/.artifacts/installed-first-ui-end-keypad/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-01-installed-first-ui-end-keypad-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001",
+          "wt": "/home/ts/wt/toad-receiving-native491-20261001",
+          "allocated": 88027136,
+          "exclusive": 27938816,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 88027136,
+          "exclusive_before_bytes": 32735232,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-02-runtime-native491-20261001-activation.json",
+              "sha256": "8392c222a266faf1755ee03ae60dee4e491215c9cbd0887be35fff1965e1d28d"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-02-runtime-native491-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-performance284-20261001",
+          "wt": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001",
+          "allocated": 84742144,
+          "exclusive": 24592384,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 84742144,
+          "exclusive_before_bytes": 32911360,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-performance284-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-03-runtime-compaction499-performance284-20261001-activation.json",
+              "sha256": "5f54c310912ca9769172d18e041d65f63ef1b50f3551af868482467c7d4ad11a"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-performance284-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-03-runtime-compaction499-performance284-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-operation-observation-20261001",
+          "wt": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001",
+          "allocated": 88883200,
+          "exclusive": 28729344,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 88883200,
+          "exclusive_before_bytes": 37052416,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-operation-observation-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-04-runtime-compaction499-operation-observation-20261001-activation.json",
+              "sha256": "c0dc0a12d5b1a64ba8d1ded23a8490ebb06a51297cb1aa5e620765a6b5e0a280"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-operation-observation-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-04-runtime-compaction499-operation-observation-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-evidence498-20261001",
+          "wt": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001",
+          "allocated": 88313856,
+          "exclusive": 28168192,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 88313856,
+          "exclusive_before_bytes": 32964608,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-evidence498-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-05-runtime-evidence498-20261001-activation.json",
+              "sha256": "bf1efd340544e5902d0d72c0c86480313f6b390ffd80fa4595ccb09d1b89834c"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-evidence498-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-05-runtime-evidence498-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-result-family-20261001",
+          "wt": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001",
+          "allocated": 74461184,
+          "exclusive": 14307328,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 74461184,
+          "exclusive_before_bytes": 22630400,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-result-family-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-06-runtime-compaction499-result-family-20261001-activation.json",
+              "sha256": "0b041d7675a1ba3b74e4c341dcc0b5a5054a4a30d5fbf269ba6fcf4e1ccad927"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-result-family-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-06-runtime-compaction499-result-family-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction494-20261001",
+          "wt": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001",
+          "allocated": 83542016,
+          "exclusive": 23396352,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 83542016,
+          "exclusive_before_bytes": 31711232,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction494-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-07-runtime-compaction494-20261001-activation.json",
+              "sha256": "db5f47dacdea8edcd665e27b891bd315289730f04915502504b5b063f1dbe03f"
+            },
+            {
+              "original": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction494-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-07-runtime-compaction494-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-04",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 83017728,
+          "exclusive_before_bytes": 27877376,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-04/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-08-runtime-openhcs-channel-delivery-476-20261001-04-activation.json",
+              "sha256": "84a560ce18aa31efa4879598f48cf44e1c2addadccddbc1a99a4dc606677df84"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-04/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-08-runtime-openhcs-channel-delivery-476-20261001-04-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg",
+            "staging-receipt.json"
+          ],
+          "historical_or_within_retired_group_refs": [
+            {
+              "target": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930",
+              "consumer": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/managed-tool-bus-release/activation.json",
+              "kind": "manifest_or_config"
+            }
+          ],
+          "allocated_bytes": 82759680,
+          "exclusive_before_bytes": 34549760,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-09-runtime-managed-tool-bus-custody-20260930-activation.json",
+              "sha256": "336a13c86d26ba1bb04fd56a4913926a94d4c337f6b2f37dc184ba68b4098db4"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-09-runtime-managed-tool-bus-custody-20260930-staging-receipt.json",
+              "sha256": "76ab805c25117c67b189e18b405ac3d1a6ad137dc4273e5889762b910ce79275"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-09-runtime-managed-tool-bus-custody-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg",
+            "staging-receipt.json"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 83103744,
+          "exclusive_before_bytes": 31281152,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-10-runtime-atomic-page-handoff-20261001-activation.json",
+              "sha256": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-10-runtime-atomic-page-handoff-20261001-staging-receipt.json",
+              "sha256": "1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-10-runtime-atomic-page-handoff-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-03",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 82886656,
+          "exclusive_before_bytes": 31064064,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-03/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-11-runtime-openhcs-channel-delivery-476-20261001-03-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-05",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 82952192,
+          "exclusive_before_bytes": 31129600,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-05/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-12-runtime-openhcs-channel-delivery-476-20261001-05-activation.json",
+              "sha256": "af11cfc5e3e52ae7d0b181a7a8383d34670f4b531c2464de70290610ea7d3001"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-05/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-12-runtime-openhcs-channel-delivery-476-20261001-05-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg",
+            "staging-receipt.json"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 95256576,
+          "exclusive_before_bytes": 40132608,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-13-runtime-native-applied-cohort-20261001-activation.json",
+              "sha256": "f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-13-runtime-native-applied-cohort-20261001-staging-receipt.json",
+              "sha256": "5a6a82b04d68ab1436a323eb7678c010d28925b22433a63402bff70330d94b82"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-13-runtime-native-applied-cohort-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-02",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 82837504,
+          "exclusive_before_bytes": 31014912,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-02/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-14-runtime-openhcs-channel-delivery-476-20261001-02-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg"
+          ],
+          "historical_or_within_retired_group_refs": [
+            {
+              "target": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001",
+              "consumer": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-04/activation.json",
+              "kind": "manifest_or_config"
+            },
+            {
+              "target": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001",
+              "consumer": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-05/activation.json",
+              "kind": "manifest_or_config"
+            }
+          ],
+          "allocated_bytes": 98304,
+          "exclusive_before_bytes": 98304,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-15-runtime-openhcs-channel-delivery-476-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001",
+          "wt": null,
+          "top": [
+            ".gitignore",
+            ".lock",
+            "CACHEDIR.TAG",
+            "activation.json",
+            "bin",
+            "lib",
+            "lib64",
+            "pyvenv.cfg",
+            "staging-receipt.json"
+          ],
+          "historical_or_within_retired_group_refs": [],
+          "allocated_bytes": 83124224,
+          "exclusive_before_bytes": 31301632,
+          "preserved_metadata": [
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-16-runtime-native-publication-joined-20261001-activation.json",
+              "sha256": "7c887479390742c051bea1c05adf142fbdcb10b1e39ae1bac9a67a8d24d4b093"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-16-runtime-native-publication-joined-20261001-staging-receipt.json",
+              "sha256": "d27f064e32d93d0b008f5884635a39317f6baddca69cf50d69f27e0c6d9e82a0"
+            },
+            {
+              "original": "/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/group05-16-runtime-native-publication-joined-20261001-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "root": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017",
+          "kind": "native_dependency",
+          "allocated_bytes": 142168064,
+          "exclusive_before_bytes": 142168064,
+          "preserved_metadata": [],
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-retained-group05-17.json"
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "root": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b",
+          "kind": "native_dependency",
+          "allocated_bytes": 142176256,
+          "exclusive_before_bytes": 142176256,
+          "preserved_metadata": [],
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-retained-group05-18.json"
+        }
+      ]
+    },
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch06-old-worktree-native-dependencies-receipt.json",
+      "before_available_bytes": 19456856064,
+      "after_available_bytes": 19882897408,
+      "observed_df_delta_bytes": 426041344,
+      "exclusive_before_bytes": 426520576,
+      "removed": [
+        {
+          "path": "/home/ts/wt/comms-phased-owner-cutover-20260930/.phase-fixtures/native-target/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/wt/comms-phased-owner-cutover-20260930/.phase-fixtures/native-target/node_modules/@earendil-works/pi-coding-agent",
+          "wt": "/home/ts/wt/comms-phased-owner-cutover-20260930",
+          "allocated": 142176256,
+          "root": "/home/ts/wt/comms-phased-owner-cutover-20260930/.phase-fixtures/native-target",
+          "exclusive_before_bytes": 142176256,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/old-native-source-preserved06-00.json"
+        },
+        {
+          "path": "/home/ts/wt/comms-fork-first-input-compaction-20260929/.native-candidate/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/wt/comms-fork-first-input-compaction-20260929/.native-candidate/node_modules/@earendil-works/pi-coding-agent",
+          "wt": "/home/ts/wt/comms-fork-first-input-compaction-20260929",
+          "allocated": 142176256,
+          "root": "/home/ts/wt/comms-fork-first-input-compaction-20260929/.native-candidate",
+          "exclusive_before_bytes": 142176256,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/old-native-source-preserved06-01.json"
+        },
+        {
+          "path": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent",
+          "wt": "/home/ts/wt/comms-compaction-live-fix-20260928",
+          "allocated": 142168064,
+          "root": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/native",
+          "exclusive_before_bytes": 142168064,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/old-native-source-preserved06-02.json"
+        }
+      ]
     }
   ],
   "preserved_ignored_proofs": [
@@ -1028,5 +1623,23 @@
     "qualified288 URI donor",
     "UV cache parent-owned",
     "Sch/Mendel separately claimed scratch/phase WTs"
-  ]
+  ],
+  "worktree_restoration": {
+    "reason": "Persistent inactive thread current worktree declaration remains authoritative; restored original source/proof path. Earlier active-only registry filter was insufficient.",
+    "path": "/home/ts/wt/comms-pr17-injected-harness",
+    "head": "eaa542b8da8b567fa4997e4e9d14fca849bebda0",
+    "branch": "feat/pr17-injected-harness",
+    "restored_proofs": [
+      {
+        "original": "/home/ts/wt/comms-pr17-injected-harness/.coverage",
+        "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/comms-pr17-injected-harness/.coverage",
+        "sha256": "0b02148ee2c26912b78793dc5e24689a14ca369102347d200b7ca34e50adcccb",
+        "bytes": 77824
+      }
+    ],
+    "allocated_restored_bytes": 4108288,
+    "current_available_bytes": 18793590784,
+    "public_store_mutations": 0
+  },
+  "conservative_net_after_restoration_bytes": 3990990848
 }
