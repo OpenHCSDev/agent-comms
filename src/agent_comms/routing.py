@@ -151,13 +151,7 @@ class DeliveryMessage:
         from .wire_record import WireRecord
 
         verified = WireRecord.from_wire(record, root_id)
-        deliveries = verified.deliveries()
-        if deliveries:
-            for delivery in deliveries:
-                yield cls(delivery.message, delivery.audience.sender_lookup)
-        else:
-            for message in verified.messages():
-                yield cls(message)
+        yield from verified.delivery_messages()
 
 
 

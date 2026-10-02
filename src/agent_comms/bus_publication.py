@@ -244,6 +244,11 @@ class CommittedDelivery(MessageWireRecord):
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
 
+    def delivery_messages(self):
+        from .routing import DeliveryMessage
+
+        return (DeliveryMessage(self.message, self.audience.sender_lookup),)
+
 
 def initial_sideband(
     wire_root_id: str,

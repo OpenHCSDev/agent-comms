@@ -8,6 +8,7 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
+from functools import partial
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -34,6 +35,51 @@ class NativeSourceCursor:
         if type(bus) is not MessageBus or type(store) is not Coordination:
             raise ValueError("current native cursor needs actual private stores")
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
+
+    @classmethod
+    async def read_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str):
+        return await Coordination.run_async(
+            bus.log.path.parent / "coordination.sqlite3",
+            partial(cls._read_owned, bus, wire_root_id, owner_name),
+        )
+
+    @classmethod
+    def _read_owned(cls, bus, wire_root_id, owner_name, store):
+        return cls(bus, store, wire_root_id=wire_root_id).read(owner_name=owner_name)
+
+    @classmethod
+    async def advance_async(
+        cls, bus: MessageBus, *, wire_root_id: str, owner: Thread,
+        owner_admission_generation: int, owner_generation: int,
+        committed_input_id: str | None,
+    ):
+        return await Coordination.run_async(
+            bus.log.path.parent / "coordination.sqlite3",
+            partial(cls._advance_owned, bus, wire_root_id, owner,
+                    owner_admission_generation, owner_generation, committed_input_id),
+        )
+
+    @classmethod
+    def _advance_owned(cls, bus, wire_root_id, owner, admission, generation, input_id, store):
+        return cls(bus, store, wire_root_id=wire_root_id).advance(
+            owner=owner, owner_admission_generation=admission,
+            owner_generation=generation, committed_input_id=input_id,
+        )
+
+    @classmethod
+    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str):
+        return await Coordination.run_async(
+            bus.log.path.parent / "coordination.sqlite3",
+            partial(cls._refresh_owned, bus, wire_root_id, owner_name),
+        )
+
+    @classmethod
+    def _refresh_owned(cls, bus, wire_root_id, owner_name, store):
+        owner, admission = bus._registry.live_owner_with_admission(owner_name)
+        person = store.participants.get(stable_thread_lookup(owner.created_at))
+        return cls._advance_owned(
+            bus, wire_root_id, owner, admission, person.participant_generation, None, store
+        )
 
     def _coverage(self, lookup: str, contention: StoreLockContention | None = None) -> SourceCoverage:
         return SourceCoverage(

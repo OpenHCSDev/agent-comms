@@ -38,8 +38,8 @@ from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
+from .store_files import _async_store_lock
 from .turn_context import InputContributionCoordinates
-from .store_files import _store_lock
 
 
 class NativeCommitObservation[T](ABC):
@@ -313,7 +313,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         payload = self.native.reader.encode(command)
         if self.maintenance_root is not None:
             try:
-                with _store_lock(self.maintenance_root / "wire"):
+                async with _async_store_lock(self.maintenance_root / "wire"):
                     MaintenanceBarrier(
                         self.maintenance_root / "registry.json"
                     ).assert_open_unlocked()

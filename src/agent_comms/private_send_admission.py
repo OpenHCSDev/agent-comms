@@ -1,4 +1,4 @@
-"""One-use selected native admission held through every raw pipe write.
+"""One-use selected admission commits before the original raw pipe writer.
 
 Only exclusion acquisition is repeatable. A taken token, durable UNKNOWN marker,
 raw byte or uncertain commit never becomes a fresh send attempt.
@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
-from .compaction_private_inputs import PrivateInputSend
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
 from .coordination_response import _response_boundary
@@ -40,7 +39,6 @@ if TYPE_CHECKING:
     from .selected_tool_broker import NativeToolMode
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
-from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -141,7 +139,7 @@ class PrivateSendAdmission:
 
         TrackedTurnSession retains child/tool custody. Its return or exception
         follows cleanup; disconnect and unknown outcomes are never committed here.
-        The raw writer still owns the sole one-use send token and exclusion.
+        The raw writer retains the sole one-use send token after durable admission.
         """
         with Coordination(str(self.store_path)) as store:
             try:
@@ -172,10 +170,17 @@ class PrivateSendAdmission:
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
 
-    @contextmanager
-    def _exclusion(
+    def _admit_once(
         self, actual_session_file: Path, selected_runtime_revision: FileRevision | None
-    ) -> Iterator[tuple[Coordination, RegistrySnapshot, sqlite3.Connection, PrivateInputSend]]:
+    ) -> None:
+        """Commit the exact grant under original fences, then release them.
+
+        Stop, rename and maintenance before this grant refuse admission. After
+        it, they are ordered after the original admitted attempt, whose raw
+        writer retains its own pipe and token. The durable UNKNOWN marker and
+        recorded admission remain the original recovery evidence; neither
+        successful pipe completion nor subsequent owner loss permits replay.
+        """
         with ExitStack() as authority:
             try:
                 store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
@@ -201,7 +206,29 @@ class PrivateSendAdmission:
                 if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
                     raise PromptAdmissionBusy("Native admission database is busy") from error
                 raise
-            yield store, registry, db, raw
+            # Busy acquisition is the ONLY repeatable operation. From token
+            # consumption through COMMIT/fsync, every failure retains original
+            # uncertainty and must propagate without another admission probe.
+            if not self._once.acquire(blocking=False):
+                raise IdentityConflict("native send admission cannot be reused")
+            _require_no_private_owner_rename(self.bus.log.path.parent)
+            MaintenanceBarrier(self.bus._registry.store.path).assert_open_unlocked()
+            self.owner.require_snapshot(
+                registry, "recipient registry owner changed before native send"
+            )
+            assert_native_runtime_schema(db)
+            self.participant.require(store, self.stage.recipient_lookup)
+            reserved = self.stage.require_reservation(
+                db, self.input_id, self.participant, self.token_digest
+            )
+            self.stage.require_claim(store)
+            raw.mark_unknown(self.input_id)
+            reserved.sent_owner_admission_generation.record(
+                reserved, db, self.owner.admission_generation
+            )
+            # ExitStack commits/closes the original journal and coordinator
+            # before releasing registry/bus/wire custody. No payload byte is
+            # eligible until all of that retirement has returned successfully.
 
     def _saved_session(
         self, actual: Path, runtime_revision: FileRevision | None
@@ -251,24 +278,5 @@ class PrivateSendAdmission:
             pass
         else:
             raise IdentityConflict("native send admission requires the isolated raw writer")
-        with self._exclusion(actual_session_file, selected_runtime_revision) as (store, registry, db, raw):
-            if not self._once.acquire(blocking=False):
-                raise IdentityConflict("native send admission cannot be reused")
-            _require_no_private_owner_rename(self.bus.log.path.parent)
-            MaintenanceBarrier(self.bus._registry.store.path).assert_open_unlocked()
-            self.owner.require_snapshot(
-                registry, "recipient registry owner changed before native send"
-            )
-            assert_native_runtime_schema(db)
-            self.participant.require(store, self.stage.recipient_lookup)
-            reserved = self.stage.require_reservation(
-                db, self.input_id, self.participant, self.token_digest
-            )
-            self.stage.require_claim(store)
-            # Persist UNKNOWN before any byte. Then retain the SAME journal's
-            # exclusion through the raw writer; neither ACK nor fake result clears it.
-            raw.mark_unknown(self.input_id)
-            reserved.sent_owner_admission_generation.record(
-                reserved, db, self.owner.admission_generation
-            )
-            yield
+        self._admit_once(actual_session_file, selected_runtime_revision)
+        yield

@@ -155,7 +155,7 @@ class SourceCoverage:
             if request.after_seq > max(witness.latest_source_seq, source.marker.admission_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
             request.require_exhausted(more)
-            return witness, initials, more
+        return witness, tuple(initials), more
 
     def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
