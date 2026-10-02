@@ -320,7 +320,7 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
 
 
 class NativeEvidenceScope(ExitStack):
-    """One acquired original source for a bounded corroboration operation.
+    """One acquired input-proof source for a bounded corroboration operation.
 
     Only the current descriptor and its decoded bytes are held. Switching
     journals closes the previous reader; no proof, receipt or disposition is
@@ -329,7 +329,7 @@ class NativeEvidenceScope(ExitStack):
 
     def __init__(self) -> None:
         super().__init__()
-        self.readers: dict[Path, NativeEvidenceRead] = {}
+        self.readers: dict[Path, NativeInputEvidenceRead] = {}
 
     @classmethod
     @contextmanager
@@ -345,11 +345,11 @@ class NativeEvidenceScope(ExitStack):
                 scope.close()
                 raise
 
-    def for_source(self, path: Path) -> NativeEvidenceRead:
+    def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
         if path not in self.readers:
             self.close()
-            self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))
+            self.readers[path] = self.enter_context(NativeInputEvidenceRead.open(path))
         return self.readers[path]
 
     def close(self) -> None:
