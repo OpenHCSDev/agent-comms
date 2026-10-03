@@ -253,6 +253,9 @@ class CertifiedSourceRead:
         return decoded()
 
     def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
+        return self.marker.access.context_manifests(self, incarnation, snapshot)
+
+    def indexed_context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
         """Capture only original observations of this recorded incarnation.
 
         The index stores byte ranges and original owner identity, never manifest
@@ -412,6 +415,26 @@ class PrefixCertificate(CheckpointTable, TypedTable):
     mtime_ns: int
     ctime_ns: int
 
+    @classmethod
+    def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:
+        """Decode the original certificate through its own declaration.
+
+        Derived index membership belongs to the mutable writer. An immutable
+        archive retains this same certificate and its original sealed sidecar.
+        """
+        actual = SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE name=?", (cls.declared_name,),
+        ))
+        if {row.name: row.sql for row in actual} != cls.schema_objects():
+            raise RelationViolationError("Private bus prefix certificate schema is unavailable.")
+        try:
+            row = cls.one(db, singleton=1)
+            if row is None:
+                raise RelationViolationError("Private bus checkpoint certificate is missing.")
+            return row.witness()
+        except (TypeError, ValueError) as error:
+            raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
+
     def witness(self) -> PrefixWitness:
         return PrefixWitness(
             self.root_id,
@@ -492,13 +515,7 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     )
     if {row.name: row.sql for row in actual} != schema:
         raise RelationViolationError("Private bus checkpoint schema is unavailable.")
-    try:
-        row = PrefixCertificate.one(db, singleton=1)
-        if row is None:
-            raise RelationViolationError("Private bus checkpoint certificate is missing.")
-        return row.witness()
-    except (TypeError, ValueError) as error:
-        raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
+    return PrefixCertificate.read_witness(db)
 
 
 def _index_row(db: sqlite3.Connection, offset: int, raw: bytes, record: WireRecord) -> None:
@@ -752,9 +769,9 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):
     path = _path(bus.path)
     with ExitStack() as resources:
         try:
-            db = resources.enter_context(closing(_connect(path)))
+            db = resources.enter_context(closing(marker.access.open_checkpoint(path)))
             stream = resources.enter_context(bus.path.open("rb"))
-            saved = _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
+            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path)
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
             raise RelationViolationError(

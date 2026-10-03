@@ -260,3 +260,36 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     live.registry.rename("alice", "new-alice")
     assert FieldCodec.encode(source.provenance) == before
     assert live.views.historical_threads("alice")
+
+
+@pytest.mark.parametrize('changed_resource', ['bus', 'certificate', 'pending'])
+def test_archived_certificate_remains_immutable_without_writer_recovery(migrated, changed_resource):
+    """Archive reads reject mutation/pending custody instead of adopting it."""
+    import sqlite3
+    from agent_comms.checkpoint_seals import PendingSeal
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.wire_log import WireLog
+
+    _, _, _, source = migrated
+    log = WireLog(Path(source.root) / 'bus.jsonl')
+    with log.certified_read() as opened:
+        saved = opened.witness
+        assert opened.connection.execute('PRAGMA query_only').fetchone()[0] == 1
+        with pytest.raises(sqlite3.OperationalError, match='readonly'):
+            opened.connection.execute('DELETE FROM prefix_certificate')
+    if changed_resource == 'bus':
+        log.path.write_bytes(log.path.read_bytes() + b'\n')
+    elif changed_resource == 'certificate':
+        with sqlite3.connect(log.path.with_name('private_bus_checkpoint.sqlite3')) as db:
+            db.execute('CREATE TABLE unrelated(value TEXT)')
+    else:
+        marker = log.read_metadata_unlocked(required=True)
+        marker.seal_with(PendingSeal.capture(saved, saved,
+                                            log.path.with_name('private_bus_checkpoint.sqlite3')))
+        log.write_metadata_unlocked(marker)
+    before = {p: p.read_bytes() for p in (log.path, log.metadata_path,
+                                         log.path.with_name('private_bus_checkpoint.sqlite3'))}
+    with pytest.raises(RelationViolationError):
+        with log.certified_read():
+            pass
+    assert {p: p.read_bytes() for p in before} == before

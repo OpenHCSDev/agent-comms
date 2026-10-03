@@ -49,14 +49,18 @@ class BusPageRow(PageIndexTable, TypedTable):
 
 
 class BusPageIndex:
-    def __init__(self, bus_path: Path):
+    def __init__(self, bus_path: Path, *, readonly: bool = False):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_page_index.sqlite3")
-        self.connection = sqlite3.connect(self.path, timeout=30)
-        self.connection.execute("PRAGMA synchronous=FULL")
+        self.connection = sqlite3.connect(
+            self.path.as_uri() + "?mode=ro" if readonly else self.path,
+            uri=readonly, timeout=30,
+        )
+        self.connection.execute("PRAGMA query_only=ON" if readonly else "PRAGMA synchronous=FULL")
         try:
             with self.connection:
-                self.connection.execute("BEGIN IMMEDIATE")
+                if not readonly:
+                    self.connection.execute("BEGIN IMMEDIATE")
                 actual = SQLiteSchemaObject.read(
                     self.connection.execute(
                         "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
@@ -68,7 +72,7 @@ class BusPageIndex:
                     for table in TypedTable.members_with(PageIndexTable)
                     for name, sql in table.schema_objects().items()
                 }
-                if not actual:
+                if not actual and not readonly:
                     for statement in schema.values():
                         self.connection.execute(statement)
                 elif {row.name: row.sql for row in actual} != schema:

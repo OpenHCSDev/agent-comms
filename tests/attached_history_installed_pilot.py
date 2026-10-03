@@ -1,9 +1,9 @@
-"""Normal installed fresh-fork wire view against copied actual saved history.
+"""Normal installed fresh-fork wire view against original actual saved history.
 
 No Node/provider call, source/store reset, patched transport or live write.
-The supplied current checkpoint schema is checked read-only before copying.
-Only destination-owned registry/checkpoint inode seals are rebuilt by their
-canonical owners; public/private publication bytes remain unchanged.
+The supplied original immutable certificates are checked read-only.
+History references preserve the source inodes and seals; no archive index,
+registry guard or certificate is rebuilt.
 """
 import asyncio
 from importlib.resources import files
@@ -30,11 +30,11 @@ class InstalledApp(ToadApp):
     CSS_PATH = files('toad').joinpath('toad.tcss')
 
 
-from retained_history_cutover_pilot import copy_actual_history
+from retained_history_cutover_pilot import reference_actual_history
 
 def prepare_physical_fixture():
-    """Prepare the same real archive copy for the existing native recorder."""
-    from retained_history_cutover_pilot import copy_actual_history
+    """Prepare the same original immutable archive for the existing native recorder."""
+    from retained_history_cutover_pilot import reference_actual_history
     destination=Path(os.environ['PHYSICAL_FIXTURE_ROOT'])
     destination.mkdir(mode=0o700,parents=True,exist_ok=False)
     project=destination/'project';project.mkdir(mode=0o700)
@@ -47,7 +47,7 @@ def prepare_physical_fixture():
     comms=wire(destination/'wire');root_id=comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread('archive-review',frozenset({'comms'}),str(project),
                                   model='selected-offline/fixture',thinking_level='off'))
-    copy_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
+    reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     index=next(i for i,item in enumerate(comms.views.historical_threads()) if item.thread.name=='nra-architecture')
     receipt={'owner':'Mendel477/268','root':str(comms.root),'wire_root_id':root_id,
              'project':str(project),'profile':str(profile),'archive_index':index,
@@ -69,7 +69,7 @@ async def main():
         for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
             comms.registry.declare(Thread(name,frozenset({'openhcs','comms'}),str(root),parent=parent,
                                           process_identity=None))
-        originals=copy_actual_history(comms.root,live)
+        originals=reference_actual_history(comms.root,live)
         sources=comms.bus.history.sources()
         assert [len(source.provenance.threads) for source in sources]==[104,7]
         assert [len(source.provenance.aliases) for source in sources]==[9,0]
