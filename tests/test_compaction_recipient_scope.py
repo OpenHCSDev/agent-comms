@@ -6,8 +6,8 @@ from test_private_bus_checkpoint import _root
 
 
 def facts_for(comms, owner):
-    with comms.bus.log.locked():
-        return comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
+    with comms.bus.log.certified_read() as source:
+        return tuple(source.retained_task_facts(owner.incarnation))
 
 
 def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_them(tmp_path):
