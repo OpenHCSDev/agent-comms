@@ -1,0 +1,10 @@
+--- dist/modes/rpc/rpc-mode.js
++++ dist/modes/rpc/rpc-mode.js
+@@ -359,6 +360,7 @@
+                     autoCompactionEnabled: session.autoCompactionEnabled,
+                     messageCount: session.messages.length,
+                     pendingMessageCount: session.pendingMessageCount,
++                    nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
+                 };
+                 return success(id, "get_state", state);
+ 
