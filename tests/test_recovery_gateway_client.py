@@ -35,19 +35,12 @@ def root():
 
 @pytest.mark.skipif(sys.platform != "linux", reason="gateway requires Linux SO_PEERCRED")
 async def test_existing_gateway_restart_returns_only_redacted_owner_dto(root: Path) -> None:
-    with CoordinationStore(root / "coordination.sqlite3") as store:
-        db = store._connection
-        db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
-        db.execute("INSERT INTO owner_generations VALUES ('a','Alice',1)")
-        db.execute("INSERT INTO current_executions VALUES ('a',NULL,NULL,0)")
-        db.execute(
-            (
-                "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                "ms) VALUES ('SECRET_EXECUTION','acp',json_object('kind','pending'),NULL,'Ali"
-                "ce','a',1,2,NULL,1,1)"
-            )
-        )
+    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination_tables.executions import ExecutionOrigin
+    with Coordination(root / "coordination.sqlite3") as store:
+        store.participants.register("a", "Alice", "Alice", committed=True)
+        store.executions.create("SECRET_EXECUTION", ExecutionOrigin.ACP, "a", "Alice", 2)
+        store.executions.mark_pending("SECRET_EXECUTION", expected_revision=1)
     database = root / "coordination.sqlite3"
     initial = (database.stat().st_ino, database.stat().st_size, database.stat().st_mtime_ns)
     gateway = RecoveryGateway(root)
