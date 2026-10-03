@@ -216,3 +216,34 @@ final batch. Previous SDK objects/scopes remain readable, but their missing
 original serialized strings keep prompt-presence unavailable. No reconstructed
 bytes earn credit. Actual third-cut completion remains pending, and neither full
 S4 nor the 30-pair comparative study is claimed.
+
+## Three original cuts completed
+
+The single distinct third-cut continuation completed on Core563 receiving4c30
+and unchanged native de166 in186.904s, exit0. It reused the same enrolled SDK
+fork, skipped both previous compactions/probes, published only the authorized
+archive-root drop, and submitted one new probe through the ordinary ACP router.
+The original source remained42,580,611 bytes with SHAafdb3948; the native child
+and inspector closed. No public input, original replay or optional policy change.
+
+`three-cut-functional.json` records the original linked commits and measurements:
+
+- Canonical retained availability:6/6,9/9,11/11 across three distinct ancestor cuts.
+- Authorized correction then explicit drop: constraint revision mass0 on both
+  transitions, three eligible original constraint lineages each. Decision mass
+  remains unavailable because this fixture has no eligible authored decision.
+- Recorded task answers:9/9, zero stale or missing. Cut1 was tool-free; cuts2
+  and3 each used bash and are tool-assisted task quality, not unassisted recall.
+- SDK objects and original registry scopes retained for all three cuts. Exact
+  serialized SDK envelope presence is11/11 for cut3; cuts1/2 remain unavailable.
+  No final HTTP-body presence or cache-saving comparison is claimed.
+- Both prior STARTED InputDocument rows and original SDK/checkpoint/scope files
+  remain unchanged. The old second ACP outcome remains UNCONFIRMED despite its
+  successful native answer and explicit administrative lease retirement.
+
+The first failed serialization receipt and later blocked publication/teardown
+receipts remain original. This closes the three-cut configured functional path,
+not full S4 or a comparative provider study. No30-pair/$75 study was started.
+The remaining study requires explicit model/sample/spend approval and must keep
+unassisted recall separate from tool-assisted task quality and unavailable
+prompt-byte evidence. Production/runtime source is unchanged by PR560.
