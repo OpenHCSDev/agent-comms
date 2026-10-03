@@ -191,8 +191,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     def complete(self, stopped):
         # FencedOwnerBatch retains the ORIGINAL wire custody through this
         # method. Readback belongs here, before resumed owners may progress.
-        self.after_stopped(stopped.lifecycle)
-        results = stopped.launch()
+        results = super().complete(stopped)
         after = stopped.lifecycle.registry.snapshot()
         for previous, result in zip(self.originals, results, strict=True):
             current = after.threads[result.thread]
@@ -202,6 +201,9 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         self.note('retained-batch-launched-configurations-verified-public-ui-pending',
                   finished=time.time(), results=FieldCodec.encode(results))
         return results
+
+    def bind_target_launch(self, lifecycle):
+        lifecycle.pin_private_nk_launch(ROOT, ROOT_ID, NATIVE)
 
     @property
     def manifest(self):
@@ -393,7 +395,6 @@ def main():
                        'owners_before':FieldCodec.encode(audience)}, opened,indent=2)
             opened.flush()
             os.fsync(opened.fileno())
-        service.owners.pin_private_nk_launch(ROOT, ROOT_ID, NATIVE)
         runtime = RestartEnvironment(path=str(TARGET / 'bin')+':'+os.environ['PATH'], virtual_env=str(TARGET))
         results = service.owners.restart_owners(runtime=runtime,
             source_interpreter=str(args.source_interpreter), cutover=operation)
