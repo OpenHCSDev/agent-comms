@@ -35,6 +35,8 @@ from .input_drain import InputDrain
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
+from .native_input_owner import RegistryOwner
+from .routing import TurnRouting
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
@@ -403,8 +405,9 @@ class TurnRunner:
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
-        turn_id: str, detail: str, routing=None, *, task=None,
-    ):
+        turn_id: str, detail: str, routing: TurnRouting | None = None, *,
+        task: asyncio.Task[Any] | None = None,
+    ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
 
         The joined worker may commit admission before its awaiting caller is
@@ -418,7 +421,9 @@ class TurnRunner:
         )
         return owner
 
-    def finish_turn(self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence):
+    def finish_turn(
+        self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence,
+    ) -> TurnTranscriptUpdate:
         """Release the original CAS lease and retain its waiter cleanup."""
         terminal_fence = self.comms.agents.finish_turn(lease)
         resources.push_async_callback(

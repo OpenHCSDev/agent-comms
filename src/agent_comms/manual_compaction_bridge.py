@@ -12,13 +12,17 @@ from . import agent_events as events
 from .compaction_errors import CompactionJournalError
 from .compaction_result import CompactionResult, RefusedCompactionResult
 from .coordinator import Coordination
+from .native_input_owner import RegistryOwner
 from .turn_phase import CompactionPhase, PublishingPhase
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 
-def prepare_compaction_turn(runner, resources, session_id, thread_name, turn_id, task):
+def prepare_compaction_turn(
+    runner: TurnRunner, resources: AsyncExitStack, session_id: str,
+    thread_name: str, turn_id: str, task: asyncio.Task,
+) -> RegistryOwner:
     owner = runner.acquire_turn(
         resources, session_id, thread_name, turn_id, "Compacting context", task=task,
     )

@@ -17,6 +17,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
+from agent_comms.transcript_updates import TurnTranscriptUpdate
 from test_backend_native_lifecycle import native_backend as native_backend
 
 
@@ -185,7 +186,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
             assert comms.agents.activity_of(execution.thread_name).detail == "Compacting context"
     await progress.consume(ae.StreamSettled())
     assert execution.finish_event.is_set()
-    assert comms.registry.require(execution.thread_name).active_turn is None
+    assert comms.registry.require(execution.thread_name).turn_lease == execution.turn_lease
     assert comms.goals.goal_wait("waiting") is not None
     diagnostic = {"elapsed_ms": 3} if not value.successful else None
     await progress.consume(
@@ -220,8 +221,6 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         execution.thread_name,
         execution.turn_id,
         execution.turn_lease,
-        stream_settled=progress.settled,
-        terminal_fence=progress.terminal_fence,
     )
     assert comms.goals.goal_wait("waiting") is None
     assert comms.registry.require("waiting").goal.state.active
@@ -246,28 +245,17 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
 
     async def disconnected(session, event, **kwargs):
         await original(session, event, **kwargs)
-        if isinstance(event, ae.TurnSettled):
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             raise ConnectionError("client disconnected after receiving terminal event")
 
     monkeypatch.setattr(runner.effects, "_emit_event", disconnected)
-    kwargs = dict(stream_settled=progress.settled, terminal_fence=progress.terminal_fence)
-    if after_stream:
+    with pytest.raises(ConnectionError, match="client disconnected"):
         await runner.settle_turn(
             execution.session_id,
             execution.thread_name,
             execution.turn_id,
             execution.turn_lease,
-            **kwargs,
         )
-    else:
-        with pytest.raises(ConnectionError, match="client disconnected"):
-            await runner.settle_turn(
-                execution.session_id,
-                execution.thread_name,
-                execution.turn_id,
-                execution.turn_lease,
-                **kwargs,
-            )
     assert comms.goals.goal_wait("waiting") is None
     goal = comms.registry.require("waiting").goal
     assert comms.goals.release_waits_after_terminal_turn(progress.terminal_fence) == ()
