@@ -1,0 +1,34 @@
+{
+  "source_checkpoint": "02b0eea427cfb9a2e5a466d9802309f86af43aa0",
+  "builder_source": "3837bfea355c5f1ede1ed4a9f8e302dbca25c148",
+  "manifest": "044646789787e3d3bcc43391e62c214d94ddffeb528692235c9d35f0db7af968",
+  "tree": "2d46dc7c8256c12990a26e756d97a56d275533ffbb95f24ebc9596004611f648",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "2d6124dbd0d108572d2f8fe8d5b57d8f2d00fd9f892e58c63c53dedc8c68fe8c",
+      "new_sha256": "aa094cf8dca78e33e85e8cf35b1e2296726477c420a068f26895b44da9e5ce70"
+    }
+  ],
+  "all_other_members_equal_native555_de166": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138407820,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; changed preparation custody path acceptance remains Mendel-owned, not Ready/live.",
+  "native_full_trust": true,
+  "canonical_prepare_exit": 0,
+  "exact_source_helper_embedded": true,
+  "original_de166_fulltree_and_manifest_unchanged": true,
+  "artifact_validation": "Build/module/import/fulltree/source identity only; changed installed boundary qualification remains Mendel-owned",
+  "negative_controls": [
+    "First pin-derivation read stale output path; failed before pin mutation. Corrected original path, reused same fresh assembly.",
+    "Old manifest canonical prepare reused de166, not new artifact proof; preserved log."
+  ]
+}
