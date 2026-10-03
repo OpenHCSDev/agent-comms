@@ -42,7 +42,7 @@ class RecordedNativeCheckpoint:
     # Optional external measurement evidence, not native lifecycle state. A
     # missing original capture cannot be reconstructed from today's registry.
     registry_scope: FileProvenance | None = None
-    wire: Annotated[Path, PathText] | None = None
+    wire: Annotated[Path | None, PathText] = None
 
     @staticmethod
     def read_record(reference: FileProvenance, target):

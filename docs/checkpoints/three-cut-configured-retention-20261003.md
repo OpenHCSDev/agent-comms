@@ -66,3 +66,29 @@ The single configured journey is in progress in
 The first route preserves original instructions/tools/62prefix messages and
 configured provider. No completed-cut/model-quality claim before final records.
 
+
+## Original cut preserved after measurement failure
+
+The first configured compaction committed as007f49e4e2484792b1aed0164a28e9ba
+(native fbc0a97b), with six required retained facts. The driver then failed saving
+the optional wire Path: its PathText representation was inside a union where
+FieldCodec encode did not apply it. The existing measurement declaration now
+places PathText around the optional Path. External JSON remains string/null;
+there is no Core codec/schema/runtime change.
+
+Raw receipt/log remain unchanged:143.226s, no probe input, original source/proof
+unchanged and native closed. Read-only original owners corroborate the successful
+cut and last native leaf; the fixed checkpoint artifact roundtrips.
+
+Explicit `--continue-committed` continues this known cut in the same fork, without
+calling its summarizer again. The existing resource verifies the original commit,
+zero private original inputs, idle dead prior fixture owners and exact last leaf;
+Registration owns the replacement private process. Normal production admission
+still owns every new probe. The original failed receipt stays separate from
+`continuation-receipt.json`. This is not UNKNOWN recovery or automatic replay.
+
+Shared capture closure5f1ff1a6 removes the decoder-interpreter constraint from
+OriginalTypedCapture.read. CurrentTypedCapture inherits that one algorithm. The
+root decoder remains selected explicitly; RetainedOwnerLaunch captures/fences the
+selected running owner's actual process, cmdline and environment independently.
+Kepler receives that unchanged helper directly for355.

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -50,7 +51,8 @@ def ordinary_source():
 
 @asynccontextmanager
 async def configured_saved_agent(stage, package, source_file, receiver, receipt, *,
-                                 capture_source=ordinary_source, observe_launch=unchanged_launch):
+                                 capture_source=ordinary_source, observe_launch=unchanged_launch,
+                                 continuation=None):
     """Acquire one configured saved fork and close its original child on every exit."""
     import agent_comms
     installed = Path(agent_comms.__file__).resolve().parent
@@ -58,7 +60,8 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     assert installed.is_relative_to(Path(sys.prefix))
     for path in (checkout/'src/agent_comms').rglob('*.py'):
         assert path.read_bytes() == (installed/path.relative_to(checkout/'src/agent_comms')).read_bytes()
-    stage.mkdir(mode=0o700, exist_ok=False)
+    if continuation is None:
+        stage.mkdir(mode=0o700, exist_ok=False)
     started = time.monotonic()
     original, launch = capture_source()
     originals = {path: digest(path) for path in
@@ -66,11 +69,26 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     original_hash = originals[source_file]
     verify_native_package(package)
     service = Comms(stage/'wire')
-    from agent_comms.compaction_journal import CompactionJournal
-    fork = await CompactionJournal(service.root/'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(
-        str(package), str(source_file), original.worktree, str(stage/'forks')),
-        cwd=Path(original.worktree), env=dict(launch.environment))
-    root_id = service.messaging.initialize_private_initial_protocol()
+    journal = CompactionJournal(service.root/'compaction-commits.sqlite3')
+    if continuation is None:
+        fork = await journal.private_inputs.fork(ForkSessionRequest(
+            str(package), str(source_file), original.worktree, str(stage/'forks')),
+            cwd=Path(original.worktree), env=dict(launch.environment))
+        root_id = service.messaging.initialize_private_initial_protocol()
+    else:
+        from agent_comms.compaction_records import NativeForkCreation
+        from agent_comms.native_entries import NativeEntry
+        # Explicitly continue a completed measured cut, never an uncertain input.
+        # The normal production writer still owns every subsequent admission.
+        assert continuation.journal == journal.path
+        assert InputDispositions(service.root/InputDispositions.filename).read().rows == {}
+        with journal.transaction() as db:
+            fork = NativeForkCreation.one(db, session_file=continuation.reference.session_file)
+        with NativeEntry.open_evidence(fork.path) as evidence:
+            _, entry, _ = continuation.capture(fork, evidence)
+            assert evidence.entries[-1].id == entry.id
+        with service.bus.log.certified_read() as source:
+            root_id = source.witness.root_id
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment = dict(launch.environment)
@@ -84,10 +102,16 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
         environment.pop(key, None)
     identity = ProcessIdentity.capture(os.getpid())
     for name in ('source529','peer529'):
-        service.registry.declare(Thread(name, frozenset({'source529'}), original.worktree,
-            parent=original.name, process_identity=identity,
-            session_file=fork.session_file if name=='source529' else None,
-            model=original.model, thinking_level=original.thinking_level))
+        if continuation is None:
+            service.registry.declare(Thread(name, frozenset({'source529'}), original.worktree,
+                parent=original.name, process_identity=identity,
+                session_file=fork.session_file if name=='source529' else None,
+                model=original.model, thinking_level=original.thinking_level))
+        else:
+            prior = service.registry.require(name)
+            prior.require_idle()
+            assert not prior.process_alive
+            service.registry.register(replace(prior, process_identity=identity), new_owner=True)
     owner = service.registry.require('source529')
     environment.update(owner.native_environment(service.root, service.registry.snapshot(), owner.worktree))
     observe_launch(environment)
@@ -111,8 +135,9 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
         receipt.update(elapsed_seconds=time.monotonic()-started,
             original_source_unchanged=all(digest(path)==expected for path,expected in originals.items()),
             native_children_closed=all(child.returncode is not None for child in children))
-        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-        (stage/'receipt.json').chmod(0o600)
+        result = stage/('receipt.json' if continuation is None else 'continuation-receipt.json')
+        result.write_text(json.dumps(receipt,indent=2)+'\n')
+        result.chmod(0o600)
         print(json.dumps(receipt),flush=True)
 
 

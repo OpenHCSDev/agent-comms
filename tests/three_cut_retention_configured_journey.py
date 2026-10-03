@@ -14,13 +14,14 @@ import sys
 
 from acp.agent.router import build_agent_router
 from agent_comms.acp_extension import CompactRequest, encode_request
-from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry, MessageEntry
 from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.message_reference import MessageReference
 from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
 from agent_comms.turn_context import FileProvenance, NativeProvenance
@@ -57,7 +58,22 @@ def frozen_scenario(root_reference):
     return RecallScenario('configured-original-three-cut', tuple(rounds))
 
 
-async def run(stage, package, original_python):
+def committed_checkpoint(stage):
+    """Explicitly locate a known successful cut; never infer input replay safety."""
+    from agent_comms.comms import Comms
+    service = Comms(stage / 'wire')
+    session_file = service.registry.require('source529').require_saved_session()
+    journal = CompactionJournal(service.root / 'compaction-commits.sqlite3')
+    attempt, = journal.summaries.history(session_file)
+    assert isinstance(attempt.state, ManualCommittedSummary)
+    scope = stage / 'cut-1-registry.private.json'
+    checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity, attempt.state.commit_id,
+                                         FileProvenance(str(scope), digest(scope)), service.root / 'bus.jsonl')
+    checkpoint.inspect()
+    return checkpoint
+
+
+async def run(stage, package, original_python, *, continuation=None):
     captured = CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),
                                    original_python).read('openhcs-architecture-memory')
     original = captured.require_current()
@@ -81,8 +97,10 @@ async def run(stage, package, original_python):
     contexts = stage / 'sdk-contexts'
     with observe_native_requests(package, observation, contexts=contexts) as observe_launch:
         async with configured_saved_agent(stage, package, source_file, Receiver(), receipt,
-                capture_source=capture_source, observe_launch=observe_launch) as (agent, owner, session):
-            contexts.mkdir(mode=0o700)
+                capture_source=capture_source, observe_launch=observe_launch,
+                continuation=continuation) as (agent, owner, creation):
+            contexts.mkdir(mode=0o700, exist_ok=continuation is not None)
+            session = NativeSessionIdentity(creation.session_id, creation.session_file)
             service = agent._comms
             router = build_agent_router(agent)
             journal = CompactionJournal(service.root / 'compaction-commits.sqlite3')
@@ -94,38 +112,46 @@ async def run(stage, package, original_python):
                                 worktree=owner.worktree, **changes)
                 return declaration
 
-            archive = pin('For this private retention task, the binding archive root is /artifacts/S4/α/source.')
-            prohibition = pin('Never replay an uncertain input. This prohibition remains binding throughout this task.')
-            alternative = pin('warm-review was chosen; cold-review remains a valid review alternative and must remain available.')
-            scenario = frozen_scenario(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True))
-            record(stage / 'frozen-oracle.private.json', scenario)
-            record(stage / 'public-questions.json', scenario.public())
-            publications = [archive, prohibition, alternative]
+            if continuation is None:
+                archive = pin('For this private retention task, the binding archive root is /artifacts/S4/α/source.')
+                pin('Never replay an uncertain input. This prohibition remains binding throughout this task.')
+                pin('warm-review was chosen; cold-review remains a valid review alternative and must remain available.')
+                scenario = frozen_scenario(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True))
+                record(stage / 'frozen-oracle.private.json', scenario)
+                record(stage / 'public-questions.json', scenario.public())
+            else:
+                scenario = RecallScenario.read(stage / 'frozen-oracle.private.json')
+                reference = FieldCodec.decode(MessageReference, json.loads(scenario.rounds[0].questions[0].evidence_ref))
+                with service.bus.log.certified_read() as source:
+                    original, = source.references((reference,))
+                    archive = original.message
             probes = {}
             for number, round_ in enumerate(scenario.rounds, 1):
                 if number == 2:
                     archive = pin('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',
                                   change=CorrectionTaskChange(archive.reference))
-                    publications.append(archive)
                 elif number == 3:
-                    publications.append(service.messaging.send_user_message(owner.name,
+                    service.messaging.send_user_message(owner.name,
                         'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',
-                        worktree=owner.worktree, task=UserTaskDrop(CorrectionTaskChange(archive.reference))))
+                        worktree=owner.worktree, task=UserTaskDrop(CorrectionTaskChange(archive.reference)))
 
-                scope = record(stage / f'{round_.identity}-registry.private.json', service.registry.store.read())
-                print(f'{round_.identity}: configured canonical compaction', flush=True)
-                prior_operations = {attempt.identity.operation_id for attempt in journal.summaries.history(session.session_file)}
-                await router('session/prompt', {'sessionId': owner.name,
-                    'prompt': [{'type': 'text', 'text': ' '}], '_meta': encode_request(CompactRequest(
-                    'Preserve exact original facts and authorized corrections/drops. Do not resume inherited work.'))}, False)
-                attempt, = (attempt for attempt in journal.summaries.history(session.session_file)
-                            if attempt.identity.operation_id not in prior_operations)
-                assert isinstance(attempt.state, ManualCommittedSummary)
-                operation = journal.operations.get(attempt.state.commit_id)
-                operation.committed_outcome()
-                checkpoint = RecordedNativeCheckpoint(journal.path,
-                    SummaryOperationIdentity(session.session_file, attempt.identity.operation_id),
-                    operation.commit_id, scope, service.root / 'bus.jsonl')
+                if continuation is not None and number == 1:
+                    checkpoint = continuation
+                    print(f'{round_.identity}: original committed cut, no summary replay', flush=True)
+                else:
+                    scope = record(stage / f'{round_.identity}-registry.private.json', service.registry.store.read())
+                    print(f'{round_.identity}: configured canonical compaction', flush=True)
+                    prior_operations = {attempt.identity.operation_id for attempt in journal.summaries.history(session.session_file)}
+                    await router('session/prompt', {'sessionId': owner.name,
+                        'prompt': [{'type': 'text', 'text': ' '}], '_meta': encode_request(CompactRequest(
+                        'Preserve exact original facts and authorized corrections/drops. Do not resume inherited work.'))}, False)
+                    attempt, = (attempt for attempt in journal.summaries.history(session.session_file)
+                                if attempt.identity.operation_id not in prior_operations)
+                    assert isinstance(attempt.state, ManualCommittedSummary)
+                    operation = journal.operations.get(attempt.state.commit_id)
+                    operation.committed_outcome()
+                    checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity,
+                        operation.commit_id, scope, service.root / 'bus.jsonl')
                 # Persist the committed cut before admitting the new, distinct probe.
                 record(stage / f'{round_.identity}-checkpoint.private.json', checkpoint)
                 print(f'{round_.identity}: distinct held-out probe', flush=True)
@@ -149,7 +175,7 @@ async def run(stage, package, original_python):
                 receipt['completed_rounds'].append(round_.identity)
                 assert service.registry.require(owner.name).active_turn is None
 
-            record(stage / 'source-publications.private.json', tuple(publications))
+            record(stage / 'source-publications.private.json', service.bus.log.full_history())
             report = scenario.score_native(Condition.TASK_MEMORY, RecordedNativeProbes(probes))
             record(stage / 'original-measurements.private.json', report)
             assert report['three_original_cuts_observed']
@@ -166,4 +192,6 @@ async def run(stage, package, original_python):
 
 
 if __name__ == '__main__':
-    asyncio.run(run(Path(sys.argv[1]).absolute(), Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute()))
+    stage = Path(sys.argv[1]).absolute()
+    continuation = committed_checkpoint(stage) if sys.argv[4:] == ['--continue-committed'] else None
+    asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))
