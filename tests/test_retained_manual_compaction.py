@@ -27,7 +27,7 @@ from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_session_reopen import validate_native_reopen
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.selected_pi_route import observe_selected_compaction_decision
@@ -213,11 +213,11 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         )
         assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(
-            validate_native_reopen,
+            NativeSessionIdentity.read,
             package,
             str(session),
-            expected_session_id=preparation.witness.session_id,
         )
+        identity.require_same_session(preparation.witness)
         latest = None
         user_entries_after = 0
         with session.open() as stream:

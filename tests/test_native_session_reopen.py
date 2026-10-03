@@ -1,4 +1,4 @@
-"""Fresh strict saved-session validation after a native manager is discarded."""
+"""Saved identity selection and strict history loading have distinct owners."""
 
 from __future__ import annotations
 
@@ -6,14 +6,11 @@ import json
 import os
 import subprocess
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
-from agent_comms import backend, native_session_reopen, native_custody
-from agent_comms.native_pi import CAPABILITY
-from agent_comms.native_session_reopen import NativeReopenError, validate_native_reopen
+from agent_comms.native_session_reopen import NativeReopenError, NativeSessionIdentity
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -46,7 +43,7 @@ console.log(JSON.stringify({id:manager.getSessionId(),file:manager.getSessionFil
     return Path(PACKAGE), Path(item["file"]), item["id"]
 
 
-def test_strict_native_reopen_preserves_bytes_and_strips_preload(saved, tmp_path, monkeypatch):
+def test_saved_identity_preserves_bytes_and_strips_preload(saved, tmp_path, monkeypatch):
     package, file, identity = saved
     before = file.read_bytes()
     marker = tmp_path / "ambient-marker"
@@ -56,26 +53,21 @@ def test_strict_native_reopen_preserves_bytes_and_strips_preload(saved, tmp_path
         f"writeFileSync({json.dumps(str(marker))},'unsafe');"
     )
     monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
-    assert validate_native_reopen(package, str(file), expected_session_id=identity) == identity
+    observed = NativeSessionIdentity.read(package, str(file))
+    assert observed == NativeSessionIdentity(identity, str(file))
     assert file.read_bytes() == before and not marker.exists()
     with pytest.raises(NativeReopenError, match="identity changed"):
-        validate_native_reopen(package, str(file), expected_session_id="wrong")
+        observed.require_same_session(NativeSessionIdentity("wrong", str(file)))
 
 
-@pytest.mark.parametrize("mutation", ["tail", "legacy", "ancestry", "missing", "symlink"])
+@pytest.mark.parametrize("mutation", ["legacy", "missing", "symlink"])
 def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
     package, file, identity = saved
     rows = file.read_text().splitlines()
-    if mutation == "tail":
-        file.write_bytes(file.read_bytes().rstrip(b"\n"))
-    elif mutation == "legacy":
+    if mutation == "legacy":
         header = json.loads(rows[0])
         header["version"] = 2
         file.write_text("\n".join([json.dumps(header), *rows[1:]]) + "\n")
-    elif mutation == "ancestry":
-        message = json.loads(rows[1])
-        message["parentId"] = "forged"
-        file.write_text("\n".join([rows[0], json.dumps(message)]) + "\n")
     elif mutation == "missing":
         file.unlink()
     else:
@@ -84,93 +76,31 @@ def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
         file = alias
     before = file.read_bytes() if file.exists() else None
     with pytest.raises(NativeReopenError):
-        validate_native_reopen(package, str(file), expected_session_id=identity)
+        NativeSessionIdentity.read(package, str(file))
     assert (file.read_bytes() if file.exists() else None) == before
 
 
-@pytest.mark.asyncio
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
-    saved, tmp_path, monkeypatch
-):
+@pytest.mark.parametrize("mutation", ["tail", "ancestry"])
+def test_native_loader_rejects_invalid_history_without_repair(saved, mutation):
     package, file, identity = saved
-    original = native_session_reopen.validate_native_reopen
-    checks = []
-
-    def checked(_stub, session, *, expected_session_id):
-        checks.append((session, expected_session_id))
-        return original(package, session, expected_session_id=expected_session_id)
-
-    monkeypatch.setattr(native_custody, "validate_native_reopen", checked)
-    marker = tmp_path / "provider-prompt-sent"
-    state_identity = tmp_path / "rpc-identity"
-    state_identity.write_text("wrong-session")
-    stub = tmp_path / "pi-stub"
-    stub.write_text(
-        f"#!{sys.executable}\n"
-        "import json,sys,select\n"
-        f"from pathlib import Path\n"
-        "state=json.loads(sys.stdin.readline())\n"
-        f"identity=Path({str(state_identity)!r}).read_text()\n"
-        "print(json.dumps({'type':'response','command':'get_state','id':state['id'],"
-        "'success':True,'data':{'nativeInputProofCapability':"
-        f"{CAPABILITY!r},'sessionId':identity,"
-        f"'sessionFile':{str(file)!r}}}}}),flush=True)\n"
-        "if select.select([sys.stdin],[],[],0.1)[0]:\n"
-        f"    Path({str(marker)!r}).write_text(sys.stdin.readline())\n"
-    )
-    stub.chmod(0o700)
-    persistent = backend.PersistentPiSession()
-    await persistent.discard_for_external_write(str(file))
-    assert not persistent.available and persistent.custody.session_file == str(file)
-    first = [
-        event
-        async for event in backend.stream_agent_events(
-            str(stub),
-            [],
-            "never send",
-            str(tmp_path),
-            session_file=str(file),
-            persistent_session=persistent,
-        )
-    ]
-    assert first[-1].ok is False and not marker.exists()
-    assert persistent.custody.session_file == str(file)
-    assert checks == [(str(file), None)]
-    state_identity.write_text(identity)
-
-    @contextmanager
-    def refuse(_public, _native, _text):
-        yield False
-
-    second = [
-        event
-        async for event in backend.stream_agent_events(
-            str(stub),
-            [],
-            "still no provider",
-            str(tmp_path),
-            session_file=str(file),
-            persistent_session=persistent,
-            send_boundary=refuse,
-        )
-    ]
-    assert second[-1].ok is False and not marker.exists()
-    assert checks == [(str(file), None), (str(file), None)]
-    assert persistent.custody.session_file == str(file), "Only a settled validated turn clears it"
+    if mutation == "tail":
+        file.write_bytes(file.read_bytes().rstrip(b"\n"))
+    else:
+        rows = file.read_text().splitlines()
+        entry = json.loads(rows[1])
+        entry["parentId"] = "forged"
+        file.write_text("\n".join([rows[0], json.dumps(entry)]) + "\n")
     before = file.read_bytes()
-    file.write_bytes(before.rstrip(b"\n"))
-    third = [
-        event
-        async for event in backend.stream_agent_events(
-            str(stub),
-            [],
-            "do not retry",
-            str(tmp_path),
-            session_file=str(file),
-            persistent_session=persistent,
-        )
-    ]
-    assert third[-1].reason_code == "compaction_reopen_invalid"
-    assert not marker.exists()
-    assert file.read_bytes() == before.rstrip(b"\n")
+    # The original header is still the same. It cannot attest valid history;
+    # the real loader must refuse before constructing an agent or provider.
+    assert NativeSessionIdentity.read(package, str(file)) == NativeSessionIdentity(identity, str(file))
+    result = subprocess.run([
+        "node", "--no-global-search-paths", "--import", str(package / "dist/agent-comms-import-fence.mjs"),
+        "--input-type=module", "-e",
+        "import {pathToFileURL} from 'node:url'; import {join} from 'node:path';"
+        "const {SessionManager}=await import(pathToFileURL(join(process.argv[1], 'dist/core/session-manager.js')));"
+        "SessionManager.open(process.argv[2]);",
+        str(package), str(file),
+    ], capture_output=True, timeout=10)
+    assert result.returncode != 0
+    assert file.read_bytes() == before

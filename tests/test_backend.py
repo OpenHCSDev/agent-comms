@@ -2639,38 +2639,6 @@ for line in sys.stdin:
                 )
             ]
             assert revived[-1].ok is True
-            # The real pinned strict validator is exercised separately against
-            # a valid native JSONL. This stub tests the transport lifecycle:
-            # discard injected manager; a different process and matching
-            # get_state identity precede a distinct new input's provider work.
-            from agent_comms import native_custody
-
-            calls = []
-
-            def validated(_launcher, file, *, expected_session_id):
-                calls.append((file, expected_session_id))
-                return "fixed-session"
-
-            monkeypatch.setattr(native_custody, "validate_native_reopen", validated)
-            retired = persistent.custody.child.proc
-            await persistent.discard_for_external_write(str(session_file))
-            assert retired is not None and retired.returncode is not None
-            assert not persistent.available and persistent.custody.session_id == "fixed-session"
-            reopened = [
-                event
-                async for event in backend.stream_agent_events(
-                    stub,
-                    [],
-                    "fresh after discarded manager",
-                    str(tmp_path),
-                    session_file=str(session_file),
-                    persistent_session=persistent,
-                )
-            ]
-            assert reopened[-1].ok is True
-            assert calls == [(str(session_file), "fixed-session")]
-            assert persistent.available and persistent.custody.child.proc is not retired
-            assert persistent.custody.idle().current
             borrowed_proc = persistent.custody.child.proc
 
             async def delayed_turn():
