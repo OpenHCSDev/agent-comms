@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -438,11 +439,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
-        await self.inputs.stop_wakes()
-        await self.sessions.close_proxies()
-        await self.turns.close()
-        await self.inputs.close()
-        await self.sessions.release_owned()
+        async with AsyncExitStack() as retirement:
+            retirement.push_async_callback(self.sessions.release_owned)
+            retirement.push_async_callback(self.turns.close)
+            retirement.push_async_callback(self.sessions.close_proxies)
+            retirement.push_async_callback(self.inputs.close)
 
     async def _emit_text(
         self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None

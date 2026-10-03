@@ -38,6 +38,7 @@ from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
 from .cursor_owner import CursorOwner
+from .child_process import join_retirement
 from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions, InputDocument
@@ -486,20 +487,18 @@ class InputDrain(FutureInputQueue):
                     queued[key] = item.immediate()
                 inbox.put_nowait({"type": "interrupt_steering", "_input_ids": list(queued)})
 
-    async def stop_wakes(self) -> None:
-        self.closing = True
-        for task in self.wake_tasks.values():
-            task.cancel()
-        await asyncio.gather(*self.wake_tasks.values(), return_exceptions=True)
-        self.wake_tasks.clear()
-
     async def close(self) -> None:
-        tasks = tuple(self.drain_tasks.values())
-        self.drain_tasks.clear()
-        self._idle_private_revisions.clear()
+        """Retire input producers before their sessions and turns are closed."""
+        self.closing = True
+        tasks = (*self.drain_tasks.values(), *self.wake_tasks.values())
         for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
+        finally:
+            self.drain_tasks.clear()
+            self.wake_tasks.clear()
+            self._idle_private_revisions.clear()
 
     async def input_started(
         self,

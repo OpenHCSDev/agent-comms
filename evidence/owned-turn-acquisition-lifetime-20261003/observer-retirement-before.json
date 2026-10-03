@@ -1,0 +1,190 @@
+{
+  "parsed_modules": 311,
+  "rows": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 439,
+      "declaration": "shutdown"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 555,
+      "declaration": "observe"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 441,
+      "consumer": "self.inputs.stop_wakes"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 442,
+      "consumer": "self.sessions.close_proxies"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 443,
+      "consumer": "self.turns.close"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 444,
+      "consumer": "self.inputs.close"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 814,
+      "declaration": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 623,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 662,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 710,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1296,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 25,
+      "declaration": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 81,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 233,
+      "declaration": "observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 489,
+      "declaration": "stop_wakes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 496,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 76,
+      "resource": "self.drain_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 90,
+      "resource": "self.wake_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 231,
+      "resource": "self.drain_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 228,
+      "resource": "self.drain_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 491,
+      "resource": "self.wake_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 494,
+      "resource": "self.wake_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 498,
+      "resource": "self.drain_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 497,
+      "resource": "self.drain_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 228,
+      "resource": "self.drain_tasks"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 493,
+      "resource": "self.wake_tasks"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 159,
+      "declaration": "background"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 265,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 377,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 529,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 45,
+      "resource": "self.inputs.wake_tasks"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 133,
+      "resource": "check.inputs.wake_tasks"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 183,
+      "consumer": "self.effects.inputs.ensure_live_drain"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 212,
+      "consumer": "self.effects.inputs.ensure_live_drain"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 550,
+      "declaration": "close"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 348,
+      "consumer": "self.inputs.ensure_live_drain"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 275,
+      "consumer": "self.inputs.ensure_live_drain"
+    }
+  ]
+}

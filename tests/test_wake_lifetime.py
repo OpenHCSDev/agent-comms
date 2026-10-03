@@ -46,7 +46,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
         await asyncio.sleep(0)
         assert not task.done()
         assert inputs.pending_turns["owner"] == [queued]
-        await asyncio.wait_for(inputs.stop_wakes(), 1)
+        await asyncio.wait_for(inputs.close(), 1)
         assert task.cancelled()
         assert inputs.pending_turns["owner"] == [queued]
         assert not inputs.dispositions.read().rows

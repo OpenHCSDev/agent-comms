@@ -814,12 +814,19 @@ async def _exec_error(fd: int, command: str) -> None:
 async def join_retirement(task: asyncio.Future):
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
-    while not task.done():
-        try:
-            await asyncio.shield(task)
-        except asyncio.CancelledError as error:
-            interrupted = error
-    result = task.result()
+    try:
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError as error:
+                interrupted = error
+        result = task.result()
+    except BaseException as error:
+        # A failed joined operation still retires its custody. Its error must
+        # not consume the caller's cancellation and restart an observer loop.
+        if interrupted is not None:
+            raise interrupted from error
+        raise
     if interrupted is not None:
         raise interrupted
     return result

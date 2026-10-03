@@ -136,8 +136,9 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("worker_fails", [False, True])
 async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
-    comms, tmp_path, monkeypatch,
+    comms, tmp_path, monkeypatch, worker_fails,
 ):
     """Cancellation cannot leave a recorded input after suppressing worker delivery."""
     owner = CommsAgent(
@@ -156,6 +157,8 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
         original = reserve(*args, **kwargs)
         captured.set()
         assert release.wait(5), "Original reservation worker was not released"
+        if worker_fails:
+            raise RuntimeError("Original reservation worker failed after cancellation")
         return original
 
     monkeypatch.setattr(OriginalTurnInput, "reserve", paused_reservation)
@@ -166,8 +169,13 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
         await asyncio.sleep(0)
         assert not running.done(), "Cancellation escaped the original reservation worker"
         release.set()
-        with pytest.raises(asyncio.CancelledError):
+        with pytest.raises(asyncio.CancelledError) as cancelled:
             await asyncio.wait_for(running, 6)
+        if worker_fails:
+            assert isinstance(cancelled.value.__cause__, RuntimeError)
+            assert str(cancelled.value.__cause__) == (
+                "Original reservation worker failed after cancellation"
+            )
         original, = owner.inputs.dispositions.read().rows.values()
         assert isinstance(original, NotSentInput)
         assert comms.registry.require(name).turn_lease is None
