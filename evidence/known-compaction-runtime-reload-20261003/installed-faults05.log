@@ -1,0 +1,278 @@
+FF
+=================================== FAILURES ===================================
+_ test_known_compaction_retains_original_sdk_context_and_next_input[receipt_mismatch] _
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f5cedcf3770>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5cedbad0f0>
+continuation = 'receipt_mismatch'
+
+    @pytest.mark.parametrize("continuation", ["next_input", "receipt_mismatch", "cancel_hook"])
+    async def test_known_compaction_retains_original_sdk_context_and_next_input(
+        native_backend, monkeypatch, continuation
+    ):
+        """One real saved SDK fork -> fenced commit -> hook -> distinct input."""
+        import hashlib
+        import os
+        from contextlib import aclosing
+        from dataclasses import replace
+        from pathlib import Path
+    
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.compaction_journal import CompactionJournal
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.goals import Goal
+        from agent_comms.native_fork import ForkSessionRequest
+        from agent_comms.native_session_prepare import NativeSessionPreparation
+        from agent_comms.native_custody import ReopenNative
+        from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+        from agent_comms.owner_compaction_provider import NativeSummary
+        from agent_comms.owner_compaction_runtime import _commit_native_summary
+        from agent_comms.owner_compaction_settings import PiCompactionSettings
+        from agent_comms.pi_summary_payloads import SelectedModel
+        from agent_comms.pi_vocabulary import ManualCompactionReason
+        from agent_comms.pi_commands import AgentCommsRestoreCompaction
+        from agent_comms.registration import Registration
+        from agent_comms.selected_pi_route import prepare_selected_native_source
+        from agent_comms.session_fence import session_writer_fence
+        from agent_comms.threads import Thread
+        from native_event_host import install_event_host
+        from urllib.parse import urlsplit
+    
+        native = native_backend
+        name = os.environ.get("PI_WRITER_TEST_SOURCE")
+        if not name:
+            pytest.skip("PI_WRITER_TEST_SOURCE must name original saved native evidence")
+        donor = Path(name).resolve(strict=True)
+        original = hashlib.sha256(donor.read_bytes()).hexdigest()
+        created = await CompactionJournal(native.root / "compaction-commits.sqlite3").private_inputs.fork(
+            ForkSessionRequest(os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor),
+                str(native.project), directory=str(native.root / "native-sessions")),
+            cwd=native.project,
+        )
+        native.session = created.path
+        registry = Registration(native.root / "registry.json")
+        registry.register(Thread("owner", frozenset(), str(native.project),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=created.session_file, model="response-local/fixture",
+            goal=Goal("Keep original source and inputs", "known-commit-control")))
+        owner, generation = registry.live_owner_with_generation("owner")
+        owner, generation = registry.lease_live_turn_with_generation(
+            owner, "known-commit-control", expected_owner_generation=generation,
+        )
+        endpoint = urlsplit(json.loads((native.config / "models.json").read_text())[
+            "providers"]["response-local"]["baseUrl"])
+        probe = native.root / "native-compaction-hooks.jsonl"
+        release = native.root / "release-compaction-hook"
+        command = "sdk-known-compaction-probe"
+        install_event_host(monkeypatch, command, f"{endpoint.scheme}://{endpoint.netloc}",
+            compaction_probe=probe,
+            compaction_release=release if continuation == "cancel_hook" else None,
+            native_settings={"compaction": {
+                "enabled": False, "reserveTokens": 2048, "keepRecentTokens": 1},
+                "retry": {"enabled": False}})
+        arguments = ["--provider", "response-local", "--model", "fixture", "--thinking", "off",
+            "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+            "--no-prompt-templates", "--no-tools"]
+        await NativeSessionPreparation.open(native.persistent, command, arguments,
+            worktree=str(native.project), environment=dict(os.environ),
+            session_file=created.session_file)
+        acquired = native.persistent.custody.idle()
+        launch = acquired.child.key[0]
+    
+        async def prepare(text):
+            return await prepare_selected_native_source(native.persistent,
+                session_file=created.session_file, expected_package=launch.package,
+                selected=SelectedModel("response-local", "fixture", 2000000),
+                settings=PiCompactionSettings(2048, 1), retained_text=text)
+    
+        async with OwnerCompactionCommit.open(native.root / "registry.json", launch.package,
+                created.session_file, native_launch=launch) as bridge:
+            prepared, source = await bridge.prepare_source(owner, generation,
+                prepared=(await prepare("")).require_ready(), prepare=prepare)
+            async def commit():
+                return await _commit_native_summary(bridge, owner, generation, native.persistent,
+                    prepared, source, NativeSummary(source.retained.text + "\n\nControlled SDK commit.", None, None),
+                    reason=ManualCompactionReason)
+    
+            if continuation == "receipt_mismatch":
+                exchange = AgentCommsRestoreCompaction.exchange
+    
+                async def altered(request, *args, **kwargs):
+                    # Alter only this external request's claimed receipt. The real
+                    # native reconciliation must reject it; journal evidence stays.
+                    return await exchange(replace(request, expected=replace(
+                        request.expected, metadata_digest="0" * 64)), *args, **kwargs)
+    
+                monkeypatch.setattr(AgentCommsRestoreCompaction, "exchange", altered)
+                with pytest.raises(ValueError):
+                    await commit()
+            elif continuation == "cancel_hook":
+                committing = asyncio.create_task(commit())
+                try:
+                    async with asyncio.timeout(20):
+                        while not (probe.exists() and '"session_compact"' in probe.read_text()):
+                            await asyncio.sleep(0.01)
+                    committing.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await committing
+                finally:
+                    release.touch()
+                    if not committing.done():
+                        committing.cancel()
+                    await asyncio.gather(committing, return_exceptions=True)
+            else:
+                operation = await commit()
+    
+            if continuation != "next_input":
+                assert isinstance(native.persistent.custody, ReopenNative)
+                assert not acquired.child.proc.alive() and acquired.child.proc.retired
+                assert native.provider.posts == 0 and native.starts == []
+                with bridge.journal.transaction() as db:
+>                   rows = tuple(CompactionOperation.select(db, session_file=created.session_file))
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: TypedTable.select() got an unexpected keyword argument 'session_file'
+
+tests/test_native_catalog_discovery.py:659: TypeError
+_ test_known_compaction_retains_original_sdk_context_and_next_input[cancel_hook] _
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f5ceceffed0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5ced898f30>
+continuation = 'cancel_hook'
+
+    @pytest.mark.parametrize("continuation", ["next_input", "receipt_mismatch", "cancel_hook"])
+    async def test_known_compaction_retains_original_sdk_context_and_next_input(
+        native_backend, monkeypatch, continuation
+    ):
+        """One real saved SDK fork -> fenced commit -> hook -> distinct input."""
+        import hashlib
+        import os
+        from contextlib import aclosing
+        from dataclasses import replace
+        from pathlib import Path
+    
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.compaction_journal import CompactionJournal
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.goals import Goal
+        from agent_comms.native_fork import ForkSessionRequest
+        from agent_comms.native_session_prepare import NativeSessionPreparation
+        from agent_comms.native_custody import ReopenNative
+        from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+        from agent_comms.owner_compaction_provider import NativeSummary
+        from agent_comms.owner_compaction_runtime import _commit_native_summary
+        from agent_comms.owner_compaction_settings import PiCompactionSettings
+        from agent_comms.pi_summary_payloads import SelectedModel
+        from agent_comms.pi_vocabulary import ManualCompactionReason
+        from agent_comms.pi_commands import AgentCommsRestoreCompaction
+        from agent_comms.registration import Registration
+        from agent_comms.selected_pi_route import prepare_selected_native_source
+        from agent_comms.session_fence import session_writer_fence
+        from agent_comms.threads import Thread
+        from native_event_host import install_event_host
+        from urllib.parse import urlsplit
+    
+        native = native_backend
+        name = os.environ.get("PI_WRITER_TEST_SOURCE")
+        if not name:
+            pytest.skip("PI_WRITER_TEST_SOURCE must name original saved native evidence")
+        donor = Path(name).resolve(strict=True)
+        original = hashlib.sha256(donor.read_bytes()).hexdigest()
+        created = await CompactionJournal(native.root / "compaction-commits.sqlite3").private_inputs.fork(
+            ForkSessionRequest(os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor),
+                str(native.project), directory=str(native.root / "native-sessions")),
+            cwd=native.project,
+        )
+        native.session = created.path
+        registry = Registration(native.root / "registry.json")
+        registry.register(Thread("owner", frozenset(), str(native.project),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=created.session_file, model="response-local/fixture",
+            goal=Goal("Keep original source and inputs", "known-commit-control")))
+        owner, generation = registry.live_owner_with_generation("owner")
+        owner, generation = registry.lease_live_turn_with_generation(
+            owner, "known-commit-control", expected_owner_generation=generation,
+        )
+        endpoint = urlsplit(json.loads((native.config / "models.json").read_text())[
+            "providers"]["response-local"]["baseUrl"])
+        probe = native.root / "native-compaction-hooks.jsonl"
+        release = native.root / "release-compaction-hook"
+        command = "sdk-known-compaction-probe"
+        install_event_host(monkeypatch, command, f"{endpoint.scheme}://{endpoint.netloc}",
+            compaction_probe=probe,
+            compaction_release=release if continuation == "cancel_hook" else None,
+            native_settings={"compaction": {
+                "enabled": False, "reserveTokens": 2048, "keepRecentTokens": 1},
+                "retry": {"enabled": False}})
+        arguments = ["--provider", "response-local", "--model", "fixture", "--thinking", "off",
+            "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+            "--no-prompt-templates", "--no-tools"]
+        await NativeSessionPreparation.open(native.persistent, command, arguments,
+            worktree=str(native.project), environment=dict(os.environ),
+            session_file=created.session_file)
+        acquired = native.persistent.custody.idle()
+        launch = acquired.child.key[0]
+    
+        async def prepare(text):
+            return await prepare_selected_native_source(native.persistent,
+                session_file=created.session_file, expected_package=launch.package,
+                selected=SelectedModel("response-local", "fixture", 2000000),
+                settings=PiCompactionSettings(2048, 1), retained_text=text)
+    
+        async with OwnerCompactionCommit.open(native.root / "registry.json", launch.package,
+                created.session_file, native_launch=launch) as bridge:
+            prepared, source = await bridge.prepare_source(owner, generation,
+                prepared=(await prepare("")).require_ready(), prepare=prepare)
+            async def commit():
+                return await _commit_native_summary(bridge, owner, generation, native.persistent,
+                    prepared, source, NativeSummary(source.retained.text + "\n\nControlled SDK commit.", None, None),
+                    reason=ManualCompactionReason)
+    
+            if continuation == "receipt_mismatch":
+                exchange = AgentCommsRestoreCompaction.exchange
+    
+                async def altered(request, *args, **kwargs):
+                    # Alter only this external request's claimed receipt. The real
+                    # native reconciliation must reject it; journal evidence stays.
+                    return await exchange(replace(request, expected=replace(
+                        request.expected, metadata_digest="0" * 64)), *args, **kwargs)
+    
+                monkeypatch.setattr(AgentCommsRestoreCompaction, "exchange", altered)
+                with pytest.raises(ValueError):
+                    await commit()
+            elif continuation == "cancel_hook":
+                committing = asyncio.create_task(commit())
+                try:
+                    async with asyncio.timeout(20):
+                        while not (probe.exists() and '"session_compact"' in probe.read_text()):
+                            await asyncio.sleep(0.01)
+                    committing.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await committing
+                finally:
+                    release.touch()
+                    if not committing.done():
+                        committing.cancel()
+                    await asyncio.gather(committing, return_exceptions=True)
+            else:
+                operation = await commit()
+    
+            if continuation != "next_input":
+                assert isinstance(native.persistent.custody, ReopenNative)
+                assert not acquired.child.proc.alive() and acquired.child.proc.retired
+                assert native.provider.posts == 0 and native.starts == []
+                with bridge.journal.transaction() as db:
+>                   rows = tuple(CompactionOperation.select(db, session_file=created.session_file))
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: TypedTable.select() got an unexpected keyword argument 'session_file'
+
+tests/test_native_catalog_discovery.py:659: TypeError
+=============================== warnings summary ===============================
+tests/test_native_catalog_discovery.py:237
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_native_catalog_discovery.py:237: PytestUnknownMarkWarning: Unknown pytest.mark.refactor_guard - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.refactor_guard
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../../dev::test_known_compaction_retains_original_sdk_context_and_next_input[receipt_mismatch]
+FAILED ../../../../dev::test_known_compaction_retains_original_sdk_context_and_next_input[cancel_hook]
+2 failed, 1 warning in 14.26s

@@ -532,3 +532,167 @@ async def test_actual_saved_source_reservation_borrows_native_coverage(native_ba
         "source_sha256": before, "redecoded_rows": len(decoded), "provider_requests": 0,
         "scope": "returned SDK fork/coverage reservation; no provider/commit/input authority",
     }), flush=True)
+
+
+@pytest.mark.parametrize("continuation", ["next_input", "receipt_mismatch", "cancel_hook"])
+async def test_known_compaction_retains_original_sdk_context_and_next_input(
+    native_backend, monkeypatch, continuation
+):
+    """One real saved SDK fork -> fenced commit -> hook -> distinct input."""
+    import hashlib
+    import os
+    from contextlib import aclosing
+    from dataclasses import replace
+    from pathlib import Path
+
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_records import CompactionOperation
+    from agent_comms.goals import Goal
+    from agent_comms.native_fork import ForkSessionRequest
+    from agent_comms.native_session_prepare import NativeSessionPreparation
+    from agent_comms.native_custody import ReopenNative
+    from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+    from agent_comms.owner_compaction_provider import NativeSummary
+    from agent_comms.owner_compaction_runtime import _commit_native_summary
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from agent_comms.pi_vocabulary import ManualCompactionReason
+    from agent_comms.pi_commands import AgentCommsRestoreCompaction
+    from agent_comms.registration import Registration
+    from agent_comms.selected_pi_route import prepare_selected_native_source
+    from agent_comms.session_fence import session_writer_fence
+    from agent_comms.threads import Thread
+    from native_event_host import install_event_host
+    from urllib.parse import urlsplit
+
+    native = native_backend
+    name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not name:
+        pytest.skip("PI_WRITER_TEST_SOURCE must name original saved native evidence")
+    donor = Path(name).resolve(strict=True)
+    original = hashlib.sha256(donor.read_bytes()).hexdigest()
+    created = await CompactionJournal(native.root / "compaction-commits.sqlite3").private_inputs.fork(
+        ForkSessionRequest(os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor),
+            str(native.project), directory=str(native.root / "native-sessions")),
+        cwd=native.project,
+    )
+    native.session = created.path
+    registry = Registration(native.root / "registry.json")
+    registry.register(Thread("owner", frozenset(), str(native.project),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        session_file=created.session_file, model="response-local/fixture",
+        goal=Goal("Keep original source and inputs", "known-commit-control")))
+    owner, generation = registry.live_owner_with_generation("owner")
+    owner, generation = registry.lease_live_turn_with_generation(
+        owner, "known-commit-control", expected_owner_generation=generation,
+    )
+    endpoint = urlsplit(json.loads((native.config / "models.json").read_text())[
+        "providers"]["response-local"]["baseUrl"])
+    probe = native.root / "native-compaction-hooks.jsonl"
+    release = native.root / "release-compaction-hook"
+    command = "sdk-known-compaction-probe"
+    install_event_host(monkeypatch, command, f"{endpoint.scheme}://{endpoint.netloc}",
+        compaction_probe=probe,
+        compaction_release=release if continuation == "cancel_hook" else None,
+        native_settings={"compaction": {
+            "enabled": False, "reserveTokens": 2048, "keepRecentTokens": 1},
+            "retry": {"enabled": False}})
+    arguments = ["--provider", "response-local", "--model", "fixture", "--thinking", "off",
+        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+        "--no-prompt-templates", "--no-tools"]
+    await NativeSessionPreparation.open(native.persistent, command, arguments,
+        worktree=str(native.project), environment=dict(os.environ),
+        session_file=created.session_file)
+    acquired = native.persistent.custody.idle()
+    launch = acquired.child.key[0]
+
+    async def prepare(text):
+        return await prepare_selected_native_source(native.persistent,
+            session_file=created.session_file, expected_package=launch.package,
+            selected=SelectedModel("response-local", "fixture", 2000000),
+            settings=PiCompactionSettings(2048, 1), retained_text=text)
+
+    async with OwnerCompactionCommit.open(native.root / "registry.json", launch.package,
+            created.session_file, native_launch=launch) as bridge:
+        prepared, source = await bridge.prepare_source(owner, generation,
+            prepared=(await prepare("")).require_ready(), prepare=prepare)
+        async def commit():
+            return await _commit_native_summary(bridge, owner, generation, native.persistent,
+                prepared, source, NativeSummary(source.retained.text + "\n\nControlled SDK commit.", None, None),
+                reason=ManualCompactionReason)
+
+        if continuation == "receipt_mismatch":
+            exchange = AgentCommsRestoreCompaction.exchange
+
+            async def altered(request, *args, **kwargs):
+                # Alter only this external request's claimed receipt. The real
+                # native reconciliation must reject it; journal evidence stays.
+                return await exchange(replace(request, expected=replace(
+                    request.expected, metadata_digest="0" * 64)), *args, **kwargs)
+
+            monkeypatch.setattr(AgentCommsRestoreCompaction, "exchange", altered)
+            with pytest.raises(ValueError):
+                await commit()
+        elif continuation == "cancel_hook":
+            committing = asyncio.create_task(commit())
+            try:
+                async with asyncio.timeout(20):
+                    while not (probe.exists() and '"session_compact"' in probe.read_text()):
+                        await asyncio.sleep(0.01)
+                committing.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await committing
+            finally:
+                release.touch()
+                if not committing.done():
+                    committing.cancel()
+                await asyncio.gather(committing, return_exceptions=True)
+        else:
+            operation = await commit()
+
+        if continuation != "next_input":
+            assert isinstance(native.persistent.custody, ReopenNative)
+            assert not acquired.child.proc.alive() and acquired.child.proc.retired
+            assert native.provider.posts == 0 and native.starts == []
+            with bridge.journal.transaction() as db:
+                rows = tuple(CompactionOperation.for_session(db, created.session_file))
+            assert len(rows) == 1 and rows[0].state.declared_name == "committed"
+            assert hashlib.sha256(donor.read_bytes()).hexdigest() == original
+            print("known_compaction_refusal", continuation, rows[0].commit_id,
+                  acquired.child.proc.pid, acquired.child.proc.retired, flush=True)
+            return
+    assert native.persistent.custody.idle().child is acquired.child
+    hooks = [json.loads(line) for line in probe.read_text().splitlines()]
+    assert [entry["event"] for entry in hooks] == ["session_start", "session_compact"]
+    assert hooks[-1]["entryId"] == operation.committed_outcome().entry_id
+    assert hooks[-1]["originalSessionId"] == created.session_id
+    assert native.provider.posts == 0
+    # Consume the original acquired SDK launch. The observation host is not a
+    # second installed executable; resolving its label as a launcher would test
+    # an unsupported command rather than this held-resource continuation.
+    try:
+        async with asyncio.timeout(30), native.persistent.lock:
+            async with session_writer_fence(created.session_file):
+                async with aclosing(backend.TurnSession(launch,
+                        "Distinct input after the known commit",
+                        persistent_session=native.persistent, native_start=native.started).run()) as stream:
+                    result = [event async for event in stream]
+    finally:
+        await backend.terminate_task_process(asyncio.current_task())
+    assert result[-1].ok, result[-1]
+    assert native.persistent.custody.idle().child is acquired.child
+    assert native.provider.posts == 1
+    assert len(native.starts) == 1
+    assert native.starts[0][2] == "Distinct input after the known commit"
+    assert sum(message.get("inputId") == native.starts[0][1]
+        for message in native.saved_inputs()) == 1
+    assert hashlib.sha256(donor.read_bytes()).hexdigest() == original
+    await native.persistent.close_idle()
+    assert not acquired.child.proc.alive() and acquired.child.proc.retired
+    assert await acquired.child.stderr_task == ""
+    print("known_compaction_runtime", json.dumps({"donor_sha256": original,
+        "source_bytes": donor.stat().st_size, "fork": created.session_file,
+        "pid": acquired.child.proc.pid, "hooks": hooks, "commit": operation.commit_id,
+        "next_input_terminal": result[-1].ok, "provider_requests": native.provider.posts,
+        "child_retired": acquired.child.proc.retired}), flush=True)
