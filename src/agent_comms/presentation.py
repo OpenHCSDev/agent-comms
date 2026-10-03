@@ -484,7 +484,7 @@ class ThreadView:
             snapshot.statuses[thread.name],
             activity,
             runtime,
-            snapshot.last_seen.get(thread.name, 0),
+            snapshot.seen_at(thread.name),
             GoalWaits.execution(thread.goal, waits, snapshot),
             snapshot.owner_binding(thread.name),
         )
