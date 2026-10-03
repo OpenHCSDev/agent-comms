@@ -1,0 +1,250 @@
+{
+  "tool": "audit.findings.Package",
+  "roots": [
+    "src",
+    "tests",
+    "tools"
+  ],
+  "evidence": {
+    "before": {
+      "revision": "0608319c02c5109c7b852e80c34841dec12bda5b",
+      "parse_omissions": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "name": "NativeEvidenceRead",
+          "line": 198,
+          "bases": [],
+          "members": [
+            "__init__",
+            "require_path",
+            "open",
+            "borrow",
+            "close",
+            "observe",
+            "decode_rows",
+            "retained_task_facts",
+            "entry_index",
+            "branch",
+            "recorded_source_prefix",
+            "covered_prefix"
+          ]
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "AssistantMessage",
+          "line": 484,
+          "bases": [
+            "PiMessage"
+          ],
+          "members": [
+            "retained_tool_calls",
+            "tracked_end",
+            "authoritative_text",
+            "final_reply",
+            "apply_start",
+            "retry_progress",
+            "require_failed_terminal",
+            "require_failure_shape",
+            "apply_end",
+            "unread_reply",
+            "transcript_events"
+          ]
+        },
+        {
+          "path": "src/agent_comms/turn_context.py",
+          "name": "JournalProvenance",
+          "line": 53,
+          "bases": [
+            "Provenance"
+          ],
+          "members": []
+        },
+        {
+          "path": "tests/compaction_retention_fixture.py",
+          "name": "RecordedNativeProbes",
+          "line": 37,
+          "bases": [],
+          "members": [
+            "resume_fork",
+            "observe",
+            "alignment"
+          ]
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "name": "RecordedNativeProbe",
+          "line": 262,
+          "bases": [],
+          "members": [
+            "submitted_prompt",
+            "answer_for_input",
+            "read_sdk_context",
+            "sdk_request",
+            "request_manifest",
+            "prompt_presence",
+            "observe",
+            "construction",
+            "model_steps",
+            "read"
+          ]
+        }
+      ],
+      "consumer_paths": {
+        "RecordedNativeProbe": [
+          "tests/compaction_retention_fixture.py",
+          "tests/test_compaction_retention_fixture.py",
+          "tests/test_recorded_retention_measurements.py",
+          "tests/three_cut_retention_configured_journey.py"
+        ],
+        "RecordedNativeProbes": [
+          "tests/compaction_retention_fixture.py",
+          "tests/test_compaction_retention_fixture.py",
+          "tests/test_recorded_retention_measurements.py",
+          "tests/three_cut_retention_configured_journey.py"
+        ],
+        "NativeEvidenceRead": [
+          "src/agent_comms/compaction_boundary.py",
+          "src/agent_comms/native_entries.py",
+          "src/agent_comms/native_pi.py",
+          "src/agent_comms/native_prompt_binding.py",
+          "src/agent_comms/owner_compaction_commit.py",
+          "src/agent_comms/owner_compaction_prepare.py",
+          "tests/retained_native_fixture.py",
+          "tests/test_retained_native_tool_latency.py"
+        ],
+        "AssistantMessage": [
+          "tests/test_pi_payloads.py",
+          "tests/test_recorded_retention_measurements.py"
+        ],
+        "JournalProvenance": [
+          "src/agent_comms/pi_payloads.py",
+          "src/agent_comms/retained_task_facts.py",
+          "tests/test_retained_context_operations.py"
+        ]
+      }
+    },
+    "after": {
+      "revision": "3fa44f1a339434148b57e80a57909b95bb6ecf61",
+      "parse_omissions": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "name": "NativeEvidenceRead",
+          "line": 198,
+          "bases": [],
+          "members": [
+            "__init__",
+            "require_path",
+            "open",
+            "borrow",
+            "close",
+            "observe",
+            "decode_rows",
+            "retained_task_facts",
+            "entry_index",
+            "branch",
+            "recorded_source_prefix",
+            "covered_prefix"
+          ]
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "AssistantMessage",
+          "line": 484,
+          "bases": [
+            "PiMessage"
+          ],
+          "members": [
+            "retained_tool_calls",
+            "tracked_end",
+            "authoritative_text",
+            "final_reply",
+            "apply_start",
+            "retry_progress",
+            "require_failed_terminal",
+            "require_failure_shape",
+            "apply_end",
+            "unread_reply",
+            "transcript_events"
+          ]
+        },
+        {
+          "path": "src/agent_comms/turn_context.py",
+          "name": "JournalProvenance",
+          "line": 53,
+          "bases": [
+            "Provenance"
+          ],
+          "members": []
+        },
+        {
+          "path": "tests/compaction_retention_fixture.py",
+          "name": "RecordedNativeProbes",
+          "line": 37,
+          "bases": [],
+          "members": [
+            "resume_fork",
+            "observe",
+            "alignment",
+            "completion_alignment"
+          ]
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "name": "RecordedNativeProbe",
+          "line": 262,
+          "bases": [],
+          "members": [
+            "submitted_prompt",
+            "answer_for_input",
+            "read_sdk_context",
+            "sdk_request",
+            "request_manifest",
+            "prompt_presence",
+            "observe",
+            "construction",
+            "model_steps",
+            "read"
+          ]
+        }
+      ],
+      "consumer_paths": {
+        "RecordedNativeProbe": [
+          "tests/compaction_retention_fixture.py",
+          "tests/test_compaction_retention_fixture.py",
+          "tests/test_recorded_retention_measurements.py",
+          "tests/three_cut_retention_configured_journey.py"
+        ],
+        "RecordedNativeProbes": [
+          "tests/compaction_retention_fixture.py",
+          "tests/test_compaction_retention_fixture.py",
+          "tests/test_recorded_retention_measurements.py",
+          "tests/three_cut_retention_configured_journey.py"
+        ],
+        "NativeEvidenceRead": [
+          "src/agent_comms/compaction_boundary.py",
+          "src/agent_comms/native_entries.py",
+          "src/agent_comms/native_pi.py",
+          "src/agent_comms/native_prompt_binding.py",
+          "src/agent_comms/owner_compaction_commit.py",
+          "src/agent_comms/owner_compaction_prepare.py",
+          "tests/retained_native_fixture.py",
+          "tests/test_retained_native_tool_latency.py"
+        ],
+        "AssistantMessage": [
+          "tests/test_pi_payloads.py",
+          "tests/test_recorded_retention_measurements.py"
+        ],
+        "JournalProvenance": [
+          "src/agent_comms/pi_payloads.py",
+          "src/agent_comms/retained_task_facts.py",
+          "tests/retained_native_fixture.py",
+          "tests/test_recorded_retention_measurements.py",
+          "tests/test_retained_context_operations.py"
+        ]
+      }
+    }
+  },
+  "limits": "Lexical AST declarations/member/import references; dynamic PiPayload/FieldCodec field decoding and exported report readers are interpreted through their existing contracts, not claimed fully resolved by AST. No omitted parsed modules."
+}
