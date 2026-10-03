@@ -43,3 +43,31 @@ not a submitted baseline, HTTP-byte observation or model comparison. The current
 captured historical cuts remain unavailable; the completed596 narrative has no
 corroborated commit. New original capture/commit qualification is separate from
 these private consumer/resource changes.
+
+## Scoped final checks and unfinished configured application
+
+The real native89 SDK control passed raw compactionSummary installation, converted
+preview equality, and canonical SessionContext.restore with unchanged journal.
+The canonical PrivateInputs.fork helper copied the original recorded S4 source
+once and recorded a distinct NativeForkCreation: 9,631 inherited entries, original
+source/proof/metadata hashes unchanged, zero prompts/provider calls. Both original
+fork-source consumers report missing raw narrative as unavailable. This is the
+final absence/source binding check, not progress on producing a new narrative.
+
+27 focused controls/19 subtests passed in2.03s. NRA Package before/after has21 owner
+declarations and310/312 lexical references, zero omissions. Existing Node Acorn
+parsed9 units with no omissions after correcting its CommonJS loader setup; the
+failed loader output is retained. These are source/SDK plumbing checks, not a
+configured submitted model baseline. Runtime/native delta is zero.
+
+Receipt: evidence/s4-native-condition-application600-20261003/receipt.json.
+
+The remaining configured consumer is concrete: ordinary native RPC has no
+private condition application command, while the SDK already owns the raw
+context-transform hook. The functional continuation will use that existing hook
+through the original private observer, retain the original transformation and
+all other SDK messages, and bind a fresh captured raw summary/canonical commit
+through the journal's returned fork. No SessionContext/native edit or forced
+ReadyContext. One new configured compaction and distinct answer are authorized;
+no previous failed/UNKNOWN input or completed summary is replayed. This full S4
+application responsibility remains active after the scoped source checkpoint.
