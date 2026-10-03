@@ -77,3 +77,11 @@ Today's source and baseline checks have no native/provider effects. This draft
 is a published working checkpoint, not Ready, installed, or a demonstrated
 reproduction of the user's transient notification. The notification itself was
 not retained in today's Toad/native logs.
+
+## Installed affected App acceptance
+
+The normal69 installed Core5025 candidate passed the original App, saved-bus IRC/DM, exact message-ID and painted-acknowledgement journey. Original20 channel messages plus one DM remain identical on return; human unread counts clear, while the recipient's20 channel and1 DM delivery obligations remain pending. No fake ACP, provider, native input or public effect. Package/source proof covers339 Core,319 ToAd,266 Textual and3 Diff members and native2b trust.
+
+The parent read the complete driver, original App02/05 receipts and cleanup, verified the original05 receipt hash99f8feee874fdad90426d7fc3656e5f925bb4b2942ef7d6585f117ae0e312b5b, and confirmed production/configuration is byte-identical to5025. Earlier driver failures remain archived: renderer entry guard and queries selecting an old hidden view instead of the App's selected workspace owner. The driver now derives selection from that existing owner; production did not change. SVG text was inspected during the run. Black raster exports remain failures of physical readability, not qualified pixels.
+
+Affected installed App/saved-bus acceptance is complete. Exact reproduction of the user's transient notification, whole native-tab/ACP navigation, physical pixel readability and whole workflow performance are not claimed. Default installation is unchanged; the joined receiving release owns ordinary default acceptance. The earlier statement that installed App verification is outstanding is superseded by this result. Original evidence is at evidence/display-selection588-installed-app-20261003; the borrowed holder was released to Einstein after terminal cleanup (five inaccessible own-UID process entries are explicitly recorded).
