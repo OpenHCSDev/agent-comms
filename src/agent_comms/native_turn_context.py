@@ -17,9 +17,14 @@ class NativeContextManifestData(PiResponseData):
     counter: str
     segments: tuple[SegmentManifest, ...]
     request_id: str | None = field(default=None, metadata={"wire_name": "requestId", "wire_omit_default": True})
+    values: tuple[MeasuredNativeSegment, ...] = ()
 
     def for_turn(self, thread, turn):
-        return ContextManifest(thread, turn, self.segments, self.counter, request_id=self.request_id)
+        if any(not any(segment.contains_value(value) for segment in self.segments)
+               for value in self.values):
+            raise ValueError("Captured SDK value is outside the original manifest")
+        return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
+            for segment in self.segments), self.counter, request_id=self.request_id)
 
     async def record(self, log, thread, lease) -> None:
         """Publish the original SDK observation under its leased owner turn."""
@@ -73,6 +78,16 @@ class NativeContextData(PiResponseData):
 
     def contributor_context(self, owner, turn):
         return TurnContext(owner.incarnation, turn, self.contributors)
+
+    def recorded_public_text(self, expected: SegmentManifest) -> str:
+        self.identity.require_same_session(expected.native_identity())
+        if len(self.segments) != 1:
+            raise ValueError("Recorded SDK source did not resolve one original value")
+        (segment,) = self.segments
+        if (segment.declared_name != expected.kind or segment.sha256 != expected.sha256
+                or segment.utf8_bytes != expected.utf8_bytes):
+            raise ValueError("Recorded SDK source differs from the original measured bytes")
+        return segment.public_text()
 
     def for_turn(self, owner, turn):
         return TurnContext(owner.incarnation, turn, self.segments)

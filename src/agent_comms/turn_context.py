@@ -40,6 +40,12 @@ class Provenance(DeclaredFamily, affix="Provenance"):
     def preview_observations(self) -> tuple[PreviewProvenance, ...]:
         return ()
 
+    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
+        return ()
+
+    def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
+        return ()
+
     def require_human_input(self):
         from .errors import RelationViolationError
 
@@ -90,6 +96,10 @@ class JournalProvenance(Provenance):
     def public_description(self) -> str:
         return f"Native journal {self.path} · entries {', '.join(self.entries)}"
 
+    def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
+        identity.require_session(self.path)
+        return self.entries
+
 
 @dataclass(frozen=True)
 class NativeProvenance(Provenance):
@@ -100,6 +110,9 @@ class NativeProvenance(Provenance):
     def public_description(self) -> str:
         return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
                 f"· context {self.context_digest}")
+
+    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
+        return (self.identity,)
 
 
 @dataclass(frozen=True)
@@ -157,6 +170,7 @@ class SegmentManifest:
     utf8_bytes: int
     tokens: int
     contributors: tuple[SegmentManifest, ...] = ()
+    captured_text: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
@@ -168,6 +182,47 @@ class SegmentManifest:
         yield from self.provenance
         for contributor in self.contributors:
             yield from contributor.source_membership()
+
+    def public_description(self) -> str:
+        return f"{self.kind.replace('_', ' ').title()} · {self.tokens} estimated tokens"
+
+    def capture_public(self, values: tuple[MeasuredNativeSegment, ...]) -> SegmentManifest:
+        """Project the original SDK publication; never capture a later preview."""
+        matched = tuple(value for value in values if value.measured_manifest() == self)
+        text = self.captured_text
+        if matched:
+            public = {value.public_text() for value in matched}
+            if len(public) != 1:
+                raise ValueError("Captured SDK public text is ambiguous")
+            text = tuple(public)
+        return replace(self, captured_text=text,
+                       contributors=tuple(child.capture_public(values) for child in self.contributors))
+
+    def contains_value(self, value: MeasuredNativeSegment) -> bool:
+        return (value.measured_manifest() == self
+                or any(child.contains_value(value) for child in self.contributors))
+
+    def native_identity(self) -> NativeSessionIdentity:
+        originals = {identity for source in self.provenance for identity in source.native_identities()}
+        if len(originals) != 1:
+            raise ValueError("Original segment has no unambiguous native source identity")
+        (identity,) = originals
+        return identity
+
+    def journal_entries(self) -> tuple[str, ...]:
+        identity = self.native_identity()
+        entries = tuple(dict.fromkeys(entry for source in self.provenance
+                                      for entry in source.journal_entries(identity)))
+        if not entries:
+            raise ValueError("Original segment has no recoverable journal coordinates")
+        return entries
+
+    async def public_text(self, read_reference) -> str:
+        if self.captured_text:
+            return "\n".join(self.captured_text)
+        if self.contributors:
+            return "\n".join([await child.public_text(read_reference) for child in self.contributors])
+        return await read_reference(self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -186,6 +241,9 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
+
+    def public_text(self) -> str:
+        return self.text()
 
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
@@ -265,7 +323,7 @@ class MeasuredNativeSegment(ContextSegment):
             yield from contributor.source_membership()
 
     def public_description(self) -> str:
-        return f"{super().public_description()} · {self.tokens} estimated tokens"
+        return self.measured_manifest().public_description()
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return self.contributors
@@ -279,6 +337,9 @@ class SystemLayerSegment(MeasuredNativeSegment):
     utf8_bytes: int
 
     def provider_value(self):
+        return self.content
+
+    def public_text(self) -> str:
         return self.content
 
     def render_into(self, prompt_parts, provider):
@@ -296,6 +357,11 @@ class NativeMessages:
 
     def provider_value(self):
         return list(self.messages)
+
+    def public_text(self) -> str:
+        from .pi_payloads import PiMessage
+
+        return "\n".join(FieldCodec.decode(PiMessage, message).text for message in self.messages)
 
     def render_into(self, prompt_parts, provider):
         provider.setdefault("messages", []).extend(self.messages)
@@ -514,6 +580,11 @@ class ContextManifest:
     # Original request-owner correlation, absent for previews and captures that
     # never observed dispatch. It grants neither admission nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+    def require_request_id(self) -> str:
+        if not self.request_id:
+            raise ValueError("Original request ID was not captured by this historical context")
+        return self.request_id
 
     def require_source(self, source: Provenance) -> Provenance:
         for segment in self.segments:

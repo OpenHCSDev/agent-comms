@@ -53,10 +53,7 @@ class InputProvenance(Provenance):
         from .input_disposition import InputDispositions
 
         inputs = InputDispositions(comms.root / InputDispositions.filename).read()
-        row = inputs.lookup(self.key)
-        if not row.matches_original_provenance(self):
-            raise RelationViolationError("Source is outside the original input document")
-        return inputs.originals((self.key,))[0].source_text
+        return self.require_original(inputs).source_text
 
     def require_human_input(self):
         self.origin.require_human()

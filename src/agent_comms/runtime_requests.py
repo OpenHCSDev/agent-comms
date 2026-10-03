@@ -18,7 +18,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .thread_presentation import LiveThreadOwnerBinding
-from .turn_context import ContextManifest, PreviewProvenance, Provenance, RecordedContextTurn
+from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
@@ -331,7 +331,7 @@ class ContextRuntimeRequest(ResultRuntimeRequest):
         from .coordinator import Coordination
 
         agent = ctx.server.agent
-        owner = agent._comms.registry.require(ctx.name)
+        owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
         context = await agent.turns.inspect_context(ctx.session_id, owner)
         return await Coordination.run_worker(partial(
             context.with_current_contributors, agent._comms, owner,
@@ -360,20 +360,53 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextReferenceRuntimeRequest(ResultRuntimeRequest):
+class RecordedContextRuntimeRequest(ResultRuntimeRequest):
     turn: RecordedContextTurn
     request_id: str
     segment: int
-    source: Provenance
 
-    def read(self, ctx):
+    def read_manifest(self, ctx):
         comms = ctx.server.agent._comms
         history = comms.bus.log.context_manifests(ctx.name, comms.registry)
-        manifest = ContextManifest.for_request(history, self.turn, self.request_id)
-        return FieldCodec.encode(manifest.public_source_text(comms, self.segment, self.source))
+        return ContextManifest.for_request(history, self.turn, self.request_id)
+
+    async def manifest(self, ctx):
+        from functools import partial
+        from .coordinator import Coordination
+
+        return await Coordination.run_worker(partial(self.read_manifest, ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
+    source: Provenance
 
     async def result(self, ctx):
         from functools import partial
         from .coordinator import Coordination
 
-        return await Coordination.run_worker(partial(self.read, ctx))
+        manifest = await self.manifest(ctx)
+        text = await Coordination.run_worker(partial(
+            manifest.public_source_text, ctx.server.agent._comms, self.segment, self.source,
+        ))
+        return FieldCodec.encode(text)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
+    async def result(self, ctx):
+        from functools import partial
+        from .coordinator import Coordination
+
+        manifest = await self.manifest(ctx)
+        if not 0 <= self.segment < len(manifest.segments):
+            raise ValueError("Original request has no selected segment")
+        segment = manifest.segments[self.segment]
+        agent = ctx.server.agent
+        owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
+
+        async def read_reference(original):
+            return await agent.turns.inspect_context_segment(ctx.session_id, owner, original)
+
+        text = await segment.public_text(read_reference)
+        return FieldCodec.encode(ContextSourceText(segment.public_description(), text))

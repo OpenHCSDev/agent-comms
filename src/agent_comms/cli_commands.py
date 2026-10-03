@@ -759,7 +759,7 @@ class ContextCliCommand(CliCommand):
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
-        from .turn_context import TurnContext, NextContextTurn
+        from .turn_context import NextContextTurn
 
         if self.turn is not None or self.diff:
             manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)

@@ -69,7 +69,7 @@ def main(package):
     replace_once(session, '        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);',
         '''        this.agent.onContextReady = async (context, requestId) => {
             const source = await this._commitNativeContext(context);
-            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).manifest(requestId)});
+            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).observation(requestId)});
         };''')
     source=session.read_text()
     session.write_text('import { TurnContext, NativeInputClaim } from "./turn-context.js";\n'+source)
@@ -88,12 +88,17 @@ def main(package):
                 const context=(await TurnContext.next(session)).full();
                 return outputArray(id, command.type, "segments", context.segments, {identity:context.identity,counter:context.counter});
             }
+            case "agent_comms_inspect_context_segment": {
+                const context=(await TurnContext.recordedSegment(session,command.identity,
+                    command.entries,command.expected)).full();
+                return outputArray(id, command.type, "segments", context.segments, {identity:context.identity,counter:context.counter});
+            }
             case "get_state": {''')
     # Inspection neither consumes a mutation generation nor disturbs summary custody.
     source=rpc.read_text()
     before='"get_state"]'
     if source.count(before)!=2: raise ValueError('Original read-only RPC admission sets changed')
-    rpc.write_text(source.replace(before,'"get_state", "agent_comms_inspect_context"]'))
+    rpc.write_text(source.replace(before,'"get_state", "agent_comms_inspect_context", "agent_comms_inspect_context_segment"]'))
     replace_once(core/'agent-session.d.ts', '    type: "context_committed";',
         '''    type: "turn_context_observed";
     context: import("./turn-context.js").NativeContextManifest;
@@ -103,11 +108,17 @@ def main(package):
     replace_once(types,'export type RpcCommand = {', '''export type RpcCommand = {
     id?: string;
     type: "agent_comms_inspect_context";
+} | {
+    id?: string;
+    type: "agent_comms_inspect_context_segment";
+    identity: {sessionId: string; sessionFile: string};
+    entries: readonly string[];
+    expected: import("../../core/turn-context.js").NativeContextSegmentManifest;
 } | {''')
     replace_once(types,'export type RpcResponse = {', '''export type RpcResponse = {
     id?: string;
     type: "response";
-    command: "agent_comms_inspect_context";
+    command: "agent_comms_inspect_context" | "agent_comms_inspect_context_segment";
     success: true;
     data: import("../../core/turn-context.js").NativeContextData;
 } | {''')

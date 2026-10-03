@@ -66,7 +66,8 @@ class InputContribution {
         const encoded=JSON.stringify(content);
         return {kind:this.kind,provenance:[...this.provenance,native,journal],
             sha256:hash(encoded),utf8_bytes:Buffer.byteLength(encoded),
-            tokens:estimateTokens({role:'user',content,timestamp:0})};
+            tokens:estimateTokens({role:'user',content,timestamp:0}),
+            captured_text:[this.range.bytes(bytes).toString()]};
     }
 }
 
@@ -108,6 +109,12 @@ class ContextSegment {
             contributors:this.contributors};
     }
     full() { return {...this.manifest(), ...this.payload()}; }
+    publicationValues() { return [this.full()]; }
+    matches(expected) {
+        const manifest=this.manifest();
+        return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
+    }
+    matchingValues(expected) { return this.matches(expected) ? [this] : []; }
 }
 class SystemLayerSegment extends ContextSegment {
     tokens() { return estimateTokens({role:'user', content:[{type:'text', text:this.value}], timestamp:0}); }
@@ -115,9 +122,24 @@ class SystemLayerSegment extends ContextSegment {
     render(provider) { provider.systemPrompt = this.value; }
 }
 class NativeMessages extends ContextSegment {
+    constructor(provenance,value) {
+        super(provenance,value);
+        // Only values without exact original entry correspondence are retained.
+        // These are references to this capture's values, not a history store.
+        this.unresolved=[];
+    }
     tokens() { return this.value.reduce((count,message) => count + estimateTokens(message),0); }
     payload() { return {messages:this.value}; }
     render(provider) { provider.messages.push(...this.value); }
+    publicationValues() { return this.unresolved.map(segment=>segment.full()); }
+    matchingValues(expected) {
+        const whole=super.matchingValues(expected);
+        if (whole.length) return whole;
+        return this.value.flatMap(message => {
+            const original=new this.constructor(this.provenance,[message]);
+            return original.matches(expected) ? [original] : [];
+        });
+    }
 }
 class TranscriptSegment extends NativeMessages {}
 class CompactionSummarySegment extends NativeMessages {}
@@ -172,8 +194,11 @@ export class TurnContext {
                 group=new declaration([...provenance],[]); segments.push(group);
             }
             group.value.push(message);
-            group.contributors.push(...(source?.contributors ?? [])
+            const observation=new declaration([...provenance,entrySource],[message]);
+            observation.contributors.push(...(source?.contributors ?? [])
                 .filter(item=>item.input_id===message.inputId).flatMap(item=>item.contributors));
+            group.contributors.push(observation.manifest());
+            if (!original) group.unresolved.push(observation);
             // Provenance is an observation, never an alternate entry/message owner.
             if (!group.provenance.some(value=>JSON.stringify(value)===JSON.stringify(entrySource)))
                 group.provenance.push(entrySource);
@@ -202,6 +227,17 @@ export class TurnContext {
         const manager=session.sessionManager;
         return this.project(session, manager.entryStore.uncompactedMetadata(manager.getLeafId()).map(meta=>meta.id));
     }
+    static async recordedSegment(session, identity, entries, expected) {
+        if (session.sessionId!==identity.sessionId || session.sessionFile!==identity.sessionFile)
+            throw new Error('Original recorded context belongs to another native session');
+        const projected=await this.project(session, entries);
+        const matches=projected.segments.flatMap(segment=>segment.matchingValues(expected));
+        if (!matches.length)
+            throw new Error('Original recorded SDK value is unavailable: projected bytes differ');
+        // Equal original JSON bytes answer the same public-value question even
+        // when the SDK entry contributes that value more than once.
+        return new this(projected.identity,[matches[0]]);
+    }
     static async recentSource(session) {
         const manager=session.sessionManager;
         return this.project(session, manager.entryStore.keptMetadata(manager.getLeafId()).map(meta=>meta.id));
@@ -215,6 +251,10 @@ export class TurnContext {
     manifest(requestId) {
         return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest()),
             ...(requestId === undefined ? {} : {requestId})};
+    }
+    observation(requestId) {
+        return {...this.manifest(requestId),
+            values:this.segments.flatMap(segment=>segment.publicationValues())};
     }
     full() { return {identity:this.identity,counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.full())}; }
 }
