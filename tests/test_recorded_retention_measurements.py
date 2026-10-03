@@ -99,6 +99,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertNotIn('expected', public)
         failed = replace(result, message=replace(result.message, is_error=True))
         self.assertFalse(question.executed_action({'tool_steps': probe.tool_steps((request, failed))})['successful'])
+        reused = probe.tool_steps((request, result, replace(request, id='request2'), replace(result, id='result2')))
+        self.assertEqual(tuple(item['source'].entries for item in reused),
+                         (('request', 'result'), ('request2', 'result2')))
         missing, = probe.tool_steps((request,))
         self.assertFalse(missing['completion']['evaluated'])
         for branch in ((result, request), (request, result, result), (request, request),

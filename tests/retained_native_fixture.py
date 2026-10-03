@@ -480,31 +480,28 @@ class RecordedNativeProbe:
         it has no refresh, admission or execution authority. A missing result
         stays unavailable, and an error result never becomes success.
         """
-        requests = {}
-        results = {}
+        pending = {}
+        measured = []
         for entry in branch:
             for call in entry.retained_tool_calls():
-                if call.id in requests:
-                    raise ValueError("Recorded probe repeats an original SDK tool call")
-                requests[call.id] = (entry, call)
+                if call.id in pending:
+                    raise ValueError("Recorded probe repeats an outstanding SDK tool call")
+                observation = {"source": JournalProvenance(self.session.session_file, (entry.require_entry_id(),)),
+                    "call": FieldCodec.encode(call),
+                    "completion": {"evaluated": False, "reason": "No original SDK result on this probe branch"}}
+                measured.append(observation)
+                pending[call.id] = (entry, observation)
             if isinstance(entry, MessageEntry) and isinstance(entry.message, ToolResultMessage):
                 message = entry.message
-                if message.tool_call_id not in requests or message.tool_call_id in results:
-                    raise ValueError("Recorded tool result lacks one preceding original request")
-                request, _ = requests[message.tool_call_id]
+                try:
+                    request, observation = pending.pop(message.tool_call_id)
+                except KeyError as error:
+                    raise ValueError("Recorded tool result lacks one preceding original request") from error
                 message.require_tool_request(request)
-                results[message.tool_call_id] = entry
-        measured = []
-        for identity, (request, call) in requests.items():
-            result = results.get(identity)
-            coordinates = (request.require_entry_id(),)
-            observation = {"evaluated": False, "reason": "No original SDK result on this probe branch"}
-            if result is not None:
-                coordinates += (result.require_entry_id(),)
-                observation = {"evaluated": True, "successful": not result.message.is_error,
-                    "artifacts": FieldCodec.encode(result.message.completed_artifacts())}
-            measured.append({"source": JournalProvenance(self.session.session_file, coordinates),
-                             "call": FieldCodec.encode(call), "completion": observation})
+                observation.update(source=JournalProvenance(self.session.session_file,
+                                      (request.require_entry_id(), entry.require_entry_id())),
+                    completion={"evaluated": True, "successful": not message.is_error,
+                                "artifacts": FieldCodec.encode(message.completed_artifacts())})
         return tuple(measured)
 
     def read(self, evidence: NativeEvidenceRead):
