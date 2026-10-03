@@ -70,9 +70,18 @@ Checkpoint `registry_scope` references an original RegistryDocument capture;
 the document supplies its snapshot. Original certified `wire` corroborates task
 publications for scoped revision measurements. Missing original evidence stays
 unevaluated. SDK prompt presence is separate from final HTTP payload presence.
-Original NativeSummaryPayload and assistant PiUsage supply available counters;
+Original NativeSummaryPayload and every original assistant step's PiUsage supply available counters;
 absent counters are never measured zeros. See
 [the receiving scope](../../checkpoints/repeated-retention-runner-20261002.md).
+
+RecordedNativeProbe exports `model_steps` from the same corroborated original
+input-to-answer branch. This includes assistant tool-call steps before the final
+answer. Each step keeps its original entry identity, timestamp and complete
+PiUsage record; unavailable usage remains unavailable, and missing optional
+counters retain the codec's omitted-field representation. The former final-only
+`answer_usage` projection is removed. The original
+answer record still retains its own usage. These are journaled completions, not
+a transport-attempt/retry count, actual billed spend or provider-wait duration.
 
 ## Required next infrastructure and owner boundaries
 
