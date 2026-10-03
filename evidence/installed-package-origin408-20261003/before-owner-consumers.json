@@ -1,0 +1,153 @@
+{
+  "parser": "Existing NRA SourceModule.parse on actual Python3.14",
+  "roots": [
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/src",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/tests",
+    "/home/ts/wt/toad-prompt-action-owner-20261002/src"
+  ],
+  "modules": 1015,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/publish_retained_summary.py",
+      "references": [
+        {
+          "line": 71,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageVcsInfo",
+            "bases": [],
+            "annotations": [
+              "vcs: str",
+              "commit_id: str",
+              "requested_revision: str"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 78,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageDirectUrl",
+            "bases": [],
+            "annotations": [
+              "url: str",
+              "vcs_info: PackageVcsInfo"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 84,
+          "node": "ClassDef",
+          "source": {
+            "class": "InstalledSource",
+            "bases": [],
+            "annotations": [
+              "module: str",
+              "head: str",
+              "location: str",
+              "files: int",
+              "python_files: int",
+              "byte_equal: bool",
+              "direct_url: PackageDirectUrl",
+              "inventory_sha256: str"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 96,
+          "node": "ClassDef",
+          "source": {
+            "class": "InstalledSourceProof",
+            "bases": [],
+            "annotations": [
+              "state: str",
+              "prefix: Annotated[Path, PathText]",
+              "sources: tuple[InstalledSource, ...]",
+              "native_package: Annotated[Path, PathText]",
+              "native_cli: str",
+              "native_manifest: str",
+              "native_tree: str",
+              "native_full_trust: bool",
+              "sdk: str",
+              "package_count: int",
+              "packages: tuple[tuple[str, str], ...]",
+              "requirements_sha256: str",
+              "protected_old_prefix_files: int",
+              "protected_old_prefix_files_unchanged: bool",
+              "public_install_changed: bool",
+              "new_native_build: bool",
+              "source_overlay: bool",
+              "dependency_bypass: bool",
+              "journey_owners: tuple[str, ...]",
+              "journey_assessment: str"
+            ],
+            "methods": [
+              "require_activation"
+            ]
+          }
+        },
+        {
+          "line": 80,
+          "node": "Name",
+          "source": "vcs_info"
+        },
+        {
+          "line": 80,
+          "node": "Name",
+          "source": "PackageVcsInfo"
+        },
+        {
+          "line": 91,
+          "node": "Name",
+          "source": "direct_url"
+        },
+        {
+          "line": 91,
+          "node": "Name",
+          "source": "PackageDirectUrl"
+        },
+        {
+          "line": 99,
+          "node": "Name",
+          "source": "InstalledSource"
+        },
+        {
+          "line": 163,
+          "node": "Name",
+          "source": "InstalledSourceProof"
+        },
+        {
+          "line": 128,
+          "node": "Attribute",
+          "source": "source.direct_url.vcs_info"
+        },
+        {
+          "line": 128,
+          "node": "Attribute",
+          "source": "source.direct_url"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/retained_summary_stage_controls.py",
+      "references": [
+        {
+          "line": 7,
+          "node": "ImportFrom",
+          "source": "from publish_retained_summary import CohortActivation, InstalledSourceProof"
+        },
+        {
+          "line": 17,
+          "node": "Name",
+          "source": "InstalledSourceProof"
+        }
+      ]
+    }
+  ],
+  "limits": "Static named/dotted references and nominal declarations; no dynamic resolution claim. Frozen historical operators remain immutable originals."
+}
