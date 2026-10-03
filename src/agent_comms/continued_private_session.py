@@ -12,7 +12,7 @@ import sqlite3
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDocument
-from .native_entries import NativeEntry
+from .native_entries import NativeEntry, NativeEvidenceRead
 from .native_pi import NativeContextProof
 from .native_runtime_input import NativeRuntimeInput
 from .native_session_reopen import NativeSessionIdentity
@@ -30,12 +30,13 @@ def verify_continued_private_session(
     inputs: InputDocument,
     *,
     journal_db: sqlite3.Connection,
+    native_reader: NativeEvidenceRead | None = None,
 ) -> None:
     """Check retained source and managed inputs without promoting an attempt."""
     before = SessionRevision.observe(str(session))
     if not before.matches(source.reserved_revision):
         raise ValueError("Continued private source identity changed")
-    with NativeEntry.open_evidence(session) as evidence:
+    with NativeEvidenceRead.borrow(session, native_reader) as evidence:
         header, entries = evidence.observe()
         if header.version != 3:
             raise ValueError("Continued private session needs a strict native header")
