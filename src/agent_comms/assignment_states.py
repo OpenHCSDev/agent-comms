@@ -176,7 +176,11 @@ class PassiveAssignment(AssignmentState):
 
 
 class PendingNotification:
-    """Only pending assignments consume an owner's current drain readiness."""
+    """Pending relevance/full execution consumes the owner's drain readiness.
+
+    Both notification and sealed work selection derive this membership from
+    the same declarations; settled history belongs to neither operation.
+    """
 
     def notification(self, recipient, *, observation, updated_at_ms=0,
                      triage_inflight=False, blocked_by_prior=False):

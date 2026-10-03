@@ -21,7 +21,6 @@ import asyncio
 import json
 import os
 import re
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -39,7 +38,6 @@ from acp.schema import (
 )
 
 from agent_comms.coordination_errors import (
-    CoordinationError,
     IdentityConflict,
     PublicationActivationBlocked,
     StaleFence,
@@ -368,19 +366,17 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 "private N/K ACP requires an explicit matching root and native package"
             )
         thread_name = await self.sessions.sync_identity(session_id)
-        # Registry admission may change without session/new or session/load.
-        # Publish the observed status even when stopped, busy, or no-wake;
-        # callbacks may only invalidate a prior client binding, not replace it.
-        await self.cursors.publish(session_id, thread_name)
-        if not self.inputs.auto_wake or not self.sessions.runtime_enabled:
-            return 0  # Explicitly disabled by owner runtime configuration.
-        if self._comms.registry.status(thread_name).stopped:
-            return 0
         if (
-            self.turns.session_busy(session_id)
+            self.inputs.background_wakes_disabled
+            or self._comms.registry.status(thread_name).stopped
+            or self.turns.session_busy(session_id)
             or session_id in self.inputs.backend_inboxes
         ):
-            return 0  # Never overlap the ACP owner session's running turn.
+            # Admission changes still invalidate the client while this owner
+            # cannot run a wake. An eligible drain observes once after its
+            # acceptance/selection, instead of verifying history before it too.
+            await self.cursors.publish(session_id, thread_name)
+            return 0
         owner = self._comms.registry.require(thread_name)
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
@@ -427,14 +423,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current generation or an all-N prefix;
             # old-generation Pi evidence cannot initialize this cursor on reconnect.
-            try:
-                cursor = await NativeSourceCursor.refresh_async(
-                    bus, wire_root_id=wire_root_id, owner_name=thread_name
-                )
-            except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
-                cursor = None  # projection unavailable; no claim or model retry
-            if cursor is not None:
-                await self.cursors.publish(session_id, thread_name)
+            await self.cursors.publish(
+                session_id, thread_name, read_cursor=NativeSourceCursor.refresh_async
+            )
         else:
             # A disconnected client must not turn a settled claim into an
             # apparent model failure. Reconnect reads the same durable row.
