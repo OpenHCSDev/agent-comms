@@ -487,6 +487,14 @@ class AssistantMessage(PiMessage):
 
     # Pi's assistant record always carries an array, including failed terminals.
     content: tuple[PiContent, ...] = field(default=(), metadata={"wire_required": True})
+    # Original Pi completion metadata. These are observations, not registry
+    # configuration or permission to select a model for a later request.
+    api: str | None = wire_field("api")
+    provider: str | None = wire_field("provider")
+    model: str | None = wire_field("model")
+    response_model: str | None = wire_field("responseModel")
+    response_id: str | None = wire_field("responseId")
+    provider_thinking_level: str | None = wire_field("providerThinkingLevel")
     assistant = True
 
     def tracked_end(self, session) -> None:
