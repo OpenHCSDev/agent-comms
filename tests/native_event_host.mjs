@@ -76,7 +76,14 @@ if (process.env.S1_COMPACTION_PROBE) {
         entryId: event.compactionEntry?.id, reason: event.reason}) + '\n');
     api.on('session_start', (event, ctx) => { original = ctx; record(event, ctx); });
     api.on('session_shutdown', record);
-    api.on('session_compact', record);
+    api.on('session_compact', async (event, ctx) => {
+      record(event, ctx);
+      if (process.env.S1_COMPACTION_RELEASE) {
+        while (!existsSync(process.env.S1_COMPACTION_RELEASE)) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+    });
   });
 }
 // Tool declarations and output bounding remain owned by the Python CLI. The
