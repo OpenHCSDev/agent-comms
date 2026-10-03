@@ -23,6 +23,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
 from agent_comms.compaction_states import UnknownNativeOutcome
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
@@ -30,6 +31,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_compaction_writer import CompactionTransportUnknownError
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
+from agent_comms.private_path import FileRevision
 from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
 from agent_comms.session_fence import SessionWriterBusyError, idle_session_writer_fence, session_writer_fence
@@ -85,6 +87,44 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
 
 def entries(witness):
     return [json.loads(line) for line in Path(witness.session_file).read_text().splitlines()]
+
+
+async def test_acquired_native_source_survives_commit_and_refuses_rewritten_prefix(native):
+    original_bridge, owner, generation, witness = native
+    session = Path(witness.session_file)
+    async with OwnerCompactionCommit.open(
+        original_bridge.registry.store.path, Path(PACKAGE), witness.session_file
+    ) as bridge:
+        source = await Coordination.run_worker(partial(
+            bridge.capture_source, owner, generation, witness
+        ))
+        await Coordination.run_worker(partial(
+            bridge.require_source_current, owner, generation, source
+        ))
+        operation = await Coordination.run_worker(partial(
+            bridge.commit, owner, generation, witness,
+            source.retained.text + "\n\nOriginal task remains retained", 20,
+            source=source,
+        ))
+        committed = source.after_native_commit(operation.committed_outcome())
+        await Coordination.run_worker(partial(
+            bridge.require_source_current, owner, generation, committed
+        ))
+        reader = bridge.boundary.native_reader
+        # Fresh metadata cannot authorize changing the already certified bytes.
+        raw = session.read_bytes()
+        rewritten = raw.replace(b'"task"', b'"edit"', 1)
+        assert rewritten != raw and len(rewritten) == len(raw)
+        session.write_bytes(rewritten)
+        fresh_stat = replace(committed, native=replace(
+            committed.native, revision=FileRevision.from_stat(session.stat())
+        ))
+        with pytest.raises(ValueError, match="original prefix changed"):
+            await Coordination.run_worker(partial(
+                bridge.require_source_current, owner, generation, fresh_stat
+            ))
+    assert reader.source.stream.closed
+    assert bridge.journal.operations.get(operation.commit_id) == operation
 
 
 def test_compaction_child_refuses_external_helper_before_execution(native, tmp_path):
