@@ -189,18 +189,6 @@
       "name": "awareness_segments"
     },
     {
-      "path": "src/agent_comms/cohort_foreground.py",
-      "line": 152,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/cohort_foreground.py",
-      "line": 170,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "src/agent_comms/compaction_boundary.py",
       "line": 69,
       "node": "Attribute",
@@ -319,54 +307,6 @@
       "line": 370,
       "node": "FunctionDef",
       "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 73,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 90,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 108,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 114,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 158,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 183,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 210,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/goal_scheduler.py",
-      "line": 237,
-      "node": "Attribute",
-      "name": "capture"
     },
     {
       "path": "src/agent_comms/historical_views.py",
@@ -547,30 +487,6 @@
       "line": 87,
       "node": "FunctionDef",
       "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/manual_compaction_bridge.py",
-      "line": 26,
-      "node": "Attribute",
-      "name": "acquire_turn"
-    },
-    {
-      "path": "src/agent_comms/manual_compaction_bridge.py",
-      "line": 56,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/manual_compaction_bridge.py",
-      "line": 66,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/manual_compaction_bridge.py",
-      "line": 77,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
     },
     {
       "path": "src/agent_comms/message_bus.py",
@@ -831,12 +747,6 @@
       "name": "begin"
     },
     {
-      "path": "src/agent_comms/owner_compaction_manual.py",
-      "line": 53,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "src/agent_comms/owner_compaction_runtime.py",
       "line": 138,
       "node": "Attribute",
@@ -1053,36 +963,6 @@
       "name": "capture"
     },
     {
-      "path": "src/agent_comms/queued_input.py",
-      "line": 41,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/queued_input.py",
-      "line": 88,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/queued_input.py",
-      "line": 105,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/queued_input.py",
-      "line": 179,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/queued_input.py",
-      "line": 192,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "src/agent_comms/read_basis.py",
       "line": 196,
       "node": "Attribute",
@@ -1185,12 +1065,6 @@
       "name": "capture"
     },
     {
-      "path": "src/agent_comms/schedule_rules.py",
-      "line": 86,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
       "path": "src/agent_comms/selected_participant.py",
       "line": 65,
       "node": "Attribute",
@@ -1279,48 +1153,6 @@
       "line": 30,
       "node": "AsyncFunctionDef",
       "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 92,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 127,
-      "node": "FunctionDef",
-      "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 177,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 177,
-      "node": "Name",
-      "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 257,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 316,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 317,
-      "node": "Attribute",
-      "name": "admit"
     },
     {
       "path": "src/agent_comms/selected_source.py",
@@ -1621,48 +1453,6 @@
       "line": 116,
       "node": "Attribute",
       "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 34,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 52,
-      "node": "ClassDef",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 63,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 180,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 243,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 255,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 341,
-      "node": "Attribute",
-      "name": "run_worker"
     },
     {
       "path": "src/agent_comms/view_unread.py",
@@ -2043,48 +1833,6 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_acp.py",
-      "line": 782,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "tests/test_acp.py",
-      "line": 842,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "tests/test_acp.py",
-      "line": 1143,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_acp.py",
-      "line": 1187,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_acp.py",
-      "line": 1234,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_acp.py",
-      "line": 1286,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_acp.py",
-      "line": 1985,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "tests/test_acp_compaction_activity.py",
       "line": 25,
       "node": "Attribute",
@@ -2095,72 +1843,6 @@
       "line": 253,
       "node": "Attribute",
       "name": "begin"
-    },
-    {
-      "path": "tests/test_acp_input_disposition.py",
-      "line": 242,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 54,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 61,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 105,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 317,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 616,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_queue_contract.py",
-      "line": 39,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_selected_write_plan.py",
-      "line": 84,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_selected_write_plan.py",
-      "line": 261,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_selected_write_plan.py",
-      "line": 270,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_selected_write_plan.py",
-      "line": 313,
-      "node": "Attribute",
-      "name": "capture"
     },
     {
       "path": "tests/test_active_turn.py",
@@ -2239,18 +1921,6 @@
       "line": 2411,
       "node": "Attribute",
       "name": "acquire"
-    },
-    {
-      "path": "tests/test_backend_failure_owner_pause.py",
-      "line": 57,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
-      "path": "tests/test_backend_failure_owner_pause.py",
-      "line": 144,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
     },
     {
       "path": "tests/test_candidate_maintenance.py",
@@ -2805,102 +2475,6 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_current_input_origin.py",
-      "line": 29,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 30,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 54,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 64,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 90,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 103,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 110,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 113,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 121,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 146,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 153,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 170,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 175,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 196,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 199,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 245,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "tests/test_cursor_load_recovery.py",
       "line": 23,
       "node": "Attribute",
@@ -3387,12 +2961,6 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_goal_failure_native.py",
-      "line": 134,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
-    },
-    {
       "path": "tests/test_goal_failure_observation.py",
       "line": 45,
       "node": "Attribute",
@@ -3521,12 +3089,6 @@
     {
       "path": "tests/test_goal_standby.py",
       "line": 322,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_goal_standby_liveness.py",
-      "line": 71,
       "node": "Attribute",
       "name": "capture"
     },
@@ -3695,30 +3257,6 @@
     {
       "path": "tests/test_input_drain_native.py",
       "line": 83,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_keyed_response_delivery.py",
-      "line": 56,
-      "node": "Attribute",
-      "name": "awareness_segments"
-    },
-    {
-      "path": "tests/test_keyed_response_delivery.py",
-      "line": 121,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_keyed_response_delivery.py",
-      "line": 157,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_keyed_response_delivery.py",
-      "line": 239,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4641,24 +4179,6 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_retained_context_operations.py",
-      "line": 164,
-      "node": "alias",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_retained_context_operations.py",
-      "line": 170,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_retained_context_operations.py",
-      "line": 175,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "tests/test_retained_manual_compaction.py",
       "line": 133,
       "node": "Attribute",
@@ -4717,18 +4237,6 @@
       "line": 51,
       "node": "Attribute",
       "name": "prepare_selected_session"
-    },
-    {
-      "path": "tests/test_runtime_goal_retry_running.py",
-      "line": 72,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_runtime_goal_retry_running.py",
-      "line": 215,
-      "node": "Attribute",
-      "name": "reserve"
     },
     {
       "path": "tests/test_runtime_goal_snapshot.py",
@@ -5249,12 +4757,6 @@
     {
       "path": "tests/test_selected_summary_output_accounting.py",
       "line": 131,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_stack_goal_standby.py",
-      "line": 198,
       "node": "Attribute",
       "name": "capture"
     },
@@ -5913,484 +5415,10 @@
       "name": "capture"
     },
     {
-      "path": "src/agent_comms/input_disposition.py",
-      "line": 301,
-      "node": "FunctionDef",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/input_disposition.py",
-      "line": 246,
-      "node": "FunctionDef",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/input_disposition.py",
-      "line": 253,
-      "node": "Name",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/input_disposition.py",
-      "line": 250,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 54,
-      "node": "alias",
-      "name": "OriginalTurnInput"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 431,
-      "node": "FunctionDef",
-      "name": "bind_native_turn"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 543,
-      "node": "FunctionDef",
-      "name": "finish_original_inputs"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 549,
-      "node": "AsyncFunctionDef",
-      "name": "finish_turn_inputs"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 83,
-      "node": "Name",
-      "name": "OriginalTurnInput"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 395,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 396,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 547,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 595,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 560,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 560,
-      "node": "Attribute",
-      "name": "finish_original_inputs"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 51,
-      "node": "ClassDef",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 18,
-      "node": "alias",
-      "name": "InputBatch"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 44,
-      "node": "alias",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 102,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 145,
-      "node": "FunctionDef",
-      "name": "begin"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 193,
-      "node": "FunctionDef",
-      "name": "prepare_prompt"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 245,
-      "node": "FunctionDef",
-      "name": "reserve_input"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 287,
-      "node": "FunctionDef",
-      "name": "open_stream"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 335,
-      "node": "FunctionDef",
-      "name": "finish_goals"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 338,
-      "node": "AsyncFunctionDef",
-      "name": "close_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 345,
-      "node": "AsyncFunctionDef",
-      "name": "continue_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 354,
-      "node": "AsyncFunctionDef",
-      "name": "prepare_native"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 461,
-      "node": "AsyncFunctionDef",
-      "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 486,
-      "node": "FunctionDef",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 158,
-      "node": "Attribute",
-      "name": "input_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 154,
-      "node": "Attribute",
-      "name": "acquire_turn"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 160,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 160,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 183,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 190,
-      "node": "Attribute",
-      "name": "prepare_prompt"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 191,
-      "node": "Attribute",
-      "name": "reserve_input"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 197,
-      "node": "Attribute",
-      "name": "native_environment"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 288,
-      "node": "Attribute",
-      "name": "bind_native_turn"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 292,
-      "node": "Attribute",
-      "name": "finish_turn_inputs"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 309,
-      "node": "Name",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 331,
-      "node": "Attribute",
-      "name": "finish_goals"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 332,
-      "node": "Attribute",
-      "name": "close_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 333,
-      "node": "Attribute",
-      "name": "continue_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 466,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 472,
-      "node": "Attribute",
-      "name": "open_stream"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 64,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 130,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 159,
-      "node": "Attribute",
-      "name": "input_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 160,
-      "node": "Attribute",
-      "name": "input_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 183,
-      "node": "Name",
-      "name": "InputBatch"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 214,
-      "node": "Attribute",
-      "name": "thread_views"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 275,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 306,
-      "node": "Attribute",
-      "name": "input_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 340,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 370,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 466,
-      "node": "Name",
-      "name": "permit_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 471,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 481,
-      "node": "Name",
-      "name": "permit_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 489,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 348,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 371,
-      "node": "Attribute",
-      "name": "awareness_segments"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 467,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 471,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 494,
-      "node": "Attribute",
-      "name": "prepare_native"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 357,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 383,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 467,
-      "node": "Attribute",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 475,
-      "node": "Name",
-      "name": "permit_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 502,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 502,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 508,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 508,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 358,
-      "node": "Attribute",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 482,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 482,
-      "node": "Name",
-      "name": "permit_custody"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 402,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 403,
-      "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
-    },
-    {
       "path": "src/agent_comms/registration.py",
       "line": 108,
       "node": "Attribute",
       "name": "begin"
-    },
-    {
-      "path": "src/agent_comms/session_lifecycle.py",
-      "line": 241,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/session_lifecycle.py",
-      "line": 311,
-      "node": "Attribute",
-      "name": "run_worker"
     },
     {
       "path": "src/agent_comms/turn_input_source.py",
@@ -6439,132 +5467,6 @@
       "line": 134,
       "node": "Name",
       "name": "OriginalTurnInput"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 177,
-      "node": "AsyncFunctionDef",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 409,
-      "node": "FunctionDef",
-      "name": "acquire_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 438,
-      "node": "AsyncFunctionDef",
-      "name": "settle_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 458,
-      "node": "FunctionDef",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 529,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 422,
-      "node": "Attribute",
-      "name": "settle_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 433,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 436,
-      "node": "Attribute",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 158,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 182,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 199,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 453,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 462,
-      "node": "Attribute",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 182,
-      "node": "Attribute",
-      "name": "native_environment"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 229,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 508,
-      "node": "Attribute",
-      "name": "finish_turn_inputs"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 531,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 256,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 257,
-      "node": "Attribute",
-      "name": "acquire_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 261,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 262,
-      "node": "Attribute",
-      "name": "current_turn_update"
     },
     {
       "path": "tests/test_atomic_turn_source_owner.py",
@@ -6643,48 +5545,6 @@
       "line": 109,
       "node": "Attribute",
       "name": "prepare_native"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 17,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 78,
-      "node": "Name",
-      "name": "run_worker"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 78,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 119,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 86,
-      "node": "Name",
-      "name": "run_worker"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 166,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 122,
-      "node": "Attribute",
-      "name": "acquire"
     },
     {
       "path": "tests/test_s1_event_behavior.py",
@@ -6799,14 +5659,1600 @@
       "line": 40,
       "node": "Attribute",
       "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 370,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 394,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 139,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 171,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 153,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 189,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 198,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 68,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 46,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 143,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 121,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 185,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 232,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 277,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 309,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 92,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 112,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 170,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 185,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 189,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 264,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 107,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 125,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 131,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 172,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 249,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 222,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 307,
+      "node": "FunctionDef",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 252,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 238,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 441,
+      "node": "FunctionDef",
+      "name": "bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 554,
+      "node": "FunctionDef",
+      "name": "finish_original_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 560,
+      "node": "AsyncFunctionDef",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 364,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 394,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 403,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 512,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 558,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 607,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 115,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 395,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 404,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 415,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 571,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 608,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 622,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 238,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 405,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 571,
+      "node": "Attribute",
+      "name": "finish_original_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 608,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 630,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 259,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 264,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 276,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 630,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 26,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 53,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 77,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 51,
+      "node": "ClassDef",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 102,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 145,
+      "node": "FunctionDef",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 192,
+      "node": "FunctionDef",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 244,
+      "node": "FunctionDef",
+      "name": "reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 286,
+      "node": "FunctionDef",
+      "name": "open_stream"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 334,
+      "node": "FunctionDef",
+      "name": "finish_goals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 337,
+      "node": "AsyncFunctionDef",
+      "name": "close_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 344,
+      "node": "AsyncFunctionDef",
+      "name": "continue_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 353,
+      "node": "AsyncFunctionDef",
+      "name": "prepare_native"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 460,
+      "node": "AsyncFunctionDef",
+      "name": "acquire"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 485,
+      "node": "FunctionDef",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 154,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 182,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 189,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "native_environment"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 287,
+      "node": "Attribute",
+      "name": "bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 291,
+      "node": "Attribute",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 330,
+      "node": "Attribute",
+      "name": "finish_goals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 331,
+      "node": "Attribute",
+      "name": "close_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 332,
+      "node": "Attribute",
+      "name": "continue_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 465,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 471,
+      "node": "Attribute",
+      "name": "open_stream"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 130,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 159,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 274,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 305,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 339,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 369,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 470,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 488,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 347,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 370,
+      "node": "Attribute",
+      "name": "awareness_segments"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 466,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 470,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 493,
+      "node": "Attribute",
+      "name": "prepare_native"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 356,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 382,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 466,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 501,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 501,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 507,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 507,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 357,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 481,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 401,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 402,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 53,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 44,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 91,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 330,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 339,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 347,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 74,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 123,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 235,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 245,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 257,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 343,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 276,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 92,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 257,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 316,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 127,
+      "node": "FunctionDef",
+      "name": "acquire"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 226,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 180,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 207,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 282,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 315,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 358,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 370,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 202,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 221,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 224,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 345,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 200,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_load.py",
+      "line": 44,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/session_load.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 52,
+      "node": "ClassDef",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 180,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 241,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 342,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 177,
+      "node": "AsyncFunctionDef",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 411,
+      "node": "FunctionDef",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 440,
+      "node": "AsyncFunctionDef",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 460,
+      "node": "FunctionDef",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 424,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 435,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 438,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 168,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 182,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 464,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 468,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 199,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 303,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 330,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 332,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 400,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 455,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 464,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 182,
+      "node": "Attribute",
+      "name": "native_environment"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 229,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 339,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 362,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 472,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 510,
+      "node": "Attribute",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 257,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 261,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 262,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 57,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 782,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 842,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1143,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1187,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1234,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1286,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1985,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 242,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 616,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 261,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 84,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 313,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 57,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 144,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 31,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 32,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 92,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 118,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 184,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 210,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 258,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 157,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "awareness_segments"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 121,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 78,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 166,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 122,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 215,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 198,
+      "node": "Attribute",
+      "name": "capture"
     }
   ],
   "scope": "src/tests/tools; original NRA parser. Dynamic partial callbacks/MRO and asyncio/contextlib lifetimes require semantic reading; AST does not establish dynamic dispatch.",
-  "changed_modules_refreshed": [
-    "src/agent_comms/input_drain.py",
-    "src/agent_comms/owned_turn.py",
-    "src/agent_comms/turn_runner.py"
-  ],
+  "changed_modules_refreshed": 40,
   "refreshed_changed_files": [
     "src/agent_comms/agent_event_updates.py",
     "src/agent_comms/input_disposition.py",
@@ -6822,5 +7268,6 @@
     "tests/test_private_idle_drain.py",
     "tests/test_s1_event_behavior.py",
     "tests/test_turn_goal_account.py"
-  ]
+  ],
+  "changed_parse_omissions": []
 }

@@ -164,22 +164,21 @@ class OwnedTurn:
                 self.snapshot = self.runner.comms.registry.snapshot()
                 for origin in self.bus_origins:
                     self.key = self.runner.inputs.dispositions.bus_key(origin, self.thread)
-                    if self.runner.inputs.dispositions.read().rows.get(self.key) is None:
-                        self.runner.inputs.dispositions.record(
-                            self.key,
-                            seq=origin.seq,
-                            owner=self.thread_name,
-                            admission=self.snapshot.admission_generations[self.thread_name],
-                            target=origin.target,
-                            text=ScheduledTurn.incoming(
-                                origin, aliases=self.snapshot.aliases
-                            ).prompt,
-                            origin=WireInputOrigin(
-                                self.runner.comms.bus.log.read_metadata_unlocked().wire_root_id,
-                                origin.reference,
-                            ),
-                        )
                     self.original_keys = (*self.original_keys, self.key)
+                    self.runner.inputs.dispositions.record(
+                        self.key,
+                        seq=origin.seq,
+                        owner=self.thread_name,
+                        admission=self.snapshot.admission_generations[self.thread_name],
+                        target=origin.target,
+                        text=ScheduledTurn.incoming(
+                            origin, aliases=self.snapshot.aliases
+                        ).prompt,
+                        origin=WireInputOrigin(
+                            self.runner.comms.bus.log.read_metadata_unlocked().wire_root_id,
+                            origin.reference,
+                        ),
+                    )
         self.batch = InputBatch.capture(
             self.origins,
             self.original_keys,

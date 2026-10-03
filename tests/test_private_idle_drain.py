@@ -301,7 +301,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     assert first.seq < second.seq
     with Coordination(comms.root / "coordination.sqlite3") as store:
         await cohort_foreground._accept_visible_deliveries(
-            comms.bus, _root_id, store, stable_thread_lookup(beta.created_at), 0,
+            comms.bus, _root_id, store.session.path, stable_thread_lookup(beta.created_at), 0,
             owner_name=beta.name,
         )
         pending = next_sealed_assignment(
@@ -361,7 +361,7 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
     with Coordination(root / "coordination.sqlite3") as store:
         assert (
             await cohort_foreground._accept_visible_deliveries(
-                comms.bus, root_id, store, lookup, 0, owner_name="beta"
+                comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
             )
             == original.message.seq
         )
@@ -369,12 +369,12 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
         message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")
         await cohort_foreground._accept_visible_deliveries(
-            comms.bus, root_id, store, lookup, 0, owner_name="beta"
+            comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]
         statements.clear()
         await cohort_foreground._accept_visible_deliveries(
-            comms.bus, root_id, store, lookup, 0, owner_name="beta"
+            comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)

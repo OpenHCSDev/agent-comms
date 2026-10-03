@@ -1,0 +1,2467 @@
+{
+  "original_full_census": "source-before.json:726 parsed,0 omissions",
+  "parsed": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 97,
+      "context": [
+        "main"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 59,
+      "context": [
+        "capture",
+        "run_startup_input"
+      ],
+      "call": "agent._comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 61,
+      "context": [
+        "capture",
+        "run_startup_input"
+      ],
+      "call": "agent.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 175,
+      "context": [
+        "run_foreground_once"
+      ],
+      "call": "comms.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 178,
+      "context": [
+        "run_foreground_once"
+      ],
+      "call": "comms.registry.register"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 228,
+      "context": [
+        "run_foreground_once"
+      ],
+      "call": "comms.registry.live_owner_with_admission"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 182,
+      "context": [
+        "run_foreground_once"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 233,
+      "context": [
+        "run_foreground_once"
+      ],
+      "call": "comms.registry.unregister"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 86,
+      "context": [
+        "prepare_goal"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 96,
+      "context": [
+        "prepare_goal"
+      ],
+      "call": "self.comms.goals.goal_wait"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 107,
+      "context": [
+        "prepare_goal"
+      ],
+      "call": "self.comms.goals.block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 153,
+      "context": [
+        "ready_goal_grant_locked"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 125,
+      "context": [
+        "prepare_goal"
+      ],
+      "call": "self.comms.goals.block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 131,
+      "context": [
+        "prepare_goal"
+      ],
+      "call": "self.comms.goals.block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 170,
+      "context": [
+        "<worker lambda>",
+        "set_goal"
+      ],
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 189,
+      "context": [
+        "<worker lambda>",
+        "edit_goal"
+      ],
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 243,
+      "context": [
+        "<worker lambda>",
+        "retry_goal"
+      ],
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 119,
+      "context": [
+        "prepare_goal"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 216,
+      "context": [
+        "<worker lambda>",
+        "update_goal"
+      ],
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 181,
+      "context": [
+        "channel_display_page"
+      ],
+      "call": "self.channels.catalog.read().views(self.registry.snapshot().threads).get"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 216,
+      "context": [
+        "last_sent_timestamps"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 273,
+      "context": [
+        "channel_views"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 291,
+      "context": [
+        "thread_views"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 303,
+      "context": [
+        "thread_presentation"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 330,
+      "context": [
+        "coordination_snapshot"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 425,
+      "context": [
+        "mark_thread_view_read"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 520,
+      "context": [
+        "list_threads"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 547,
+      "context": [
+        "thread_detail"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 553,
+      "context": [
+        "thread_detail"
+      ],
+      "call": "self.goals.goal_execution"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 564,
+      "context": [
+        "poll"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 471,
+      "context": [
+        "mark_user_view_read"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 550,
+      "context": [
+        "thread_detail"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 181,
+      "context": [
+        "channel_display_page"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 311,
+      "context": [
+        "_owner_snapshot"
+      ],
+      "call": "self._comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 295,
+      "context": [
+        "__init__"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 118,
+      "context": [
+        "_launch"
+      ],
+      "call": "lifecycle.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 257,
+      "context": [
+        "fence"
+      ],
+      "call": "self.lifecycle.registry.fence_idle_owners"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 208,
+      "context": [
+        "complete"
+      ],
+      "call": "self.lifecycle.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 231,
+      "context": [
+        "restart"
+      ],
+      "call": "lifecycle.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 66,
+      "context": [
+        "violated"
+      ],
+      "call": "check.registry.admission_generations.get"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 135,
+      "context": [
+        "_user_identity_under_wire_lock"
+      ],
+      "call": "self.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 138,
+      "context": [
+        "_user_identity_under_wire_lock"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 70,
+      "context": [
+        "send_message"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 184,
+      "context": [
+        "_pin_constraint"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 143,
+      "context": [
+        "_user_identities"
+      ],
+      "call": "self.registry.all_threads().values"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 220,
+      "context": [
+        "acknowledge_through"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 143,
+      "context": [
+        "_user_identities"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 116,
+      "context": [
+        "send_initial_cohort"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 73,
+      "context": [
+        "scope"
+      ],
+      "call": "self.comms.registry.live_owner_with_admission"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 79,
+      "context": [
+        "block"
+      ],
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 130,
+      "context": [
+        "thread_name"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 173,
+      "context": [
+        "block_current"
+      ],
+      "call": "self.comms.goals.block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 183,
+      "context": [
+        "current_active_goal"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 210,
+      "context": [
+        "settle_original"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 134,
+      "context": [
+        "provider_usage"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 155,
+      "context": [
+        "tool_ended"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 203,
+      "context": [
+        "settle_original"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 237,
+      "context": [
+        "finish"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 109,
+      "context": [
+        "reserve"
+      ],
+      "call": "comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 125,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.goals.registry.register"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 226,
+      "context": [
+        "before_publish"
+      ],
+      "call": "ctx.goals._goal_input_review"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 258,
+      "context": [
+        "before_publish"
+      ],
+      "call": "ctx.goals.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 295,
+      "context": [
+        "before_publish"
+      ],
+      "call": "ctx.goals.waits.record"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 130,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.goals.registry.status"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 133,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.goals.waits.clear"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 274,
+      "context": [
+        "before_publish"
+      ],
+      "call": "ctx.goals.waits.read"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 205,
+      "context": [
+        "before_transition"
+      ],
+      "call": "ctx.goals.registry.register"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 300,
+      "context": [
+        "before_publish"
+      ],
+      "call": "ctx.goals.bus.log.latest_sequence"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 206,
+      "context": [
+        "before_transition"
+      ],
+      "call": "ctx.goals.registry.status"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 384,
+      "context": [
+        "change"
+      ],
+      "call": "ctx.goals.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 416,
+      "context": [
+        "change"
+      ],
+      "call": "ctx.goals.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 60,
+      "context": [
+        "check"
+      ],
+      "call": "ctx.goals.registry.status"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 120,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.goals.registry.goal_history"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 144,
+      "context": [
+        "__call__"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 147,
+      "context": [
+        "__call__"
+      ],
+      "call": "self.comms.goals.goal_wait"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 192,
+      "context": [
+        "native_start"
+      ],
+      "call": "self.inputs.dispositions.started"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 295,
+      "context": [
+        "_private_observation_revision"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 558,
+      "context": [
+        "finish_original_inputs"
+      ],
+      "call": "self.dispositions.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 218,
+      "context": [
+        "awaiting_input_keys"
+      ],
+      "call": "self.dispositions.bus_key"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 248,
+      "context": [
+        "observe"
+      ],
+      "call": "self.effects.turns.goals.schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 199,
+      "context": [
+        "submit"
+      ],
+      "call": "self.comms.registry.live_owner_with_admission"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 305,
+      "context": [
+        "sync_thread"
+      ],
+      "call": "self.effects.turns.goals.sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 112,
+      "context": [
+        "reserve_foreground_owner"
+      ],
+      "call": "comms.registry.canonical_name"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 116,
+      "context": [
+        "reserve_foreground_owner"
+      ],
+      "call": "comms.registry.register"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 113,
+      "context": [
+        "reserve_foreground_owner"
+      ],
+      "call": "comms.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 101,
+      "context": [
+        "consume"
+      ],
+      "call": "comms.goals.consume_goal_wait"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 144,
+      "context": [
+        "bind"
+      ],
+      "call": "self.goals.bind"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 316,
+      "context": [
+        "peer_progress"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 151,
+      "context": [
+        "turn_state"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 183,
+      "context": [
+        "<worker lambda>",
+        "prepare_selected_session"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 87,
+      "context": [
+        "consume_reply_wait"
+      ],
+      "call": "self.comms.goals.consume_reply_wait"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 160,
+      "context": [
+        "prepare"
+      ],
+      "call": "comms.registry.live_owner_with_admission"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 191,
+      "context": [
+        "lease"
+      ],
+      "call": "comms.registry.lease_live_turn_with_admission"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 136,
+      "context": [
+        "_selected_claim_boundary"
+      ],
+      "call": "comms.registry.store._read_unlocked().snapshot"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 370,
+      "context": [
+        "write_selected_claimed_file"
+      ],
+      "call": "comms.registry.store._read_unlocked().snapshot"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 60,
+      "context": [
+        "verify_selected_wake"
+      ],
+      "call": "comms.registry.live_owner_with_admission"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 136,
+      "context": [
+        "_selected_claim_boundary"
+      ],
+      "call": "comms.registry.store._read_unlocked"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 370,
+      "context": [
+        "write_selected_claimed_file"
+      ],
+      "call": "comms.registry.store._read_unlocked"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 113,
+      "context": [
+        "activity_of"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 128,
+      "context": [
+        "all_activity"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 162,
+      "context": [
+        "set_drain_diagnostic"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 178,
+      "context": [
+        "begin_turn"
+      ],
+      "call": "self.registry.lease_local_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 190,
+      "context": [
+        "transition_turn"
+      ],
+      "call": "self.registry.transition_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 194,
+      "context": [
+        "observe_native_phase"
+      ],
+      "call": "self.registry.observe_native_phase"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 199,
+      "context": [
+        "finish_turn"
+      ],
+      "call": "self.registry.release_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 202,
+      "context": [
+        "finish_turn"
+      ],
+      "call": "self.registry.canonical_name"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 109,
+      "context": [
+        "set_activity"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 182,
+      "context": [
+        "begin_turn"
+      ],
+      "call": "self.registry.transition_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 217,
+      "context": [
+        "set_agent_info"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 230,
+      "context": [
+        "agent_info_of"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 184,
+      "context": [
+        "begin_turn"
+      ],
+      "call": "self.registry.release_turn"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 564,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.registry.declare"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 739,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.registry.require"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 775,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.registry.require"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 587,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.registry.require"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 363,
+      "context": [
+        "apply"
+      ],
+      "call": "ctx.registry.require"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 53,
+      "context": [
+        "display_evidence"
+      ],
+      "call": "presentation.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 310,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 400,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 471,
+      "context": [
+        "resolve_thread_model"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 522,
+      "context": [
+        "_fork_unlocked"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 524,
+      "context": [
+        "_fork_unlocked"
+      ],
+      "call": "self.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 548,
+      "context": [
+        "_fork_unlocked"
+      ],
+      "call": "self.registry._declare_unlocked"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 571,
+      "context": [
+        "adopt_current"
+      ],
+      "call": "self.registry.declare"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 139,
+      "context": [
+        "import_thread"
+      ],
+      "call": "self.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 185,
+      "context": [
+        "restore_stopped"
+      ],
+      "call": "self.registry.restore_stopped"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 223,
+      "context": [
+        "claim_thread"
+      ],
+      "call": "self.registry._claim_unlocked"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 253,
+      "context": [
+        "set_project"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 268,
+      "context": [
+        "set_project"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 279,
+      "context": [
+        "rename_managed_thread"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 288,
+      "context": [
+        "rename_managed_thread"
+      ],
+      "call": "self.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 327,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.rename"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 402,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 433,
+      "context": [
+        "heartbeat"
+      ],
+      "call": "self.registry.heartbeat"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 441,
+      "context": [
+        "set_thread_model"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 444,
+      "context": [
+        "set_thread_model"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 450,
+      "context": [
+        "set_thread_thinking_level"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 453,
+      "context": [
+        "set_thread_thinking_level"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 461,
+      "context": [
+        "initialize_native_configuration"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 482,
+      "context": [
+        "attach_session"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 496,
+      "context": [
+        "attach_session"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 505,
+      "context": [
+        "archive"
+      ],
+      "call": "self.registry.archive"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 153,
+      "context": [
+        "import_thread"
+      ],
+      "call": "self.registry._declare_unlocked"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 270,
+      "context": [
+        "set_project"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 335,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 404,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 444,
+      "context": [
+        "set_thread_model"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 453,
+      "context": [
+        "set_thread_thinking_level"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 466,
+      "context": [
+        "initialize_native_configuration"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 502,
+      "context": [
+        "archive"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 565,
+      "context": [
+        "_fork_unlocked"
+      ],
+      "call": "self.registry.remove"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 187,
+      "context": [
+        "restore_stopped"
+      ],
+      "call": "self.registry.store.private_guard_unlocked"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 234,
+      "context": [
+        "rename_self"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 289,
+      "context": [
+        "rename_managed_thread"
+      ],
+      "call": "self.registry.canonical_name"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 332,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 336,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.canonical_name"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 466,
+      "context": [
+        "initialize_native_configuration"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 503,
+      "context": [
+        "archive"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 157,
+      "context": [
+        "import_thread"
+      ],
+      "call": "self.registry.remove"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 191,
+      "context": [
+        "restore_stopped"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 348,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.rename"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 380,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.rename"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 560,
+      "context": [
+        "_fork_unlocked"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 388,
+      "context": [
+        "_rename_thread_unlocked"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 106,
+      "context": [
+        "capture"
+      ],
+      "call": "inputs.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 123,
+      "context": [
+        "capture"
+      ],
+      "call": "inputs.dispositions.record"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 157,
+      "context": [
+        "require_handoff",
+        "dispatch"
+      ],
+      "call": "inputs.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 160,
+      "context": [
+        "require_handoff",
+        "dispatch"
+      ],
+      "call": "inputs.dispositions.read().lookup"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 160,
+      "context": [
+        "require_handoff",
+        "dispatch"
+      ],
+      "call": "inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 38,
+      "context": [
+        "root"
+      ],
+      "call": "self.registry.store.path.parent.resolve"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 177,
+      "context": [
+        "capture"
+      ],
+      "call": "self.boundary.registry.store._read_unlocked().snapshot"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 109,
+      "context": [
+        "hold"
+      ],
+      "call": "self.registry.guard_owner_compaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 177,
+      "context": [
+        "capture"
+      ],
+      "call": "self.boundary.registry.store._read_unlocked"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 154,
+      "context": [
+        "validated_thread"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 291,
+      "context": [
+        "configuration_updates"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 292,
+      "context": [
+        "configuration_updates"
+      ],
+      "call": "self.comms.goals.goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 336,
+      "context": [
+        "release_registered_owner"
+      ],
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 55,
+      "context": [
+        "_require_available_new_tags"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 39,
+      "context": [
+        "apply"
+      ],
+      "call": "channels.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 62,
+      "context": [
+        "create_tag"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 74,
+      "context": [
+        "update_tags"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 77,
+      "context": [
+        "update_tags"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 78,
+      "context": [
+        "update_tags"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 105,
+      "context": [
+        "set_saved_view"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 117,
+      "context": [
+        "set_channel_metadata"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 123,
+      "context": [
+        "set_channel_any_mode"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 129,
+      "context": [
+        "set_channel_sort"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 140,
+      "context": [
+        "set_channel_pinned"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 147,
+      "context": [
+        "set_thread_pinned"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 148,
+      "context": [
+        "set_thread_pinned"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 189,
+      "context": [
+        "_change_tag"
+      ],
+      "call": "self.registry.all_threads().values"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 51,
+      "context": [
+        "channels"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 75,
+      "context": [
+        "update_tags"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 77,
+      "context": [
+        "update_tags"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 166,
+      "context": [
+        "rename_tag"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 177,
+      "context": [
+        "_change_tag"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 183,
+      "context": [
+        "_change_tag"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 189,
+      "context": [
+        "_change_tag"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 191,
+      "context": [
+        "_change_tag"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 84,
+      "context": [
+        "update_tags"
+      ],
+      "call": "self.registry.all_threads"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 193,
+      "context": [
+        "_change_tag"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 108,
+      "context": [
+        "admit"
+      ],
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 392,
+      "context": [
+        "_require_same_stop_owner"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 437,
+      "context": [
+        "_release_current_owner_unlocked"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 445,
+      "context": [
+        "_release_current_owner_unlocked"
+      ],
+      "call": "self.registry.unregister"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 180,
+      "context": [
+        "acquire_thread"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 187,
+      "context": [
+        "acquire_thread"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 195,
+      "context": [
+        "ensure_owner"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 210,
+      "context": [
+        "start"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 212,
+      "context": [
+        "start"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 284,
+      "context": [
+        "stop"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 285,
+      "context": [
+        "stop"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 378,
+      "context": [
+        "reserve",
+        "_launch_owner_unlocked"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 417,
+      "context": [
+        "_finish_stopped_owner"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 421,
+      "context": [
+        "_finish_stopped_owner"
+      ],
+      "call": "self.registry.unregister"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 296,
+      "context": [
+        "stop"
+      ],
+      "call": "self.registry.unregister"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 431,
+      "context": [
+        "release"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 446,
+      "context": [
+        "_release_current_owner_unlocked"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 293,
+      "context": [
+        "stop"
+      ],
+      "call": "self.registry.unregister"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 432,
+      "context": [
+        "release"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 197,
+      "context": [
+        "ensure_owner"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 290,
+      "context": [
+        "stop"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 114,
+      "context": [
+        "_goal_input_review"
+      ],
+      "call": "self.registry.aliases_for"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 118,
+      "context": [
+        "_goal_input_review"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 317,
+      "context": [
+        "_goal_snapshot"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 46,
+      "context": [
+        "unresolved_inputs"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 65,
+      "context": [
+        "input_delivery"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 66,
+      "context": [
+        "input_delivery"
+      ],
+      "call": "self.registry.aliases_for"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 82,
+      "context": [
+        "dismiss_historical_inputs"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 83,
+      "context": [
+        "dismiss_historical_inputs"
+      ],
+      "call": "self.registry.aliases_for"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 91,
+      "context": [
+        "goal_input_review"
+      ],
+      "call": "self._goal_input_review(self.registry.require(name), goal_id, wait_for).public"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 160,
+      "context": [
+        "goal_history"
+      ],
+      "call": "self.registry.goal_history"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 174,
+      "context": [
+        "recover_closed_goal_wait"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 207,
+      "context": [
+        "recover_closed_goal_wait"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 225,
+      "context": [
+        "release_waits_after_terminal_turn"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 328,
+      "context": [
+        "consume_goal_wait"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 341,
+      "context": [
+        "consume_reply_wait"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 380,
+      "context": [
+        "block_goal_after_failed_turn"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 391,
+      "context": [
+        "block_goal_after_failed_turn"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 404,
+      "context": [
+        "block_unverified_goal_completion"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 411,
+      "context": [
+        "block_unverified_goal_completion"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 50,
+      "context": [
+        "unresolved_inputs"
+      ],
+      "call": "self.registry.aliases_for"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 108,
+      "context": [
+        "_goal_input_review"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 164,
+      "context": [
+        "goal_wait"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 288,
+      "context": [
+        "release_waits_after_terminal_turn"
+      ],
+      "call": "self.registry.register"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 391,
+      "context": [
+        "block_goal_after_failed_turn"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 411,
+      "context": [
+        "block_unverified_goal_completion"
+      ],
+      "call": "self.registry.status"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 367,
+      "context": [
+        "update_goal"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 91,
+      "context": [
+        "goal_input_review"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 110,
+      "context": [
+        "admit"
+      ],
+      "call": "self.runner.comms.goals.goal_wait"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 335,
+      "context": [
+        "finish_goals"
+      ],
+      "call": "self.progress.goals.finish"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 107,
+      "context": [
+        "admit"
+      ],
+      "call": "self.runner.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 197,
+      "context": [
+        "prepare_prompt"
+      ],
+      "call": "self.runner.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 208,
+      "context": [
+        "prepare_prompt"
+      ],
+      "call": "self.runner.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 488,
+      "context": [
+        "settle_unbound"
+      ],
+      "call": "self.runner.inputs.dispositions.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 489,
+      "context": [
+        "settle_unbound"
+      ],
+      "call": "self.runner.inputs.dispositions.read().shared_state"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 164,
+      "context": [
+        "begin"
+      ],
+      "call": "self.runner.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 166,
+      "context": [
+        "begin"
+      ],
+      "call": "self.runner.inputs.dispositions.bus_key"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 168,
+      "context": [
+        "begin"
+      ],
+      "call": "self.runner.inputs.dispositions.record"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 489,
+      "context": [
+        "settle_unbound"
+      ],
+      "call": "self.runner.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 308,
+      "context": [
+        "change"
+      ],
+      "call": "ctx.server.agent.turns.goals.edit_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 318,
+      "context": [
+        "change"
+      ],
+      "call": "ctx.server.agent.turns.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 326,
+      "context": [
+        "result"
+      ],
+      "call": "ctx.server.agent.turns.goals.retry_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 335,
+      "context": [
+        "result"
+      ],
+      "call": "ctx.server.agent.turns.goals.set_goal"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 397,
+      "context": [
+        "collaborations"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 398,
+      "context": [
+        "collaborations"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 430,
+      "context": [
+        "goal_contacts"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 431,
+      "context": [
+        "goal_contacts"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 441,
+      "context": [
+        "contact_projection"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 442,
+      "context": [
+        "contact_projection"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 488,
+      "context": [
+        "edit"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 491,
+      "context": [
+        "edit"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 510,
+      "context": [
+        "set_order"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 511,
+      "context": [
+        "set_order"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 551,
+      "context": [
+        "snapshot"
+      ],
+      "call": "self.registry.require"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 552,
+      "context": [
+        "snapshot"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 165,
+      "context": [
+        "enqueue"
+      ],
+      "call": "comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 166,
+      "context": [
+        "enqueue"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 202,
+      "context": [
+        "status"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 209,
+      "context": [
+        "cancel"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 230,
+      "context": [
+        "step"
+      ],
+      "call": "comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 447,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 497,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 498,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 523,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 554,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 571,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.goal_history"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 678,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 777,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.unresolved_inputs"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 272,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 518,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 551,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 772,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.goals.goal_input_review"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 942,
+      "context": [
+        "apply"
+      ],
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 92,
+      "context": [
+        "capture"
+      ],
+      "call": "comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 98,
+      "context": [
+        "run"
+      ],
+      "call": "inputs.effects.turns.goals.sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 245,
+      "context": [
+        "bind_page_read"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 286,
+      "context": [
+        "capture_page_window"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 480,
+      "context": [
+        "transcript_checkpoint"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 397,
+      "context": [
+        "thread_transcript_page"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 519,
+      "context": [
+        "repair_input_routing"
+      ],
+      "call": "self.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 66,
+      "context": [
+        "bind"
+      ],
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 74,
+      "context": [
+        "bind"
+      ],
+      "call": "self.dispositions.bind_originals"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 125,
+      "context": [
+        "bind"
+      ],
+      "call": "self.dispositions.read().compaction_rows"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 117,
+      "context": [
+        "bind"
+      ],
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 125,
+      "context": [
+        "bind"
+      ],
+      "call": "self.dispositions.read"
+    }
+  ],
+  "limitation": "Syntactic receiver/context inventory; callback dispatch and nominal owners read semantically; no dynamic resolution proof."
+}

@@ -10,6 +10,8 @@ import asyncio
 import json
 import os
 from typing import Any
+from functools import partial
+from .coordinator import Coordination
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
@@ -41,7 +43,9 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
     # its exact mark already COMMITted (reconcile rather than infer rollback).
     with publication_identity_fence(agent._comms.root, nonblocking=True):
         try:
-            owner, owner_generation = agent._comms.registry.live_owner_with_generation(thread_name)
+            owner, owner_generation = await Coordination.run_worker(partial(
+                agent._comms.registry.live_owner_with_generation, thread_name,
+            ))
         except (RelationViolationError, UnregisteredThreadError):
             return 0
         if (
@@ -61,13 +65,14 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
         journal = CompactionJournal(path)
         client = agent.sessions.client
         sockets = frozenset(runtime.clients.get(session_id, ()))
-        for item in journal.publications.pending(owner.session_file):
+        pending = await Coordination.run_worker(partial(journal.publications.pending, owner.session_file))
+        for item in pending:
             # Recheck under the handoff fence; an owner epoch may change even
             # without a session rebind. No old row crosses that boundary.
             try:
-                current, current_owner_generation = (
-                    agent._comms.registry.live_owner_with_generation(thread_name)
-                )
+                current, current_owner_generation = await Coordination.run_worker(partial(
+                    agent._comms.registry.live_owner_with_generation, thread_name,
+                ))
             except (RelationViolationError, UnregisteredThreadError):
                 break
             if (
@@ -113,9 +118,9 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                 # socket transport, does not mark this exact row observed.
                 break
             try:
-                current, current_owner_generation = (
-                    agent._comms.registry.live_owner_with_generation(thread_name)
-                )
+                current, current_owner_generation = await Coordination.run_worker(partial(
+                    agent._comms.registry.live_owner_with_generation, thread_name,
+                ))
             except (RelationViolationError, UnregisteredThreadError):
                 break
             if (
@@ -135,6 +140,6 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
             ):
                 # No ACK after owner/client change or all socket sends failed.
                 break
-            journal.publications.observe(item.commit_id, item.metadata_json)
+            await Coordination.run_worker(partial(journal.publications.observe, item.commit_id, item.metadata_json))
             projected += 1
     return projected

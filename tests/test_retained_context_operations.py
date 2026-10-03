@@ -1,5 +1,7 @@
 """One original human-source workflow through the public CLI and file effects."""
 
+from contextlib import ExitStack
+
 import json
 
 from agent_comms.cli import main
@@ -172,9 +174,11 @@ def original_input_consumer_journey(tmp_path, command):
     originals = []
     with _store_lock(comms._wire_lock_path):
         for _ in range(2):
-            queued, _ = QueuedInput.capture(
-                agent.inputs, "beta", text=wording, prompt=wording, echo=True,
-                images=(), controller=Client(), origin=origin)
+            with ExitStack() as custody:
+                queued, _ = QueuedInput.capture(
+                    agent.inputs, "beta", text=wording, prompt=wording, echo=True,
+                    images=(), controller=Client(), origin=origin, custody=custody)
+                custody.pop_all()
             originals.append(agent.inputs.dispositions.read().lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",

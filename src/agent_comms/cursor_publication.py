@@ -10,6 +10,7 @@ import os
 import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 
 from acp.schema import SessionInfoUpdate
 
@@ -23,6 +24,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
+from .coordinator import Coordination
 from .coordination_errors import CoordinationError
 from .message_bus import MessageBus
 from .native_source_cursor import NativeSourceCursor
@@ -87,7 +89,7 @@ class CursorPublication:
         if self.root_id is None:
             raise ValueError("Native cursor requires the configured root")
         revision = self.delivery(session_id).next_revision()
-        scope = self.scope(thread_name, session_id)
+        scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if scope is None:
             return unavailable
@@ -100,14 +102,14 @@ class CursorPublication:
                 bus, wire_root_id=self.root_id, owner_name=thread_name
             )
         except BlockingIOError:
-            current = self.scope(thread_name, session_id)
+            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
-            current = self.scope(thread_name, session_id)
+            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        current = self.scope(thread_name, session_id)
+        current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         if current != scope:
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         return CursorEnvelope(

@@ -227,12 +227,18 @@ class InputDispositions(LockedStore[InputDocument]):
 
     def record(
         self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
-        origin: InputOrigin = UnattributedInputOrigin(),
+        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
     ) -> bool:
-        """Return acceptance only after the reservation and directory are fsynced."""
+        """Enlist supplied reservation custody before publishing acceptance."""
         row = ReservedInput(key, seq, owner, admission, target, text,
                             origin=origin)
-        document = self.update(lambda original: original.record(row))
+        def reserve(original: InputDocument) -> InputDocument:
+            changed = original.record(row)
+            if changed is not original and custody is not None:
+                custody.callback(self.settle_unbound, (row.key,))
+            return changed
+
+        document = self.update(reserve)
         return document.rows[key] is row
 
     def reserve_turn(
