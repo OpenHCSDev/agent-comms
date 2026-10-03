@@ -1,0 +1,147 @@
+{
+  "source_head": "25aa1d41e9d52ced17cb4223d8a4fddfc6635bb2",
+  "final_source_same": "ea8fb8041b33fc088e1e15b62deba9dd75d18d4a",
+  "dependency": "569 final67f68f3a; no additional native changes in570",
+  "installed_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-construction-installed-site/agent_comms",
+  "source_files_matching": 339,
+  "source_mismatches": [],
+  "wheel_sha256": "55bad1d1adb2e3bf9ef5e9ebb2790ee18e2e559571924dc451158b4b70748342",
+  "scorer_exit_code": 0,
+  "command": "PYTHONPATH=.artifacts/s4-construction-installed-site:tests <runtime563>/bin/python tests/compaction_retention_fixture.py --scenario-file <original frozen oracle> --recorded-run <original continued-run> --condition task-memory",
+  "report_sha256": "ce3ce6560c09355bb272633bce42714d68525d9aa7d0764c816c7a59684470d6",
+  "correct": 9,
+  "questions": 9,
+  "stale": 0,
+  "missing": 0,
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "three_original_cuts_observed": true,
+  "original_capture_hash_matches": {
+    "continuation-2-receipt.json": true,
+    "continued-run.private.json": true,
+    "original-measurements.private.json": true,
+    "cut-3-checkpoint.private.json": true,
+    "cut-3-registry.private.json": true,
+    "cut-3-manifest.private.json": true,
+    "cut-3-inputs.private.json": true
+  },
+  "prior_started_input_rows_match": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "original_input_disposition": "Started/ACP_UNCONFIRMED unchanged",
+  "observations": {
+    "cut-1": {
+      "source_reference_membership": {
+        "evaluated": true,
+        "original_message_entries": 9588,
+        "referenced_message_entries": 33,
+        "unreferenced_message_entries": 9555,
+        "complete_message_reference_coverage": false,
+        "managed_checkpoint": {
+          "entry_id": "fbc0a97b",
+          "referenced_in_sdk_sources": true
+        },
+        "full_context_capacity": {
+          "evaluated": false,
+          "reason": "Original request model capacity/final transport budget is not captured"
+        }
+      },
+      "model_steps": 1,
+      "native_selected_models": [
+        [
+          "openai-codex",
+          "gpt-6.1-sol",
+          "openai-codex-responses"
+        ]
+      ],
+      "returned_model_available": 0,
+      "provider_effort_available": 0
+    },
+    "cut-2": {
+      "source_reference_membership": {
+        "evaluated": true,
+        "original_message_entries": 9592,
+        "referenced_message_entries": 19,
+        "unreferenced_message_entries": 9573,
+        "complete_message_reference_coverage": false,
+        "managed_checkpoint": {
+          "entry_id": "fa0c1f5b",
+          "referenced_in_sdk_sources": true
+        },
+        "full_context_capacity": {
+          "evaluated": false,
+          "reason": "Original request model capacity/final transport budget is not captured"
+        }
+      },
+      "model_steps": 2,
+      "native_selected_models": [
+        [
+          "openai-codex",
+          "gpt-6.1-sol",
+          "openai-codex-responses"
+        ]
+      ],
+      "returned_model_available": 0,
+      "provider_effort_available": 0
+    },
+    "cut-3": {
+      "source_reference_membership": {
+        "evaluated": true,
+        "original_message_entries": 9596,
+        "referenced_message_entries": 9,
+        "unreferenced_message_entries": 9587,
+        "complete_message_reference_coverage": false,
+        "managed_checkpoint": {
+          "entry_id": "f1d4d7c6",
+          "referenced_in_sdk_sources": true
+        },
+        "full_context_capacity": {
+          "evaluated": false,
+          "reason": "Original request model capacity/final transport budget is not captured"
+        }
+      },
+      "model_steps": 2,
+      "native_selected_models": [
+        [
+          "openai-codex",
+          "gpt-6.1-sol",
+          "openai-codex-responses"
+        ]
+      ],
+      "returned_model_available": 0,
+      "provider_effort_available": 0
+    }
+  },
+  "provider_calls": 0,
+  "native_launches": 0,
+  "public_mutations": 0,
+  "new_environment": false,
+  "failed_attempt_retained": "installed-observations.json preserves failure01; owner fix restores TypedRow.read via .locate rename",
+  "scope": "Normal installed package over the same completed configured native sources; no fresh provider/TUI/intervention evaluation",
+  "unqualified": [
+    "condition-specific intervention/construction",
+    "complete full-context eligibility/capacity",
+    "final transport content/model/effort receipts",
+    "executed actions",
+    "matched study"
+  ]
+}

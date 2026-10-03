@@ -17,7 +17,7 @@ from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.native_compaction_request import NativeSummaryPayload
-from agent_comms.native_entries import MessageEntry
+from agent_comms.native_entries import MessageEntry, NativeEntry
 from agent_comms.native_pi import NativeContextRecord
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
@@ -28,7 +28,8 @@ from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDro
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
-    ContextManifest, FileProvenance, NativeProvenance, RecordedContextTurn, SystemLayerSegment,
+    ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
+    SegmentManifest, SystemLayerSegment,
 )
 from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -112,6 +113,7 @@ class RecordedMeasurementTests(unittest.TestCase):
             return {'construction': {'fork': {'source': source, 'sourceRevision': 'original'},
                 'sdk_manifest': {'counter': 'native', 'segments': [
                     {'kind': 'tool_catalog', 'sha256': 'c' * 64, 'utf8_bytes': 10}]}},
+                'model_steps': (),
                 'scoped_facts': {'configured_settings': {'evaluated': True, 'model': model, 'thinking': 'high'}}}
         a = {'r1': observation('parent')}
         with self.assertRaisesRegex(ValueError, 'source histories'):
@@ -121,6 +123,73 @@ class RecordedMeasurementTests(unittest.TestCase):
         observed = candidate.alignment(different, a, a, scenario.rounds)
         self.assertTrue(observed['r1']['evaluated'])
         self.assertFalse(observed['r2']['evaluated'])
+
+    def test_completion_metadata_is_original_and_never_filled_from_settings(self):
+        # Detect decoder loss of selected/returned model and exact provider
+        # effort, and prevent missing observations becoming configured values.
+        wire = {'role': 'assistant', 'content': [], 'stopReason': 'stop',
+                'api': 'openai-codex-responses', 'provider': 'openai-codex',
+                'model': 'configured-alias', 'responseModel': 'returned-model',
+                'responseId': 'response-1', 'providerThinkingLevel': 'high'}
+        entry = NativeEntry.from_evidence({'type': 'message', 'id': 'answer', 'message': wire})
+        selected, = RecordedNativeProbe.model_steps((entry,))
+        observation = selected['selection']
+        self.assertTrue(observation['evaluated'])
+        self.assertEqual(observation['model'], 'configured-alias')
+        self.assertEqual(observation['response_model'], 'returned-model')
+        self.assertEqual(observation['provider_thinking_level'], 'high')
+        self.assertTrue(all(entry.message.to_wire()[key] == value for key, value in wire.items()))
+        unreported, = RecordedNativeProbe.model_steps((MessageEntry(id='missing', message=AssistantMessage()),))
+        self.assertFalse(unreported['selection']['evaluated'])
+        self.assertIsNone(unreported['selection']['model'])
+        with self.assertRaises(ValueError):
+            AssistantMessage.from_wire(dict(wire, model=True))
+        a = {'model_steps': (selected,)}
+        compared = RecordedNativeProbes.completion_alignment(a, a)
+        self.assertTrue(compared['evaluated'])
+        self.assertTrue(compared['fields']['response_model']['same'])
+        missing = {'model_steps': (unreported,)}
+        self.assertFalse(RecordedNativeProbes.completion_alignment(a, missing)['evaluated'])
+        different = {'model_steps': (dict(selected, selection=dict(observation, model='another')),)}
+        with self.assertRaisesRegex(ValueError, 'completion models'):
+            RecordedNativeProbes.completion_alignment(a, different)
+
+    def test_construction_corroborates_segment_references_on_original_branch(self):
+        # Detect foreign, missing and future source coordinates before a context
+        # label can imply complete history. Source references are not byte proof.
+        rows = ({'type': 'session', 'id': self.identity.session_id, 'version': 3},
+                {'type': 'message', 'id': 'first', 'parentId': self.identity.session_id,
+                 'message': {'role': 'user', 'content': 'original history'}},
+                {'type': 'message', 'id': 'probe', 'parentId': 'first',
+                 'message': {'role': 'user', 'content': 'held-out question'}},
+                {'type': 'message', 'id': 'answer', 'parentId': 'probe',
+                 'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}})
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        owner = Thread('fixture', frozenset(), str(self.root))
+        turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        def manifest(path, entries):
+            segment = SegmentManifest('transcript', (JournalProvenance(path, entries),),
+                                      'b' * 64, 20, 5)
+            return ContextManifest(owner.incarnation, turn, (segment,), 'counter')
+        with NativeEntry.open_evidence(self.session) as evidence:
+            _, entries = evidence.observe()
+            branch = evidence.branch('answer', entries)
+            measured = probe.construction(evidence, branch,
+                                         manifest(str(self.session), ('first', 'probe')), {})['source_coverage']
+            self.assertTrue(measured['complete_message_reference_coverage'])
+            self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
+            self.assertFalse(measured['full_context_capacity']['evaluated'])
+            partial = probe.construction(evidence, branch,
+                                         manifest(str(self.session), ('probe',)), {})['source_coverage']
+            self.assertEqual(partial['unreferenced_message_entries'], ('first',))
+            self.assertFalse(partial['complete_message_reference_coverage'])
+            for path, ids in ((str(self.root / 'foreign'), ('probe',)),
+                              (str(self.session), ('missing',)), (str(self.session), ('answer',))):
+                with self.assertRaises(ValueError):
+                    probe.construction(evidence, branch, manifest(path, ids), {})
+            self.assertFalse(probe.construction(evidence, branch, None, {})['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority

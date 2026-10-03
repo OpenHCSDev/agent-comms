@@ -29,7 +29,7 @@ from agent_comms.registry_document import RegistryDocument
 from agent_comms.retained_task_facts import (
     ConstraintTaskFact, DecisionTaskFact, HumanConstraintTaskFact, RetainedTaskFacts,
 )
-from agent_comms.turn_context import ContextManifest, FileProvenance, NativeProvenance
+from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance
 from agent_comms.wire_log import WireLog
 
 
@@ -295,7 +295,11 @@ class RecordedNativeProbe:
 
     @staticmethod
     def answer_for_input(evidence: NativeEvidenceRead, context):
-        """Resolve the terminal through original ancestry and its nearest input."""
+        """Resolve the terminal and its complete original source ancestry.
+
+        Consumers measuring this input's completions select the span after its
+        user entry; context construction must retain the inherited ancestry.
+        """
         _, entries = evidence.observe()
         user, = (entry for entry in entries if entry.id == context.session_entry_id)
         candidates = []
@@ -305,7 +309,7 @@ class RecordedNativeProbe:
             branch = evidence.branch(answer.id, entries)
             boundaries = tuple(entry for entry in branch if entry.input_boundary)
             if boundaries and boundaries[-1].id == user.id:
-                candidates.append((answer, branch[branch.index(user) + 1:]))
+                candidates.append((answer, branch))
         answer, = candidates
         return answer
 
@@ -374,8 +378,15 @@ class RecordedNativeProbe:
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
 
-    def construction(self, evidence, user, manifest):
-        """Read construction facts without inferring a policy from a label."""
+    def construction(self, evidence, branch, manifest, checkpoint):
+        """Corroborate original SDK source references, not a condition label.
+
+        The successful input-to-answer branch owns the available source. A
+        later tool-round request may include earlier completions of this input;
+        the final answer itself cannot have supplied its preceding SDK context.
+        Entry membership is not a claim about transformed provider bytes or
+        complete-history capacity. Those need their own original observations.
+        """
         journal = self.checkpoint.journal if self.checkpoint is not None else self.fork_journal
         fork = None
         if journal is not None:
@@ -384,9 +395,40 @@ class RecordedNativeProbe:
             if fork is not None:
                 fork.require_same_session(self.session)
                 fork.covered_prefix(evidence, evidence.entries)
-        branch = evidence.branch(user.id, evidence.entries)
         models = tuple(entry for entry in branch if entry.model_choice is not None)
         thinking = tuple(entry for entry in branch if isinstance(entry, ThinkingLevelChangeEntry))
+        coverage = {"evaluated": False, "reason": "Original matching SDK manifest unavailable"}
+        if manifest is not None:
+            available = evidence.entry_index(branch[:-1])
+            included = set()
+            segments = []
+            for segment in manifest.segments:
+                references = tuple(reference for reference in segment.provenance
+                                   if isinstance(reference, JournalProvenance))
+                identities = []
+                for reference in references:
+                    if reference.path != self.session.session_file:
+                        raise ValueError("SDK source reference belongs to another native session")
+                    for identity in reference.entries:
+                        if identity not in available:
+                            raise ValueError("SDK source reference is outside its original answer branch")
+                        identities.append(identity)
+                included.update(identities)
+                segments.append({"manifest": segment, "source_entries": tuple(identities)})
+            messages = tuple(entry.require_entry_id() for entry in branch[:-1] if entry.is_message)
+            coverage = {"evaluated": bool(included),
+                        "scope": "JournalProvenance entry membership, not transformed message-byte equivalence",
+                        "segments": tuple(segments),
+                        "original_message_entries": messages,
+                        "included_message_entries": tuple(identity for identity in messages if identity in included),
+                        "unreferenced_message_entries": tuple(identity for identity in messages if identity not in included),
+                        "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages),
+                        "full_context_capacity": {"evaluated": False,
+                            "reason": "Original request model capacity/final transport budget is not captured"}}
+            if self.checkpoint is not None:
+                identity = checkpoint["native_entry_id"]
+                coverage["managed_checkpoint"] = {"entry_id": identity,
+                    "referenced_in_sdk_sources": identity in included}
         return {
             "fork": FieldCodec.encode(fork),
             "journal_settings": {
@@ -397,6 +439,7 @@ class RecordedNativeProbe:
                 "scope": "Historical branch metadata; not current request selection",
             },
             "sdk_manifest": FieldCodec.encode(manifest),
+            "source_coverage": coverage,
             "condition_evaluated": False,
             "reason": "SDK assembly is recorded; a label does not prove full-history or truncation policy",
         }
@@ -417,6 +460,16 @@ class RecordedNativeProbe:
                 "evaluated": entry.message.usage is not None,
                 "value": FieldCodec.encode(entry.message.usage),
             },
+            "selection": {
+                "evaluated": bool(entry.message.provider and entry.message.model),
+                "provider": entry.message.provider,
+                "model": entry.message.model,
+                "api": entry.message.api,
+                "response_model": entry.message.response_model,
+                "response_id": entry.message.response_id,
+                "provider_thinking_level": entry.message.provider_thinking_level,
+                "scope": "Original journaled Pi completion metadata; not an HTTP dispatch receipt or configured effort",
+            },
         } for entry in branch if entry.assistant_message)
 
     def read(self, evidence: NativeEvidenceRead):
@@ -436,9 +489,10 @@ class RecordedNativeProbe:
         answer, = (row for row in entries if row.id == self.answer_entry_id)
         if not isinstance(answer, MessageEntry) or not answer.final_reply:
             raise ValueError("Recorded recall answer is not a successful native terminal")
-        original, branch = self.answer_for_input(evidence, context)
+        original, source_branch = self.answer_for_input(evidence, context)
         if answer.id != original.id:
             raise ValueError("Recorded answer belongs to another original input")
+        branch = source_branch[source_branch.index(user) + 1:]
         calls = tuple(call for entry in branch for call in entry.retained_tool_calls())
         prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
@@ -471,7 +525,7 @@ class RecordedNativeProbe:
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
-            "construction": self.construction(evidence, user, manifest),
+            "construction": self.construction(evidence, source_branch, manifest, checkpoint),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(calls), "tools": tuple(call.name for call in calls),

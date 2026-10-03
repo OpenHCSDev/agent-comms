@@ -170,8 +170,33 @@ class RecordedNativeProbes:
                     (item["sha256"], item["utf8_bytes"]) for item in catalogs[1]):
                 raise ValueError("Matched probes have different native tool catalogs")
             pairs[identity] = {"evaluated": True,
-                              "scope": "Common original SDK fork source, configured selection, tool catalog and frozen probe; not complete intervention/construction proof"}
+                              "scope": "Common original SDK fork source, configured selection, tool catalog and frozen probe; not complete intervention/construction proof",
+                              "completion_selection": self.completion_alignment(original, control)}
         return pairs
+
+    @staticmethod
+    def completion_alignment(original, control):
+        """Original completion records own this observation, never settings."""
+        groups = tuple(tuple(step["selection"] for step in observed["model_steps"])
+                       for observed in (original, control))
+        if not all(groups) or not all(item["evaluated"] for group in groups for item in group):
+            return {"evaluated": False, "reason": "Original completion selections unavailable"}
+        choices = tuple(frozenset((item["provider"], item["model"]) for item in group)
+                        for group in groups)
+        if choices[0] != choices[1]:
+            raise ValueError("Matched probes have different journaled completion models")
+        # APIs and returned-model/effort fields are independent original facts.
+        # Missing fields cannot be supplied by historical or registry settings.
+        fields = {}
+        for name in ("api", "response_model", "provider_thinking_level"):
+            values = tuple(tuple(item[name] for item in group) for group in groups)
+            available = all(value is not None for group in values for value in group)
+            fields[name] = {"evaluated": available,
+                           "same": set(values[0]) == set(values[1]) if available else None}
+            if available and not fields[name]["same"]:
+                raise ValueError(f"Matched completion {name} observations differ")
+        return {"evaluated": True, "models": tuple(sorted(choices[0])), "fields": fields,
+                "scope": "Original journaled Pi completion observations, not transport attempt receipts"}
 
 
 class Condition(str, Enum):
