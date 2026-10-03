@@ -1,0 +1,398 @@
+{
+  "sha": "bc15a45dabf0c2f0b59633e684bfe8ec799fdab1",
+  "roots": [
+    "src/agent_comms",
+    "tests",
+    "tools"
+  ],
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 157,
+      "node": "FunctionDef",
+      "name": "compaction_messages_for",
+      "source": "def compaction_messages_for(self, recipient_lookup):"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 345,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "ctx.bus.log.retained_context"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 159,
+      "node": "ClassDef",
+      "name": "HeldCompaction",
+      "source": "class HeldCompaction:"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 97,
+      "node": "Name",
+      "name": "HeldCompaction",
+      "source": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "WireLog("
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "retained_sources",
+      "source": "WireLog(self.root / \"bus.jsonl\").retained_sources"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 115,
+      "node": "Name",
+      "name": "HeldCompaction",
+      "source": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 44,
+      "node": "Name",
+      "name": "HeldCompaction",
+      "source": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 106,
+      "node": "Name",
+      "name": "HeldCompaction",
+      "source": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 127,
+      "node": "FunctionDef",
+      "name": "capture_sources",
+      "source": "def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 210,
+      "node": "FunctionDef",
+      "name": "conversation_sources",
+      "source": "def conversation_sources("
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 156,
+      "node": "Attribute",
+      "name": "capture_sources",
+      "source": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "capture_sources",
+      "source": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "capture_sources",
+      "source": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 273,
+      "node": "Attribute",
+      "name": "capture_sources",
+      "source": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 194,
+      "node": "Attribute",
+      "name": "capture_sources",
+      "source": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 145,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "WireLog(registry.store.path.with_name(\"bus.jsonl\")).retained_context"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 229,
+      "node": "Attribute",
+      "name": "conversation_sources",
+      "source": "self.log.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "conversation_sources",
+      "source": "source.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 112,
+      "node": "FunctionDef",
+      "name": "conversation_sources",
+      "source": "def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 177,
+      "node": "FunctionDef",
+      "name": "retained_task_facts_unlocked",
+      "source": "def retained_task_facts_unlocked(self, recipient: ThreadIncarnation):"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 187,
+      "node": "FunctionDef",
+      "name": "_retained_task_facts",
+      "source": "def _retained_task_facts(records, recipient: ThreadIncarnation):"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 196,
+      "node": "FunctionDef",
+      "name": "retained_sources",
+      "source": "def retained_sources(self, name: str, registry):"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 220,
+      "node": "FunctionDef",
+      "name": "retained_context",
+      "source": "def retained_context(self, name: str, registry):"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 184,
+      "node": "Attribute",
+      "name": "_retained_task_facts",
+      "source": "self._retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 120,
+      "node": "Attribute",
+      "name": "conversation_sources",
+      "source": "source.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 191,
+      "node": "Attribute",
+      "name": "compaction_messages_for",
+      "source": "record.compaction_messages_for"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 215,
+      "node": "Attribute",
+      "name": "_retained_task_facts",
+      "source": "self._retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 229,
+      "node": "Attribute",
+      "name": "retained_sources",
+      "source": "self.retained_sources"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 57,
+      "node": "FunctionDef",
+      "name": "compaction_messages_for",
+      "source": "def compaction_messages_for(self, recipient_lookup):"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "owner._comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 417,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "service.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 10,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 223,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 284,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 356,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 371,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 111,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 142,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 157,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "reopened.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 202,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 260,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "reopened.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 145,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 204,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 303,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 392,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 555,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 74,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "comms.bus.log.retained_task_facts_unlocked"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 544,
+      "node": "Attribute",
+      "name": "retained_context",
+      "source": "comms.bus.log.retained_context"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "retained_task_facts_unlocked",
+      "source": "service.bus.log.retained_task_facts_unlocked"
+    }
+  ],
+  "ambiguity": "Attribute uses are syntactic; semantic reads resolve WireLog/CertifiedSourceRead/CommittedDelivery callers. Dynamic imports not proved by this census."
+}

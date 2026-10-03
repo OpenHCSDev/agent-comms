@@ -13,7 +13,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO
+from typing import BinaryIO
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -21,7 +21,6 @@ from agent_comms.coordination_tables.publications import (
 
 from .bus_publication import (
     CommittedDelivery,
-    stable_thread_lookup,
     has_private_wire_fields,
     unique_wire_object,
 )
@@ -48,10 +47,6 @@ from .store_files import (
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
-
-if TYPE_CHECKING:
-
-    from .thread_identity import ThreadIncarnation
 
 
 class WireLog:
@@ -174,48 +169,26 @@ class WireLog:
                 captured = source.context_manifests(incarnation, snapshot)
         return tuple(captured)
 
-    def retained_task_facts_unlocked(self, recipient: ThreadIncarnation):
-        """Capture exact task facts from their original addressed declarations.
-
-        Caller owns the original bus lock. Outgoing declared decisions belong
-        to their author's source too; unrelated messages cannot invalidate it.
-        """
-        marker = self._private_marker_unlocked()
-        return self._retained_task_facts(self.verified_records_unlocked(marker), recipient)
-
-    @staticmethod
-    def _retained_task_facts(records, recipient: ThreadIncarnation):
-        facts = []
-        lookup = stable_thread_lookup(recipient.created_at)
-        for record in records:
-            for message in record.compaction_messages_for(lookup):
-                facts.extend(message.retained_task_facts())
-        return tuple(facts)
-
     @contextmanager
     def retained_sources(self, name: str, registry):
         """Borrow one certified wire/registry/input cut for retained readers.
 
-        Capture under the existing wire boundary, then decode outside it. The
-        acquired wire prefix remains certified for the entire consumer scope.
+        Capture original bytes under the existing wire/bus/registry/input cut,
+        then decode outside publication custody. This is an observation, never
+        a current admission or compaction permit.
         """
         from .exporting import WireExportBoundary
         from .input_disposition import InputDispositions
         from .retained_task_facts import RetainedTaskFacts
 
-        with ExitStack() as resources:
-            with _store_lock(self.path.parent / "wire"):
+        with _store_lock(self.path.parent / "wire"):
+            with self.certified_read() as source:
                 snapshot = registry.snapshot()
                 owner = snapshot.require(name)
                 inputs = InputDispositions(self.path.parent / InputDispositions.filename).read()
-                metadata, _, stream, boundary, _ = resources.enter_context(
-                    self._opened_wire_snapshot(need_sequence=False)
-                )
-                export = WireExportBoundary(metadata.last_seq, time.time())
-            facts = self._retained_task_facts(
-                self._snapshot_records(metadata, stream, boundary), owner.incarnation
-            )
-            yield owner, snapshot, RetainedTaskFacts(facts), inputs, export
+                captured = source.retained_task_facts(owner.incarnation)
+                export = WireExportBoundary(source.marker.last_seq, time.time())
+        yield owner, snapshot, RetainedTaskFacts(tuple(captured)), inputs, export
 
     def retained_context(self, name: str, registry):
         """Authored retained context; also the source of instruction export.

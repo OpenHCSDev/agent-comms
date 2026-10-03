@@ -83,6 +83,39 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     assert len(rows[0].decisions) == 2
 
 
+def test_retained_fact_capture_is_exhaustive_scoped_and_detached(tmp_path, monkeypatch):
+    """Do not truncate to a display page or decode another owner's originals."""
+    from agent_comms.private_bus_checkpoint import DeliverySources
+    from agent_comms.retained_task_facts import UserSourceTaskFact
+
+    comms, _ = _root(tmp_path)
+    original = []
+    for number in range(101):
+        original.append(comms.messaging.send_user_message(
+            "Alice", f"Original constraint {number}", worktree=str(tmp_path),
+        ))
+    foreign = comms.messaging.send_user_message("Bob", "Foreign constraint", worktree=str(tmp_path))
+    decoded = []
+    decode = DeliverySources.decode_bytes
+
+    def observed(pointer, raw, root_id):
+        decoded.append(pointer.seq)
+        return decode(pointer, raw, root_id)
+
+    monkeypatch.setattr(DeliverySources, "decode_bytes", observed)
+    owner = comms.registry.require("Alice")
+    with comms.bus.log.certified_read() as source:
+        captured = source.retained_task_facts(owner.incarnation)
+        assert decoded == [], "Decoding retained publication custody"
+    later = comms.messaging.send_user_message("Alice", "After the captured cut", worktree=str(tmp_path))
+    facts = tuple(captured)
+    assert tuple(fact.source for fact in facts if isinstance(fact, UserSourceTaskFact)) == tuple(original)
+    assert decoded == [message.seq for message in original]
+    assert foreign.seq not in decoded and later.seq not in decoded
+    with pytest.raises(RelationViolationError, match="left its lock lifetime"):
+        source.retained_task_facts(owner.incarnation)
+
+
 def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, monkeypatch) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
 

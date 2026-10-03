@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .coordination_tables.publications import PublicationIntents
     from .turn_context import ContextManifest
+    from .retained_task_facts import ExactTaskFact
 
 OriginalSource = TypeVar("OriginalSource")
 
@@ -254,6 +255,27 @@ class CertifiedSourceRead:
 
     def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
         return self.marker.access.context_manifests(self, incarnation, snapshot)
+
+    def retained_task_facts(self, incarnation: ThreadIncarnation) -> Iterator[ExactTaskFact]:
+        """Capture this owner's originals; their declarations own applicability.
+
+        SQLite's negative LIMIT requests the complete sender/addressed relation,
+        rather than a display page. The existing pointer reader captures bytes
+        now; its decoder may run after publication custody closes. No unrelated
+        record is decoded and no fact is stored in the checkpoint.
+        """
+        from .bus_publication import stable_thread_lookup
+
+        lookup = stable_thread_lookup(incarnation.created_at)
+        originals = self.conversation_sources(
+            lookup, "1", (), limit=-1, ascending=True,
+        )
+        return (
+            fact
+            for original in originals
+            for message in original.compaction_messages_for(lookup)
+            for fact in message.retained_task_facts()
+        )
 
     def indexed_context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
         """Capture only original observations of this recorded incarnation.
