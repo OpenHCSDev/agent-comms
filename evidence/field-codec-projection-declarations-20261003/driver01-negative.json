@@ -1,0 +1,10 @@
+{
+  "state": "Failed driver owner selection before complete observation",
+  "owner_import": "agent_comms.goal_attempts.AttemptRecord",
+  "observed_rows": 36,
+  "requested_rows": 50,
+  "cause": "driver selected goal-ledger AttemptRecord rather than coordination_tables.attempts.AttemptRecord; earlier canonical150row receipt names coordination tables",
+  "product_change": false,
+  "public_writes": 0,
+  "retry_input": false
+}

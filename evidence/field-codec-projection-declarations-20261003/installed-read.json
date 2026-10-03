@@ -1,0 +1,35 @@
+{
+  "state": "PASS installed original typed-row projection from actual query-only public databases",
+  "installed_codec": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "source_head": "87dca5aa",
+  "wheel_sha256": "53ef7556a128492c5d46bbc37b20ac6d5b0ea7a81fb1fdb9195af629b2f9bed3",
+  "installed_package_files_byte_equal": 342,
+  "tables": [
+    {
+      "owner": "ExecutionRecord",
+      "rows": 50,
+      "distinct_projections": 50
+    },
+    {
+      "owner": "AttemptRecord",
+      "rows": 50,
+      "distinct_projections": 50
+    },
+    {
+      "owner": "WakeAssignment",
+      "rows": 50,
+      "distinct_projections": 50
+    }
+  ],
+  "cache": {
+    "hits": 447,
+    "misses": 15,
+    "maxsize": 256,
+    "currsize": 15
+  },
+  "public_writes": 0,
+  "provider_calls": 0,
+  "ui_claim": false,
+  "speed_claim": false
+}
