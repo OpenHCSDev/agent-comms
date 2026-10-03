@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
@@ -357,18 +358,20 @@ class TurnSettled(AgentEvent):
     turn_id: str
 
 
-class AgentEventConsumer(MroDispatch, ABC):
+class AgentEventConsumer(MroDispatch):
     """Shared activity and metadata algorithms; owners supply their context."""
 
-    @property
-    @abstractmethod
-    def comms(self) -> Comms:
-        pass
+    def __init__(self, *, comms: Comms, thread_name: str):
+        self._comms = comms
+        self._thread_name = thread_name
 
     @property
-    @abstractmethod
+    def comms(self) -> Comms:
+        return self._comms
+
+    @property
     def thread_name(self) -> str:
-        pass
+        return self._thread_name
 
     async def before_agent_info(self, event: AgentInfo) -> None:
         pass
@@ -378,12 +381,15 @@ class AgentEventConsumer(MroDispatch, ABC):
 
     @handles(AgentInfo)
     async def record_agent_info(self, event: AgentInfo) -> None:
+        from .coordinator import Coordination
+
         await self.before_agent_info(event)
-        self.comms.agents.set_agent_info(
+        await Coordination.run_worker(partial(
+            self.comms.agents.set_agent_info,
             self.thread_name,
             model=event.model,
             session_name=event.session_name,
             context_used=event.context_used,
             context_size=event.context_size,
-        )
+        ))
         await self.after_agent_info(event)

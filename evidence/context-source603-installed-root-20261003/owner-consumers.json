@@ -1,0 +1,361 @@
+{
+  "parser": "existing audit.findings.Package",
+  "meaning": "Preview and native provenance supply their original identity to one read relation; no new input proof.",
+  "limitations": [
+    "Lexical AST sites do not prove dynamic family resolution; hooks and consumers read semantically."
+  ],
+  "revisions": [
+    {
+      "revision": "dcf524d9435dcc1293df638c925442652a1247f4",
+      "root": "src",
+      "parsed": 311,
+      "omissions": [],
+      "sites": [
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 82,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 93,
+          "call": "expected.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 83,
+          "call": "expected.native_identity"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 489,
+          "declaration": "for_manifest"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 490,
+          "call": "expected.native_identity"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 490,
+          "call": "expected.journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 43,
+          "declaration": "native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 46,
+          "declaration": "journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 99,
+          "declaration": "journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 114,
+          "declaration": "native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 213,
+          "declaration": "native_identity"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 220,
+          "declaration": "journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 239,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 221,
+          "call": "self.native_identity"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 230,
+          "call": "self.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 214,
+          "call": "source.native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 253,
+          "call": "child.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 223,
+          "call": "source.journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_runner.py",
+          "line": 212,
+          "call": "AgentCommsInspectContextSegment.for_manifest"
+        },
+        {
+          "file": "src/agent_comms/turn_runner.py",
+          "line": 214,
+          "call": "context.recorded_public_text"
+        }
+      ]
+    },
+    {
+      "revision": "dcf524d9435dcc1293df638c925442652a1247f4",
+      "root": "tests",
+      "parsed": 363,
+      "omissions": [],
+      "sites": [
+        {
+          "file": "tests/test_backend_native_lifecycle.py",
+          "line": 19,
+          "declaration": "NativeBackendFixture"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 204,
+          "call": "AgentCommsInspectContextSegment.for_manifest"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 124,
+          "call": "borrowed.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 128,
+          "call": "child.journal_entries"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 132,
+          "call": "borrowed.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 162,
+          "call": "acquired.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 197,
+          "call": "acquired.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 208,
+          "call": "replace(acquired, segments=()).recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 210,
+          "call": "replace(acquired, segments=(replace(value, sha256='f' * 64),)).recorded_public_text"
+        }
+      ]
+    },
+    {
+      "revision": "90a34762",
+      "root": "src",
+      "parsed": 311,
+      "omissions": [],
+      "sites": [
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 82,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 93,
+          "call": "expected.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 83,
+          "call": "expected.native_identity"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 489,
+          "declaration": "for_manifest"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 490,
+          "call": "expected.native_identity"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 490,
+          "call": "expected.journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 43,
+          "declaration": "native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 46,
+          "declaration": "journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 99,
+          "declaration": "journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 114,
+          "declaration": "native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 129,
+          "declaration": "native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 217,
+          "declaration": "native_identity"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 224,
+          "declaration": "journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 243,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 225,
+          "call": "self.native_identity"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 234,
+          "call": "self.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 218,
+          "call": "source.native_identities"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 257,
+          "call": "child.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 227,
+          "call": "source.journal_entries"
+        },
+        {
+          "file": "src/agent_comms/turn_runner.py",
+          "line": 212,
+          "call": "AgentCommsInspectContextSegment.for_manifest"
+        },
+        {
+          "file": "src/agent_comms/turn_runner.py",
+          "line": 214,
+          "call": "context.recorded_public_text"
+        }
+      ]
+    },
+    {
+      "revision": "90a34762",
+      "root": "tests",
+      "parsed": 365,
+      "omissions": [],
+      "sites": [
+        {
+          "file": "tests/native_backend_fixture.py",
+          "line": 17,
+          "declaration": "NativeBackendFixture"
+        },
+        {
+          "file": "tests/native_backend_fixture.py",
+          "line": 95,
+          "declaration": "native_backend_fixture"
+        },
+        {
+          "file": "tests/native_context_reader_journey.py",
+          "line": 21,
+          "declaration": "read_original_context"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 204,
+          "call": "AgentCommsInspectContextSegment.for_manifest"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 124,
+          "call": "borrowed.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 128,
+          "call": "child.journal_entries"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 132,
+          "call": "borrowed.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 162,
+          "call": "acquired.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 197,
+          "call": "acquired.recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 208,
+          "call": "replace(acquired, segments=()).recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 210,
+          "call": "replace(acquired, segments=(replace(value, sha256='f' * 64),)).recorded_public_text"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 236,
+          "call": "original.native_identity"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 237,
+          "call": "original.journal_entries"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 240,
+          "call": "replace(original, provenance=(*original.provenance, PreviewProvenance(replace(native, session_id='other'), 'b' * 64))).native_identity"
+        }
+      ]
+    }
+  ]
+}

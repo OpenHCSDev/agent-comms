@@ -1,0 +1,9 @@
+{
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "scope": "Authored SDK recorded root/mixed/child installed RPC reads",
+  "model_request_capture": false,
+  "new_native_inputs": 0,
+  "provider_calls": 0,
+  "state": "SCOPED_PASS",
+  "elapsed_seconds": 6.111859580967575
+}

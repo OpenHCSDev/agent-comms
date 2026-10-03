@@ -1,0 +1,17 @@
+[
+  {
+    "path": "dist/core/turn-context.js"
+  },
+  {
+    "path": "dist/core/turn-context.d.ts"
+  },
+  {
+    "path": "dist/core/agent-session.js"
+  },
+  {
+    "path": "dist/modes/rpc/rpc-mode.js"
+  },
+  {
+    "path": "dist/modes/rpc/rpc-types.d.ts"
+  }
+]
