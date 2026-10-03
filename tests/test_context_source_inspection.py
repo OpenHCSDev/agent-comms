@@ -127,7 +127,9 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     assert observed == [child]
     assert child.journal_entries() == ("original-entry",)
     with pytest.raises(ValueError, match="measured bytes"):
-        borrowed.recorded_public_text(replace(root, contributors=()))
+        # System contributors annotate sources; they cannot reconstruct an
+        # enclosing system value whose original bytes are unavailable.
+        borrowed.recorded_public_text(root)
     with pytest.raises(ValueError, match="selected contributor"):
         original.selected_segment(0, (2,))
     with pytest.raises(ValueError, match="absent or ambiguous"):
@@ -161,9 +163,17 @@ async def test_complete_recorded_root_uses_one_acquired_result(tmp_path):
 
     assert await root.public_text(read_reference) == "\n".join(m["content"] for m in messages)
     assert reads == [root]
-    # Range annotations alone never assert complete capture of the whole value.
-    assert not replace(root, contributors=tuple(replace(p, captured_text=("range",))
-                                               for p in parts)).public_text_recorded
+    captured = replace(root, contributors=tuple(replace(p, captured_text=(f"Captured {n}",))
+                                                for n, p in enumerate(parts)))
+    assert captured.public_text_recorded
+    reads.clear()
+    assert await captured.public_text(read_reference) == "\n".join(f"Captured {n}" for n in range(1000))
+    assert reads == []
+    # A message's logical instruction-range annotation is not its entire body.
+    annotated = replace(parts[0], contributors=(replace(system(provenance).measured_manifest(),
+                                                       captured_text=("Only a range",)),))
+    assert not annotated.public_text_recorded
+    assert annotated.requested_parts() == ()
 
 
 @pytest.mark.asyncio
@@ -189,6 +199,11 @@ async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_pa
     assert await root.public_text(read_reference) == (
         "Original transformed message\nOriginal journal message")
     assert reads == [root]
+    from agent_comms.pi_commands import AgentCommsInspectContextSegment
+
+    request = AgentCommsInspectContextSegment.for_manifest(root)
+    assert request.parts == (value.measured_manifest(),)
+    assert FieldCodec.decode(AgentCommsInspectContextSegment, FieldCodec.encode(request)) == request
     with pytest.raises(ValueError, match="measured bytes"):
         replace(acquired, segments=()).recorded_public_text(root)
     with pytest.raises(ValueError, match="outside the selected"):

@@ -226,9 +226,15 @@ class SegmentManifest:
         return entries
 
     async def public_text(self, read_reference) -> str:
-        if self.captured_text:
-            return "\n".join(self.captured_text)
+        if self.public_text_recorded:
+            return self.recorded_public_text({})
         return await read_reference(self)
+
+    def recorded_parts(self) -> tuple[SegmentManifest, ...]:
+        return ContextSegment.decode(self.kind).recorded_parts(self)
+
+    def requested_parts(self) -> tuple[SegmentManifest, ...]:
+        return tuple(part for part in self.recorded_parts() if not part.public_text_recorded)
 
     def recorded_public_text(self, values_by_digest) -> str:
         """Render the one acquired SDK result alongside original captures.
@@ -242,9 +248,10 @@ class SegmentManifest:
         for value in values_by_digest.get(self.sha256, ()):
             if value.matches_recorded(self):
                 return value.public_text()
-        if self.contributors:
+        parts = self.recorded_parts()
+        if parts:
             return "\n".join(child.recorded_public_text(values_by_digest)
-                             for child in self.contributors)
+                             for child in parts)
         raise ValueError("Recorded SDK source differs from the original measured bytes")
 
     def original_values(self):
@@ -254,9 +261,10 @@ class SegmentManifest:
 
     @property
     def public_text_recorded(self) -> bool:
-        # Contributor metadata can annotate only a range of a provider value.
-        # It cannot establish complete capture of its enclosing value.
-        return bool(self.captured_text)
+        if self.captured_text:
+            return True
+        parts = self.recorded_parts()
+        return bool(parts) and all(part.public_text_recorded for part in parts)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -274,6 +282,11 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
         return self.declared_name.replace("_", " ").title()
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
+        return ()
+
+    @classmethod
+    def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
+        # Source annotations do not partition a complete provider value.
         return ()
 
     def public_text(self) -> str:
@@ -392,6 +405,14 @@ class NativeMessages:
     tokens: int
     sha256: str
     utf8_bytes: int
+
+    @classmethod
+    def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
+        # SDK capture emits one same-kind child per provider message. A single
+        # message's logical input-range annotations have other declared kinds.
+        if all(part.kind == cls.declared_name for part in original.contributors):
+            return original.contributors
+        return ()
 
     def provider_value(self):
         return list(self.messages)

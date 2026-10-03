@@ -90,7 +90,7 @@ def main(package):
             }
             case "agent_comms_inspect_context_segment": {
                 const context=(await TurnContext.recordedSegment(session,command.identity,
-                    command.entries,command.expected)).full();
+                    command.entries,command.expected,command.parts)).full();
                 return outputArray(id, command.type, "segments", context.segments, {identity:context.identity,counter:context.counter});
             }
             case "get_state": {''')
@@ -114,6 +114,7 @@ def main(package):
     identity: {sessionId: string; sessionFile: string};
     entries: readonly string[];
     expected: import("../../core/turn-context.js").NativeContextSegmentManifest;
+    parts: readonly import("../../core/turn-context.js").NativeContextSegmentManifest[];
 } | {''')
     replace_once(types,'export type RpcResponse = {', '''export type RpcResponse = {
     id?: string;

@@ -483,10 +483,12 @@ class AgentCommsInspectContextSegment(NativeQuery):
     identity: NativeSessionIdentity
     entries: tuple[str, ...]
     expected: SegmentManifest
+    parts: tuple[SegmentManifest, ...]
 
     @classmethod
     def for_manifest(cls, expected: SegmentManifest):
-        return cls(identity=expected.native_identity(), entries=expected.journal_entries(), expected=expected)
+        return cls(identity=expected.native_identity(), entries=expected.journal_entries(),
+                   expected=expected, parts=expected.requested_parts())
 
 
 @dataclass(frozen=True, kw_only=True)
