@@ -1,0 +1,1268 @@
+{
+  "tool": "existing Node Acorn/acorn-walk",
+  "scope": "Lexical member/import evidence; dynamic SDK resolution read semantically",
+  "units": [
+    {
+      "revision": "805e8283",
+      "path": "tests/retained_native_conditions.mjs",
+      "declarations": [
+        {
+          "method": "observe",
+          "line": 12
+        },
+        {
+          "method": "constructNativeConditions",
+          "line": 7
+        }
+      ],
+      "consumers": [
+        {
+          "name": "assertCurrent",
+          "line": 43
+        },
+        {
+          "name": "latestMetadata",
+          "line": 47
+        },
+        {
+          "name": "keptMetadata",
+          "line": 60
+        },
+        {
+          "name": "entryMessages",
+          "line": 62
+        },
+        {
+          "name": "prefixContext",
+          "line": 61
+        },
+        {
+          "name": "capture",
+          "line": 63
+        },
+        {
+          "name": "assertCurrent",
+          "line": 64
+        },
+        {
+          "name": "observe",
+          "line": 65
+        },
+        {
+          "name": "observe",
+          "line": 71
+        },
+        {
+          "name": "observe",
+          "line": 72
+        },
+        {
+          "name": "observe",
+          "line": 73
+        }
+      ],
+      "imports": [
+        {
+          "path": "node:crypto",
+          "names": [
+            "createHash"
+          ]
+        },
+        {
+          "path": "node:util",
+          "names": [
+            "isDeepStrictEqual"
+          ]
+        },
+        {
+          "path": "node:path",
+          "names": [
+            "join"
+          ]
+        },
+        {
+          "path": "node:url",
+          "names": [
+            "pathToFileURL"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "805e8283",
+      "path": "tests/native_turn_context_contract.mjs",
+      "declarations": [],
+      "consumers": [
+        {
+          "name": "capture",
+          "line": 45
+        },
+        {
+          "name": "capture",
+          "line": 55
+        },
+        {
+          "name": "observe",
+          "line": 59
+        },
+        {
+          "name": "capture",
+          "line": 64
+        },
+        {
+          "name": "observe",
+          "line": 65
+        },
+        {
+          "name": "observe",
+          "line": 69
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 81
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 104
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 115
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 118
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 120
+        }
+      ],
+      "imports": [
+        {
+          "path": "node:assert/strict",
+          "names": [
+            "assert"
+          ]
+        },
+        {
+          "path": "node:fs",
+          "names": [
+            "mkdirSync",
+            "writeFileSync",
+            "readFileSync"
+          ]
+        },
+        {
+          "path": "node:path",
+          "names": [
+            "join",
+            "resolve"
+          ]
+        },
+        {
+          "path": "node:url",
+          "names": [
+            "pathToFileURL"
+          ]
+        },
+        {
+          "path": "node:crypto",
+          "names": [
+            "createHash"
+          ]
+        },
+        {
+          "path": "./retained_native_conditions.mjs",
+          "names": [
+            "constructNativeConditions"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "ba9c117e",
+      "path": "tests/retained_native_conditions.mjs",
+      "declarations": [
+        {
+          "method": "observe",
+          "line": 7
+        },
+        {
+          "method": "boundedConstruction",
+          "line": 34
+        },
+        {
+          "method": "applyBoundedNativeCondition",
+          "line": 69
+        },
+        {
+          "method": "constructNativeConditions",
+          "line": 79
+        }
+      ],
+      "consumers": [
+        {
+          "name": "assertCurrent",
+          "line": 38
+        },
+        {
+          "name": "latestMetadata",
+          "line": 42
+        },
+        {
+          "name": "captureCompactionWitness",
+          "line": 45
+        },
+        {
+          "name": "keptMetadata",
+          "line": 56
+        },
+        {
+          "name": "entryMessages",
+          "line": 57
+        },
+        {
+          "name": "prefixContext",
+          "line": 58
+        },
+        {
+          "name": "capture",
+          "line": 59
+        },
+        {
+          "name": "observe",
+          "line": 60
+        },
+        {
+          "name": "assertCurrent",
+          "line": 61
+        },
+        {
+          "name": "captureCompactionWitness",
+          "line": 62
+        },
+        {
+          "name": "requireReady",
+          "line": 72
+        },
+        {
+          "name": "boundedConstruction",
+          "line": 73
+        },
+        {
+          "name": "requireReady",
+          "line": 74
+        },
+        {
+          "name": "install",
+          "line": 75
+        },
+        {
+          "name": "boundedConstruction",
+          "line": 85
+        },
+        {
+          "name": "observe",
+          "line": 88
+        },
+        {
+          "name": "observe",
+          "line": 89
+        },
+        {
+          "name": "observe",
+          "line": 90
+        }
+      ],
+      "imports": [
+        {
+          "path": "node:crypto",
+          "names": [
+            "createHash"
+          ]
+        },
+        {
+          "path": "node:util",
+          "names": [
+            "isDeepStrictEqual"
+          ]
+        },
+        {
+          "path": "node:path",
+          "names": [
+            "join"
+          ]
+        },
+        {
+          "path": "node:url",
+          "names": [
+            "pathToFileURL"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "ba9c117e",
+      "path": "tests/native_turn_context_contract.mjs",
+      "declarations": [],
+      "consumers": [
+        {
+          "name": "capture",
+          "line": 45
+        },
+        {
+          "name": "capture",
+          "line": 55
+        },
+        {
+          "name": "observe",
+          "line": 59
+        },
+        {
+          "name": "capture",
+          "line": 64
+        },
+        {
+          "name": "observe",
+          "line": 65
+        },
+        {
+          "name": "observe",
+          "line": 69
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 81
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 105
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 116
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 119
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 121
+        },
+        {
+          "name": "applyBoundedNativeCondition",
+          "line": 123
+        },
+        {
+          "name": "applyBoundedNativeCondition",
+          "line": 130
+        },
+        {
+          "name": "restore",
+          "line": 133
+        }
+      ],
+      "imports": [
+        {
+          "path": "node:assert/strict",
+          "names": [
+            "assert"
+          ]
+        },
+        {
+          "path": "node:fs",
+          "names": [
+            "mkdirSync",
+            "writeFileSync",
+            "readFileSync"
+          ]
+        },
+        {
+          "path": "node:path",
+          "names": [
+            "join",
+            "resolve"
+          ]
+        },
+        {
+          "path": "node:url",
+          "names": [
+            "pathToFileURL"
+          ]
+        },
+        {
+          "path": "node:crypto",
+          "names": [
+            "createHash"
+          ]
+        },
+        {
+          "path": "./retained_native_conditions.mjs",
+          "names": [
+            "constructNativeConditions",
+            "applyBoundedNativeCondition"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "native89",
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "declarations": [
+        {
+          "class": "SessionContext",
+          "members": [
+            "constructor",
+            "restore",
+            "sourceMessages",
+            "entryMessages",
+            "sourceBudget",
+            "sourceContext",
+            "prefixContext",
+            "entryContext",
+            "compactionRequired",
+            "install",
+            "requireReady",
+            "messages",
+            "messageCount",
+            "beforeInput"
+          ],
+          "line": 6
+        },
+        {
+          "class": "ReadyContext",
+          "base": "SessionContext",
+          "members": [
+            "requireReady",
+            "messages",
+            "messageCount",
+            "install"
+          ],
+          "line": 56
+        },
+        {
+          "class": "CompactionContext",
+          "base": "SessionContext",
+          "members": [
+            "messages",
+            "messageCount",
+            "install",
+            "beforeInput"
+          ],
+          "line": 64
+        }
+      ],
+      "consumers": [
+        {
+          "name": "install",
+          "line": 19
+        },
+        {
+          "name": "entryMessages",
+          "line": 23
+        },
+        {
+          "name": "entryMessages",
+          "line": 44
+        },
+        {
+          "name": "prefixContext",
+          "line": 44
+        },
+        {
+          "name": "requireReady",
+          "line": 73
+        }
+      ],
+      "imports": [
+        {
+          "path": "../../node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+          "names": [
+            "ContextBudget"
+          ]
+        },
+        {
+          "path": "./session-manager.js",
+          "names": [
+            "sessionEntryToContextMessages"
+          ]
+        },
+        {
+          "path": "./messages.js",
+          "names": [
+            "convertToLlm"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "native89",
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "declarations": [
+        {
+          "class": "InputByteRange",
+          "members": [
+            "constructor",
+            "requireCoordinate",
+            "capture",
+            "bytes",
+            "matches",
+            "requireDigest"
+          ],
+          "line": 12
+        },
+        {
+          "class": "InputImages",
+          "members": [
+            "constructor",
+            "capture",
+            "preserved",
+            "content"
+          ],
+          "line": 31
+        },
+        {
+          "class": "InputContribution",
+          "members": [
+            "constructor",
+            "capture",
+            "preserved",
+            "observe"
+          ],
+          "line": 49
+        },
+        {
+          "class": "NativeInputClaim",
+          "members": [
+            "constructor",
+            "capture",
+            "observe"
+          ],
+          "line": 74
+        },
+        {
+          "class": "ContextSegment",
+          "members": [
+            "constructor",
+            "manifest",
+            "full"
+          ],
+          "line": 97
+        },
+        {
+          "class": "SystemLayerSegment",
+          "base": "ContextSegment",
+          "members": [
+            "tokens",
+            "payload",
+            "render"
+          ],
+          "line": 112
+        },
+        {
+          "class": "NativeMessages",
+          "base": "ContextSegment",
+          "members": [
+            "tokens",
+            "payload",
+            "render"
+          ],
+          "line": 117
+        },
+        {
+          "class": "TranscriptSegment",
+          "base": "NativeMessages",
+          "members": [],
+          "line": 122
+        },
+        {
+          "class": "CompactionSummarySegment",
+          "base": "NativeMessages",
+          "members": [],
+          "line": 123
+        },
+        {
+          "class": "InjectionMessageSegment",
+          "base": "NativeMessages",
+          "members": [],
+          "line": 124
+        },
+        {
+          "class": "TransformedInputSegment",
+          "base": "NativeMessages",
+          "members": [],
+          "line": 125
+        },
+        {
+          "class": "ToolCatalogSegment",
+          "base": "ContextSegment",
+          "members": [
+            "tokens",
+            "payload",
+            "render"
+          ],
+          "line": 126
+        },
+        {
+          "class": "TurnContext",
+          "members": [
+            "constructor",
+            "capture",
+            "next",
+            "project",
+            "fullSource",
+            "recentSource",
+            "render",
+            "manifest",
+            "full"
+          ],
+          "line": 132
+        }
+      ],
+      "consumers": [
+        {
+          "name": "capture",
+          "line": 56
+        },
+        {
+          "name": "capture",
+          "line": 59
+        },
+        {
+          "name": "capture",
+          "line": 78
+        },
+        {
+          "name": "observe",
+          "line": 93
+        },
+        {
+          "name": "capture",
+          "line": 185
+        },
+        {
+          "name": "assertCurrent",
+          "line": 194
+        },
+        {
+          "name": "capture",
+          "line": 197
+        },
+        {
+          "name": "assertCurrent",
+          "line": 198
+        },
+        {
+          "name": "keptMetadata",
+          "line": 207
+        }
+      ],
+      "imports": [
+        {
+          "path": "node:crypto",
+          "names": [
+            "createHash"
+          ]
+        },
+        {
+          "path": "node:fs",
+          "names": [
+            "readFileSync"
+          ]
+        },
+        {
+          "path": "./compaction/compaction.js",
+          "names": [
+            "estimateTokens"
+          ]
+        },
+        {
+          "path": "./session-manager.js",
+          "names": [
+            "sessionEntryToContextMessages"
+          ]
+        },
+        {
+          "path": "./session-context.js",
+          "names": [
+            "SessionContext"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "native89",
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "declarations": [
+        {
+          "class": "SessionHeaderScanLimitError",
+          "base": "Error",
+          "members": [
+            "constructor"
+          ],
+          "line": 96
+        },
+        {
+          "class": "SessionManager",
+          "members": [
+            "acAssertUsable",
+            "acMutation",
+            "sessionId",
+            "sessionFile",
+            "sessionDir",
+            "cwd",
+            "persist",
+            "flushed",
+            "entryStore",
+            "leafId",
+            "_pr48LoadedRevision",
+            "constructor",
+            "_assertLoadedRevision",
+            "setSessionFile",
+            "_setSessionFile",
+            "newSession",
+            "isPersisted",
+            "getCwd",
+            "getSessionDir",
+            "usesDefaultSessionDir",
+            "getSessionId",
+            "getSessionFile",
+            "_persist",
+            "_appendEntry",
+            "assertNativeInputSafe",
+            "nativeInputProofAvailable",
+            "getTrackedInput",
+            "flushInputDurably",
+            "appendMessage",
+            "appendThinkingLevelChange",
+            "appendModelChange",
+            "reloadCompactionCommit",
+            "reconcileCompactionCommit",
+            "captureCompactionWitness",
+            "appendCompactionIfCurrent",
+            "appendCompaction",
+            "appendCustomEntry",
+            "appendSessionInfo",
+            "getSessionName",
+            "appendCustomMessageEntry",
+            "getLeafId",
+            "getLeafEntry",
+            "getEntry",
+            "getChildren",
+            "getLabel",
+            "appendLabelChange",
+            "buildContextEntries",
+            "getHeader",
+            "getTree",
+            "branch",
+            "resetLeaf",
+            "branchWithSummary",
+            "createBranchedSession",
+            "create",
+            "open",
+            "continueRecent",
+            "inMemory",
+            "forkFrom",
+            "list",
+            "listAll"
+          ],
+          "line": 474
+        }
+      ],
+      "consumers": [
+        {
+          "name": "assertCurrent",
+          "line": 805
+        },
+        {
+          "name": "assertCurrent",
+          "line": 891
+        },
+        {
+          "name": "assertCurrent",
+          "line": 1310
+        }
+      ],
+      "imports": [
+        {
+          "path": "./session-entry-store.js",
+          "names": [
+            "DiskEntryStore",
+            "MemoryEntryStore"
+          ]
+        },
+        {
+          "path": "@earendil-works/pi-ai",
+          "names": [
+            "uuidv7"
+          ]
+        },
+        {
+          "path": "crypto",
+          "names": [
+            "randomUUID"
+          ]
+        },
+        {
+          "path": "fs",
+          "names": [
+            "appendFileSync",
+            "closeSync",
+            "createReadStream",
+            "existsSync",
+            "fsyncSync",
+            "lstatSync",
+            "mkdirSync",
+            "openSync",
+            "readdirSync",
+            "readSync",
+            "statSync",
+            "writeFileSync"
+          ]
+        },
+        {
+          "path": "fs",
+          "names": [
+            "fstatSync",
+            "realpathSync",
+            "unlinkSync"
+          ]
+        },
+        {
+          "path": "crypto",
+          "names": [
+            "createHash"
+          ]
+        },
+        {
+          "path": "path",
+          "names": [
+            "basename"
+          ]
+        },
+        {
+          "path": "fs/promises",
+          "names": [
+            "readdir",
+            "stat"
+          ]
+        },
+        {
+          "path": "path",
+          "names": [
+            "dirname",
+            "join",
+            "resolve"
+          ]
+        },
+        {
+          "path": "readline",
+          "names": [
+            "createInterface"
+          ]
+        },
+        {
+          "path": "string_decoder",
+          "names": [
+            "StringDecoder"
+          ]
+        },
+        {
+          "path": "../config.js",
+          "names": [
+            "APP_NAME",
+            "getDefaultAgentDir",
+            "getSessionsDir"
+          ]
+        },
+        {
+          "path": "../utils/paths.js",
+          "names": [
+            "normalizePath",
+            "resolvePath"
+          ]
+        },
+        {
+          "path": "./messages.js",
+          "names": [
+            "createBranchSummaryMessage",
+            "createCompactionSummaryMessage",
+            "createCustomMessage"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "native89",
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-entry-store.js",
+      "declarations": [
+        {
+          "class": "EntryMetadata",
+          "members": [
+            "constructor",
+            "fromIndex"
+          ],
+          "line": 14
+        },
+        {
+          "class": "StoreAvailability",
+          "members": [
+            "constructor",
+            "requireOpen",
+            "closed"
+          ],
+          "line": 40
+        },
+        {
+          "class": "AvailableStore",
+          "base": "StoreAvailability",
+          "members": [
+            "requireOpen"
+          ],
+          "line": 45
+        },
+        {
+          "class": "UnavailableStore",
+          "base": "StoreAvailability",
+          "members": [
+            "constructor",
+            "requireOpen",
+            "closed"
+          ],
+          "line": 48
+        },
+        {
+          "class": "EntryStore",
+          "members": [
+            "availability",
+            "constructor",
+            "header",
+            "lastId",
+            "metadata",
+            "get",
+            "metadataEntries",
+            "branchMetadata",
+            "append",
+            "committedAppend",
+            "storedAt",
+            "close",
+            "assertCurrent",
+            "assertUsable",
+            "invalidate",
+            "has",
+            "validate",
+            "validateHeader",
+            "entries",
+            "fileEntries",
+            "branch",
+            "ancestors",
+            "branchContains",
+            "commonAncestor",
+            "latestMetadata",
+            "latest",
+            "contextSettings",
+            "contextMetadata",
+            "keptMetadata",
+            "uncompactedMetadata",
+            "contextEntries",
+            "contextMessageCount",
+            "trackedMetadata",
+            "trackedInputMetadata",
+            "trackedInputs",
+            "trackedInput",
+            "commits",
+            "children",
+            "label"
+          ],
+          "line": 55
+        },
+        {
+          "class": "EntryBranchRange",
+          "members": [
+            "constructor",
+            "reverse",
+            "isEmpty"
+          ],
+          "line": 198
+        },
+        {
+          "class": "MemoryEntryStore",
+          "base": "EntryStore",
+          "members": [
+            "header",
+            "entries",
+            "metadata",
+            "last",
+            "constructor",
+            "header",
+            "lastId",
+            "get",
+            "metadata",
+            "assertCurrent",
+            "metadataEntries",
+            "branchMetadata",
+            "append",
+            "committedAppend",
+            "storedAt",
+            "close"
+          ],
+          "line": 218
+        },
+        {
+          "class": "DiskEntryStore",
+          "base": "EntryStore",
+          "members": [
+            "fd",
+            "db",
+            "header",
+            "last",
+            "revision",
+            "extent",
+            "sequence",
+            "metadata",
+            "insert",
+            "constructor",
+            "header",
+            "lastId",
+            "revision",
+            "metadata",
+            "metadataEntries",
+            "branchMetadata",
+            "trackedMetadata",
+            "trackedInputMetadata",
+            "label",
+            "commits",
+            "children",
+            "assertCurrent",
+            "decode",
+            "get",
+            "index",
+            "refresh",
+            "append",
+            "committedAppend",
+            "storedAt",
+            "close"
+          ],
+          "line": 254
+        }
+      ],
+      "consumers": [
+        {
+          "name": "latestMetadata",
+          "line": 118
+        },
+        {
+          "name": "assertCurrent",
+          "line": 131
+        },
+        {
+          "name": "latestMetadata",
+          "line": 133
+        },
+        {
+          "name": "keptMetadata",
+          "line": 136
+        },
+        {
+          "name": "assertCurrent",
+          "line": 137
+        },
+        {
+          "name": "latestMetadata",
+          "line": 139
+        },
+        {
+          "name": "assertCurrent",
+          "line": 150
+        },
+        {
+          "name": "assertCurrent",
+          "line": 156
+        },
+        {
+          "name": "assertCurrent",
+          "line": 312
+        },
+        {
+          "name": "assertCurrent",
+          "line": 315
+        },
+        {
+          "name": "assertCurrent",
+          "line": 318
+        },
+        {
+          "name": "assertCurrent",
+          "line": 320
+        },
+        {
+          "name": "assertCurrent",
+          "line": 354
+        },
+        {
+          "name": "assertCurrent",
+          "line": 365
+        },
+        {
+          "name": "assertCurrent",
+          "line": 432
+        }
+      ],
+      "imports": [
+        {
+          "path": "node:fs",
+          "names": [
+            "closeSync",
+            "fstatSync",
+            "mkdirSync",
+            "mkdtempSync",
+            "openSync",
+            "readSync",
+            "rmSync",
+            "statSync",
+            "unlinkSync"
+          ]
+        },
+        {
+          "path": "node:os",
+          "names": [
+            "homedir"
+          ]
+        },
+        {
+          "path": "node:path",
+          "names": [
+            "dirname",
+            "join",
+            "resolve"
+          ]
+        },
+        {
+          "path": "node:sqlite",
+          "names": [
+            "DatabaseSync"
+          ]
+        },
+        {
+          "path": "node:v8",
+          "names": [
+            "getHeapStatistics"
+          ]
+        },
+        {
+          "path": "./session-manager.js",
+          "names": [
+            "sessionEntryToContextMessages"
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "native89",
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+      "declarations": [
+        {
+          "class": "BudgetAdmissionError",
+          "base": "Error",
+          "members": [
+            "constructor"
+          ],
+          "line": 6
+        },
+        {
+          "class": "ContextBudget",
+          "members": [
+            "constructor",
+            "available",
+            "fits",
+            "compactionRequired",
+            "allowance",
+            "admit",
+            "observeAdmission"
+          ],
+          "line": 14
+        },
+        {
+          "class": "ProviderRejection",
+          "members": [
+            "formats",
+            "decode",
+            "revisedAllowance"
+          ],
+          "line": 74
+        },
+        {
+          "class": "UnrecoverableRejection",
+          "base": "ProviderRejection",
+          "members": [
+            "revisedAllowance"
+          ],
+          "line": 92
+        },
+        {
+          "class": "ContextBudgetRejection",
+          "base": "ProviderRejection",
+          "members": [
+            "constructor",
+            "decodeCounts",
+            "valid",
+            "revisedAllowance"
+          ],
+          "line": 96
+        },
+        {
+          "class": "InputCompletionRejection",
+          "base": "ContextBudgetRejection",
+          "members": [
+            "pattern",
+            "fromMatch"
+          ],
+          "line": 131
+        },
+        {
+          "class": "TextToolOutputRejection",
+          "base": "ContextBudgetRejection",
+          "members": [
+            "pattern",
+            "fromMatch"
+          ],
+          "line": 137
+        },
+        {
+          "class": "ContextBudgetRequest",
+          "members": [
+            "constructor",
+            "allowance",
+            "send"
+          ],
+          "line": 149
+        }
+      ],
+      "consumers": [],
+      "imports": [
+        {
+          "path": "../utils/error-body.js",
+          "names": [
+            "normalizeProviderError"
+          ]
+        },
+        {
+          "path": "../utils/estimate.js",
+          "names": [
+            "estimateContextTokens",
+            "estimateSerializedRequestTokens"
+          ]
+        },
+        {
+          "path": "../utils/agent-comms-request-observation.js",
+          "names": [
+            "observeRequest"
+          ]
+        }
+      ]
+    }
+  ],
+  "parse_omissions": []
+}

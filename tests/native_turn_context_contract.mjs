@@ -4,7 +4,7 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {constructNativeConditions} from './retained_native_conditions.mjs';
+import {constructNativeConditions,applyBoundedNativeCondition} from './retained_native_conditions.mjs';
 
 const [pkg, suppliedRoot] = process.argv.slice(2);
 const root=resolve(suppliedRoot);
@@ -99,6 +99,7 @@ try {
         // corroborated RecordedNativeCheckpoint.condition_source consumer.
         const source={evaluated:true,session:full.identity,native_entry_id:compaction,
             summary:'Authored uncombined narrative only.',
+            checkpoint_session:full.identity,
             source:{kind:'file',path:new URL(import.meta.url).pathname,
                 sha256:hash(readFileSync(new URL(import.meta.url)))}};
         const constructed=await constructNativeConditions(session,pkg,source);
@@ -119,6 +120,18 @@ try {
             {...source,session:{...source.session,sessionId:'another'}}),/another original native session/);
         await assert.rejects(constructNativeConditions(session,pkg,
             {...source,native_entry_id:old}),/not the selected native compaction/);
+        const applied=await applyBoundedNativeCondition(session,pkg,source);
+        // SDK installation consumes AgentMessages, never converted LLM messages.
+        assert.equal(session.agent.state.messages[0].role,'compactionSummary');
+        assert.equal(session.agent.state.messages[0].summary,source.summary);
+        assert.deepEqual((await TurnContext.next(session)).render(),bounded.context);
+        assert.deepEqual(applied.context,bounded.context);
+        assert.deepEqual(applied.checkpoint_session,full.identity);
+        await assert.rejects(applyBoundedNativeCondition(session,pkg,
+            {evaluated:false,reason:'Original narrative unavailable'}),/eligible narrative/);
+        const {SessionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
+        SessionContext.restore(session);
+        assert.deepEqual((await TurnContext.next(session)).render(),provider);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);
     }
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
@@ -126,5 +139,5 @@ try {
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
         kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions,
-        bounded_construction_scope:conditions ? 'Authored SDK construction control; not an original captured model baseline' : undefined}));
+        bounded_construction_scope:conditions ? 'Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline' : undefined}));
 } finally {session.dispose();}

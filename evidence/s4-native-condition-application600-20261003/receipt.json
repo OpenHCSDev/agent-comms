@@ -1,0 +1,48 @@
+{
+  "source_head": "ba9c117e856a8303538b91ca1401e34f8a918cf9",
+  "scope": "Private bounded raw SDK installation/restore and canonical fork missing-capture binding; NOT a submitted original model baseline",
+  "runtime_native_delta": 0,
+  "provider_calls": 0,
+  "input_replays": 0,
+  "sdk": {
+    "exit": 0,
+    "raw_installation_and_original_restore_assertions_passed": true,
+    "journal_bytes_unchanged": true,
+    "raw_log": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-application600/sdk01.log",
+    "scope": "Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline"
+  },
+  "fork": {
+    "sdk_creation_recorded": true,
+    "inherited_entries": 9631,
+    "source_unchanged": true,
+    "condition_source": {
+      "evaluated": false,
+      "reason": "Original pre-pack summary assembly not captured"
+    },
+    "cli_exit": 0,
+    "private_receipt": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-application600/fork01/receipt.json"
+  },
+  "sanity": {
+    "tests": 27,
+    "subtests": 19,
+    "seconds": 2.03,
+    "exit": 0
+  },
+  "ast": {
+    "python_declarations_before": 21,
+    "python_declarations_after": 21,
+    "references_before": 310,
+    "references_after": 312,
+    "parse_omissions": [],
+    "native_units": 9,
+    "native_parse_omissions": [],
+    "initial_native_loader_refusal_preserved": true,
+    "dynamic_sdk_resolution": "read semantically"
+  },
+  "scope_gaps": [
+    "No fresh captured raw summary + corroborated commit + fork applied in configured native input yet",
+    "No HTTP bytes/returned-model/capacity/recall comparison claim",
+    "Separate 30-pair study not authorized"
+  ],
+  "remaining_consumer": "Ordinary native RPC has no private condition application command. Use existing SDK context-transform hook through original observer; preserve original transform and distinct input, no runtime family edits."
+}
