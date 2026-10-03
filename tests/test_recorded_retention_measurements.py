@@ -22,7 +22,7 @@ from agent_comms.native_pi import NativeContextRecord
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
-from agent_comms.pi_payloads import AssistantMessage, PiUsage, UserMessage
+from agent_comms.pi_payloads import AssistantMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
 from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDrop
 from agent_comms.thread_identity import TurnId, TurnIdentity
@@ -76,6 +76,44 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertTrue(steps[2]['usage']['evaluated'])
         self.assertEqual(steps[2]['usage']['value']['totalTokens'], 0)
         self.assertNotIn('cacheRead', steps[2]['usage']['value'])
+
+    def test_original_tool_pair_does_not_award_proposal_or_constraint_credit(self):
+        # Prevent invented action success from an answer, an unrelated SDK
+        # result, a failed result or a call with no recorded completion.
+        call = ToolCallContent(id='call', name='read', arguments={'path': '/source'})
+        request = MessageEntry(id='request', message=AssistantMessage(content=(call,), stop_reason='toolUse'))
+        result = MessageEntry(id='result', message=ToolResultMessage(
+            tool_call_id=call.id, tool_name=call.name, content=()))
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        source = JournalProvenance(self.identity.session_file, ('request', 'result'))
+        question = Question('action', 'Which action?', 'inspect-source', 'oracle',
+                            measurement=Measurement.ACTION, action_source=source)
+        original = {'tool_steps': probe.tool_steps((request, result))}
+        observation = question.executed_action(original)
+        self.assertTrue(observation['evaluated'])
+        self.assertTrue(observation['successful'])
+        self.assertEqual(observation['call']['arguments'], call.arguments)
+        self.assertFalse(observation['proposal_alignment']['evaluated'])
+        public = question.public()
+        self.assertNotIn('action_source', public)
+        self.assertNotIn('expected', public)
+        failed = replace(result, message=replace(result.message, is_error=True))
+        self.assertFalse(question.executed_action({'tool_steps': probe.tool_steps((request, failed))})['successful'])
+        missing, = probe.tool_steps((request,))
+        self.assertFalse(missing['completion']['evaluated'])
+        for branch in ((result, request), (request, result, result), (request, request),
+                       (request, replace(result, message=replace(result.message, tool_name='write')))):
+            with self.assertRaises(ValueError):
+                probe.tool_steps(branch)
+        for wrong in (JournalProvenance('/other', source.entries),
+                      JournalProvenance(source.path, ('request', 'unrelated'))):
+            with self.assertRaises(ValueError):
+                replace(question, action_source=wrong).executed_action(original)
+        with self.assertRaises(ValueError):
+            replace(question, action_source=JournalProvenance(source.path, ('request', 'request')))
+        self.assertFalse(replace(question, action_source=None).executed_action(original)['evaluated'])
+        with self.assertRaises(ValueError):
+            result.require_artifact_request(request)  # read success is not a recorded file mutation
 
     def test_quality_denominators_keep_assistance_and_unobserved_rounds_separate(self):
         # Prevent assisted answers or absent records from inflating recall or

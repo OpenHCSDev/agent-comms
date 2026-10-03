@@ -12,12 +12,23 @@ choice, not execution. An original SDK `ToolCallContent` and its matching
 establish that every task constraint was respected or that the final filesystem
 still has that value.
 
-The implementation will let an action question name that original request/result
-pair with the existing `JournalProvenance`. `RecordedNativeProbe` will select
+The implementation lets an action question name that original request/result
+pair with the existing `JournalProvenance`. `RecordedNativeProbe` selects
 the pair from its corroborated input-to-answer branch. The existing
-`ToolResultMessage` will own exact request matching for both measurements and
-retained file-artifact projection. Replace the duplicate request checks in the
-same change. Prompts keep these source coordinates and the oracle private.
+`ToolResultMessage` owns exact request matching for both measurements and
+retained file-artifact projection. The old inline artifact request check is
+replaced by this shared method. Assistance counts derive from the same tool
+observations; the separate call-count traversal is removed. Prompts keep these
+source coordinates and the oracle private. SDK errors and uncompleted calls
+remain distinct from successful results. Empty tool-result content still counts
+as a recorded result, even when the presentation owner has no text to display.
+
+The existing AST package reader parsed `src`, `tests` and `tools` without
+omissions. Source review closes `PiMessage`/`ToolResultMessage`, native entry
+delegation, retained artifact projection, `RecordedNativeProbe`, `Question`,
+`ScoredScenario`, CLI scoring and configured journey consumers. The decoder's
+dynamic member dispatch is read directly; lexical AST does not prove that
+dispatch. No new class, codec, lifecycle state or action authority is introduced.
 
 Original request capacity and final HTTP bytes remain unavailable: the existing
 observer captures route/prefix hashes, not those fields. Condition labels do
