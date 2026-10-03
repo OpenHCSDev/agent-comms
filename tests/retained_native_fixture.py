@@ -12,6 +12,7 @@ from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.input_disposition import InputDocument
 from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
@@ -239,6 +240,25 @@ class RecordedNativeProbe:
     sdk_context: FileProvenance | None = None
     context_manifest: FileProvenance | None = None
     sdk_segment_bytes: FileProvenance | None = None
+    submitted_inputs: FileProvenance | None = None
+
+    def submitted_prompt(self, user):
+        """Bind an original submitted source to its exact recorded native write.
+
+        A direct-native control measures its native user text. An ACP capture
+        supplies the original InputDocument, whose STARTED member owns both
+        submitted and rendered text. This is measurement, never lease authority.
+        """
+        if self.submitted_inputs is None:
+            return user.message.text, {"scope": "original native user text"}
+        document = RecordedNativeCheckpoint.read_record(self.submitted_inputs, InputDocument)
+        row, = (row for row in document.rows.values()
+                if row.has_started and row.native_id == self.input_id)
+        if not row.matches_native(turn_id=row.turn_id, native_id=self.input_id, text=user.message.text):
+            raise ValueError("Original submitted input differs from the recorded native write")
+        return row.source_text, {"scope": "original STARTED InputDocument source and exact sent text",
+                                 "source": FieldCodec.encode(row.context_provenance()),
+                                 "turn_id": row.turn_id}
 
     @staticmethod
     def answer_for_input(evidence: NativeEvidenceRead, context):
@@ -335,6 +355,7 @@ class RecordedNativeProbe:
         if answer.id != original.id:
             raise ValueError("Recorded answer belongs to another original input")
         calls = tuple(call for entry in branch for call in entry.retained_tool_calls())
+        prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
             attempt, entry, covered = self.checkpoint.capture(self.session, evidence)
             checkpoint = self.checkpoint._report(attempt, entry, covered)
@@ -357,7 +378,8 @@ class RecordedNativeProbe:
                 for item in fields(NativeContextRecord)
             }),
             "session": FieldCodec.encode(self.session),
-            "prompt": user.message.text,
+            "prompt": prompt,
+            "submitted_source": submitted,
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
             "answer_usage": {"evaluated": answer.message.usage is not None,

@@ -1,0 +1,73 @@
+{
+  "scope": "Readonly original submitted InputDocument/native proof binding; no ACP settlement inference",
+  "provider_calls": 0,
+  "input_replays": 0,
+  "three_cuts_qualified": false,
+  "rounds": {
+    "cut-1": {
+      "input_id": "48f861fc41379d39e7111d206b9d8617",
+      "answer_entry_id": "2b0d4e1b",
+      "submitted_source": {
+        "scope": "original STARTED InputDocument source and exact sent text",
+        "source": {
+          "kind": "input",
+          "key": "acp:4b3cfd4525e04ba2a2ade1d45fc086f2",
+          "origin": {
+            "kind": "unattributed"
+          }
+        },
+        "turn_id": "9667fb88a82f487aba6a9f962b322679"
+      },
+      "answer_support": {
+        "tool_calls": 0,
+        "tools": [],
+        "unassisted_recall": true,
+        "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+      },
+      "score_totals": {
+        "questions": 3,
+        "correct": 3,
+        "stale": 0,
+        "missing": 0
+      },
+      "prompt_presence": {
+        "evaluated": false,
+        "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"
+      }
+    },
+    "cut-2": {
+      "input_id": "6c13198ae5958304e799129f371f44b7",
+      "answer_entry_id": "b7807f3e",
+      "submitted_source": {
+        "scope": "original STARTED InputDocument source and exact sent text",
+        "source": {
+          "kind": "input",
+          "key": "acp:fc5e8578176d46ec8b41e044de3ac974",
+          "origin": {
+            "kind": "unattributed"
+          }
+        },
+        "turn_id": "b4aa28174de24019ba3448e4d8e8f01f"
+      },
+      "answer_support": {
+        "tool_calls": 1,
+        "tools": [
+          "bash"
+        ],
+        "unassisted_recall": false,
+        "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+      },
+      "score_totals": {
+        "questions": 3,
+        "correct": 3,
+        "stale": 0,
+        "missing": 0
+      },
+      "prompt_presence": {
+        "evaluated": false,
+        "reason": "Original SDK payload and matching context manifest not supplied"
+      }
+    }
+  },
+  "originals_unchanged": true
+}

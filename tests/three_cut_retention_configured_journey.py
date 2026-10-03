@@ -171,7 +171,8 @@ async def run(stage, package, original_python, *, continuation=None):
                     FileProvenance(str(sdk), digest(sdk)),
                     record(stage / f'{round_.identity}-manifest.private.json', manifest),
                     FileProvenance(str(contexts / f'segments-{context.llm_context_digest}.json'),
-                                   digest(contexts / f'segments-{context.llm_context_digest}.json')))
+                                   digest(contexts / f'segments-{context.llm_context_digest}.json')),
+                    record(stage / f'{round_.identity}-inputs.private.json', inputs.read()))
                 record(stage / 'original-run.private.json', RecordedNativeProbes(dict(probes)))
                 receipt['completed_rounds'].append(round_.identity)
                 assert service.registry.require(owner.name).active_turn is None

@@ -145,3 +145,40 @@ quality or full three-cut claim is made.
 results. The raw first failed receipt stays unchanged. Three-cut acceptance
 remains open on the blocked publication and the original submitted-input
 measurement relation; no comparative study is running.
+
+
+## Submitted-source measurement closure
+
+The next independent source change closes that scoring refusal without parsing
+or stripping the rendered native prompt. RecordedNativeProbe accepts a pinned
+original InputDocument capture. Its STARTED member supplies submitted source
+text and exact sent text; `matches_native` verifies the original native user
+write. NativeContextProof and answer ancestry still corroborate the admitted
+input and successful terminal. The document is a read-only measurement capture,
+not an alternative disposition store or lease/admission grant.
+
+The configured driver records this original document after each real prompt
+returns. Direct-native controls continue to measure their original native user
+text; they do not claim an ACP submitted-source observation. No text substring,
+wrapper stripping or expected-answer injection is used.
+
+Read-only captures of the two existing STARTED rows now bind both frozen probe
+prompts correctly. Both original answers score3/3 with zero stale or missing
+answers. Cut1 is tool-free; cut2 used one bash call and is explicitly task-quality
+rather than unassisted recall. `submitted-source-binding.json` records this exact
+strength. Native session, input proof and original InputDocument hashes remain
+unchanged. No new provider call, input or replay occurred. Original serialized
+SDK bytes remain unavailable for these captures; third-cut and ACP settlement
+remain unfinished.
+
+The original publishing turn has no wire request or reply route. The existing
+TurnRouting.requires_annotation owner therefore requires no outgoing wire
+publication for this human ACP prompt. The still-blocked work is the final
+TranscriptChangedUpdate checkpoint/notification followed by OwnedTurn's acquired
+AsyncExitStack settlement: TurnRunner.settle_turn, agents.finish_turn and
+Registration.release_turn for the exact original lease. RecoveryMonitor's dead
+NativeExecution abandonment does not grant live human-ACP completion. Mendel563
+owns resource/lifecycle disposition, now with parent-authorized owned private
+resource teardown. The actual launcher is tool exec handle89747; no caller-held
+ParentedProcess object is available to fabricate. No DB edit, fd release or
+signal has been performed by this measurement worker.
