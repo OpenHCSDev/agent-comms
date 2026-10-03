@@ -12,7 +12,7 @@ import unittest
 
 from agent_comms.comms import Comms
 from agent_comms.compaction_identity import SummaryOperationIdentity
-from agent_comms.compaction_records import SelectedSummaryAttempt
+from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
@@ -24,6 +24,8 @@ from agent_comms.native_turn_context import NativeContextData
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.request_progress import RequestProgress
+from agent_comms.private_path import FileRevision
+from agent_comms.text_digest import TextDigest
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.turn_lease import TurnLeaseFence
 from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
@@ -197,26 +199,42 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertTrue(all(not row['evaluated'] for row in missing.values()))
         different = RecordedNativeProbes({'r1': replace(original,
             session=NativeSessionIdentity('other', str(self.root / 'other.jsonl')), input_id='b' * 32)})
-        def observation(source, model='provider/model'):
-            point = RequestProgress('request', self.identity.session_id, original.input_id,
+        def observation(source, model='provider/model', probe=original):
+            point = RequestProgress('request', probe.session.session_id, probe.input_id,
                 1, 2, '3', 1, 0, 0, 0, 'budget_admission',
                 model=ReportedModel(provider='provider', id='model', context_window=100, max_tokens=20))
-            return {'construction': {'fork': {'source': source, 'sourceRevision': 'original'},
-                'sdk_manifest': {'counter': 'native', 'segments': [
-                    {'kind': 'tool_catalog', 'sha256': 'c' * 64, 'utf8_bytes': 10}]},
+            owner = Thread('original', frozenset(), str(self.root), created_at=12)
+            turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+            revision = FileRevision.from_stat(self.session.stat())
+            fork = NativeForkCreation(session_id=probe.session.session_id, session_file=probe.session.session_file,
+                source=NativeSessionIdentity(source, str(self.root / f'{source}.jsonl')),
+                source_revision=revision, revision=revision, prefix_digest=TextDigest.of('fixture prefix'), entry_count=1)
+            manifest = ContextManifest(owner.incarnation, turn,
+                (SegmentManifest('tool_catalog', (JournalProvenance(probe.session.session_file, ('original',)),),
+                    'c' * 64, 10, 2),), 'native', request_id='request')
+            return {'construction': {'fork': fork, 'sdk_manifest': manifest,
                 'request_budget': {'evaluated': True, 'observations': (point,)}},
                 'model_steps': ({'selection': {'evaluated': True, 'provider': 'provider', 'model': 'model',
                     'api': 'original-api', 'response_model': None, 'provider_thinking_level': None}},),
                 'scoped_facts': {'configured_settings': {'evaluated': True, 'model': model, 'thinking': 'high'}}}
         a = {'r1': observation('parent')}
-        with self.assertRaisesRegex(ValueError, 'source histories'):
-            candidate.alignment(different, a, {'r1': observation('other-parent')}, scenario.rounds)
+        control = different.rounds['r1']
+        b = {'r1': observation('parent', probe=control)}
+        with self.assertRaisesRegex(ValueError, 'source identity'):
+            candidate.alignment(different, a, {'r1': observation('other-parent', probe=control)}, scenario.rounds)
         with self.assertRaisesRegex(ValueError, 'model/effort'):
-            candidate.alignment(different, a, {'r1': observation('parent', 'other/model')}, scenario.rounds)
-        observed = candidate.alignment(different, a, a, scenario.rounds)
+            candidate.alignment(different, a, {'r1': observation('parent', 'other/model', probe=control)}, scenario.rounds)
+        observed = candidate.alignment(different, a, b, scenario.rounds)
         self.assertTrue(observed['r1']['evaluated'])
         self.assertFalse(observed['r2']['evaluated'])
-        unavailable = observation('parent')
+        self.assertEqual(len(observed['r1']['sdk_manifest_changes']['removed']), 1)
+        self.assertEqual(len(observed['r1']['sdk_manifest_changes']['added']), 1)
+        changed = observation('parent', probe=control)
+        changed['construction']['fork'] = replace(changed['construction']['fork'],
+            source_revision=replace(revision := changed['construction']['fork'].source_revision, size=revision.size+1))
+        with self.assertRaisesRegex(ValueError, 'source revisions'):
+            candidate.alignment(different, a, {'r1': changed}, scenario.rounds)
+        unavailable = observation('parent', probe=control)
         unavailable['construction']['request_budget'] = {'evaluated': False, 'reason': 'Historical record absent'}
         self.assertFalse(candidate.alignment(different, a, {'r1': unavailable}, scenario.rounds)['r1']['evaluated'])
 

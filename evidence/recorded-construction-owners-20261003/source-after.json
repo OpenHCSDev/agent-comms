@@ -1,0 +1,165 @@
+{
+  "revision": "1ff0d987e44d65d1f49c710de2969d37b2a42669",
+  "tool": "Existing audit.findings.Package via retained S4 consumer script",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "name": "NativeForkCreation",
+      "line": 375,
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "name": "NativeSessionIdentity",
+      "line": 21,
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "name": "NativeContextData",
+      "line": 34,
+      "bases": [
+        "PiResponseData"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "SegmentManifest",
+      "line": 96,
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "ContextManifest",
+      "line": 422,
+      "bases": []
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "RecordedNativeProbes",
+      "line": 37,
+      "bases": []
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274,
+      "bases": []
+    }
+  ],
+  "construction_reads": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 145,
+      "read": "a['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 145,
+      "read": "b['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 148,
+      "read": "b['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "read": "a['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "read": "b['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 158,
+      "read": "a['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 158,
+      "read": "b['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 161,
+      "read": "a['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 161,
+      "read": "b['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 179,
+      "read": "b['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 148,
+      "read": "a['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 179,
+      "read": "a['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 163,
+      "read": "item['sdk_manifest']"
+    }
+  ],
+  "owned_calls": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 148,
+      "call": "a['fork'].source.require_same_session"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 76,
+      "call": "session.require_same_session"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 128,
+      "call": "session.require_same_session"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 179,
+      "call": "a['sdk_manifest'].changed_since"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 87,
+      "call": "session.require_same_session"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 335,
+      "call": "self.session.require_same_session"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 560,
+      "call": "self.session.require_same_session"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 440,
+      "call": "fork.require_same_session"
+    }
+  ],
+  "limits": "Lexical AST evidence; dynamic JSON/report readers and MRO require semantic review. Public encoding unchanged through ScoredScenario."
+}
