@@ -1,0 +1,460 @@
+{
+  "method": "Existing refactor-audit Package.load; AST locates sites, semantic source reads resolve owners",
+  "roots": [
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "revision": "22637139189b49977f150246a8189ca06cb80a13",
+      "root": "src",
+      "modules": 311,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "revision": "22637139189b49977f150246a8189ca06cb80a13",
+      "root": "tests",
+      "modules": 362,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "revision": "22637139189b49977f150246a8189ca06cb80a13",
+      "root": "tools",
+      "modules": 53,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001",
+      "revision": "6c13614dd73db0c439ff75ebc84d1bff62372c10",
+      "root": "src",
+      "modules": 289,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/textual-native-subtree-strips-20261002",
+      "revision": "10a323dc19cd0a8640afc21f2fdc070813f05ecd",
+      "root": "src",
+      "modules": 249,
+      "omissions": []
+    }
+  ],
+  "projection_sites": [
+    {
+      "file": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/field_codec.py",
+      "line": 418,
+      "expression": "cls._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/field_codec.py",
+      "line": 504,
+      "expression": "cls._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/field_codec.py",
+      "line": 292,
+      "expression": "cls._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 20,
+      "expression": "self._projections",
+      "context": "Store"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 57,
+      "expression": "self._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 77,
+      "expression": "self._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 87,
+      "expression": "self._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 50,
+      "expression": "self._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 55,
+      "expression": "self._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 82,
+      "expression": "self._projections",
+      "context": "Load"
+    },
+    {
+      "file": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/permission_controller.py",
+      "line": 73,
+      "expression": "self._projections",
+      "context": "Load"
+    }
+  ],
+  "projection_declarations": [
+    {
+      "file": "src/agent_comms/compaction_source.py",
+      "line": 40,
+      "name": "encoded_native",
+      "decorator": "projected(view='journal', name='native_json')"
+    },
+    {
+      "file": "src/agent_comms/coordination_snapshot.py",
+      "line": 207,
+      "name": "can_retry",
+      "decorator": "projected(view='snapshot')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 146,
+      "name": "snapshot_disposition",
+      "decorator": "projected(view='snapshot', name='disposition')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 150,
+      "name": "snapshot_wake_mode",
+      "decorator": "projected(view='snapshot', name='wake_mode')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 154,
+      "name": "snapshot_triage_verdict",
+      "decorator": "projected(view='snapshot', name='triage_verdict')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 159,
+      "name": "snapshot_execution_id",
+      "decorator": "projected(view='snapshot', name='execution_id')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 163,
+      "name": "snapshot_exact_target",
+      "decorator": "projected(view='snapshot', name='exact_target')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 125,
+      "name": "snapshot_phase",
+      "decorator": "projected(view='snapshot', name='phase')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 129,
+      "name": "snapshot_lease_expires_at_ms",
+      "decorator": "projected(view='snapshot', name='lease_expires_at_ms')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 133,
+      "name": "snapshot_backend_done",
+      "decorator": "projected(view='snapshot', name='backend_done')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 137,
+      "name": "snapshot_process_dead",
+      "decorator": "projected(view='snapshot', name='process_dead')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/executions.py",
+      "line": 164,
+      "name": "snapshot_status",
+      "decorator": "projected(view='snapshot', name='status')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/executions.py",
+      "line": 168,
+      "name": "snapshot_current_attempt_ordinal",
+      "decorator": "projected(view='snapshot', name='current_attempt_ordinal')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/publications.py",
+      "line": 186,
+      "name": "payload_utf8_bytes",
+      "decorator": "projected(view='snapshot')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/responses.py",
+      "line": 53,
+      "name": "snapshot_state",
+      "decorator": "projected(view='snapshot', name='state')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/responses.py",
+      "line": 57,
+      "name": "snapshot_receipt_message_id",
+      "decorator": "projected(view='snapshot', name='receipt_message_id')"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/responses.py",
+      "line": 61,
+      "name": "snapshot_receipt_seq",
+      "decorator": "projected(view='snapshot', name='receipt_seq')"
+    },
+    {
+      "file": "src/agent_comms/debt_ratchet.py",
+      "line": 507,
+      "name": "delta",
+      "decorator": "projected(view='report')"
+    },
+    {
+      "file": "src/agent_comms/input_attempt.py",
+      "line": 224,
+      "name": "public_id",
+      "decorator": "projected(view='public', name='inputId')"
+    },
+    {
+      "file": "src/agent_comms/input_attempt.py",
+      "line": 228,
+      "name": "public_state",
+      "decorator": "projected(view='public', name='status')"
+    },
+    {
+      "file": "src/agent_comms/messages.py",
+      "line": 189,
+      "name": "message_id",
+      "decorator": "projected(view='wire', name='id')"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 149,
+      "name": "content_thread",
+      "decorator": "projected(view='content', name='thread')"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 153,
+      "name": "content_bus",
+      "decorator": "projected(view='content', name='bus')"
+    }
+  ],
+  "declaration_mutations": [
+    {
+      "file": "tests/test_goal_failure_observation.py",
+      "line": 291,
+      "expression": "setattr(store, '_sync' if after_commit else '_commit', crash)"
+    },
+    {
+      "file": "src/toad/jsonrpc.py",
+      "line": 40,
+      "expression": "setattr(callable, '_jsonrpc_expose', f'{prefix}{name or callable.__name__}')"
+    },
+    {
+      "file": "src/toad/jsonrpc.py",
+      "line": 41,
+      "expression": "setattr(callable, '_jsonrpc_ordered', ordered)"
+    },
+    {
+      "file": "src/toad/widget_actions.py",
+      "line": 17,
+      "expression": "setattr(cls, f'action_{declaration.declared_name}', partialmethod(cls._run_declared_action, declaration))"
+    },
+    {
+      "file": "src/toad/widgets/conversation.py",
+      "line": 1729,
+      "expression": "setattr(details, 'delivery', state)"
+    },
+    {
+      "file": "src/toad/widgets/conversation.py",
+      "line": 1732,
+      "expression": "setattr(details, 'error', error)"
+    },
+    {
+      "file": "src/toad/widgets/conversation.py",
+      "line": 1738,
+      "expression": "setattr(details, 'overview_text', value)"
+    },
+    {
+      "file": "src/textual/_animator.py",
+      "line": 161,
+      "expression": "setattr(self.obj, self.attribute, value)"
+    },
+    {
+      "file": "src/textual/_animator.py",
+      "line": 165,
+      "expression": "setattr(self.obj, self.attribute, self.end_value)"
+    },
+    {
+      "file": "src/textual/_animator.py",
+      "line": 129,
+      "expression": "setattr(self.obj, self.attribute, self.final_value)"
+    },
+    {
+      "file": "src/textual/_on.py",
+      "line": 88,
+      "expression": "setattr(method, '_textual_on', [])"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 1238,
+      "expression": "setattr(obj, self.horizontal, horizontal)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 1239,
+      "expression": "setattr(obj, self.vertical, vertical)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 516,
+      "expression": "setattr(obj, top, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 517,
+      "expression": "setattr(obj, right, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 518,
+      "expression": "setattr(obj, bottom, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 519,
+      "expression": "setattr(obj, left, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 526,
+      "expression": "setattr(obj, top, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 527,
+      "expression": "setattr(obj, right, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 528,
+      "expression": "setattr(obj, bottom, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 529,
+      "expression": "setattr(obj, left, _border)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 535,
+      "expression": "setattr(obj, top, _border1)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 536,
+      "expression": "setattr(obj, bottom, _border1)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 537,
+      "expression": "setattr(obj, right, _border2)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 538,
+      "expression": "setattr(obj, left, _border2)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 546,
+      "expression": "setattr(obj, top, _border1)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 547,
+      "expression": "setattr(obj, right, _border2)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 548,
+      "expression": "setattr(obj, bottom, _border3)"
+    },
+    {
+      "file": "src/textual/css/_style_properties.py",
+      "line": 549,
+      "expression": "setattr(obj, left, _border4)"
+    },
+    {
+      "file": "src/textual/css/scalar_animation.py",
+      "line": 84,
+      "expression": "setattr(self.styles, self.attribute, self.final_value)"
+    },
+    {
+      "file": "src/textual/css/scalar_animation.py",
+      "line": 70,
+      "expression": "setattr(self.styles, self.attribute, self.final_value)"
+    },
+    {
+      "file": "src/textual/css/scalar_animation.py",
+      "line": 79,
+      "expression": "setattr(self.styles, self.attribute, value)"
+    },
+    {
+      "file": "src/textual/dom.py",
+      "line": 334,
+      "expression": "setattr(self, f'_reactive_{name}', value)"
+    },
+    {
+      "file": "src/textual/dom.py",
+      "line": 2046,
+      "expression": "setattr(self, attribute_name, not value)"
+    },
+    {
+      "file": "src/textual/dom.py",
+      "line": 1827,
+      "expression": "setattr(styles, key, value)"
+    },
+    {
+      "file": "src/textual/dom.py",
+      "line": 437,
+      "expression": "setattr(self, variable_name, _Mutated(value))"
+    },
+    {
+      "file": "src/textual/reactive.py",
+      "line": 360,
+      "expression": "setattr(owner, f'_default_{name}', default)"
+    },
+    {
+      "file": "src/textual/reactive.py",
+      "line": 581,
+      "expression": "setattr(obj, '__watchers', {})"
+    },
+    {
+      "file": "src/textual/reactive.py",
+      "line": 418,
+      "expression": "setattr(obj, self.internal_name, value)"
+    },
+    {
+      "file": "src/textual/reactive.py",
+      "line": 351,
+      "expression": "setattr(owner, '__computes', computes)"
+    },
+    {
+      "file": "src/textual/widget.py",
+      "line": 281,
+      "expression": "setattr(obj, self._internal_name, None)"
+    },
+    {
+      "file": "src/textual/widget.py",
+      "line": 286,
+      "expression": "setattr(obj, self._internal_name, new_title)"
+    }
+  ]
+}

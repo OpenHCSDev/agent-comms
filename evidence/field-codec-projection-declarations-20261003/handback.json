@@ -1,0 +1,15 @@
+{
+  "state": "PASS restored all original Core source and assets after601 installed read",
+  "original_head": "f4a5827955174d23ca6e6bcf96f2a3abc4af996d",
+  "package_files_original": 342,
+  "all_equal": true,
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/field-codec601-installed/restore-f4a-wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "provenance": "normal local wheel built from exact original Git f4a in existing parent checkout; original Git direct_url remains archived, not falsely rewritten",
+  "toad_text_native_writes": false,
+  "remaining_parent_handles": [],
+  "observed_at": 1791055961.6440544,
+  "package_loan_returned": true
+}
