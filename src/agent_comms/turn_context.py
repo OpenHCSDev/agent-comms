@@ -369,7 +369,7 @@ class NativeMessages:
     def public_text(self) -> str:
         from .pi_payloads import PiMessage
 
-        return "\n".join(FieldCodec.decode(PiMessage, message).text for message in self.messages)
+        return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
 
     def render_into(self, prompt_parts, provider):
         provider.setdefault("messages", []).extend(self.messages)

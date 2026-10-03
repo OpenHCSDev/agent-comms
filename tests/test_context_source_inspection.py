@@ -44,7 +44,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
     segment = system((original, source))
     # Native89 has no Core contributors or captured-value field. The existing
     # external decoder still accepts that precise current-preview projection.
-    data = FieldCodec.decode(NativeContextData, {
+    data = NativeContextData.from_wire({
         "counter": "pi.estimateTokens", "identity": FieldCodec.encode(native),
         "segments": FieldCodec.encode((segment,)),
     })
