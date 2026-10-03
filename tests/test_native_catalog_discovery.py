@@ -190,3 +190,89 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         assert not channel.pending._pending
     assert len(children) == 1 and not children[0].alive()
     print("actual_native_setting_results", observed)
+
+
+async def test_actual_native_replacement_callback_once_and_cancel(native_backend):
+    """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+    from uuid import uuid4
+
+    from agent_comms.native_entries import NativeEvidenceRead
+    from agent_comms.pi_commands import GetState, UnknownCommand
+
+    native = native_backend
+    events = native.project / "replacement-events.jsonl"
+    cancelled_target = native.project / "cancelled.jsonl"
+    extension = native.project / "replacement-observer.mjs"
+    extension.write_text(
+        "import {appendFileSync} from 'node:fs';\n"
+        "export default function(pi) {\n"
+        "  pi.on('session_start', (event,ctx) => appendFileSync("
+        + json.dumps(str(events))
+        + ",JSON.stringify({event:'session_start',reason:event.reason,"
+        "sessionId:ctx.sessionManager.getSessionId()})+'\\n'));\n"
+        "  pi.on('session_before_switch', (event) => {\n"
+        "    if (event.targetSessionFile === "
+        + json.dumps(str(cancelled_target))
+        + ") return {cancel:true};\n"
+        "  });\n"
+        "}\n"
+    )
+    launch = NativePiRpcLaunch.managed(
+        "pi", ("--model", "response-local/fixture", "--thinking", "off",
+               "--offline", "--no-extensions", "--extension", str(extension),
+               "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+        worktree=native.project, session_file=str(native.session),
+    )
+
+    def observed():
+        return [json.loads(row) for row in events.read_text().splitlines()]
+
+    async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
+        channel = PiRpcChannel(child.stdout)
+
+        async def state():
+            request = GetState(id=uuid4().hex)
+            return (await request.exchange(channel, child.stdin, strict=True)).require_request(request)
+
+        async def replacement(frame):
+            # These are vendor RPC frames, including fork's external entryId.
+            # The original open-command representation and channel decode own
+            # framing; this control creates no replacement pending registry.
+            identity = uuid4().hex
+            command = UnknownCommand(wire={"id": identity, **frame})
+            child.stdin.write(channel.command_bytes(command))
+            await child.stdin.drain()
+            while True:
+                event = await channel.receive(strict=True)
+                assert event is not None
+                if isinstance(event, Response) and event.id == identity:
+                    assert event.success, event
+                    return
+
+        initial = await state()
+        assert len(observed()) == 1 and observed()[0]["sessionId"] == initial.session_id
+        # Native startup's real metadata leaf suffices for SDK fork/clone;
+        # there is no fabricated user/assistant seed or provider invocation.
+        with NativeEvidenceRead.open(native.session) as evidence:
+            _, entries = evidence.observe()
+            leaf = entries[-1].require_entry_id()
+        for frame in (
+            {"type": "switch_session", "sessionPath": str(native.session)},
+            {"type": "fork", "entryId": leaf},
+            {"type": "clone"},
+            {"type": "new_session"},
+        ):
+            count = len(observed())
+            await replacement(frame)
+            current = await state()
+            assert len(observed()) == count + 1, (frame, observed())
+            assert observed()[-1]["sessionId"] == current.session_id
+        before = await state()
+        count = len(observed())
+        await replacement({"type": "switch_session", "sessionPath": str(cancelled_target)})
+        after = await state()
+        assert after.identity == before.identity and len(observed()) == count
+        assert not cancelled_target.exists()
+        assert native.provider.posts == 0 and native.saved_inputs() == []
+        print("actual_native_replacement_hooks", observed(), flush=True)
+    assert child.returncode is not None and not child.alive()
