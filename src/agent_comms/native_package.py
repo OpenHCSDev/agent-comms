@@ -5,6 +5,8 @@ mtime cache or caller-provided success marker. Not a sandbox against arbitrary
 same-UID code or an installer mutating code after verification. Preparation must
 publish new build directories, never edit a package used by a running process.
 This stdlib-only file is also invoked directly by the preparation/launch scripts.
+Shared resources must be read-only. Their content commitment is unchanged when
+another deployment acquires an inode name; private mutable state is unrelated.
 """
 
 from __future__ import annotations
@@ -53,11 +55,11 @@ def package_tree_digest(root: Path) -> str:
             info.st_dev,
             info.st_ino,
             info.st_mode,
-            info.st_nlink,
+            info.st_nlink if info.st_mode & 0o222 else 0,
             info.st_uid,
             info.st_size,
             info.st_mtime_ns,
-            info.st_ctime_ns,
+            info.st_ctime_ns if info.st_mode & 0o222 else 0,
         )
 
     def visit(path: Path, relative: str, depth: int) -> None:
@@ -79,7 +81,9 @@ def package_tree_digest(root: Path) -> str:
                     names.append(entry.name)
             for name in sorted(names):
                 visit(path / name, f"{relative}/{name}", depth + 1)
-        elif stat.S_ISREG(before.st_mode) and before.st_nlink == 1:
+        elif stat.S_ISREG(before.st_mode):
+            if before.st_nlink != 1 and before.st_mode & 0o222:
+                raise NativePackageError("Native package shared resource is writable")
             total += before.st_size
             if total > MAX_BYTES:
                 raise NativePackageError("Native package byte limit exceeded")
@@ -102,7 +106,7 @@ def package_tree_digest(root: Path) -> str:
             record = ["file", relative, before.st_mode & 0o111, before.st_size, content.hexdigest()]
             digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
         else:
-            raise NativePackageError("Native package contains links or special files")
+            raise NativePackageError("Native package contains symlinks or special files")
         if identity(path.lstat()) != identity(before):
             raise NativePackageError("Native package changed during verification")
 
@@ -111,6 +115,65 @@ def package_tree_digest(root: Path) -> str:
     except OSError as error:
         raise NativePackageError("Native package could not be verified") from error
     return digest.hexdigest()
+
+
+def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
+    """Seal a NEW patched package, then reuse matching frozen resource inodes.
+
+    The existing build lifetime calls this only after every patch. Old handed
+    packages have a different import fence and are never changed or borrowed.
+    No donor metadata becomes authority: every shared byte/mode must equal the
+    already built resource, and the resulting tree still requires its own pin.
+    """
+    root = root.resolve(strict=True)
+    package_tree_digest(root)
+    fence = Path("dist/agent-comms-import-fence.mjs")
+    current_fence = (root / fence).read_bytes()
+    donors = []
+    for deployment in sorted(deployments.glob(".pi-native-*")):
+        donor = deployment / "node_modules/@earendil-works/pi-coding-agent"
+        candidate = donor / fence
+        if not candidate.is_file() or candidate.is_symlink() or donor == root:
+            continue
+        info = candidate.lstat()
+        if info.st_mode & 0o222 or candidate.read_bytes() != current_fence:
+            continue
+        # Reject all foreign, mutable-shared and aliased filesystem shapes before
+        # any resource borrow. This remains content verification, not a cache.
+        package_tree_digest(donor)
+        donors.append(donor)
+    shared_files = shared_bytes = 0
+    for path in sorted(root.rglob("*")):
+        before = path.lstat()
+        if not stat.S_ISREG(before.st_mode):
+            continue
+        path.chmod(stat.S_IMODE(before.st_mode) & ~0o222)
+        for donor in donors:
+            source = donor / path.relative_to(root)
+            if not source.is_file() or source.is_symlink():
+                continue
+            observed = source.lstat()
+            if observed.st_mode & 0o222 or observed.st_dev != before.st_dev:
+                continue
+            if observed.st_size != before.st_size or observed.st_mode & 0o111 != before.st_mode & 0o111:
+                continue
+            if source.read_bytes() != path.read_bytes():
+                continue
+            # The build owns this unpublished path. Create the replacement first;
+            # failure cannot discard its independent compiled resource.
+            replacement = path.with_name(path.name + ".sharing")
+            os.link(source, replacement, follow_symlinks=False)
+            try:
+                if replacement.read_bytes() != path.read_bytes():
+                    raise NativePackageError("Native resource changed while sharing")
+                os.replace(replacement, path)
+            finally:
+                replacement.unlink(missing_ok=True)
+            shared_files += 1
+            shared_bytes += before.st_size
+            break
+    package_tree_digest(root)
+    return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
 
 def verify_native_package(root: Path) -> None:
@@ -127,9 +190,11 @@ def verify_native_package(root: Path) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--digest":
+    if len(sys.argv) == 4 and sys.argv[1] == "--share-resources":
+        print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
+    elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
         print(package_tree_digest(Path(sys.argv[2])))
     elif len(sys.argv) == 2:
         verify_native_package(Path(sys.argv[1]))
     else:
-        raise SystemExit("Usage: native_package.py [--digest] PACKAGE_DIR")
+        raise SystemExit("Usage: native_package.py [--digest] PACKAGE_DIR | --share-resources NEW_PACKAGE DEPLOYMENTS")
