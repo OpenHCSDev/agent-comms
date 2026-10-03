@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "scope": "Original-record measurement plumbing, not a recall/cache/latency study",
+  "installed_core": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "new_provider_calls": 0,
+  "native_launches": 0,
+  "source_copies": 0,
+  "original_hashes": {
+    "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/summary-prefix527-functional02/forks/2026-10-02T19-20-59-118Z_01a0fe10-09ee-7494-ad5e-6441d3b89114.jsonl": "7705d866034c638df1e56c2a26c50d05ed550d727d1f36df15aade4f0ea5a417",
+    "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/summary-prefix527-functional02/forks/2026-10-02T19-20-59-118Z_01a0fe10-09ee-7494-ad5e-6441d3b89114.jsonl.input-proof": "712012c3471a48f7a199c4793c4cd115d1bdc9b734f402f9493ff48dd8ea7125",
+    "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/summary-prefix527-functional02/wire/compaction-commits.sqlite3": "9354f7e44e57b5adebdf8de17d2bb7009618da552b4cc0a9f4af6ca0bfa9f7a1",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl": "03d61d24cc9bb8acabd4a53c89bfa849e6e7460183c10a598f9f01770108fed0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl.input-proof": "7be3edda9c7f2e67003af00b7c03490c46bd20fc2098ee48c4b7a39c50d90f87"
+  },
+  "originals_unchanged": true,
+  "527_original_commit": "cf50a8f9bec64c66a9d325bcc73543a8",
+  "summary_usage": {
+    "evaluated": true,
+    "usage": {
+      "input": 82612,
+      "output": 3328,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 85940,
+      "cost": {
+        "input": 0.16522399999999998,
+        "output": 0.033280000000000004,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0.19850399999999999
+      },
+      "reasoning": 0
+    },
+    "tokens_before": 95187,
+    "scope": "Original SDK-normalized counters; no cache savings or paired cost inference"
+  },
+  "original_cuts_observed": 1,
+  "three_cuts_qualified": false,
+  "535_controlled_original_questions": 21,
+  "controlled_correct": 7,
+  "missing": 14,
+  "prompt_presence_evaluated": false,
+  "revision_mass_evaluated": false,
+  "remaining": "Three genuine sequential cuts, original SDK captures/scope evidence, registered matched study"
+}

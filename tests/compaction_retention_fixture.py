@@ -38,11 +38,11 @@ class RecordedNativeProbes:
 
     def observe(self, rounds):
         """Visit declared cuts in frozen round order, borrowing each source once."""
+        if self.rounds.keys() & self.checkpoints.keys():
+            raise ValueError("A probed round's checkpoint belongs on its RecordedNativeProbe")
         selected = dict(self.checkpoints)
         for identity, probe in self.rounds.items():
             if probe.checkpoint is not None:
-                if identity in selected and selected[identity] != probe.checkpoint:
-                    raise ValueError("Round declares different probe and measurement checkpoints")
                 selected[identity] = probe.checkpoint
         unexpected = selected.keys() - {item.identity for item in rounds}
         if unexpected:

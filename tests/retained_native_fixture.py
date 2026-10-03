@@ -24,7 +24,7 @@ from agent_comms.pi_payloads import StateData
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_turn_context import NativeContextData
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.retained_task_facts import (
     ConstraintTaskFact, DecisionTaskFact, HumanConstraintTaskFact, RetainedTaskFacts,
 )
@@ -161,8 +161,8 @@ class RecordedNativeCheckpoint:
         if previous.registry_scope is None or self.registry_scope is None or self.wire is None:
             return {"evaluated": False,
                     "reason": "Original scope snapshots and certified wire evidence are required"}
-        prior = self.read_record(previous.registry_scope, RegistrySnapshot)
-        current = self.read_record(self.registry_scope, RegistrySnapshot)
+        prior = self.read_record(previous.registry_scope, RegistryDocument).snapshot()
+        current = self.read_record(self.registry_scope, RegistryDocument).snapshot()
         before_owner = prior.require_active(before.request.source.incarnation.name)
         after_owner = current.require_active(after.request.source.incarnation.name)
         if (before.request.source.incarnation.resolved(prior) != before_owner.incarnation
@@ -214,10 +214,11 @@ class RecordedNativeCheckpoint:
                     "reason": "Original scoped lineages compared" if denominator
                               else "No eligible authored identities"}
 
-        return {"evaluated": True,
+        measured = {"constraints": measure((ConstraintTaskFact, HumanConstraintTaskFact)),
+                    "decisions": measure(DecisionTaskFact)}
+        return {"evaluated": any(group["evaluated"] for group in measured.values()),
                 "scope": "Original captured scopes and certified authored task publications",
-                "constraints": measure((ConstraintTaskFact, HumanConstraintTaskFact)),
-                "decisions": measure(DecisionTaskFact)}
+                **measured}
 
 
 @dataclass(frozen=True)
