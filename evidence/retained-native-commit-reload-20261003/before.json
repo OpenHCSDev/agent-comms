@@ -1,0 +1,939 @@
+{
+  "sha": "152aaef2c68d661a17a42c27d88fb1ce4bc089e9",
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 90,
+      "node": "ClassDef",
+      "name": "PersistentPiSession",
+      "source": "class PersistentPiSession:"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 143,
+      "node": "FunctionDef",
+      "name": "require_reopen",
+      "source": "def require_reopen(self, identity: NativeSessionIdentity) -> None:"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 146,
+      "node": "AsyncFunctionDef",
+      "name": "discard_for_external_write",
+      "source": "async def discard_for_external_write(self, identity: NativeSessionIdentity) -> None:"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 103,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 501,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 509,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 95,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 121,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 128,
+      "node": "Name",
+      "name": "RetainedNative",
+      "source": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 204,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 728,
+      "node": "Attribute",
+      "name": "GetState",
+      "source": "commands.GetState"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 114,
+      "node": "Name",
+      "name": "BorrowedNative",
+      "source": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 117,
+      "node": "Name",
+      "name": "BorrowedNative",
+      "source": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 148,
+      "node": "Attribute",
+      "name": "require_reopen",
+      "source": "self.require_reopen"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 290,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 312,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 113,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 72,
+      "node": "ClassDef",
+      "name": "PendingAttestation",
+      "source": "class PendingAttestation(NativeAttestation):"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 75,
+      "node": "Attribute",
+      "name": "GetState",
+      "source": "commands.GetState"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 86,
+      "node": "Attribute",
+      "name": "GetState",
+      "source": "commands.GetState"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "GetState",
+      "source": "commands.GetState"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 24,
+      "node": "ClassDef",
+      "name": "NativeCompactionWriter",
+      "source": "class NativeCompactionWriter:"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 24,
+      "node": "ClassDef",
+      "name": "PiSessionChild",
+      "source": "class PiSessionChild:"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 83,
+      "node": "ClassDef",
+      "name": "NativeCustody",
+      "source": "class NativeCustody(ABC):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 134,
+      "node": "ClassDef",
+      "name": "ReopenNative",
+      "source": "class ReopenNative(NativeCustody):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 157,
+      "node": "ClassDef",
+      "name": "RetiringNative",
+      "source": "class RetiringNative(NativeCustody):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 182,
+      "node": "ClassDef",
+      "name": "BorrowedNative",
+      "source": "class BorrowedNative(NativeCustody):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 210,
+      "node": "ClassDef",
+      "name": "RetainedNative",
+      "source": "class RetainedNative(NativeCustody):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 134,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 157,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 182,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 210,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 99,
+      "node": "Name",
+      "name": "RetainedNative",
+      "source": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 109,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 112,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 115,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 151,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 160,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 161,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 183,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 184,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 212,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 226,
+      "node": "Name",
+      "name": "RetainedNative",
+      "source": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 96,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 116,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 149,
+      "node": "Name",
+      "name": "PendingAttestation",
+      "source": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 197,
+      "node": "Name",
+      "name": "RetiringNative",
+      "source": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 206,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 259,
+      "node": "Name",
+      "name": "RetiringNative",
+      "source": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 267,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 109,
+      "node": "Name",
+      "name": "NativeCustody",
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 242,
+      "node": "Name",
+      "name": "PendingAttestation",
+      "source": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 437,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 376,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 32,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 48,
+      "node": "Name",
+      "name": "NativeCompactionWriter",
+      "source": "NativeCompactionWriter"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 77,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 141,
+      "node": "Name",
+      "name": "compact_owner_once",
+      "source": "compact_owner_once"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 47,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 90,
+      "node": "AsyncFunctionDef",
+      "name": "compact_owner_once",
+      "source": "async def compact_owner_once("
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 164,
+      "node": "AsyncFunctionDef",
+      "name": "_commit_native_summary",
+      "source": "async def _commit_native_summary("
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 94,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 168,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "persistent.discard_for_external_write"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 143,
+      "node": "Name",
+      "name": "_commit_native_summary",
+      "source": "_commit_native_summary"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 207,
+      "node": "ClassDef",
+      "name": "GetState",
+      "source": "class GetState(SessionSnapshot, PiCommand):"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 251,
+      "node": "ClassDef",
+      "name": "NativeQuery",
+      "source": "class NativeQuery(PiCommand):"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 410,
+      "node": "ClassDef",
+      "name": "SwitchSession",
+      "source": "class SwitchSession(MutatesSession, PiCommand):"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 285,
+      "node": "Name",
+      "name": "NativeQuery",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 441,
+      "node": "Name",
+      "name": "NativeQuery",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 455,
+      "node": "Name",
+      "name": "NativeQuery",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 470,
+      "node": "Name",
+      "name": "NativeQuery",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 29,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 30,
+      "node": "Name",
+      "name": "NativeQuery",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 76,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 103,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 127,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "require_reopen",
+      "source": "persistent.require_reopen"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 75,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "require_reopen",
+      "source": "persistent.require_reopen"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 52,
+      "node": "Name",
+      "name": "PendingAttestation",
+      "source": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 196,
+      "node": "Name",
+      "name": "PendingAttestation",
+      "source": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 118,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 193,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 180,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "GetState",
+      "source": "commands.GetState"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 157,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 68,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 40,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 624,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 637,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 630,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 119,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2470,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 103,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 111,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 150,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 158,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 112,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 118,
+      "node": "Name",
+      "name": "RetiringNative",
+      "source": "RetiringNative"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 246,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 23,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 261,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 268,
+      "node": "Name",
+      "name": "RetiringNative",
+      "source": "RetiringNative"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 78,
+      "node": "Attribute",
+      "name": "GetState",
+      "source": "commands.GetState"
+    },
+    {
+      "path": "tests/test_backend_settlement.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 69,
+      "node": "Name",
+      "name": "NativeCompactionWriter",
+      "source": "NativeCompactionWriter"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 155,
+      "node": "Name",
+      "name": "GetState",
+      "source": "GetState"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 134,
+      "node": "Name",
+      "name": "GetState",
+      "source": "GetState"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 752,
+      "node": "Name",
+      "name": "GetState",
+      "source": "GetState"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 787,
+      "node": "Name",
+      "name": "GetState",
+      "source": "GetState"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 204,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 236,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 318,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 290,
+      "node": "Name",
+      "name": "GetState",
+      "source": "GetState"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "discard_for_external_write",
+      "source": "owner.persistent.discard_for_external_write"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 643,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 686,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 908,
+      "node": "Name",
+      "name": "PersistentPiSession",
+      "source": "PersistentPiSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 656,
+      "node": "Name",
+      "name": "_commit_native_summary",
+      "source": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 715,
+      "node": "Name",
+      "name": "_commit_native_summary",
+      "source": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 955,
+      "node": "Name",
+      "name": "_commit_native_summary",
+      "source": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 53,
+      "node": "AsyncFunctionDef",
+      "name": "discard_for_external_write",
+      "source": "async def discard_for_external_write(self, *_args):"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 58,
+      "node": "Name",
+      "name": "_commit_native_summary",
+      "source": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 75,
+      "node": "Name",
+      "name": "GetState",
+      "source": "GetState"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 208,
+      "node": "Name",
+      "name": "PiSessionChild",
+      "source": "PiSessionChild"
+    },
+    {
+      "path": "tests/test_stack_settlement_boundary.py",
+      "line": 136,
+      "node": "Attribute",
+      "name": "PersistentPiSession",
+      "source": "backend.PersistentPiSession"
+    }
+  ],
+  "ambiguity": "Python attributes are syntactic; manually read actual SDK AgentSessionRuntime.switchSession/rpc-mode handlers. Native code unchanged; dependency AST follows at finalclosure."
+}
