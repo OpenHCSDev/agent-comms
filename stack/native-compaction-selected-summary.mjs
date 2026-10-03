@@ -116,9 +116,10 @@ function acSummaryCurrent(session, request, binding) {
     try {
         const witness = session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId);
         if (Object.keys(request.witness).some(key => witness[key] !== request.witness[key])) return false;
-        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId(), request.retainedText);
-        return preparation &&
-            preparation.firstKeptEntryId === request.witness.firstKeptEntryId;
+        // Admission owns the prepared cut. The witness fences its original
+        // history; checking currentness must not prepare that history again.
+        // Native compact() still admits the generated final context by budget.
+        return true;
     } catch { return false; }
 }
 function acSummaryValidUsage(usage) {
@@ -208,8 +209,8 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
     const selectedStream = (model, context, options) => {
         // No standalone getAuth: actual selected streamFn resolves auth on use.
         if (slot.controller.signal.aborted ||
-            !acSummaryCurrent(session, request, binding) || model !== binding.model ||
-            !acSummaryCompatible(session, binding)) throw new Error("Selected route changed before call");
+            !acSummaryCurrent(session, request, binding) || model !== binding.model)
+            throw new Error("Selected route changed before call");
         // Everything after this line, including auth/header hooks, is possibly
         // spent even if the fake transport observes zero network requests.
         slot.started = true;
