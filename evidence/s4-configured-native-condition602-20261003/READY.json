@@ -1,0 +1,100 @@
+{
+  "capture": {
+    "complete": true,
+    "public_inputs": 0,
+    "input_replays": 0,
+    "paid_comparison": false,
+    "installed_core_revision": "91e07acc481281ce3e7b322567fbd41bc7939226",
+    "installed_code_assets": 339,
+    "installed_source_digest": "b5ae427fedf3150c35a75c40c40f60212ab38e05fb97febc98a662ef9857ec18",
+    "private_fixture_revision": "74eae916d119ef24c1c33f573e64e8bea85b83a3",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "source_bytes": 42662475,
+    "original_sha256": "1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258",
+    "fork_bytes": 42662484,
+    "original_summary_operation": "9388e6dde50c4bf591bbe430e578c765",
+    "original_commit": "671a057291324371bf0ded12fd5cc227",
+    "raw_summary_bytes": 14659,
+    "new_original_inputs": 0,
+    "elapsed_seconds": 143.8155800269451,
+    "original_source_unchanged": true,
+    "native_children_closed": true,
+    "receipt": "/home/ts/wt/a60201/capture/receipt.json",
+    "sha256": "62b35e7fe01d9699945adfe6b32dcee2df3ec71a57afd47723207a092485b213"
+  },
+  "application": {
+    "complete": true,
+    "public_inputs": 0,
+    "input_replays": 0,
+    "paid_comparison": false,
+    "installed_UI": false,
+    "acceptance_scope": "original configured cut/capture/SDK fork/bounded SDK input and distinct answer",
+    "installed_core_revision": "91e07acc481281ce3e7b322567fbd41bc7939226",
+    "installed_code_assets": 339,
+    "installed_source_digest": "b5ae427fedf3150c35a75c40c40f60212ab38e05fb97febc98a662ef9857ec18",
+    "private_fixture_revision": "74eae916d119ef24c1c33f573e64e8bea85b83a3",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "source_bytes": 42732908,
+    "original_sha256": "f515e30d56b4aad7655d97157a84ad2f212bbe4fc6015caa18840f5ca8482c94",
+    "fork_bytes": 42732862,
+    "original_cut_correlated": true,
+    "SDK_child_binding": true,
+    "bounded_original_narrative_in_actual_SDK_input": true,
+    "canonical_request_budget_and_terminal": true,
+    "distinct_answer": true,
+    "new_original_inputs": 1,
+    "model_steps": 1,
+    "model_recall_evaluated": false,
+    "final_HTTP_bytes_evaluated": false,
+    "elapsed_seconds": 45.82123630505521,
+    "original_source_unchanged": true,
+    "native_children_closed": true,
+    "receipt": "/home/ts/wt/a60201/application/receipt.json",
+    "sha256": "bc8a28b64ba892affb11c63958065d73e8eba88d34c94998e5afc58fdeed0d9a"
+  },
+  "source_head": "74eae916d119ef24c1c33f573e64e8bea85b83a3",
+  "runtime_native_delta": 0,
+  "configured_journey_exit": 0,
+  "source_observations": [
+    {
+      "stage": "bounded-transform-armed",
+      "input_id": "1430b5fe6148de98860a980a68ec97ac"
+    },
+    {
+      "stage": "bounded-transform-applied",
+      "input_id": "1430b5fe6148de98860a980a68ec97ac",
+      "native_entry_id": "0094470d"
+    },
+    {
+      "stage": "bounded-transform-restored",
+      "input_id": "1430b5fe6148de98860a980a68ec97ac"
+    }
+  ],
+  "original_probe_identity": {
+    "session": {
+      "sessionId": "01a10369-d188-767d-beb5-9e68c6054c3e",
+      "sessionFile": "/home/ts/wt/a60201/application/forks/2026-10-03T20-17-09-000Z_01a10369-d188-767d-beb5-9e68c6054c3e.jsonl"
+    },
+    "input_id": "1430b5fe6148de98860a980a68ec97ac",
+    "answer_entry_id": "87661bb9"
+  },
+  "original_probe_file": "/home/ts/wt/a60201/application/recorded-probe.private.json",
+  "original_probe_sha256": "fff818b493fe9a784d20dc318d386c7a14469948d4626e5dd53623693c63ca0d",
+  "sanity": {
+    "tests": 27,
+    "subtests": 19,
+    "elapsed_seconds": 1.96,
+    "exit": 0
+  },
+  "SDK_control": {
+    "raw_input_transform_preserved_unmatched_messages": true,
+    "original_transform_restored": true,
+    "original_journal_unchanged": true,
+    "provider_calls": 0,
+    "exit": 0
+  },
+  "scope": "Original configured summary/capture/commit/SDK fork/bounded SDK input/one distinct ACP answer; not UI, comparative recall, final HTTP bytes or returned-model proof",
+  "command": "PYTHONPATH=tests:tools/cutover /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python tests/three_cut_retention_configured_journey.py /home/ts/wt/a60201 /home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python --bounded-application"
+}

@@ -1,0 +1,467 @@
+{
+  "tool": "Node bundled Acorn",
+  "scope": "Parsed declaration/import/call evidence; dynamic inspector serialization read semantically",
+  "units": [
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "evidence": [
+        {
+          "line": 2,
+          "import": "node:crypto"
+        },
+        {
+          "line": 3,
+          "import": "node:util"
+        },
+        {
+          "line": 4,
+          "import": "node:path"
+        },
+        {
+          "line": 5,
+          "import": "node:url"
+        },
+        {
+          "line": 34,
+          "declaration": "boundedMessages"
+        },
+        {
+          "line": 45,
+          "call": "captureCompactionWitness"
+        },
+        {
+          "line": 57,
+          "call": "captureCompactionWitness"
+        },
+        {
+          "line": 62,
+          "declaration": "boundedConstruction"
+        },
+        {
+          "line": 63,
+          "call": "boundedMessages"
+        },
+        {
+          "line": 69,
+          "call": "prefixContext"
+        },
+        {
+          "line": 72,
+          "call": "captureCompactionWitness"
+        },
+        {
+          "line": 79,
+          "declaration": "transformBoundedNativeCondition"
+        },
+        {
+          "line": 82,
+          "call": "requireReady"
+        },
+        {
+          "line": 83,
+          "call": "boundedMessages"
+        },
+        {
+          "line": 90,
+          "declaration": "armBoundedNativeCondition"
+        },
+        {
+          "line": 101,
+          "call": "subscribe"
+        },
+        {
+          "line": 122,
+          "declaration": "applyBoundedNativeCondition"
+        },
+        {
+          "line": 125,
+          "call": "requireReady"
+        },
+        {
+          "line": 126,
+          "call": "boundedConstruction"
+        },
+        {
+          "line": 127,
+          "call": "requireReady"
+        },
+        {
+          "line": 132,
+          "declaration": "constructNativeConditions"
+        },
+        {
+          "line": 138,
+          "call": "boundedConstruction"
+        }
+      ]
+    },
+    {
+      "path": "tests/summary_prefix_native_observer.mjs",
+      "evidence": [
+        {
+          "line": 7,
+          "import": "node:fs"
+        }
+      ]
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "evidence": [
+        {
+          "line": 2,
+          "import": "node:assert/strict"
+        },
+        {
+          "line": 3,
+          "import": "node:fs"
+        },
+        {
+          "line": 4,
+          "import": "node:path"
+        },
+        {
+          "line": 5,
+          "import": "node:url"
+        },
+        {
+          "line": 6,
+          "import": "node:crypto"
+        },
+        {
+          "line": 7,
+          "import": "./retained_native_conditions.mjs"
+        },
+        {
+          "line": 82,
+          "call": "constructNativeConditions"
+        },
+        {
+          "line": 106,
+          "call": "constructNativeConditions"
+        },
+        {
+          "line": 117,
+          "call": "constructNativeConditions"
+        },
+        {
+          "line": 120,
+          "call": "constructNativeConditions"
+        },
+        {
+          "line": 122,
+          "call": "constructNativeConditions"
+        },
+        {
+          "line": 124,
+          "call": "applyBoundedNativeCondition"
+        },
+        {
+          "line": 131,
+          "call": "applyBoundedNativeCondition"
+        },
+        {
+          "line": 138,
+          "call": "transformBoundedNativeCondition"
+        },
+        {
+          "line": 142,
+          "call": "transformBoundedNativeCondition"
+        },
+        {
+          "line": 145,
+          "call": "armBoundedNativeCondition"
+        },
+        {
+          "line": 148,
+          "call": "transformContext"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "evidence": [
+        {
+          "line": 1,
+          "import": "./turn-context.js"
+        },
+        {
+          "line": 2,
+          "import": "./session-context.js"
+        },
+        {
+          "line": 17,
+          "import": "node:fs"
+        },
+        {
+          "line": 18,
+          "import": "./native-proof-journal.js"
+        },
+        {
+          "line": 19,
+          "import": "node:crypto"
+        },
+        {
+          "line": 20,
+          "import": "node:path"
+        },
+        {
+          "line": 21,
+          "import": "@earendil-works/pi-ai"
+        },
+        {
+          "line": 22,
+          "import": "@earendil-works/pi-ai/compat"
+        },
+        {
+          "line": 23,
+          "import": "../modes/interactive/theme/theme.js"
+        },
+        {
+          "line": 24,
+          "import": "../utils/frontmatter.js"
+        },
+        {
+          "line": 25,
+          "import": "../utils/sleep.js"
+        },
+        {
+          "line": 26,
+          "import": "../utils/tool-result-images.js"
+        },
+        {
+          "line": 27,
+          "import": "./auth-guidance.js"
+        },
+        {
+          "line": 28,
+          "import": "./bash-executor.js"
+        },
+        {
+          "line": 29,
+          "import": "./compaction/index.js"
+        },
+        {
+          "line": 30,
+          "import": "./defaults.js"
+        },
+        {
+          "line": 31,
+          "import": "./export-html/index.js"
+        },
+        {
+          "line": 32,
+          "import": "./export-html/tool-renderer.js"
+        },
+        {
+          "line": 33,
+          "import": "./extensions/index.js"
+        },
+        {
+          "line": 34,
+          "import": "./extensions/runner.js"
+        },
+        {
+          "line": 35,
+          "import": "./model-registry.js"
+        },
+        {
+          "line": 36,
+          "import": "./prompt-templates.js"
+        },
+        {
+          "line": 37,
+          "import": "./session-export.js"
+        },
+        {
+          "line": 38,
+          "import": "./session-manager.js"
+        },
+        {
+          "line": 39,
+          "import": "./source-info.js"
+        },
+        {
+          "line": 40,
+          "import": "./system-prompt.js"
+        },
+        {
+          "line": 41,
+          "import": "./tools/bash.js"
+        },
+        {
+          "line": 42,
+          "import": "./tools/index.js"
+        },
+        {
+          "line": 43,
+          "import": "./tools/tool-definition-wrapper.js"
+        },
+        {
+          "line": 44,
+          "import": "./usage-totals.js"
+        },
+        {
+          "line": 163,
+          "call": "subscribe"
+        },
+        {
+          "line": 765,
+          "method": "subscribe"
+        },
+        {
+          "line": 1086,
+          "call": "beforeInput"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "evidence": [
+        {
+          "line": 1,
+          "import": "./session-entry-store.js"
+        },
+        {
+          "line": 2,
+          "import": "@earendil-works/pi-ai"
+        },
+        {
+          "line": 3,
+          "import": "crypto"
+        },
+        {
+          "line": 4,
+          "import": "fs"
+        },
+        {
+          "line": 5,
+          "import": "fs"
+        },
+        {
+          "line": 6,
+          "import": "crypto"
+        },
+        {
+          "line": 7,
+          "import": "path"
+        },
+        {
+          "line": 8,
+          "import": "fs/promises"
+        },
+        {
+          "line": 9,
+          "import": "path"
+        },
+        {
+          "line": 10,
+          "import": "readline"
+        },
+        {
+          "line": 11,
+          "import": "string_decoder"
+        },
+        {
+          "line": 12,
+          "import": "../config.js"
+        },
+        {
+          "line": 13,
+          "import": "../utils/paths.js"
+        },
+        {
+          "line": 14,
+          "import": "./messages.js"
+        },
+        {
+          "line": 836,
+          "method": "captureCompactionWitness"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "evidence": [
+        {
+          "line": 2,
+          "import": "../../node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js"
+        },
+        {
+          "line": 3,
+          "import": "./session-manager.js"
+        },
+        {
+          "line": 4,
+          "import": "./messages.js"
+        },
+        {
+          "line": 38,
+          "method": "prefixContext"
+        },
+        {
+          "line": 44,
+          "call": "prefixContext"
+        },
+        {
+          "line": 51,
+          "method": "requireReady"
+        },
+        {
+          "line": 54,
+          "method": "beforeInput"
+        },
+        {
+          "line": 57,
+          "method": "requireReady"
+        },
+        {
+          "line": 68,
+          "method": "beforeInput"
+        },
+        {
+          "line": 73,
+          "call": "requireReady"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "evidence": [
+        {
+          "line": 1,
+          "import": "./agent-loop.js"
+        },
+        {
+          "line": 2,
+          "import": "./stream-fn.js"
+        },
+        {
+          "line": 152,
+          "method": "subscribe"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "evidence": [
+        {
+          "line": 1,
+          "import": "../../pi-ai/dist/utils/agent-comms-request-observation.js"
+        },
+        {
+          "line": 6,
+          "import": "@earendil-works/pi-ai"
+        },
+        {
+          "line": 7,
+          "import": "./stream-fn.js"
+        },
+        {
+          "line": 192,
+          "call": "transformContext"
+        }
+      ]
+    }
+  ],
+  "parse_omissions": []
+}
