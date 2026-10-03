@@ -1,0 +1,1663 @@
+{
+  "roots": [
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "revision": "51647db2b6f0528e2cd08dfd8d940c4efe19109e",
+      "root": "src/agent_comms",
+      "parsed_modules": 311,
+      "parse_omissions": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 523,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)"
+        },
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 523,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "comms.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 65,
+          "kind": "import",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 124,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 69,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "owners.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 124,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "owners.pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 67,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 69,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "owners.pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 265,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 262,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 289,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 260,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 297,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 282,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 286,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/backend.py",
+          "line": 696,
+          "kind": "definition",
+          "name": "prepare_launch"
+        },
+        {
+          "path": "src/agent_comms/backend.py",
+          "line": 536,
+          "kind": "Call",
+          "name": "prepare_launch",
+          "expression": "self.prepare_launch()"
+        },
+        {
+          "path": "src/agent_comms/backend.py",
+          "line": 536,
+          "kind": "Attribute",
+          "name": "prepare_launch",
+          "expression": "self.prepare_launch"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 757,
+          "kind": "import",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 782,
+          "kind": "Call",
+          "name": "restart_environment",
+          "expression": "ctx.owners.restart_environment(os.environ)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 781,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 782,
+          "kind": "Attribute",
+          "name": "restart_environment",
+          "expression": "ctx.owners.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 100,
+          "kind": "import",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 452,
+          "kind": "import",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 102,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 458,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "line": 46,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "line": 61,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "line": 73,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/agent_comms/optional_awareness_projection.py",
+          "line": 218,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/optional_awareness_projection.py",
+          "line": 248,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 18,
+          "kind": "class",
+          "name": "OwnerCutover",
+          "bases": [
+            "ABC"
+          ],
+          "members": [
+            "restart",
+            "require_selection",
+            "complete",
+            "recover",
+            "failed",
+            "leave_stopped",
+            "restore_unchanged"
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 76,
+          "kind": "class",
+          "name": "StoppedOwnerInstallation",
+          "bases": [
+            "OwnerCutover"
+          ],
+          "members": [
+            "recovery_paths",
+            "complete",
+            "after_stopped"
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 92,
+          "kind": "class",
+          "name": "PreserveOwnerRuntime",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ],
+          "members": [
+            "require_selection",
+            "after_stopped",
+            "recover"
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 14,
+          "kind": "import",
+          "expression": "from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 37,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 76,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 83,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 88,
+          "kind": "definition",
+          "name": "after_stopped"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 92,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 98,
+          "kind": "definition",
+          "name": "after_stopped"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 84,
+          "kind": "Call",
+          "name": "after_stopped",
+          "expression": "self.after_stopped(stopped.lifecycle)"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 26,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 84,
+          "kind": "Attribute",
+          "name": "after_stopped",
+          "expression": "self.after_stopped"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 21,
+          "kind": "import",
+          "expression": "from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 134,
+          "kind": "import",
+          "expression": "from .owner_cutover import OwnerCutover, PreserveOwnerRuntime"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 147,
+          "kind": "definition",
+          "name": "pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 224,
+          "kind": "definition",
+          "name": "restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 235,
+          "kind": "definition",
+          "name": "restart_environment"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 260,
+          "kind": "import",
+          "expression": "from .owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 145,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 169,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 169,
+          "kind": "Call",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch(validated_root, wire_root_id, native_package, None)"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 262,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest(tuple(names) if names is not None else None, agent_bin, tuple(agent_args) if agent_args is not None else None, expected, runtime, source_interpreter)"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 323,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 145,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 169,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 226,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 238,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 252,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 262,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 228,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 239,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 240,
+          "kind": "Attribute",
+          "name": "_private_nk_launch",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 31,
+          "kind": "class",
+          "name": "OwnerRestartRequest",
+          "bases": [],
+          "members": [
+            "threads",
+            "require_selection",
+            "environment"
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 85,
+          "kind": "class",
+          "name": "OwnerRestartHandoff",
+          "bases": [],
+          "members": [
+            "launch",
+            "restore",
+            "_launch"
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 24,
+          "kind": "import",
+          "expression": "from .owner_cutover import OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 159,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 199,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 133,
+          "kind": "Name",
+          "name": "OwnerRestartHandoff",
+          "expression": "OwnerRestartHandoff"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 196,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 223,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 215,
+          "kind": "Call",
+          "name": "complete",
+          "expression": "stopped.complete(cutover)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 254,
+          "kind": "Call",
+          "name": "complete",
+          "expression": "fenced.complete(cutover)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 54,
+          "kind": "Call",
+          "name": "restart_environment",
+          "expression": "lifecycle.restart_environment(os.environ if self.runtime is None else self.runtime.encode())"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 137,
+          "kind": "Name",
+          "name": "OwnerRestartHandoff",
+          "expression": "OwnerRestartHandoff"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 159,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 161,
+          "kind": "Call",
+          "name": "complete",
+          "expression": "operation.complete(self)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 175,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 199,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 212,
+          "kind": "Call",
+          "name": "OwnerRestartHandoff",
+          "expression": "OwnerRestartHandoff(str(self.lifecycle.root), owners, self.runtime, self.request.agent_bin, self.request.agent_args)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 215,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "stopped.complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 227,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 228,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 254,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "fenced.complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 54,
+          "kind": "Attribute",
+          "name": "restart_environment",
+          "expression": "lifecycle.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 161,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "operation.complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 212,
+          "kind": "Name",
+          "name": "OwnerRestartHandoff",
+          "expression": "OwnerRestartHandoff"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 97,
+          "kind": "Call",
+          "name": "restart_entrypoint",
+          "expression": "lifecycle.restart_entrypoint(source.binary)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 97,
+          "kind": "Attribute",
+          "name": "restart_entrypoint",
+          "expression": "lifecycle.restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 28,
+          "kind": "class",
+          "name": "PrivateNkLaunch",
+          "bases": [],
+          "members": [
+            "from_environment",
+            "current",
+            "validate",
+            "apply_environment"
+          ]
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 94,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 35,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 65,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 96,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/relationships.py",
+          "line": 535,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/relationships.py",
+          "line": 538,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 89,
+          "kind": "Call",
+          "name": "restart_environment",
+          "expression": "comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 94,
+          "kind": "Call",
+          "name": "restart_entrypoint",
+          "expression": "comms.owners.restart_entrypoint(source[RestartEnvironment.binary_key])"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 99,
+          "kind": "Call",
+          "name": "restart_environment",
+          "expression": "comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 103,
+          "kind": "Call",
+          "name": "restart_entrypoint",
+          "expression": "comms.owners.restart_entrypoint(self.agent_bin)"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 89,
+          "kind": "Attribute",
+          "name": "restart_environment",
+          "expression": "comms.owners.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 94,
+          "kind": "Attribute",
+          "name": "restart_entrypoint",
+          "expression": "comms.owners.restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 99,
+          "kind": "Attribute",
+          "name": "restart_environment",
+          "expression": "comms.owners.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 103,
+          "kind": "Attribute",
+          "name": "restart_entrypoint",
+          "expression": "comms.owners.restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 239,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 237,
+          "kind": "Call",
+          "name": "complete",
+          "expression": "turn.complete()"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 237,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "turn.complete"
+        },
+        {
+          "path": "src/agent_comms/turn_admission.py",
+          "line": 102,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "session.stats.complete"
+        },
+        {
+          "path": "src/agent_comms/turn_stats.py",
+          "line": 31,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/agent_comms/turn_stats.py",
+          "line": 83,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 31,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 174,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 162,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "cached.complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 202,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 202,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 203,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 246,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "index.complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 185,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 192,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/agent_comms/worker.py",
+          "line": 18,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)"
+        },
+        {
+          "path": "src/agent_comms/worker.py",
+          "line": 18,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "comms.owners.pin_private_nk_launch"
+        }
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "revision": "51647db2b6f0528e2cd08dfd8d940c4efe19109e",
+      "root": "tools/cutover",
+      "parsed_modules": 51,
+      "parse_omissions": [],
+      "sites": [
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 9,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 26,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch(target.root, target.wire_root_id, target.native_package)"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 16,
+          "kind": "Name",
+          "name": "OwnerRestartHandoff",
+          "expression": "OwnerRestartHandoff"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 26,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 28,
+          "kind": "import",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 29,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 174,
+          "kind": "class",
+          "name": "PublishOpenhcsRecovery",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ],
+          "members": [
+            "failed",
+            "complete",
+            "manifest",
+            "note",
+            "require_sources",
+            "require_selection",
+            "retain_preimages",
+            "protected_originals",
+            "after_stopped"
+          ]
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 174,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 191,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 279,
+          "kind": "definition",
+          "name": "after_stopped"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 194,
+          "kind": "Call",
+          "name": "after_stopped",
+          "expression": "self.after_stopped(stopped.lifecycle)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 370,
+          "kind": "Call",
+          "name": "PublishOpenhcsRecovery",
+          "expression": "PublishOpenhcsRecovery(audience, owners, original, directory, args.current_prefix, args.receipt, manifest_bytes, sources, carry_proof)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 396,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch(ROOT, ROOT_ID, NATIVE)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 194,
+          "kind": "Attribute",
+          "name": "after_stopped",
+          "expression": "self.after_stopped"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 370,
+          "kind": "Name",
+          "name": "PublishOpenhcsRecovery",
+          "expression": "PublishOpenhcsRecovery"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 396,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 360,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 360,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 24,
+          "kind": "import",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 25,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 203,
+          "kind": "class",
+          "name": "PublishRetainedSummary",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ],
+          "members": [
+            "__post_init__",
+            "recovery_paths",
+            "require_recovery_originals",
+            "note",
+            "require_selection",
+            "protected_files",
+            "after_stopped",
+            "failed",
+            "recover",
+            "complete"
+          ]
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 203,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 280,
+          "kind": "definition",
+          "name": "after_stopped"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 348,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 207,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 349,
+          "kind": "Call",
+          "name": "after_stopped",
+          "expression": "self.after_stopped(stopped.lifecycle)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 362,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 384,
+          "kind": "Call",
+          "name": "PublishRetainedSummary",
+          "expression": "PublishRetainedSummary(cohort, audience, owners, task_carry, runtime_installation, directory, receipt)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 399,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch(ROOT, cohort.original_route.wire_root_id, cohort.native)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 311,
+          "kind": "Call",
+          "name": "after_stopped",
+          "expression": "self.task_carry.after_stopped(lifecycle)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 349,
+          "kind": "Attribute",
+          "name": "after_stopped",
+          "expression": "self.after_stopped"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 384,
+          "kind": "Name",
+          "name": "PublishRetainedSummary",
+          "expression": "PublishRetainedSummary"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 399,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 311,
+          "kind": "Attribute",
+          "name": "after_stopped",
+          "expression": "self.task_carry.after_stopped"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 374,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 374,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 244,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 244,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/restart_original_thread_format.py",
+          "line": 14,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/restart_original_thread_format.py",
+          "line": 29,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest(agent_bin=packet['target_binary'], runtime=FieldCodec.decode(RestartEnvironment, packet['runtime']), source_interpreter=sys.executable)"
+        },
+        {
+          "path": "tools/cutover/restart_original_thread_format.py",
+          "line": 29,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/restart_retained_routing.py",
+          "line": 10,
+          "kind": "import",
+          "expression": "from retained_routing_cutover import RetainedRoutingCutover"
+        },
+        {
+          "path": "tools/cutover/restart_retained_routing.py",
+          "line": 23,
+          "kind": "Call",
+          "name": "RetainedRoutingCutover",
+          "expression": "RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)"
+        },
+        {
+          "path": "tools/cutover/restart_retained_routing.py",
+          "line": 23,
+          "kind": "Name",
+          "name": "RetainedRoutingCutover",
+          "expression": "RetainedRoutingCutover"
+        },
+        {
+          "path": "tools/cutover/restore_stopped_owners.py",
+          "line": 19,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch"
+        },
+        {
+          "path": "tools/cutover/restore_stopped_owners.py",
+          "line": 21,
+          "kind": "Name",
+          "name": "OwnerRestartHandoff",
+          "expression": "OwnerRestartHandoff"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 14,
+          "kind": "import",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 15,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 22,
+          "kind": "class",
+          "name": "RetainedIndexCutover",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ],
+          "members": [
+            "failed",
+            "operation_arguments",
+            "require_selection",
+            "after_stopped"
+          ]
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 22,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 54,
+          "kind": "definition",
+          "name": "after_stopped"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 66,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 66,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "lifecycle.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 39,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 39,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/retained_index_installed_pilot.py",
+          "line": 14,
+          "kind": "import",
+          "expression": "from retained_index_cutover import RetainedIndexCutover"
+        },
+        {
+          "path": "tools/cutover/retained_index_installed_pilot.py",
+          "line": 38,
+          "kind": "Call",
+          "name": "RetainedIndexCutover",
+          "expression": "RetainedIndexCutover(old_python, seed['root_id'], Path(os.environ['AC_NATIVE_COPIED_PACKAGE']))"
+        },
+        {
+          "path": "tools/cutover/retained_index_installed_pilot.py",
+          "line": 38,
+          "kind": "Name",
+          "name": "RetainedIndexCutover",
+          "expression": "RetainedIndexCutover"
+        },
+        {
+          "path": "tools/cutover/retained_routing_cutover.py",
+          "line": 8,
+          "kind": "import",
+          "expression": "from retained_index_cutover import RetainedIndexCutover"
+        },
+        {
+          "path": "tools/cutover/retained_routing_cutover.py",
+          "line": 12,
+          "kind": "class",
+          "name": "RetainedRoutingCutover",
+          "bases": [
+            "RetainedIndexCutover"
+          ],
+          "members": [
+            "operation_arguments",
+            "require_selection"
+          ]
+        },
+        {
+          "path": "tools/cutover/retained_routing_cutover.py",
+          "line": 12,
+          "kind": "Name",
+          "name": "RetainedIndexCutover",
+          "expression": "RetainedIndexCutover"
+        },
+        {
+          "path": "tools/cutover/retained_routing_installed_pilot.py",
+          "line": 13,
+          "kind": "import",
+          "expression": "from retained_routing_cutover import RetainedRoutingCutover"
+        },
+        {
+          "path": "tools/cutover/retained_routing_installed_pilot.py",
+          "line": 58,
+          "kind": "Call",
+          "name": "RetainedRoutingCutover",
+          "expression": "RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')"
+        },
+        {
+          "path": "tools/cutover/retained_routing_installed_pilot.py",
+          "line": 58,
+          "kind": "Name",
+          "name": "RetainedRoutingCutover",
+          "expression": "RetainedRoutingCutover"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 13,
+          "kind": "import",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 14,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 18,
+          "kind": "class",
+          "name": "RetainedTaskSourceCarry",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ],
+          "members": [
+            "failed",
+            "require_selection",
+            "after_stopped"
+          ]
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 18,
+          "kind": "Name",
+          "name": "StoppedOwnerInstallation",
+          "expression": "StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 52,
+          "kind": "definition",
+          "name": "after_stopped"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 30,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 30,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 123,
+          "kind": "Call",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch(root, root_id, package)"
+        },
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 123,
+          "kind": "Attribute",
+          "name": "pin_private_nk_launch",
+          "expression": "service.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 15,
+          "kind": "import",
+          "expression": "from agent_comms.owner_cutover import OwnerCutover"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 16,
+          "kind": "import",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 23,
+          "kind": "class",
+          "name": "ThreadRetirementCutover",
+          "bases": [
+            "OwnerCutover"
+          ],
+          "members": [
+            "failed",
+            "validate",
+            "require_selection",
+            "originals",
+            "complete"
+          ]
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 23,
+          "kind": "Name",
+          "name": "OwnerCutover",
+          "expression": "OwnerCutover"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 61,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 46,
+          "kind": "Call",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 46,
+          "kind": "Name",
+          "name": "OwnerRestartRequest",
+          "expression": "OwnerRestartRequest"
+        }
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "revision": "431e87d9965ca1e620a4a403e7e3d714c109be3f",
+      "root": "src/toad",
+      "parsed_modules": 285,
+      "parse_omissions": [],
+      "sites": [
+        {
+          "path": "src/toad/acp/maintenance_ingress.py",
+          "line": 137,
+          "kind": "import",
+          "expression": "from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch"
+        },
+        {
+          "path": "src/toad/acp/maintenance_ingress.py",
+          "line": 162,
+          "kind": "Name",
+          "name": "PrivateNkLaunch",
+          "expression": "PrivateNkLaunch"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 31,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 34,
+          "kind": "Call",
+          "name": "complete",
+          "expression": "complete('l')"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 32,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 34,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 38,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 206,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 204,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 29,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 101,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 76,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/plan.py",
+          "line": 22,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/plan.py",
+          "line": 63,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/plan.py",
+          "line": 72,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "previous.complete"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 132,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 733,
+          "kind": "definition",
+          "name": "complete"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 136,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 745,
+          "kind": "Call",
+          "name": "complete",
+          "expression": "complete()"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 745,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1670,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.input_histories.shell.complete"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1778,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "self.input_histories.shell.complete"
+        },
+        {
+          "path": "src/toad/widgets/plan.py",
+          "line": 75,
+          "kind": "Name",
+          "name": "complete",
+          "expression": "complete"
+        },
+        {
+          "path": "src/toad/widgets/plan.py",
+          "line": 72,
+          "kind": "Attribute",
+          "name": "complete",
+          "expression": "entry.status.complete"
+        }
+      ]
+    }
+  ],
+  "dynamic_resolution": "Candidate attribute/alias sites require semantic review; no dynamic dispatch proof. Parent ActivateGlobalExtension source separately read; inherits StoppedOwnerInstallation with no complete override."
+}
