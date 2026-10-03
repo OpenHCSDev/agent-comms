@@ -439,8 +439,8 @@ class NativePiRpcLaunch:
         return cls(argv, cwd, env, session, package, configuration=configuration)
 
     @classmethod
-    def package_for_command(cls, command: str) -> Path:
-        """Resolve an explicitly supported launcher to the reviewed package.
+    def _command_selection(cls, command: str):
+        """Decode the original launcher selection without acquiring its package.
 
         Executable names never establish capability. Configured commands must
         name this installation's entrypoint, its pinned CLI, or the source stack
@@ -458,7 +458,6 @@ class NativePiRpcLaunch:
         route = PrivateNkLaunch.current()
         if route is not None:
             package = route.native_package
-            route.validate()
         elif executable is not None and executable == stack_launcher.resolve():
             build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
             package = (
@@ -466,7 +465,6 @@ class NativePiRpcLaunch:
                 / f".pi-native-{build}"
                 / "node_modules/@earendil-works/pi-coding-agent"
             )
-            _trusted_package(package)
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
@@ -476,6 +474,16 @@ class NativePiRpcLaunch:
         )
         if executable is not None and executable not in allowed:
             raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+        return package, route
+
+    @classmethod
+    def package_for_command(cls, command: str) -> Path:
+        """Acquire the original reviewed artifact before any new native execution."""
+        package, route = cls._command_selection(command)
+        if route is not None:
+            route.validate()
+        else:
+            _trusted_package(package)
         return package
 
     @classmethod
@@ -494,19 +502,45 @@ class NativePiRpcLaunch:
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         package = cls.package_for_command(command)
-        cli = package / "dist" / "cli.js"
         cwd = worktree.resolve(strict=True)
+        if not cwd.is_dir():
+            raise NativePiUnavailable("Native Pi worktree is unavailable")
+        from .selected_session import SelectedSession, SavedSelectedSession
+        from .native_session_reopen import SessionIdentityHelper
+
+        saved = Path(session_file).absolute() if session_file is not None else None
+        directory = saved.parent if saved is not None else cwd
+        session = (SavedSelectedSession(directory,
+            identity=SessionIdentityHelper.locate(package, str(saved)))
+            if saved is not None else SelectedSession(directory))
+        return cls._managed(package, arguments, cwd, environment, session)
+
+    @classmethod
+    def _managed(cls, package, arguments, cwd, environment, session):
+        """Assemble the entire key from one acquired package and selected source."""
+        cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        from .selected_session import SelectedSession
-
-        saved = Path(session_file).absolute() if session_file is not None else None
-        session = SelectedSession.for_launch(saved.parent if saved else cwd, saved, package)
-        if saved is not None:
+        if session.path is not None:
             arguments += ("--session", str(session.path))
+        cli = package / "dist" / "cli.js"
         return cls._build(cli, arguments, cwd, env, session, package, RestartEnvironment.inherit(env))
+
+    def retained_managed(self, command, arguments, *, worktree, environment, session_file):
+        """Derive a candidate from this acquired immutable launch, not a path cache.
+
+        Only original child custody may consume it after comparing the complete
+        launch/auth key and checking its actual saved-source revision/liveness.
+        A different package or selected file needs its own fresh acquisition.
+        """
+        package, _ = self._command_selection(command)
+        saved = Path(session_file).absolute() if session_file is not None else None
+        if package != self.package or saved != self.session.path:
+            return None
+        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
+            worktree, environment, self.session)
 
     @classmethod
     def tracked(

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import agent_events as events
 from . import backend
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiUnavailable
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
 from .turn_admission import UnwrittenPrompt
@@ -64,25 +64,23 @@ class NativeSessionPreparation(backend.TurnSession):
         environment: dict[str, str],
         session_file: str,
     ) -> StateData:
-        launch = await asyncio.to_thread(
-            NativePiRpcLaunch.managed,
-            agent_bin,
-            tuple(agent_args),
-            worktree=Path(worktree),
-            environment=environment,
-            session_file=session_file,
-        )
-        preparation = cls(launch, "", persistent_session=persistent)
         owner = asyncio.current_task()
-        async with session_writer_fence(launch.session.session_file), persistent.lock:
-            try:
-                async with aclosing(preparation.run()) as stream:
-                    async for event in stream:
-                        if isinstance(event, events.Done) and not event.ok:
-                            raise NativePiUnavailable(event.text)
-                state = preparation.native.attestation.state
-                assert state is not None
-                return state
-            finally:
-                if owner is not None:
-                    await backend.terminate_task_process(owner)
+        async with persistent.lock:
+            launch = await asyncio.to_thread(
+                persistent.custody.managed_launch,
+                agent_bin, tuple(agent_args), worktree=Path(worktree),
+                environment=environment, session_file=session_file,
+            )
+            preparation = cls(launch, "", persistent_session=persistent)
+            async with session_writer_fence(launch.session.session_file):
+                try:
+                    async with aclosing(preparation.run()) as stream:
+                        async for event in stream:
+                            if isinstance(event, events.Done) and not event.ok:
+                                raise NativePiUnavailable(event.text)
+                    state = preparation.native.attestation.state
+                    assert state is not None
+                    return state
+                finally:
+                    if owner is not None:
+                        await backend.terminate_task_process(owner)
