@@ -1,0 +1,60 @@
+{
+  "source_head": "4ea083964b42fa68f48ad25b467f3b1a44b49263",
+  "scope": "Measurement/scorer changes only; existing installed Core573 decoder and recorded original sources; no native/provider run",
+  "sanity": {
+    "controls": 26,
+    "passed": 26,
+    "seconds": 1.734,
+    "risk": "Prevent missing/changed original request models, capacities/intents and unmatched questions from becoming paired quality; preserve source and denominator controls"
+  },
+  "installed_scorer_exit_code": 0,
+  "scorer_command": "PYTHONPATH=tests .artifacts/s523-runtime/bin/python tests/compaction_retention_fixture.py --scenario-file <same original frozen oracle> --recorded-run <same original continued-run> --condition task-memory",
+  "same_original_reused_control_exit_code": 1,
+  "same_original_reused_control_refused": true,
+  "negative_log_sha256": "b79aa7c2b74c471ca8e9b29a6a6ef3d2dc0a60e3c13da7924bbdff9827869fa3",
+  "questions": 9,
+  "correct": 9,
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "model_steps": {
+    "cut-1": 1,
+    "cut-2": 2,
+    "cut-3": 2
+  },
+  "historical_request_budget_available": {
+    "cut-1": false,
+    "cut-2": false,
+    "cut-3": false
+  },
+  "prior_input_rows_unchanged": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "provider_inputs": 0,
+  "input_replays": 0,
+  "report_sha256": "8f5d05bff67e368aa7be53dc5608487a322b065268ff97cac740ae06eade7dcf",
+  "paired_model_quality_evaluated": false,
+  "condition_intervention_evaluated": false,
+  "full_context_capacity_evaluated": false,
+  "final_HTTP_bytes_evaluated": false,
+  "study_evaluated": false,
+  "limits": "Original recorded scorer and reused-control refusal qualify the entrypoint; composed-record source controls cover positive pair matching. No genuine matched-arm provider dataset was produced; historical absent observations remain unavailable."
+}
