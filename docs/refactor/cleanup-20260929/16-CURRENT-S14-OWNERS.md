@@ -1,4 +1,25 @@
-## Current follow-through: scrolling checkpoints merged; next receiving batch — 2026-10-03T18:54Z
+## Current: #401 live; next source checkpoint receiving — 2026-10-03T19:40Z
+
+The default now uses the existing534 prefix, Core91e07acc / Toad290da91fa / Texta142a35 / unchanged native89. It includes Core597, Toad399/400 and Text43. Toad401 successorbc484 merged e1b75ee; parent matched all83 frozen artifacts and exact source/activation, then ran the original preserve publisher ONCE. It completed44.071s; terminal readback confirms19 original births/settings/root, replacement owners alive and no replay/reset. Raw receipt58226a7a remains UI-pending as originally produced; the later physical acceptance is separate.534 is LIVE and immutable.485 is retained previous rollback;334 remains protected.
+
+The ordinary default plain-st isolated helper launch completed23.715s with original owner/runtime unchanged and empty cleanup. Sch viewed the initial frame during the same run. The raw finalPNG was black and remains a negative; Sch and parent viewed the readable22s frame from the SAME original movie after terminal, showing saved history and chat/sidebar/session Ready. No new input/provider/motion claim. Persistent delivered-build notification sent; Tristan is testing. Original publication/default evidence is archived on401's original branch under evidence/joined597-body399-plan400-text43-receiving-20261003/publication.
+
+| Owner | Actual progress and next action |
+| --- | --- |
+| Heisenberg | Toad402 normaljoined current401 main and merged00f79ce after source/tool equality review. Existing MaterializingBody completion releases settled preceding writers, retaining the latest writer and pixels; deletes9/adds17 production lines. Full performance remains active: stepped motion and late frames still occur. Continue source work from the same profile, not another unchanged recording. |
+| Kepler | Text44 mergeddb8bec; original geometry owner derives damage and resize once across all3 consumers, deletes25/adds31. Granted next existing _get_geometry/get_offset owner family; missing-descendant rejection preserved. |
+| Mendel | Core5998362 published: nine production files106 deleted/171 added. Original InputDocument owns reservation membership; rollback enlisted before publication, batch from same update, second read deleted. OwnedTurn/InputDrain own retirement; ACP Done's notice-based competing mutation deleted. RegistrySnapshot owns alias/status and sync_identity consumes one joined cut. Source/AST14files compile, final changed cancellation/receipt-failure and configured saved-fork gate next on explicitly released THIN540. Original540339code+10metadata/proofs archived by Bohr, fresh225allUID0borrowers/gaps, package-only grant. No live534 borrow/newenv/native. |
+| Parent | Core601 mergedeb3778. Existing FieldCodec memoizes immutable projection declarations with its existing bounded lookup; current row values remain derived. Five lines deleted/ten added. Installed normal wheel342source/assets matched; query-only actual canonical50ExecutionRecord/50coordinationAttemptRecord/50WakeAssignment all distinct/current getters pass. Initial driver chose same-named goal table36rows; negative preserved and owner corrected, no product workaround. Coref4 normal local wheel restored342originalSHAs and full style22 handback; truthful local directURL, original Git metadata archived. No UI/speed claim. |
+| Arendt | Core600 merged43195a, private SDK/fork/application consumers only, runtime/native delta0. Raw SDK install/restore and9631-entry original fork binding pass with0provider; missing historical narrative remains unavailable. Full configured fresh capture+commit+fork application through the existing transform hook and distinct answer remains active, using original provider without replay/forced readiness. |
+| Einstein |400 already live.403 ResponseDelivery/AgentResponse native header/style family had stopped after cleanup replies; parent resumed SAME thread to finish existing MroProjection migration and delete core prefix/decorate hooks. Source first, one final installed App check on a real released holder; no new framework/env/provider. |
+| Sch |401 live acceptance/archive complete; same receiving checkout prepares next accepted402/44+601 normal source join. User is testing; no new cutover during active use. Do not hold accepted checkpoints behind fullS4/U2/144Hz. |
+| Bohr | Continuous cleanup remains active;20GiB target unfinished. Batch61 reclaimed1,055,457,280 exclusive bytes; corrected generic-only62 reclaimed241,938,432 and63 another19,775,488. These are separate new credits, not earlier recredits. Latest62 home8.35GiB, later concurrent growth unmeasured. Seven released source caches and five exact wheel-extraction aliases are next, preserving standalone wheels/Git/proofs/current packages.7c is HELD; superseded whole-generation permission withdrawn. Only unpatched/unpinned generic520/527 dependencies retired; all108manifest entries and15065original files unchanged. Actual installed03/g477 borrower764232 remains held. |
+
+Original402/44 changed recording140.423s completed with16warm+7input checks,38 retained ready bodies, original owner/runtime unchanged and cleanup empty. Writer Up median12.56/p9529.89/max174.74ms, Down10.09/25.30/97.65; film still stepped.1342GILsamples/0errors, but no causalCPU/gain/smoothness claim. Encoder verified UI alive before/after encoding; personal DURING viewing remains unestablished, parent/Kepler viewed AFTERUIexit. Original raw assessment unreviewed and hashes preserved; scoped qualification is separate. No unchanged rerun. Next meaningful changed journey must establish actual live inspection timing.
+
+The complete original goal remains active. Tests come after semantic owner-and-consumer changes; no duplicate stores, semantic mirrors or uncertainty replay. Newly merged402/44/601 are not yet in the default build.
+
+## Historical: scrolling checkpoints merged; next receiving batch — 2026-10-03T18:54Z
 
 Live remains397 in the protected485 prefix. Tristan is testing; no later public cutover has run.
 
@@ -17,7 +38,7 @@ Sch supplied an exact grouped release for consumed397/401 UV copies (Coref4a/91,
 
 Same original worker contexts continue. The full goal remains active; accepted live checkpoints do not wait for final performance or full S4.
 
-## Current: #397 is live; ordinary default terminal accepted — 2026-10-03
+## Historical: #397 live; ordinary default terminal accepted — 2026-10-03
 
 Toad397 frozen f698660abeb61531d83b612574f0fc0e85aa553d merged at6f2b057f4a7075b7c86c538f66378c1a56fad26b. Parent verified the frozen Ready artifacts and zero production difference from the qualified installed source before merging. One original publication completed44.659s, with no replay or schema reset. The canonical terminal readback confirms all19 original thread births/settings, replacement processes alive, original root/rootID, correct native route and default links. The reused485 holder is now LIVE and protected; rollback334 remains retained.
 
