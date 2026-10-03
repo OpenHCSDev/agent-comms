@@ -1,0 +1,243 @@
+{
+  "native_manifest": "915c78ab702bd8ea",
+  "parser": "Node bundled Acorn and acorn-walk",
+  "files": [
+    "dist/core/agent-session-runtime.js",
+    "dist/core/agent-session-services.js",
+    "dist/core/agent-session.js",
+    "dist/core/auth-guidance.js",
+    "dist/core/auth-storage.js",
+    "dist/core/bash-executor.js",
+    "dist/core/cache-stats.js",
+    "dist/core/compaction/agent-comms-policy.js",
+    "dist/core/compaction/agent-comms-source.js",
+    "dist/core/compaction/branch-summarization.js",
+    "dist/core/compaction/compaction.js",
+    "dist/core/compaction/index.js",
+    "dist/core/compaction/utils.js",
+    "dist/core/defaults.js",
+    "dist/core/diagnostics.js",
+    "dist/core/event-bus.js",
+    "dist/core/exec.js",
+    "dist/core/experimental.js",
+    "dist/core/export-html/ansi-to-html.js",
+    "dist/core/export-html/index.js",
+    "dist/core/export-html/template.js",
+    "dist/core/export-html/tool-renderer.js",
+    "dist/core/export-html/vendor/highlight.min.js",
+    "dist/core/export-html/vendor/marked.min.js",
+    "dist/core/extensions/index.js",
+    "dist/core/extensions/loader.js",
+    "dist/core/extensions/runner.js",
+    "dist/core/extensions/types.js",
+    "dist/core/extensions/wrapper.js",
+    "dist/core/footer-data-provider.js",
+    "dist/core/http-dispatcher.js",
+    "dist/core/index.js",
+    "dist/core/keybindings.js",
+    "dist/core/messages.js",
+    "dist/core/model-config.js",
+    "dist/core/model-registry.js",
+    "dist/core/model-resolver.js",
+    "dist/core/model-runtime.js",
+    "dist/core/models-store.js",
+    "dist/core/native-proof-journal.js",
+    "dist/core/native-proof-schema.js",
+    "dist/core/output-guard.js",
+    "dist/core/package-manager.js",
+    "dist/core/pi-manifest.js",
+    "dist/core/project-trust.js",
+    "dist/core/prompt-templates.js",
+    "dist/core/provider-attribution.js",
+    "dist/core/provider-composer.js",
+    "dist/core/radius.js",
+    "dist/core/remote-catalog-provider.js",
+    "dist/core/resolve-config-value.js",
+    "dist/core/resource-loader.js",
+    "dist/core/runtime-credentials.js",
+    "dist/core/sdk.js",
+    "dist/core/session-context.js",
+    "dist/core/session-cwd.js",
+    "dist/core/session-entry-store.js",
+    "dist/core/session-export.js",
+    "dist/core/session-manager.js",
+    "dist/core/settings-diagnostics.js",
+    "dist/core/settings-manager.js",
+    "dist/core/skills.js",
+    "dist/core/slash-commands.js",
+    "dist/core/source-info.js",
+    "dist/core/system-prompt.js",
+    "dist/core/telemetry.js",
+    "dist/core/timings.js",
+    "dist/core/tools/agent-comms-file-artifact.js",
+    "dist/core/tools/bash.js",
+    "dist/core/tools/edit-diff.js",
+    "dist/core/tools/edit.js",
+    "dist/core/tools/file-mutation-queue.js",
+    "dist/core/tools/find.js",
+    "dist/core/tools/grep.js",
+    "dist/core/tools/index.js",
+    "dist/core/tools/ls.js",
+    "dist/core/tools/output-accumulator.js",
+    "dist/core/tools/path-utils.js",
+    "dist/core/tools/powershell.js",
+    "dist/core/tools/read.js",
+    "dist/core/tools/render-utils.js",
+    "dist/core/tools/renderers/bash.js",
+    "dist/core/tools/renderers/edit.js",
+    "dist/core/tools/renderers/find.js",
+    "dist/core/tools/renderers/grep.js",
+    "dist/core/tools/renderers/index.js",
+    "dist/core/tools/renderers/ls.js",
+    "dist/core/tools/renderers/read.js",
+    "dist/core/tools/renderers/write.js",
+    "dist/core/tools/tool-definition-wrapper.js",
+    "dist/core/tools/truncate.js",
+    "dist/core/tools/write.js",
+    "dist/core/trust-manager.js",
+    "dist/core/turn-context.js",
+    "dist/core/usage-totals.js",
+    "dist/modes/rpc/jsonl.js",
+    "dist/modes/rpc/rpc-client.js",
+    "dist/modes/rpc/rpc-mode.js",
+    "dist/modes/rpc/rpc-types.js",
+    "dist/main.js",
+    "dist/cli.js"
+  ],
+  "omissions": [],
+  "sites": [
+    {
+      "file": "dist/core/agent-session-services.js",
+      "line": 64,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/resource-loader.js",
+      "line": 158,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/sdk.js",
+      "line": 73,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 48,
+      "node": "Identifier",
+      "name": "FileSettingsStorage"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 127,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 157,
+      "node": "Identifier",
+      "name": "FileSettingsStorage"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 158,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 165,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 170,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 171,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 179,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 184,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 186,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 201,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 205,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 281,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 291,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 304,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 379,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/main.js",
+      "line": 454,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/main.js",
+      "line": 515,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    },
+    {
+      "file": "dist/main.js",
+      "line": 581,
+      "node": "Identifier",
+      "name": "SettingsManager"
+    }
+  ],
+  "limits": "Declared coding-agent core/main/RPC roots; lexical sites do not resolve dynamic dispatch. Bundle index not imported by executed cli/main graph."
+}
