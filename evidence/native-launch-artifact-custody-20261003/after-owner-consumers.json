@@ -1,5 +1,5 @@
 {
-  "source_head": "12c1758e",
+  "source_head": "c857c6f6b890cf4d34540db6c6e84c21eda304a9",
   "modules": 726,
   "parse_omissions": [],
   "sites": [
@@ -11,19 +11,19 @@
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 119,
+      "line": 121,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 141,
+      "line": 143,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 144,
+      "line": 146,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
@@ -35,9 +35,9 @@
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 219,
-      "node": "Name",
-      "source": "NativePiRpcLaunch"
+      "line": 222,
+      "node": "Attribute",
+      "source": "(persistent_session.custody if persistent_session is not None else EmptyNative()).managed_launch"
     },
     {
       "path": "src/agent_comms/cohort_foreground.py",
@@ -143,19 +143,31 @@
     },
     {
       "path": "src/agent_comms/native_compaction_writer.py",
-      "line": 41,
+      "line": 44,
       "node": "Name",
       "source": "verify_native_package"
     },
     {
       "path": "src/agent_comms/native_custody.py",
-      "line": 121,
+      "line": 81,
+      "node": "FunctionDef",
+      "source": "def managed_launch(self, command, arguments, *, worktree, environment, session_file):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 235,
+      "node": "FunctionDef",
+      "source": "def managed_launch(self, command, arguments, *, worktree, environment, session_file):"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 125,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
     {
       "path": "src/agent_comms/native_custody.py",
-      "line": 198,
+      "line": 202,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
@@ -167,21 +179,39 @@
     },
     {
       "path": "src/agent_comms/native_custody.py",
-      "line": 100,
+      "line": 104,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
     {
       "path": "src/agent_comms/native_custody.py",
-      "line": 136,
+      "line": 140,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
     {
       "path": "src/agent_comms/native_custody.py",
-      "line": 211,
+      "line": 215,
       "node": "Name",
       "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 244,
+      "node": "Attribute",
+      "source": "super().managed_launch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 82,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 238,
+      "node": "Attribute",
+      "source": "original.retained_managed"
     },
     {
       "path": "src/agent_comms/native_entries.py",
@@ -245,7 +275,7 @@
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 702,
+      "line": 739,
       "node": "FunctionDef",
       "source": "def _trusted_package(package: Path) -> Path:"
     },
@@ -257,19 +287,43 @@
     },
     {
       "path": "src/agent_comms/native_pi.py",
+      "line": 480,
+      "node": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 519,
+      "node": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 531,
+      "node": "FunctionDef",
+      "source": "def retained_managed(self, command: str, arguments: tuple[str, ...], *, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch | None:"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
       "line": 407,
       "node": "Name",
       "source": "SelectedSession"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 490,
+      "line": 498,
       "node": "Name",
       "source": "NativePiRpcLaunch"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 523,
+      "line": 560,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 534,
       "node": "Name",
       "source": "NativePiRpcLaunch"
     },
@@ -281,39 +335,69 @@
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 496,
+      "line": 482,
+      "node": "Attribute",
+      "source": "cls._command_selection"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 504,
       "node": "Attribute",
       "source": "cls.package_for_command"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 517,
+      "line": 516,
+      "node": "Attribute",
+      "source": "cls._managed"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 541,
+      "node": "Attribute",
+      "source": "self._command_selection"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 545,
+      "node": "Attribute",
+      "source": "self._managed"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 554,
       "node": "Name",
       "source": "SelectedSession"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 542,
+      "line": 579,
       "node": "Name",
       "source": "_trusted_package"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 723,
+      "line": 760,
       "node": "Name",
       "source": "verify_native_package"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 506,
+      "line": 486,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 515,
       "node": "Name",
       "source": "SelectedSession"
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "line": 469,
+      "line": 514,
       "node": "Name",
-      "source": "_trusted_package"
+      "source": "SessionIdentityHelper"
     },
     {
       "path": "src/agent_comms/native_runtime_input.py",
@@ -335,15 +419,15 @@
     },
     {
       "path": "src/agent_comms/native_session_prepare.py",
-      "line": 25,
+      "line": 27,
       "node": "ClassDef",
       "source": "class NativeSessionPreparation(backend.TurnSession):"
     },
     {
       "path": "src/agent_comms/native_session_prepare.py",
-      "line": 68,
-      "node": "Name",
-      "source": "NativePiRpcLaunch"
+      "line": 72,
+      "node": "Attribute",
+      "source": "persistent.custody.managed_launch"
     },
     {
       "path": "src/agent_comms/native_session_reopen.py",
@@ -353,7 +437,7 @@
     },
     {
       "path": "src/agent_comms/native_session_reopen.py",
-      "line": 86,
+      "line": 62,
       "node": "ClassDef",
       "source": "class SessionIdentityHelper(PiHelper):"
     },
@@ -365,7 +449,13 @@
     },
     {
       "path": "src/agent_comms/native_session_reopen.py",
-      "line": 89,
+      "line": 65,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 68,
       "node": "Name",
       "source": "NativeSessionIdentity"
     },
@@ -389,13 +479,13 @@
     },
     {
       "path": "src/agent_comms/native_session_reopen.py",
-      "line": 59,
+      "line": 54,
       "node": "Name",
       "source": "verify_native_package"
     },
     {
       "path": "src/agent_comms/native_session_reopen.py",
-      "line": 72,
+      "line": 55,
       "node": "Name",
       "source": "SessionIdentityHelper"
     },
