@@ -16,6 +16,7 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .native_entries import NativeEvidenceRead
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativeWitness
+from .private_bus_checkpoint import CertifiedSourceRead
 from .registration import Registration
 from .retained_task_facts import ExactTaskFact, RetainedTaskFacts
 from .session_fence import idle_session_writer_fence
@@ -115,7 +116,7 @@ class CompactionBoundary:
                 yield HeldCompaction(
                     self, witness, receipt, fd,
                     (executor_fd, wire_lock.descriptor, bus_lock.descriptor, input_fd),
-                    native_facts,
+                    native_facts, bus_lock.certified_read(),
                 )
 
 
@@ -164,6 +165,7 @@ class HeldCompaction:
     authority_fd: int
     retained_fds: tuple[int, ...]
     native_facts: tuple[ExactTaskFact, ...]
+    wire_source: CertifiedSourceRead
 
     def capture(
         self,
@@ -178,9 +180,7 @@ class HeldCompaction:
         rows, input_facts = inputs.compaction_material(
             owner, pending_input_keys, self.boundary.future_queue
         )
-        facts = WireLog(
-            self.boundary.root / "bus.jsonl"
-        ).retained_task_facts_unlocked(owner.incarnation)
+        facts = tuple(self.wire_source.retained_task_facts(owner.incarnation))
         facts += owner.retained_task_facts()
         facts += input_facts
         facts += self.native_facts
