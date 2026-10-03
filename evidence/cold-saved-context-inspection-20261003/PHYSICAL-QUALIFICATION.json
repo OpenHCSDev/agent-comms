@@ -1,0 +1,28 @@
+{
+  "state": "SCOPED_READY_PHYSICAL_AND_BACKEND",
+  "reviewed_source": "3c19a3ab8af279a29ad9490b275e34444ef455bc",
+  "production_unchanged": true,
+  "installed_prefix": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001",
+  "source_files": {
+    "native_custody.py": {
+      "reviewed_sha256": "e6004eb9ebf6c1f683ff4acd23ec632ec8b394193a8f08969ef72a29cf56cdd7",
+      "installed_sha256": "e6004eb9ebf6c1f683ff4acd23ec632ec8b394193a8f08969ef72a29cf56cdd7",
+      "equal": true
+    },
+    "turn_runner.py": {
+      "reviewed_sha256": "ecc5c85714aa181e1529b12c3077ddfa805117a035b069cd311fed84b7977a91",
+      "installed_sha256": "ecc5c85714aa181e1529b12c3077ddfa805117a035b069cd311fed84b7977a91",
+      "equal": true
+    }
+  },
+  "physical_original": "/home/ts/.cache/agent-scratch/einstein-cold-context595-physical06",
+  "terminal_original_sha256": "a73dc351a833705429d90ab141f8b4c5a3a21fe9e72deca874f493b666c5c895",
+  "recorder_original_sha256": "76e33d7f7e9fa5b2b28ba182c93093a02d5c52f4ec10184dbcffff9664ef6b9a",
+  "pixel_review": "Mendel inspected phase-segment-return.png after terminal: saved history, roster Ready, native system reference and system text visible; parent and Einstein separately reviewed original frames.",
+  "elapsed_seconds": 53.37425221805461,
+  "native_and_controller_absent": true,
+  "inputs": 0,
+  "provider_calls": 0,
+  "priming_calls": 0,
+  "limits": "Private authentic saved SDK fork with original configured model/settings; this is not current public UI arrival, busy-provider or preparation speed acceptance. Original physical05 failure retained."
+}
