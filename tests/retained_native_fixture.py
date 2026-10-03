@@ -474,7 +474,7 @@ class RecordedNativeProbe:
                 coverage["managed_checkpoint"] = {"entry_id": identity,
                     "referenced_in_sdk_sources": identity in included}
         return {
-            "fork": FieldCodec.encode(fork),
+            "fork": fork,
             "journal_settings": {
                 "evaluated": bool(models and thinking),
                 "model": models[-1].model_choice if models else None,
@@ -482,7 +482,7 @@ class RecordedNativeProbe:
                 "original_entries": tuple(entry.id for entry in models[-1:] + thinking[-1:]),
                 "scope": "Historical branch metadata; not current request selection",
             },
-            "sdk_manifest": FieldCodec.encode(manifest),
+            "sdk_manifest": manifest,
             "request_budget": self.request_budget(manifest),
             "source_coverage": coverage,
             "condition_evaluated": False,

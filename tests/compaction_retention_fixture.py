@@ -145,9 +145,9 @@ class RecordedNativeProbes:
             if a["fork"] is None or b["fork"] is None:
                 pairs[identity] = {"evaluated": False, "reason": "Original SDK fork records unavailable"}
                 continue
-            if (a["fork"]["source"] != b["fork"]["source"]
-                    or a["fork"]["sourceRevision"] != b["fork"]["sourceRevision"]):
-                raise ValueError("Matched probes have different original source histories")
+            a["fork"].source.require_same_session(b["fork"].source)
+            if a["fork"].source_revision != b["fork"].source_revision:
+                raise ValueError("Matched probes have different original source revisions")
             settings = original["scoped_facts"]["configured_settings"], control["scoped_facts"]["configured_settings"]
             if not all(item["evaluated"] for item in settings):
                 pairs[identity] = {"evaluated": False, "reason": "Original configured model/effort unavailable"}
@@ -158,16 +158,16 @@ class RecordedNativeProbes:
             if a["sdk_manifest"] is None or b["sdk_manifest"] is None:
                 pairs[identity] = {"evaluated": False, "reason": "Original request manifests unavailable"}
                 continue
-            if a["sdk_manifest"]["counter"] != b["sdk_manifest"]["counter"]:
+            if a["sdk_manifest"].counter != b["sdk_manifest"].counter:
                 raise ValueError("Matched probes use different native measurement counters")
-            catalogs = tuple(tuple(segment for segment in item["sdk_manifest"]["segments"]
-                                   if segment["kind"] == ToolCatalogSegment.declared_name)
+            catalogs = tuple(tuple(segment for segment in item["sdk_manifest"].segments
+                                   if segment.kind == ToolCatalogSegment.declared_name)
                              for item in (a, b))
             if not all(catalogs):
                 pairs[identity] = {"evaluated": False, "reason": "Original tool catalogs unavailable"}
                 continue
-            if tuple((item["sha256"], item["utf8_bytes"]) for item in catalogs[0]) != tuple(
-                    (item["sha256"], item["utf8_bytes"]) for item in catalogs[1]):
+            if tuple((item.sha256, item.utf8_bytes) for item in catalogs[0]) != tuple(
+                    (item.sha256, item.utf8_bytes) for item in catalogs[1]):
                 raise ValueError("Matched probes have different native tool catalogs")
             request = self.request_alignment(original, control, settings[0]["model"])
             completion = self.completion_alignment(original, control)
@@ -176,6 +176,7 @@ class RecordedNativeProbes:
                 "scope": "Common original SDK fork source, configured selection, admitted request model, journaled completion selections, tool catalog and frozen probe; not complete intervention/construction proof",
                 "request_selection": request,
                 "completion_selection": completion,
+                "sdk_manifest_changes": a["sdk_manifest"].changed_since(b["sdk_manifest"]),
                 "reason": request["reason"] if not request["evaluated"] else (
                     "Original completion selections unavailable" if not completion["evaluated"]
                     else "Original request and completion selections corroborate the source match"),
