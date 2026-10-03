@@ -169,10 +169,71 @@ class RecordedNativeProbes:
             if tuple((item["sha256"], item["utf8_bytes"]) for item in catalogs[0]) != tuple(
                     (item["sha256"], item["utf8_bytes"]) for item in catalogs[1]):
                 raise ValueError("Matched probes have different native tool catalogs")
-            pairs[identity] = {"evaluated": True,
-                              "scope": "Common original SDK fork source, configured selection, tool catalog and frozen probe; not complete intervention/construction proof",
-                              "completion_selection": self.completion_alignment(original, control)}
+            request = self.request_alignment(original, control, settings[0]["model"])
+            completion = self.completion_alignment(original, control)
+            pairs[identity] = {
+                "evaluated": request["evaluated"] and completion["evaluated"],
+                "scope": "Common original SDK fork source, configured selection, admitted request model, journaled completion selections, tool catalog and frozen probe; not complete intervention/construction proof",
+                "request_selection": request,
+                "completion_selection": completion,
+                "reason": request["reason"] if not request["evaluated"] else (
+                    "Original completion selections unavailable" if not completion["evaluated"]
+                    else "Original request and completion selections corroborate the source match"),
+            }
         return pairs
+
+    @staticmethod
+    def request_alignment(original, control, selection):
+        """Consume the probe's exact admitted request, never infer it from config.
+
+        ContextBudget owns every estimate/allowance. Its recorded model owns
+        selection; this comparison does not recalculate capacity or turn an
+        absent output intent into an equal zero. Revised allowances remain in
+        their original order and need not match between different histories.
+        """
+        groups = tuple(observed["construction"]["request_budget"]
+                       for observed in (original, control))
+        if not all(group["evaluated"] for group in groups):
+            return {"evaluated": False, "reason": "Original correlated request admission unavailable"}
+        points = tuple(group["observations"] for group in groups)
+        if not all(points):
+            raise ValueError("An evaluated request admission requires its original observations")
+        models = []
+        for group in points:
+            selected = []
+            for point in group:
+                if point.model is None or point.model.display_name is None:
+                    return {"evaluated": False, "reason": "Original admitted request model unavailable"}
+                selected.append(point.model.require_selection(selection))
+            models.append(tuple(selected))
+        capacity = {
+            "context_window": RecordedNativeProbes.same_observations("request context window", tuple(
+                tuple(model.context_window for model in group) for group in models)),
+            "max_tokens": RecordedNativeProbes.same_observations("request model output capacity", tuple(
+                tuple(model.max_tokens for model in group) for group in models)),
+        }
+        contract = {
+            "output_token_field": RecordedNativeProbes.same_observations("request output field", tuple(
+                (group[0].output_token_field,) for group in points)),
+            "requested_output_tokens": RecordedNativeProbes.same_observations("request initial output intent", tuple(
+                (group[0].requested_output_tokens,) for group in points)),
+            "minimum_output_tokens": RecordedNativeProbes.same_observations("request minimum output", tuple(
+                (group[0].minimum_output_tokens,) for group in points)),
+        }
+        return {"evaluated": True, "reason": "Original admitted request models match the captured selection",
+                "model_capacity": capacity, "request_contract": contract,
+                "candidate": groups[0], "baseline": groups[1],
+                "scope": "Original native admission observations; not full-history capacity, HTTP bytes or returned model/effort"}
+
+    @staticmethod
+    def same_observations(name, groups):
+        """One matched-field algorithm preserves absence and original values."""
+        available = all(groups) and all(value is not None for group in groups for value in group)
+        same = set(groups[0]) == set(groups[1]) if available else None
+        if available and not same:
+            raise ValueError(f"Matched original {name} observations differ")
+        return {"evaluated": available, "same": same,
+                "candidate": groups[0], "baseline": groups[1]}
 
     @staticmethod
     def completion_alignment(original, control):
@@ -190,11 +251,7 @@ class RecordedNativeProbes:
         fields = {}
         for name in ("api", "response_model", "provider_thinking_level"):
             values = tuple(tuple(item[name] for item in group) for group in groups)
-            available = all(value is not None for group in values for value in group)
-            fields[name] = {"evaluated": available,
-                           "same": set(values[0]) == set(values[1]) if available else None}
-            if available and not fields[name]["same"]:
-                raise ValueError(f"Matched completion {name} observations differ")
+            fields[name] = RecordedNativeProbes.same_observations(f"completion {name}", values)
         return {"evaluated": True, "models": tuple(sorted(choices[0])), "fields": fields,
                 "scope": "Original journaled Pi completion observations, not transport attempt receipts"}
 
@@ -382,19 +439,31 @@ class ScoredScenario(ScoreView):
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
 
-    def paired_quality(self, baseline, evidence, baseline_evidence):
-        """Separate assistance while keeping every frozen question in the sample."""
+    def paired_quality(self, baseline, evidence, baseline_evidence, alignment):
+        """Original alignment owns pairing; every frozen question stays visible."""
         if self.source != baseline.source:
             raise ValueError("Matched quality requires the same complete frozen oracle")
         controls = {round_.identity: round_ for round_ in baseline.rounds}
+        grouped = self.support_groups(evidence, baseline_evidence)
+        unmatched = []
+        for name, rounds in grouped.items():
+            if name == "unobserved":
+                continue
+            matched = []
+            for round_ in rounds:
+                (matched if alignment[round_.identity]["evaluated"] else unmatched).append(round_)
+            grouped[name] = matched
+        grouped["unmatched"] = unmatched
         measured = {}
-        for name, rounds in self.support_groups(evidence, baseline_evidence).items():
+        for name, rounds in grouped.items():
             candidate = self.totals(chain.from_iterable(round_.outcomes for round_ in rounds))
             control = self.totals(chain.from_iterable(controls[round_.identity].outcomes for round_ in rounds))
+            evaluated = bool(rounds) and all(alignment[round_.identity]["evaluated"] for round_ in rounds)
             measured[name] = {"candidate": candidate, "baseline": control,
-                              "evaluated": name != "unobserved",
+                              "evaluated": evaluated,
                               "correct_difference": candidate["correct"] - control["correct"]
-                                                    if name != "unobserved" else None}
+                                                    if evaluated else None,
+                              "scope": "Descriptive differences for matched original source and selections; not certified interventions or study margins"}
         return measured
 
 
@@ -581,7 +650,7 @@ class RecallScenario:
         return {"candidate": score.public_native(cuts, original),
                 "baseline": control.public_native(baseline_cuts, baseline_original),
                 "alignment": alignment,
-                "paired_quality": score.paired_quality(control, original, baseline_original),
+                "paired_quality": score.paired_quality(control, original, baseline_original, alignment),
                 "condition_construction": {"evaluated": False,
                     "reason": "Condition-specific construction/complete-history eligibility is not supplied by labels"},
                 "study_acceptance": {"evaluated": False,

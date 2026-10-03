@@ -1,0 +1,404 @@
+{
+  "revision": "1d14d9c3e563b56f062b45d381a31f1dae5d2c1e",
+  "tool": "Existing audit.findings.Package via retained S4 consumer script",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "name": "PiModel",
+      "line": 763,
+      "bases": [
+        "PiPayload",
+        "DeclaredFamily"
+      ],
+      "methods": [
+        "wire_member",
+        "matches_identity",
+        "require_selection",
+        "for_compaction"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "name": "ReportedModel",
+      "line": 791,
+      "bases": [
+        "PiModel"
+      ],
+      "methods": [
+        "identity",
+        "matches_identity",
+        "require_selection",
+        "for_compaction",
+        "display_name"
+      ]
+    },
+    {
+      "path": "src/agent_comms/request_progress.py",
+      "name": "RequestProgress",
+      "line": 8,
+      "bases": [
+        "PiPayload"
+      ],
+      "methods": [
+        "__post_init__",
+        "label"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "RecordedNativeProbes",
+      "line": 37,
+      "bases": [],
+      "methods": [
+        "resume_fork",
+        "observe",
+        "alignment",
+        "request_alignment",
+        "same_observations",
+        "completion_alignment"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "Condition",
+      "line": 259,
+      "bases": [
+        "str",
+        "Enum"
+      ],
+      "methods": []
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "ScoreView",
+      "line": 284,
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        "scored_answers",
+        "outcomes",
+        "questions",
+        "correct",
+        "stale",
+        "missing",
+        "public_totals",
+        "totals",
+        "measurement_totals"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "ScoredScenario",
+      "line": 362,
+      "bases": [
+        "ScoreView"
+      ],
+      "methods": [
+        "__post_init__",
+        "identity",
+        "scored_answers",
+        "public",
+        "support_groups",
+        "support_totals",
+        "proposed_actions",
+        "public_native",
+        "paired_quality"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "RecallScenario",
+      "line": 596,
+      "bases": [],
+      "methods": [
+        "__post_init__",
+        "read",
+        "public",
+        "score",
+        "observe_native",
+        "score_native",
+        "compare_native"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274,
+      "bases": [],
+      "methods": [
+        "submitted_prompt",
+        "answer_for_input",
+        "read_sdk_context",
+        "sdk_request",
+        "request_manifest",
+        "prompt_presence",
+        "request_budget",
+        "observe",
+        "construction",
+        "model_steps",
+        "tool_steps",
+        "read"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 447,
+      "call": "self.support_groups"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 649,
+      "call": "probes.alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 820,
+      "call": "scenario.score_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 172,
+      "call": "self.request_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 173,
+      "call": "self.completion_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 210,
+      "call": "RecordedNativeProbes.same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 212,
+      "call": "RecordedNativeProbes.same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 216,
+      "call": "RecordedNativeProbes.same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 218,
+      "call": "RecordedNativeProbes.same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 220,
+      "call": "RecordedNativeProbes.same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 254,
+      "call": "RecordedNativeProbes.same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 653,
+      "call": "score.paired_quality"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 826,
+      "call": "scenario.score_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 830,
+      "call": "scenario.compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 406,
+      "call": "self.support_groups"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 486,
+      "call": "self.request_budget"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 604,
+      "call": "self.model_steps"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 606,
+      "call": "self.construction"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 221,
+      "call": "scenario.score_native"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 229,
+      "call": "scenario.rounds[1].score_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 86,
+      "call": "selected.request_budget"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 109,
+      "call": "RecordedNativeProbe.model_steps"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 172,
+      "call": "score.paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 177,
+      "call": "score.paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 195,
+      "call": "candidate.alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 216,
+      "call": "candidate.alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 237,
+      "call": "RecordedNativeProbes.request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 242,
+      "call": "RecordedNativeProbes.request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 267,
+      "call": "RecordedNativeProbe.model_steps"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 274,
+      "call": "RecordedNativeProbe.model_steps"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 280,
+      "call": "RecordedNativeProbes.completion_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 358,
+      "call": "scenario.score_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 95,
+      "call": "capture((publication(observed, replace(lease, turn_id='other')),)).request_budget"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 194,
+      "call": "candidate.alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 213,
+      "call": "candidate.alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 215,
+      "call": "candidate.alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 253,
+      "call": "RecordedNativeProbes.request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 255,
+      "call": "RecordedNativeProbes.request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 287,
+      "call": "RecordedNativeProbes.completion_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 89,
+      "call": "selected.request_budget"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 90,
+      "call": "probe.request_budget"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 93,
+      "call": "capture((publication(changed),)).request_budget"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 251,
+      "call": "RecordedNativeProbes.request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 256,
+      "call": "RecordedNativeProbes.request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 284,
+      "call": "RecordedNativeProbes.completion_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 311,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 316,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 221,
+      "call": "candidate.alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 323,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 324,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 312,
+      "call": "scenario.score_native"
+    }
+  ],
+  "limits": "Lexical AST sites; JSON report readers and dynamic/MRO resolution require semantic review"
+}
