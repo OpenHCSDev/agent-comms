@@ -184,6 +184,24 @@ class DisplaySelection:
         )
         return cls(snapshot, catalog, canonical, seen, document.notice)
 
+    @classmethod
+    @contextmanager
+    def reading(
+        cls, registry: Registration, catalog: ChannelCatalog,
+        reads: ReadLedger, viewer: str | None,
+    ) -> Iterator[DisplaySelection]:
+        """Borrow the original identity resources and read the ledger once.
+
+        Read-ledger custody ends before yielding: painted acknowledgement may
+        write that same ledger while identity and membership remain acquired.
+        """
+        with registry.store.reading() as document, catalog.reading() as channels:
+            with reads.reading() as read_document:
+                selected = cls.capture(
+                    document.snapshot(), channels, reads, read_document, viewer
+                )
+            yield selected
+
     @property
     def channels(self) -> Mapping[str, Channel]:
         return self.catalog.views(self.registry.threads)
@@ -237,14 +255,9 @@ class BusPresentation:
                 _, records = stack.enter_context(
                     self.bus.log._record_snapshot(need_sequence=False)
                 )
-                with (
-                    self.registry.store.reading() as registry,
-                    self.catalog.reading() as catalog,
-                    self.bus.reads.reading() as reads,
-                ):
-                    basis = DisplaySelection.capture(
-                        registry.snapshot(), catalog, self.bus.reads, reads, viewer
-                    )
+                with DisplaySelection.reading(
+                    self.registry, self.catalog, self.bus.reads, viewer
+                ) as basis:
                     if target is not None:
                         basis.scope(target)
                 if file_revision(self.bus.log.path) != bus_revision:
@@ -264,15 +277,20 @@ class BusPresentation:
         """Local display projection; underlying channel history remains target-owned."""
         if not is_channel_target(target):
             raise ValueError(f"{target!r} is not a channel target.")
-        with self.snapshot(viewer=viewer, target=target) as (basis, records, _):
-            scope = basis.scope(target)
+        with ExitStack() as resources:
+            with _store_lock(self._wire_lock_path, shared=True):
+                marker, _, source, stream, records = resources.enter_context(
+                    self.bus.log.page_snapshot()
+                )
+                with DisplaySelection.reading(
+                    self.registry, self.catalog, self.bus.reads, viewer
+                ) as basis:
+                    scope = basis.scope(target)
+            # Identity capture does not grant custody over page preparation. Both
+            # DM and channel pages borrow the same original reader and source cut.
             page = MessagePageRequest.capture(
-                scope,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-            ).collect(records)
+                scope, before=before, after=after, limit=limit, max_bytes=max_bytes
+            ).read_opened(self.bus.log, marker, source, stream, records)
             if viewer is not None:
                 scope = replace(
                     scope,
@@ -294,13 +312,9 @@ class BusPresentation:
             if through is None:
                 # Acquire the bus cut before the registry, as publication does.
                 records = stack.enter_context(self.bus.log.verified_snapshot())
-            with (
-                self.registry.store.reading() as registry,
-                self.catalog.reading() as catalog,
-            ):
-                basis = DisplaySelection.capture(
-                    registry.snapshot(), catalog, self.bus.reads, self.bus.reads.read(), viewer
-                )
+            with DisplaySelection.reading(
+                self.registry, self.catalog, self.bus.reads, viewer
+            ) as basis:
                 current = basis.scope(target)
                 if through is None:
                     # Explicit Mark Read selects this entire opened source cut.

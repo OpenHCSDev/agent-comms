@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import BinaryIO, Literal
 
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .bus_projection import BusFileRevision
 
 
 class StaleBusPageIndexError(ValueError):
@@ -36,6 +37,16 @@ class BusPageSource(PageIndexTable, TypedTable):
     offset: int = field(metadata={"sql": Column(check="offset>=0")})
     tail: str
     singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
+
+    def covers(self, stream: BinaryIO, source: BusFileRevision) -> bool:
+        """A later append index may lend offsets within this original cut."""
+        opened = os.fstat(stream.fileno())
+        return (
+            source.opened_by(stream)
+            and self.identity[:2] == (opened.st_dev, source.inode)
+            and source.size <= self.offset <= opened.st_size
+            and self.tail == BusPageIndex._tail(stream, self.offset)
+        )
 
 
 @dataclass(frozen=True)
@@ -188,6 +199,7 @@ class BusPageIndex:
         upper: int | None,
         descending: bool,
         targets: frozenset[str] | None,
+        before_offset: int | None = None,
     ) -> Generator[BusPageRow, None, None]:
         clauses: list[str] = []
         params: list[object] = []
@@ -197,6 +209,9 @@ class BusPageIndex:
         if upper is not None:
             clauses.append("seq < ?")
             params.append(upper)
+        if before_offset is not None:
+            clauses.append("offset < ?")
+            params.append(before_offset)
         if targets is not None:
             if not targets:
                 return
