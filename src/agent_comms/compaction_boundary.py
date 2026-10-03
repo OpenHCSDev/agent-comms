@@ -6,13 +6,14 @@ import json
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .compaction_source import CompactionSource
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue, InputDispositions
+from .native_entries import NativeEvidenceRead
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativeWitness
 from .registration import Registration
@@ -29,6 +30,7 @@ class CompactionBoundary:
     registry: Registration
     inputs: InputDispositions
     future_queue: FutureInputQueue | None = None
+    native_reader: NativeEvidenceRead | None = field(default=None, kw_only=True)
 
     @property
     def root(self) -> Path:
@@ -99,7 +101,7 @@ class CompactionBoundary:
         with idle_session_writer_fence(expected.session_file) as executor_fd:
             # Read the original journal before taking any bus/registry/input
             # locks. The existing writer fence retains this exact source cut.
-            native_facts = witness.retained_task_facts()
+            native_facts = witness.retained_task_facts(self.native_reader)
             with (
                 _store_lock(self.root / "wire") as wire_lock,
                 _store_lock(self.root / "bus.jsonl") as bus_lock,
