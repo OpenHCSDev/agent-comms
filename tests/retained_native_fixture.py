@@ -13,7 +13,7 @@ from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.field_codec import FieldCodec, FieldRepresentation, PathText
-from agent_comms.input_disposition import InputDocument
+from agent_comms.input_disposition import InputDocument, InputDispositions
 from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
@@ -230,6 +230,9 @@ class RecordedNativeCheckpoint:
         SDK construction owns the current kept range and native conversion.
         """
         _, entry, _, assembly = self.capture(session, evidence)
+        return self._condition_source(session,entry,assembly)
+
+    def _condition_source(self,session,entry,assembly):
         if assembly is None:
             return {"evaluated": False,
                     "reason": "Original pre-pack summary assembly not captured"}
@@ -241,36 +244,48 @@ class RecordedNativeCheckpoint:
                 "native_entry_id": entry.id, "summary": assembly.summary,
                 "source": FieldCodec.encode(self.summary_assembly)}
 
-    def fork_condition_source(self, journal: Path, session_file: Path):
-        """Bind original captured narrative through the recorded SDK creation.
-
-        The journal's NativeForkCreation covers inherited entries, not an input
-        grant. Keep its child identity distinct from the checkpoint source;
-        later child work cannot turn a new entry into inherited source.
-        """
+    def _fork_capture(self,journal:Path,child:NativeEvidenceRead):
+        """Original creation owns inheritance for both construction and scoring."""
+        session_file=child.source.path
         creation = CompactionJournal.observe_readonly(journal, lambda db:
             NativeForkCreation.one(db, session_file=str(session_file)), absent=None)
         if creation is None:
             raise ValueError("Bounded child requires its original recorded SDK fork")
         with self.original_source() as (original, source):
             creation.source.require_same_session(original)
-            constructed = self.condition_source(original, source)
-            with NativeEntry.open_evidence(session_file) as child:
-                header, entries = child.observe()
-                selected = NativeSessionIdentity(header.id, str(session_file))
-                creation.require_same_session(selected)
-                inherited = creation.covered_prefix(child, entries)
-                if not constructed["evaluated"]:
-                    return constructed
-                identity = constructed["native_entry_id"]
-                if identity not in inherited:
-                    raise ValueError("Original checkpoint is outside the SDK fork prefix")
-                copied, _ = child.entry_index(entries)[identity]
-                original_entry, _ = source.entry_index(source.entries)[identity]
-                if copied != original_entry:
-                    raise ValueError("Original checkpoint differs from its inherited SDK entry")
-                return {**constructed, "session": FieldCodec.encode(selected),
-                        "fork_creation": FieldCodec.encode(creation)}
+            captured=self.capture(original,source)
+            header,entries=child.observe()
+            selected=NativeSessionIdentity(header.id,str(session_file))
+            creation.require_same_session(selected)
+            inherited=creation.covered_prefix(child,entries)
+            entry=captured[1]
+            if entry.id not in inherited:
+                raise ValueError("Original checkpoint is outside the SDK fork prefix")
+            copied,_=child.entry_index(entries)[entry.id]
+            if copied!=entry:
+                raise ValueError("Original checkpoint differs from its inherited SDK entry")
+            return creation,original,captured
+
+    def fork_condition_source(self,journal:Path,session_file:Path):
+        """Bind captured narrative through the recorded SDK creation, not input authority."""
+        with NativeEntry.open_evidence(session_file) as child:
+            creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child)
+            constructed=self._condition_source(original,entry,assembly)
+            if not constructed['evaluated']:
+                return constructed
+            return {**constructed,'session':FieldCodec.encode(NativeSessionIdentity(
+                creation.session_id,creation.session_file)),
+                    'fork_creation':FieldCodec.encode(creation)}
+
+    def capture_for_probe(self,session,evidence,fork_journal):
+        """A probe may follow the original cut or its corroborated SDK child."""
+        if self.reference.session_file==session.session_file:
+            return self.capture(session,evidence)
+        if fork_journal is None:
+            raise ValueError('Inherited checkpoint probe requires its original fork journal')
+        creation,_,captured=self._fork_capture(fork_journal,evidence)
+        creation.require_same_session(session)
+        return captured
 
     def inspect(self, previous: RecordedNativeCheckpoint | None = None):
         """Read a checkpoint or adjacent-cut difference without a new model input.
@@ -418,6 +433,69 @@ class RecordedNativeProbe:
     fork_journal: Annotated[Path | None, PathText] = None
     # Original diagnostic publication, not a reconstructed request or budget.
     request_observations: FileProvenance | None = None
+    condition_observation: FileProvenance | None = None
+
+    @classmethod
+    def capture_input(cls,service,owner,session,row,contexts,output,checkpoint=None,condition_observation=None):
+        """Acquire this completed input's original source publications once."""
+        from agent_comms.diagnostics import request_observation_path
+
+        def pin(name,value):
+            path=output/f'probe-{row.native_id}-{name}.private.json'
+            with path.open('x') as stream:
+                json.dump(FieldCodec.encode(value),stream,ensure_ascii=False)
+                stream.write('\n')
+            path.chmod(0o600)
+            return FileProvenance(str(path),hashlib.sha256(path.read_bytes()).hexdigest())
+
+        with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
+            context=NativeContextProof.read_evidence(Path(session.session_file),row.native_id,evidence=evidence)
+            answer,_=cls.answer_for_input(evidence,context)
+            provenance=NativeProvenance(session,context.request_generation,context.llm_context_digest)
+            manifest,=(manifest for manifest in service.bus.log.context_manifests(owner.name,service.registry)
+                       if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
+        def original(path):
+            return FileProvenance(str(path),hashlib.sha256(path.read_bytes()).hexdigest())
+
+        observed=request_observation_path(service.root,row.turn_id)
+        return cls(session,row.native_id,answer.id,checkpoint,
+            original(contexts/f'context-{context.llm_context_digest}.json'),
+            pin('manifest',manifest),original(contexts/f'segments-{context.llm_context_digest}.json'),
+            pin('inputs',InputDispositions(service.root/InputDispositions.filename).read()),
+            fork_journal=service.root/'compaction-commits.sqlite3',
+            request_observations=original(observed) if observed.is_file() else None,
+            condition_observation=original(condition_observation) if condition_observation is not None else None)
+
+    def applied_condition(self,serialized):
+        """Join this input's SDK hook to the corroborated narrative and actual bytes."""
+        if self.condition_observation is None:
+            return {'evaluated':False,'reason':'Original condition application not captured'}
+        if self.checkpoint is None or self.fork_journal is None or not serialized['evaluated']:
+            return {'evaluated':False,'reason':'Original checkpoint, fork and SDK bytes required'}
+        source=self.checkpoint.fork_condition_source(self.fork_journal,Path(self.session.session_file))
+        if not source['evaluated']:
+            return source
+        records=self.checkpoint.read_json_lines(self.condition_observation)
+        applications=tuple(row for row in records if row.get('stage')=='bounded-transform-applied'
+                           and row['input_id']==self.input_id)
+        if not applications:
+            raise ValueError('Original input has no recorded SDK condition application')
+        for applied in applications:
+            if (applied['session']!=source['session'] or
+                    applied['checkpoint_session']!=source['checkpoint_session'] or
+                    applied['native_entry_id']!=source['native_entry_id'] or
+                    applied['narrative_source']!=source['source']):
+                raise ValueError('Recorded SDK condition belongs to another original source')
+        texts=FieldCodec.decode(tuple[str,...],self.checkpoint.read_json(self.sdk_segment_bytes))
+        narrative=json.dumps(source['summary'],ensure_ascii=False)[1:-1]
+        if not any(narrative in text for text in texts):
+            raise ValueError('Captured SDK request does not contain the original bounded narrative')
+        if not any(row.get('stage')=='bounded-transform-restored' and row['input_id']==self.input_id for row in records):
+            raise ValueError('Original SDK condition hook has not retired')
+        return {'evaluated':True,'narrative_source':source['source'],
+            'checkpoint_session':source['checkpoint_session'],'session':source['session'],
+            'native_entry_id':source['native_entry_id'],
+            'scope':'Original transform and narrative present in this recorded SDK input; not final HTTP bytes or comparative recall'}
 
     def submitted_prompt(self, user):
         """Bind an original submitted source to its exact recorded native write.
@@ -598,7 +676,8 @@ class RecordedNativeProbe:
         Entry membership is not a claim about transformed provider bytes or
         complete-history capacity. Those need their own original observations.
         """
-        journal = self.checkpoint.journal if self.checkpoint is not None else self.fork_journal
+        journal = self.fork_journal if self.fork_journal is not None else (
+            self.checkpoint.journal if self.checkpoint is not None else None)
         fork = None
         if journal is not None:
             fork = CompactionJournal.observe_readonly(journal, lambda db:
@@ -655,8 +734,7 @@ class RecordedNativeProbe:
             "request_budget": budget,
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
-            "condition_evaluated": False,
-            "reason": "SDK assembly is recorded; a label does not prove full-history or truncation policy",
+            "condition_application": self.applied_condition(serialized),
         }
 
     @staticmethod
@@ -744,7 +822,8 @@ class RecordedNativeProbe:
         tools = self.tool_steps(branch)
         prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
-            attempt, entry, covered, assembly = self.checkpoint.capture(self.session, evidence)
+            attempt, entry, covered, assembly = self.checkpoint.capture_for_probe(
+                self.session,evidence,self.fork_journal)
             checkpoint = self.checkpoint._report(attempt, entry, covered, assembly)
             retained = attempt.request.retained
             scoped = self.checkpoint.scoped_facts(attempt)
