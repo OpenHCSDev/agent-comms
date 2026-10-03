@@ -169,3 +169,41 @@ Mendel606 owns RetainedNative.inspect/inspect_acquired and EmptyNative.inspect:
 required original preparation and stats publication, then one acquired query.
 BorrowedNative retains its active receiver. Those methods are unchanged here;
 normal whole-head integration will receive606 rather than duplicate its methods.
+
+## Prepared installed reader qualification
+
+The existing `native_turn_context_contract.mjs --recorded-readers` creates two
+original SDK message parts and checks one projection for root, mixed resolution,
+and exact child, rejecting missing bytes, another session, and a root read with
+only child coordinates. Its original observation is exported from TurnContext's
+existing observation producer. Ordinary S4 seed callers omit that flag and keep
+their original source construction/contract scope.
+
+The existing cold `test_native_context_inspection` fixture has one recorded-read
+case. It leases and publishes the SDK contract's original authored observation
+through NativeContextManifestData.record, retires that fixture lease normally,
+and reads the recorded root and exact child through RuntimeConnection and the
+indexed manifest membership API. Both reads use installed Core and the matching
+compiled SDK. Original native bytes and original user rows must remain unchanged;
+provider posts and new inputs must remain zero. Owner shutdown closes the child.
+No public root, original input, unknown attempt or configured model is changed.
+
+This is an authored SDK capture/installed read check, not an assertion that an
+onContextReady model request occurred. Current preview/authenticated file gates
+40603/05 retain their demonstrated native89 scope; they do not qualify future
+recorded request capture. The original f3/39 witness is also unchanged.
+
+After direct lease of the matching installed holder, run the one existing case:
+
+```sh
+PI_COMPACTION_TEST_PACKAGE=/matching/native/package \
+  /leased/holder/bin/python -m pytest -o addopts='' \
+  --basetemp=/owned/bounded/receipt-root \
+  tests/test_native_context_inspection.py::test_original_context_query_preserves_native_journal_and_dispatches_no_prompt \
+  -q -s
+```
+
+Paths above are placeholders for the actual lease, not permission to substitute
+or overlay a package. No installed qualification has run at this driver
+checkpoint. Source syntax checks passed. No source model/provider rerun is needed
+for these preparation changes; compiled production remains exactly4ab53277.

@@ -26,9 +26,30 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(native_backend):
+@pytest.mark.parametrize('recorded_readers', [True])
+async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(
+    native_backend, recorded_readers=False
+):
     fixture = native_backend
+    sdk_source = None
+    if recorded_readers:
+        import agent_comms
+
+        assert 'site-packages' in Path(agent_comms.__file__).resolve().parts
+        seed_root = fixture.root.parent / 'recorded-sdk-source'
+        seed = await asyncio.create_subprocess_exec(
+            'node', str(Path(__file__).with_name('native_turn_context_contract.mjs')),
+            os.environ['PI_COMPACTION_TEST_PACKAGE'], str(seed_root), '--recorded-readers',
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        output, error = await seed.communicate()
+        assert seed.returncode == 0, error.decode()
+        sdk_source = json.loads(output)
+        (fixture.root.parent / 'original-recorded-sdk-source.json').write_bytes(output)
+        fixture.session = Path(sdk_source['session_file'])
+        fixture.project = seed_root / 'project'
     before = fixture.session.read_bytes()
+    original_inputs = fixture.saved_inputs()
     owner = canonical_agent(
         Comms(fixture.root), agent_bin="pi",
         agent_args=["--model", "response-local/fixture", "--offline"],
@@ -62,13 +83,54 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
             assert selected == Path(thread.require_saved_session())
             assert owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry) == ()
             assert fixture.session.read_bytes() == selected_before
+            if recorded_readers:
+                from agent_comms.native_turn_context import NativeContextManifestData
+                from agent_comms.turn_context import ContextSourceText
+
+                observed = NativeContextManifestData.from_wire(sdk_source['recorded_observation'])
+                # This is the SDK contract's original authored observation, not
+                # a claim that a model request/onContextReady event happened.
+                leased = owner._comms.agents.begin_turn(thread.name, 'authored-sdk-context-read')
+                try:
+                    await observed.record(owner._comms.bus.log, leased.thread, leased.turn_lease)
+                finally:
+                    owner._comms.agents.finish_turn(leased.turn_lease)
+                original, = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
+                assert original.require_request_id() == 'authored-sdk-source-request'
+                position = next(i for i, segment in enumerate(original.segments)
+                                if segment.kind == 'transcript' and len(segment.contributors) > 1)
+                group = original.selected_segment(position)
+                child = original.selected_segment(position, (0,))
+                assert group.sha256 != child.sha256
+                source = NativeContextData.from_wire(sdk_source['full'])
+                expected_group = source.segments[position]
+                params = dict(turn=FieldCodec.encode(original.turn),
+                              request_id=original.require_request_id(), segment=position)
+                root_text = FieldCodec.decode(ContextSourceText,
+                    await connection.request('context_recorded_segment', **params))
+                child_text = FieldCodec.decode(ContextSourceText,
+                    await connection.request('context_recorded_segment', **params, contributors=[0]))
+                from agent_comms.pi_payloads import PiMessage
+
+                assert root_text.text == expected_group.public_text()
+                assert child_text.text == PiMessage.from_wire(expected_group.messages[0]).text
+                assert child_text.text != root_text.text
+                assert fixture.session.read_bytes() == selected_before
+                assert owner._comms.bus.log.latest_sequence() == 0
+                receipt = {'scope':'Installed authenticated reads of an original authored SDK capture',
+                    'model_request_capture':False, 'provider_calls':fixture.provider.posts,
+                    'new_native_inputs':0, 'original_user_rows':len(original_inputs),
+                    'original_request':original.require_request_id(),
+                    'root_text':root_text.text, 'child_text':child_text.text,
+                    'root_and_child_differ':True, 'original_native_bytes_unchanged':True}
+                (fixture.root.parent / 'recorded-reader-receipt.json').write_text(json.dumps(receipt, indent=2))
         finally:
             await connection.close()
     finally:
         await owner.shutdown()
         assert fixture.provider.posts == 0
         assert fixture.session.read_bytes().startswith(before)
-        assert fixture.saved_inputs() == []
+        assert fixture.saved_inputs() == original_inputs
     assert not prepared_child.alive()
     print("cold_context_runtime", json.dumps({"pid": prepared_child.pid,
         "source": str(fixture.session), "cold_acquisition": True,

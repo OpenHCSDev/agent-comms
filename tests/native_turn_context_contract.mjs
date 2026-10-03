@@ -33,6 +33,9 @@ const kept=manager.appendMessage({role:'user',content:[
     {type:'image',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',mimeType:'image/png'},
 ],timestamp:3});
 const compaction=manager.appendCompaction('Original source summary.',kept,100);
+const recordedEntries=[kept];
+if (process.argv.includes('--recorded-readers'))
+    recordedEntries.push(manager.appendMessage({role:'user',content:'Distinct recorded child.',timestamp:4}));
 if (process.argv.includes('--retained-history'))
     manager.appendMessage({role:'user',content:'Representative retained native history. '.repeat(3000),timestamp:4});
 manager.appendCustomMessageEntry('source-contract','Original injected delivery',true);
@@ -78,35 +81,47 @@ try {
     assert(system.provenance.some(s=>s.path===join(cwd,'.pi','APPEND_SYSTEM.md')));
     assert(!JSON.stringify(captured.manifest()).includes('Original source summary'));
     assert.deepEqual((await TurnContext.next(session)).render(),provider);
-    // Recorded roots and mixed original parts borrow one real SDK projection.
-    // Counters observe this acquisition; all data comes from the original store.
-    const selected=await TurnContext.project(session,[kept]);
-    const recorded=selected.manifest().segments.find(segment=>segment.kind==='transcript');
-    assert(recorded?.contributors.length);
-    const project=TurnContext.project;
-    let projections=0;
-    TurnContext.project=async function(...args) {
-        projections++;
-        return project.apply(this,args);
-    };
-    try {
-        const whole=await TurnContext.recordedSegment(session,full.identity,[kept],recorded,[]);
-        assert.equal(projections,1);
-        assert.equal(whole.full().segments.length,1);
-        assert.equal(whole.full().segments[0].sha256,recorded.sha256);
-        projections=0;
-        const mixed={...recorded,sha256:'c'.repeat(64)};
-        const parts=recorded.contributors;
-        const resolved=await TurnContext.recordedSegment(session,full.identity,[kept],mixed,parts);
-        assert.equal(projections,1);
-        assert.deepEqual(resolved.full().segments.map(segment=>segment.sha256),parts.map(part=>part.sha256));
-        await assert.rejects(TurnContext.recordedSegment(session,full.identity,[kept],mixed,[]),/projected bytes differ/);
-        await assert.rejects(TurnContext.recordedSegment(session,full.identity,[kept],mixed,
-            [{...parts[0],sha256:'f'.repeat(64)}]),/projected bytes differ/);
-        await assert.rejects(TurnContext.recordedSegment(session,{...full.identity,sessionId:'another'},
-            [kept],recorded,[]),/another native session/);
-    } finally {TurnContext.project=project;}
-    assert.deepEqual(readFileSync(manager.getSessionFile()),before);
+    if (process.argv.includes('--recorded-readers')) {
+        // Recorded roots and mixed original parts borrow one real SDK projection.
+        // Counters observe this acquisition; all data comes from the original store.
+        const selected=await TurnContext.project(session,recordedEntries);
+        const recorded=selected.manifest().segments.find(segment=>segment.kind==='transcript');
+        assert(recorded?.contributors.length);
+        const project=TurnContext.project;
+        let projections=0;
+        TurnContext.project=async function(...args) {
+            projections++;
+            return project.apply(this,args);
+        };
+        try {
+            const whole=await TurnContext.recordedSegment(session,full.identity,recordedEntries,recorded,[]);
+            assert.equal(projections,1);
+            assert.equal(whole.full().segments.length,1);
+            assert.equal(whole.full().segments[0].sha256,recorded.sha256);
+            projections=0;
+            const child=recorded.contributors[0];
+            assert.notEqual(child.sha256,recorded.sha256);
+            const childEntries=child.provenance.find(source=>source.kind==='journal').entries;
+            const childRead=await TurnContext.recordedSegment(session,full.identity,childEntries,child,[]);
+            assert.equal(projections,1);
+            assert.equal(childRead.full().segments[0].sha256,child.sha256);
+            assert.notEqual(childRead.full().segments[0].sha256,recorded.sha256);
+            await assert.rejects(TurnContext.recordedSegment(session,full.identity,childEntries,recorded,
+                recorded.contributors),/projected bytes differ/);
+            projections=0;
+            const mixed={...recorded,sha256:'c'.repeat(64)};
+            const parts=recorded.contributors;
+            const resolved=await TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,parts);
+            assert.equal(projections,1);
+            assert.deepEqual(resolved.full().segments.map(segment=>segment.sha256),parts.map(part=>part.sha256));
+            await assert.rejects(TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,[]),/projected bytes differ/);
+            await assert.rejects(TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,
+                [{...parts[0],sha256:'f'.repeat(64)}]),/projected bytes differ/);
+            await assert.rejects(TurnContext.recordedSegment(session,{...full.identity,sessionId:'another'},
+                recordedEntries,recorded,[]),/another native session/);
+        } finally {TurnContext.project=project;}
+        assert.deepEqual(readFileSync(manager.getSessionFile()),before);
+    }
     const conditions = process.argv.includes('--source-projections')
         ? await constructNativeConditions(session, pkg) : undefined;
     if (conditions) {
@@ -186,5 +201,10 @@ try {
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
         kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions,
+        ...(process.argv.includes('--recorded-readers') ? {
+            recorded_observation:captured.observation('authored-sdk-source-request'),
+            recorded_reader_scope:'Authored SDK capture and root/child resolution; no onContextReady model request',
+            root_single_projection:true,child_uses_original_coordinates:true,
+            mixed_single_projection:true,missing_or_other_session_refused:true} : {}),
         bounded_construction_scope:conditions ? 'Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline' : undefined}));
 } finally {session.dispose();}
