@@ -290,13 +290,12 @@ async def test_original_summary_assembly_inspector(tmp_path):
     from summary_prefix_configured_installed_journey import observe_native_requests
     import hashlib
 
-    pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     summaries = tmp_path / "summary-assemblies"
     summaries.mkdir(mode=0o700)
     observation = tmp_path / "original-observations.jsonl"
     async with native_summary_owner(tmp_path, 200) as fixture:
-        with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
-            package, session, original, preparation, selected, settings, calls, _, launch = fixture
+        package, session, original, preparation, selected, settings, calls, _, launch = fixture
+        with observe_native_requests(package, observation, summaries=summaries) as observe_launch:
             child, _, exchange, errors = await launch(observe_launch=observe_launch)
             command = AgentCommsSummarizeCompaction(
                 id="original-source-capture", version=1, operation_id=uuid4().hex,
@@ -333,12 +332,11 @@ async def test_summary_observer_releases_before_native_eof(tmp_path):
     """The same observation resource closes before native EOF; no generation."""
     from summary_prefix_configured_installed_journey import observe_native_requests
 
-    pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     summaries = tmp_path / "summary-assemblies"
     summaries.mkdir(mode=0o700)
     async with native_summary_owner(tmp_path, 200) as fixture:
         package, session, original, _, _, _, calls, _, launch = fixture
-        with observe_native_requests(pin, tmp_path / "observations.jsonl",
+        with observe_native_requests(package, tmp_path / "observations.jsonl",
                                      summaries=summaries) as observe_launch:
             child, _, _, errors = await launch(observe_launch=observe_launch)
             child.stdin.close()
