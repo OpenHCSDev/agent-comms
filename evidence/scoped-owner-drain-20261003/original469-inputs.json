@@ -1,0 +1,206 @@
+{
+  "source": "running original read-only committed SQLite snapshot; no stopped-custody claim",
+  "sequence": 469,
+  "inputs": [
+    {
+      "input_id": "2402a222db67d372974e44535d2c0cd8",
+      "owner": "openhcs-helper2",
+      "stage": "triage",
+      "session_id": "01a0eed9-e545-72c7-a2fa-d3870585abee",
+      "session_entry_id": "87ce0b58",
+      "request_generation": 48,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl"
+    },
+    {
+      "input_id": "2a426de23817e2b81af0fd8ba5923e10",
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "stage": "full",
+      "session_id": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "session_entry_id": "6b7300fa",
+      "request_generation": 130,
+      "execution_id": "wirev135c40270e07a34406541ab454e2a184b071259726529737e599201b01b7d1f35",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl"
+    },
+    {
+      "input_id": "30d8219585c717c87ab0454b71dad5cb",
+      "owner": "compaction499-live-architecture-memory",
+      "stage": "triage",
+      "session_id": "01a0f9aa-a804-77e8-8107-3d93fcaec806",
+      "session_entry_id": "baedbd24",
+      "request_generation": 93,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T22-51-46-051Z_01a0f9aa-a804-77e8-8107-3d93fcaec806.jsonl"
+    },
+    {
+      "input_id": "3293904d13c231a942e2f3e4263c1752",
+      "owner": "openhcs-helper2",
+      "stage": "full",
+      "session_id": "01a0eed9-e545-72c7-a2fa-d3870585abee",
+      "session_entry_id": "b7243094",
+      "request_generation": 49,
+      "execution_id": "wirev1720f7ce29104b387843b7285f3516bebe3343dd03561d15a0e9d1ea9d7a007b0",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl"
+    },
+    {
+      "input_id": "585f1123e6c6cc8ffe5348452f863204",
+      "owner": "compaction499-live-architecture-memory",
+      "stage": "full",
+      "session_id": "01a0f9aa-a804-77e8-8107-3d93fcaec806",
+      "session_entry_id": "e19258ce",
+      "request_generation": 94,
+      "execution_id": "wirev1058007e35c2520ce681c3fb49b06ad0001656f1cfff10b50ef9c8d7fc78225ad",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T22-51-46-051Z_01a0f9aa-a804-77e8-8107-3d93fcaec806.jsonl"
+    },
+    {
+      "input_id": "5c29cf4156b99d409c3f23b37a19f479",
+      "owner": "openhcs-audit-open-prs",
+      "stage": "triage",
+      "session_id": "01a0f860-e719-7127-8b6d-b4a808991c79",
+      "session_entry_id": "41977518",
+      "request_generation": 37,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-35-321Z_01a0f860-e719-7127-8b6d-b4a808991c79.jsonl"
+    },
+    {
+      "input_id": "6811e7def03bb9a7eab80a5f4eec0afd",
+      "owner": "openhcs-architecture-memory",
+      "stage": "triage",
+      "session_id": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+      "session_entry_id": "c3d7c4bf",
+      "request_generation": 117,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-29T04-00-11-362Z_01a0eb51-f263-778e-b2f4-a2d3a9b65d01.jsonl"
+    },
+    {
+      "input_id": "6f3145f3a18ba4459bd74a15224d68c4",
+      "owner": "openhcs-helper",
+      "stage": "full",
+      "session_id": "01a0ee8c-8c10-77cc-a306-2f47d15ba7d0",
+      "session_entry_id": "85bfb8df",
+      "request_generation": 154,
+      "execution_id": "wirev1244a3afced3659d04740f91d3ce9b1b6afc3ebae742059e5b4616d9a47e282c5",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl"
+    },
+    {
+      "input_id": "81c49fe87bdc2e0ceafc2ff75dbece23",
+      "owner": "openhcs-audit-merged-models",
+      "stage": "full",
+      "session_id": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+      "session_entry_id": "ca15c8ce",
+      "request_generation": 38,
+      "execution_id": "wirev192b2ee2f209f87cf63cef9bda11a8bc1b24c4094e0511bdc5478d01090fd7d09",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-46-206Z_01a0f860-273f-749b-b07a-3c8b4cf6290e.jsonl"
+    },
+    {
+      "input_id": "86cc6bdca3485a7bd7a435063ab444df",
+      "owner": "openhcs-architecture-memory",
+      "stage": "full",
+      "session_id": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+      "session_entry_id": "d77ce0f9",
+      "request_generation": 118,
+      "execution_id": "wirev1ea8ffbcc4dcd82227fc773f37c724d09a6fa13bada4b1fa2bc3a67724bf5e9eb",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-29T04-00-11-362Z_01a0eb51-f263-778e-b2f4-a2d3a9b65d01.jsonl"
+    },
+    {
+      "input_id": "921f7e5b1b1998e8da85ad7420aaa8ce",
+      "owner": "openhcs-audit-merged-boundaries",
+      "stage": "triage",
+      "session_id": "01a0f860-8c7e-7129-8d3f-c358fe68ad60",
+      "session_entry_id": "ab248d25",
+      "request_generation": 27,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl"
+    },
+    {
+      "input_id": "99c8a0ecae2b85d65691a4c800ef95f5",
+      "owner": "openhcs-audit-merged-runtime",
+      "stage": "full",
+      "session_id": "01a0f85f-c742-756b-9a21-4f02f7bea72e",
+      "session_entry_id": "21fff39e",
+      "request_generation": 40,
+      "execution_id": "wirev1d52226d8b985a5f918cd95d10876e2502845f2f1718db275a4f52c67a46f8407",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl"
+    },
+    {
+      "input_id": "ad2b57d330d8d251a0d241bb5a43163c",
+      "owner": "openhcs-audit-merged-runtime",
+      "stage": "triage",
+      "session_id": "01a0f85f-c742-756b-9a21-4f02f7bea72e",
+      "session_entry_id": "e5f5233e",
+      "request_generation": 39,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl"
+    },
+    {
+      "input_id": "b6ba070371312a50b0209c23de7fff42",
+      "owner": "openhcs-audit-merged-models",
+      "stage": "triage",
+      "session_id": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+      "session_entry_id": "f2565f4d",
+      "request_generation": 37,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-46-206Z_01a0f860-273f-749b-b07a-3c8b4cf6290e.jsonl"
+    },
+    {
+      "input_id": "c06e5f1a83d25a7b168f6d239c39076a",
+      "owner": "openhcs-audit-merged-boundaries",
+      "stage": "full",
+      "session_id": "01a0f860-8c7e-7129-8d3f-c358fe68ad60",
+      "session_entry_id": "8fd730ef",
+      "request_generation": 28,
+      "execution_id": "wirev1c9f2e9f0f2f12f2bb5eb1d9009141aad6c9a1ff2e16b8d2446ae839c508e1e7d",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl"
+    },
+    {
+      "input_id": "c4a54b367200bc0b2b84643c7f65e6ec",
+      "owner": "openhcs-audit-open-prs",
+      "stage": "full",
+      "session_id": "01a0f860-e719-7127-8b6d-b4a808991c79",
+      "session_entry_id": "82e63744",
+      "request_generation": 38,
+      "execution_id": "wirev1ae09a20587458a6c4c9ad3ee3cb67e54907996ba613ea3c8dd79ab18bddab478",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-35-321Z_01a0f860-e719-7127-8b6d-b4a808991c79.jsonl"
+    },
+    {
+      "input_id": "c79f359bca5a45ac45e4937950cbdb44",
+      "owner": "compaction501-live-architecture-memory",
+      "stage": "full",
+      "session_id": "01a0f9f6-16a7-7101-ac0f-6cb7639f1949",
+      "session_entry_id": "011fbf37",
+      "request_generation": 49,
+      "execution_id": "wirev15703f4dc78036471144ca93d4dec458844771417d64dea97a3797ba449866234",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-02T00-14-09-575Z_01a0f9f6-16a7-7101-ac0f-6cb7639f1949.jsonl"
+    },
+    {
+      "input_id": "d75aaaaa096eb4362b2edbe775a8671c",
+      "owner": "compaction501-live-architecture-memory",
+      "stage": "triage",
+      "session_id": "01a0f9f6-16a7-7101-ac0f-6cb7639f1949",
+      "session_entry_id": "0f5b5c94",
+      "request_generation": 48,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-02T00-14-09-575Z_01a0f9f6-16a7-7101-ac0f-6cb7639f1949.jsonl"
+    },
+    {
+      "input_id": "d79a23fcced6c7c0d64028ce98ae735f",
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "stage": "triage",
+      "session_id": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "session_entry_id": "320be616",
+      "request_generation": 129,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl"
+    },
+    {
+      "input_id": "f147201d70ea31d20296e512b697a34e",
+      "owner": "openhcs-helper",
+      "stage": "triage",
+      "session_id": "01a0ee8c-8c10-77cc-a306-2f47d15ba7d0",
+      "session_entry_id": "78dc4cf7",
+      "request_generation": 153,
+      "execution_id": null,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl"
+    }
+  ]
+}

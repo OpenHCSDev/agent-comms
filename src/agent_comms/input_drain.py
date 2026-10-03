@@ -8,6 +8,7 @@ import sqlite3
 import time
 from dataclasses import replace
 from contextlib import aclosing
+from functools import partial
 from typing import Any
 
 from acp import RequestError
@@ -32,7 +33,12 @@ from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .agent_events import Done
 from .comms import Comms
 from .input_origin import InputOrigin, UnattributedInputOrigin
-from .coordination_errors import CoordinationError
+from .coordination_errors import CoordinationError, IdentityConflict
+from .coordination_cohort import next_sealed_assignment
+from .coordinator import Coordination
+from .bus_publication import stable_thread_lookup
+from .cursor_owner import CursorOwner
+from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
@@ -42,7 +48,7 @@ from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import WakeScheduleCheck
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
@@ -270,8 +276,39 @@ class InputDrain(FutureInputQueue):
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
             return await self.drain_owned_inbox(session_id)
 
-    def _private_observation_revision(self, session_id: str, root_id: str) -> tuple:
-        """Cheap source revisions; never a receipt, cursor, or owner authority."""
+    def _private_observation_revision(
+        self, session_id: str, root_id: str, store: Coordination,
+    ) -> tuple:
+        """Original owner/work observations, never delivery or replay authority.
+
+        Other owners' registry phases and SQL writes cannot change this owner's
+        observation. Committed wire messages, own pending/recovered work and
+        physical replacement still can. Silent context records consume bytes,
+        not the message cut used to select delivery.
+        """
+        with self.comms.bus.log.certified_read(blocking=False) as source:
+            if source.marker.root_id != root_id:
+                raise IdentityConflict("private drain original root changed")
+            wire = (
+                source.witness.source_identity,
+                source.committed_sequence(),
+                source.marker.admission_after_seq,
+            )
+        registry = self.comms.registry.snapshot()
+        thread = registry.require(self.sessions.require(session_id))
+        owner = RegistryOwner(
+            thread=thread, admission_generation=registry.admission_generations[thread.name],
+        )
+        with store.session.read():
+            participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+            pending = next_sealed_assignment(
+                store, participant.lookup, owner.thread.name, after_seq=wire[-1],
+            )
+            cursor = CursorOwner(
+                thread=owner.thread, admission_generation=owner.admission_generation,
+                wire_root_id=root_id, generation=participant.participant_generation,
+            ).cursor(store.session._connection)
+            original = store.session.path.stat()
         return (
             root_id,
             self.effects._private_nk_native_package,
@@ -281,16 +318,21 @@ class InputDrain(FutureInputQueue):
             session_id in self.backend_inboxes,
             self.effects.turns.turn_state(session_id).busy,
             session_id in self.effects.turns.turn_tasks,
-            file_revision(self.comms.bus.log.path),
-            file_revision(self.comms.registry.store.path),
-            file_revision(self.comms.root / ".registry-owner-guard"),
-            file_revision(self.comms.root / "coordination.sqlite3"),
+            wire,
+            owner,
+            registry.statuses[thread.name],
+            participant,
+            pending,
+            cursor,
+            (original.st_dev, original.st_ino),
         )
 
     async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
         # The caller still validates the current private marker each time. The
         # ordinary loop still synchronizes configuration and schedules goals.
-        before = self._private_observation_revision(session_id, root_id)
+        observe = partial(self._private_observation_revision, session_id, root_id)
+        path = self.comms.root / "coordination.sqlite3"
+        before = await Coordination.run_async(path, observe, lock_timeout=0)
         if self._idle_private_revisions.get(session_id) == before:
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
@@ -298,7 +340,7 @@ class InputDrain(FutureInputQueue):
         result = await self.effects._drain_private_nk(session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.
-        if result == 0 and before == self._private_observation_revision(session_id, root_id):
+        if result == 0 and before == await Coordination.run_async(path, observe, lock_timeout=0):
             self._idle_private_revisions[session_id] = before
         return result
 

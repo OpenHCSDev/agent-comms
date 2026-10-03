@@ -18,7 +18,6 @@ from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
 from .native_entries import NativeEvidenceScope
-from .native_input_record import UnrecordedNativeInputReference
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
@@ -137,11 +136,14 @@ class NativeSourceCursor:
                 or injected < prior.injected_seq
             ):
                 raise IdentityConflict("current cursor would change owner or regress")
-            if not identity.matches_prefix(db, evidence):
-                return prior
-            if not identity.admits(db, proof, injected, prior, committed_input_id):
-                return prior
-            return self._publish(db, identity, prior, coverage, proof)
+            cursor = prior
+            if identity.matches_prefix(db, evidence) and identity.admits(
+                db, proof, injected, prior, committed_input_id
+            ):
+                cursor = self._publish(db, identity, prior, coverage, proof)
+            if cursor is not None:
+                identity.require_coverage(db, cursor, coverage)
+            return cursor
 
     @staticmethod
     def _publish(
@@ -188,6 +190,11 @@ class NativeSourceCursor:
             )
             if updated.rowcount != 1:
                 raise StaleFence("current cursor monotonic update lost its fence")
+        else:
+            # Equal bounds did not write a new row. Publish the exact durable
+            # result, including its original native reference, rather than a
+            # newly constructed candidate.
+            return prior
         return cursor
 
     def read(self, *, owner_name: str) -> CurrentNativeCursor | None:
@@ -237,22 +244,8 @@ class NativeSourceCursor:
         self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,
         source_reads: NativeEvidenceScope,
     ) -> ProvenSourceCoverage:
-        if cursor.owner_identity != owner.participant_identity:
-            raise IdentityConflict("current native cursor owner identity differs")
         coverage = sources.prefix(through_seq=cursor.covered_seq, source_reads=source_reads)
-        if cursor.covered_seq > coverage.covered_seq or (
-            cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
-        ):
-            raise IdentityConflict("current native cursor exceeds canonical source proof")
-        evidence = coverage.evidence(through_seq=cursor.covered_seq)
         with self.store.session.read():
             assert_native_runtime_schema(self.store.session._connection)
-            if not owner.matches_prefix(self.store.session._connection, evidence):
-                raise IdentityConflict("current cursor borrows historical owner source proof")
-        proof = coverage.last_proof(cursor.injected_seq)
-        expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
-        if cursor.reference != expected:
-            raise IdentityConflict("current native cursor proof differs from journal")
-        if proof is not None and proof.owner_identity != owner.participant_identity:
-            raise IdentityConflict("current native cursor proof belongs to another owner")
+            owner.require_coverage(self.store.session._connection, cursor, coverage)
         return coverage

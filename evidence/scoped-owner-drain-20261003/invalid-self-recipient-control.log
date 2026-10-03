@@ -1,0 +1,114 @@
+F..F...                                                                  [100%]
+=================================== FAILURES ===================================
+_____ test_quiescent_private_drain_does_no_package_or_repeated_cursor_work _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-64hsww9v')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f54a346e650>
+
+    @pytest.mark.asyncio
+    async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _root_id = _session(tmp_path)
+        # An empty cursor still requires recovery. A genuine absent-audience
+        # initial supplies a coverage-only cursor without a native input.
+>       comms.messaging.send_initial_cohort("sender", "sender", "sender's original source")
+
+tests/test_private_idle_drain.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:119: in send_initial_cohort
+    Message(sender=sender, target=target, body=body, type=type, notice=notice)
+<string>:15: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Message(sender='sender', target='sender', body="sender's original source", type=<MessageType.INFO: 'info'>, timestamp=...ThreadRole.AGENT: 'agent'>, membership=None, notice=False, mentions=(), claim_transition=None, task=NoTaskAttachment())
+
+    def __post_init__(self) -> None:
+        if not self.sender:
+            raise RelationViolationError("Message sender cannot be empty.")
+        if not self.target:
+            raise RelationViolationError("Message target cannot be empty.")
+        if not self.body:
+            raise ValueError("Message body cannot be empty.")
+        self.task.require_sender(self.sender)
+        if self.claim_transition is not None:
+            transition = self.claim_transition
+            if type(transition) is not ClaimTransition or (
+                self.seq > 0
+                and (
+                    transition.owner != self.sender
+                    or transition.seq != self.seq
+                    or transition.message_id != self.message_id
+                )
+            ):
+                raise RelationViolationError("Claim transition does not bind this message.")
+        if any(
+            not (0 <= mention.start < mention.end <= len(self.body))
+            or self.body[mention.start] != "@"
+            for mention in self.mentions
+        ):
+            raise ValueError("Mention ranges must identify text in the message body.")
+        if not is_channel_target(self.target):
+            # DM: a thread name; sending to yourself is not a conversation.
+            if self.sender == self.target:
+>               raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")
+E               agent_comms.errors.RelationViolationError: Thread 'sender' cannot message itself.
+
+src/agent_comms/messages.py:162: RelationViolationError
+______ test_new_inputs_and_recovery_revision_invalidate_idle_observation _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-nce4vlo0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f54a26d1350>
+
+    @pytest.mark.asyncio
+    async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_path, monkeypatch):
+        comms, agent, _root_id = _session(tmp_path)
+>       comms.messaging.send_initial_cohort("sender", "sender", "sender's original source")
+
+tests/test_private_idle_drain.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:119: in send_initial_cohort
+    Message(sender=sender, target=target, body=body, type=type, notice=notice)
+<string>:15: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Message(sender='sender', target='sender', body="sender's original source", type=<MessageType.INFO: 'info'>, timestamp=...ThreadRole.AGENT: 'agent'>, membership=None, notice=False, mentions=(), claim_transition=None, task=NoTaskAttachment())
+
+    def __post_init__(self) -> None:
+        if not self.sender:
+            raise RelationViolationError("Message sender cannot be empty.")
+        if not self.target:
+            raise RelationViolationError("Message target cannot be empty.")
+        if not self.body:
+            raise ValueError("Message body cannot be empty.")
+        self.task.require_sender(self.sender)
+        if self.claim_transition is not None:
+            transition = self.claim_transition
+            if type(transition) is not ClaimTransition or (
+                self.seq > 0
+                and (
+                    transition.owner != self.sender
+                    or transition.seq != self.seq
+                    or transition.message_id != self.message_id
+                )
+            ):
+                raise RelationViolationError("Claim transition does not bind this message.")
+        if any(
+            not (0 <= mention.start < mention.end <= len(self.body))
+            or self.body[mention.start] != "@"
+            for mention in self.mentions
+        ):
+            raise ValueError("Mention ranges must identify text in the message body.")
+        if not is_channel_target(self.target):
+            # DM: a thread name; sending to yourself is not a conversation.
+            if self.sender == self.target:
+>               raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")
+E               agent_comms.errors.RelationViolationError: Thread 'sender' cannot message itself.
+
+src/agent_comms/messages.py:162: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_private_idle_drain.py::test_quiescent_private_drain_does_no_package_or_repeated_cursor_work
+FAILED tests/test_private_idle_drain.py::test_new_inputs_and_recovery_revision_invalidate_idle_observation
+2 failed, 5 passed in 2.28s
