@@ -1,0 +1,9 @@
+{
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7c2a2e644420c349/node_modules/@earendil-works/pi-coding-agent",
+  "source_hashes": {
+    "native-session-entry-store.mjs": "d1595267809937b4dc7b6aaf43b420805c6702732620d7faddd26cf0ebb876c4",
+    "native-session-context.mjs": "b644b4283b4059587a9883602910b4868adde69907dd740e1a636062ffcdf5fd",
+    "native-turn-context.mjs": "11bcccebf0234a0ca5e2eeb9293637eb481ba8a73304e9ec14c7f3e4294443e4"
+  },
+  "compiled_source_bytes_equal": true
+}
