@@ -377,6 +377,9 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
     @contextmanager
     def concurrent_public_mark(*, need_sequence=True):
         with original(need_sequence=need_sequence) as snapshot:
+            if started.is_set():
+                yield snapshot
+                return
             writer = WorkerThread(target=mark_then_append, daemon=True)
             writer.start()
             assert started.wait(timeout=3) and not finished.is_set()
