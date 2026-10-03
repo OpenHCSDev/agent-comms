@@ -1423,10 +1423,14 @@ class ChildCommand(DeclaredFamily, affix="Command"):
     def argv(self) -> tuple[str, ...]:
         return (
             sys.executable,
-            "-m",
-            "agent_comms.child_process",
+            "-c",
+            "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),
         )
+
+    @classmethod
+    def main(cls) -> None:
+        FieldCodec.decode(cls, json.loads(sys.argv[1])).run()
 
     @abstractmethod
     def run(self) -> None: ...
@@ -1483,7 +1487,3 @@ class WatchDeadlineCommand(ChildCommand):
         os.fstat(self.descriptor)
         print("armed", flush=True)
         platform.watch_deadline(self.descriptor, self.deadline)
-
-
-if __name__ == "__main__":
-    FieldCodec.decode(ChildCommand, json.loads(sys.argv[1])).run()
