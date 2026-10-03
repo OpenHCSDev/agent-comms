@@ -32,7 +32,7 @@ async def _exchange_observation(
     *,
     expected_package: Path,
     timeout: float,
-) :
+):
     """One read-only request; every uncertain transport retires the borrowed child."""
     if not 0 < timeout <= request.observation_timeout_seconds:
         raise ValueError("Bounded selected Pi deadline required")
