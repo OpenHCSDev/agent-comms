@@ -54,5 +54,22 @@ child directly without calling prepare. Its shared generic inspect method is603-
 Concrete coordinated change: required original preparation/stats publication on retained
 inspection, then its existing acquired query; Empty prepares once and consumes that
 acquired query directly. Borrowed active-reader correlation remains owned by the actual
-TurnSession/AgentInfo stream. Method edit is coordinated directly with Arendt; no query
-reader, usage formula, optional publisher or retained-usage cache is introduced.
+TurnSession/AgentInfo stream. Arendt granted those exact methods at603507df9c8; whole head merged normally first.
+Both leaf paths now consume the acquired query after exactly one required preparation.
+The active BorrowedNative method is byte-unchanged. No query reader, usage formula,
+optional publisher or retained-usage cache is introduced.
+
+Final family census: source-after.json uses the existing NRA parser across complete Core
+and Toad production roots. Missing native usage remains absent: original native89
+getContextUsage returns null tokens if latest compaction has no later assistant usage;
+GetSessionStats/UsageAccount preserve that distinction rather than using Tree counters.
+StatsRequest failed responses do not fabricate measurement; original child/response
+retention and failure handling remain determining. Runtime info is published only after
+original idle retention and model attestation, before ACP info effects. Existing managed
+turn before/after AgentInfo hooks preserve exact native-attachment/lease/config semantics.
+
+Package605 preimage is archived/readback-verified separately before granted540 reuse.
+603 whole-head normal integration carries its reviewed f3dd manifest; native89 differs
+from that fulltree commitment. No installed trust mutation or manifest edit is performed:
+matched existing native artifact selection is coordinated with parent/Sch for qualification.
+603's new recorded-parts query is not exercised by606 cold/current-context acceptance.
