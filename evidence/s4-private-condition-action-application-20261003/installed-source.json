@@ -1,0 +1,12 @@
+{
+  "revision": "da8cce269055c0025703680a5b405aada798741d",
+  "python": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s523-runtime/bin/python",
+  "sources": {
+    "native_tools.py": "22c71d45ede2f69a9701d554e42d03cb7aab049ad924c07acc23cc7800ff00fc",
+    "pi_payloads.py": "f16823b12d4f32544870a19c83aa9b229aae9acba291d476dbc334a6f841d1a0",
+    "task_sources.py": "415d102ca6694c9838d27f858a2926b4814b058f2ed44a29d691b4cf1952ac71",
+    "field_codec.py": "8050f19bffa36118bac4e852836c86c76fabe22eb9c0292dbf01f15158eb2eb5"
+  },
+  "source_matches": true,
+  "native_processes_started": 0
+}

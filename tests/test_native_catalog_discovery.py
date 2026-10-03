@@ -20,6 +20,101 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
+async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_backend, monkeypatch):
+    """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms import native_pi
+    from agent_comms import coordinated_runtime
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_session_reopen import NativeSessionIdentity
+    from agent_comms.selected_session import SavedSelectedSession
+
+    source_name = os.environ.get("PI_LAUNCH_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_LAUNCH_TEST_SOURCE to an actual completed native source")
+    native = native_backend
+    source = Path(source_name).resolve(strict=True)
+    before = hashlib.sha256(source.read_bytes()).hexdigest()
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        str(package), str(source), str(native.project),
+        directory=str(native.project / "launch-sessions"),
+    ), cwd=native.project)
+    session = SavedSelectedSession(created.path.parent,
+        identity=NativeSessionIdentity(created.session_id, created.session_file))
+    execution = SelectedExecution(root=native.root,
+        wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+        owner_name="launch-custody", native_package=package)
+    verifications = []
+    verify = native_pi._trusted_package
+
+    def observed(artifact):
+        verifications.append(artifact)
+        return verify(artifact)
+
+    monkeypatch.setattr(native_pi, "_trusted_package", observed)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", observed)
+    await Coordination.run_worker(execution.validate)
+    launches, children = [], []
+    for stage in range(2):
+        if stage:
+            # A new stage consumes current auth/config, not the old launch key.
+            (native.config / "auth.json").write_text(json.dumps({
+                "response-local": {"type": "api_key", "key": "changed-local-only"},
+            }))
+        launch = await Coordination.run_worker(partial(execution.tracked_launch,
+            package, worktree=native.project, session=session,
+            provider="response-local", model="fixture", thinking_level="off"))
+        authentication = launch.configuration.auth_revision()
+        launches.append((launch, authentication))
+        child = await PiSessionChild.start((launch, authentication), session.attestation())
+        children.append(child)
+        try:
+            async with asyncio.timeout(20):
+                pending = child.attestation
+                response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+                pending.accept(response).require_identity().require_same_session(session.identity)
+        finally:
+            await child.close()
+        assert child.proc.retired and await child.stderr_task == ""
+    assert len(verifications) == 2  # pre-claim plus first fresh acquired launch
+    assert launches[0][1] != launches[1][1]
+    assert children[0].proc.identity != children[1].proc.identity
+    with pytest.raises(native_pi.NativePiUnavailable, match="differs from its acquired"):
+        await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
+            package.parent, acquired_launch=launches[0][0],
+            worktree=native.project, session=session,
+            provider="response-local", model="fixture"))
+    malformed = native.project / "malformed.jsonl"
+    malformed.write_text("{}\n")
+    wrong = SavedSelectedSession(malformed.parent,
+        identity=NativeSessionIdentity(created.session_id, str(malformed)))
+    with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
+        await Coordination.run_worker(partial(execution.tracked_launch,
+            package, worktree=native.project, session=wrong,
+            provider="response-local", model="fixture"))
+    # Independent new acquisition still verifies the real artifact.
+    await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
+        package, worktree=native.project, session=session,
+        provider="response-local", model="fixture"))
+    assert len(verifications) == 3 and native.provider.posts == 0
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == before
+    print("actual_selected_launch_custody", json.dumps({
+        "preclaim_and_first_verifications": 2, "borrowed_verifications": 0,
+        "independent_verifications": 1, "auth_changed": True,
+        "children_retired": [child.proc.retired for child in children],
+        "source_bytes": source.stat().st_size, "source_sha256": before,
+        "provider_requests": native.provider.posts,
+    }), flush=True)
+
+
 @pytest.fixture
 async def catalog_owner(native_backend, monkeypatch):
     native = native_backend
@@ -190,3 +285,250 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         assert not channel.pending._pending
     assert len(children) == 1 and not children[0].alive()
     print("actual_native_setting_results", observed)
+
+
+@pytest.mark.parametrize("driver", ["immutable_cli", "sdk_callbacks"])
+async def test_actual_native_replacement_callback_once_and_cancel(native_backend, monkeypatch, driver):
+    """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+    from functools import partial
+    from uuid import uuid4
+
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    import hashlib
+    import os
+    from pathlib import Path
+
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.pi_commands import GetState, UnknownCommand
+
+    native = native_backend
+    source_name = os.environ.get("PI_REPLACEMENT_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_REPLACEMENT_TEST_SOURCE to an actual completed saved native session")
+    source = Path(source_name).resolve(strict=True)
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        directory=str(native.project / "replacement-sessions"),
+    ), cwd=native.project)
+    events = native.project / "replacement-events.jsonl"
+    cancelled_target = native.project / "cancelled.jsonl"
+    command = "pi"
+    if driver == "sdk_callbacks":
+        from native_event_host import install_event_host
+        from urllib.parse import urlsplit
+
+        address = urlsplit(json.loads((native.config / "models.json").read_text())["providers"]["response-local"]["baseUrl"])
+        command = "sdk-replacement-probe"
+        install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
+                           replacement_probe=events, cancelled_session=cancelled_target)
+    launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+        command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+               "--offline", "--no-extensions",
+               "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+        worktree=native.project, session_file=created.session_file,
+    ))
+
+    def observed():
+        return [json.loads(row) for row in events.read_text().splitlines()]
+
+    async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
+        channel = PiRpcChannel(child.stdout)
+        errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+
+        async def state():
+            request = GetState(id=uuid4().hex)
+            try:
+                response = await request.exchange(channel, child.stdin, strict=True)
+            except EOFError as error:
+                error.add_note(await errors)
+                raise
+            return response.require_request(request)
+
+        async def replacement(frame):
+            # These are vendor RPC frames, including fork's external entryId.
+            # The original open-command representation and channel decode own
+            # framing; this control creates no replacement pending registry.
+            identity = uuid4().hex
+            command = UnknownCommand(wire={"id": identity, **frame})
+            child.stdin.write(channel.command_bytes(command))
+            await child.stdin.drain()
+            while True:
+                event = await channel.receive(strict=True)
+                assert event is not None, await errors
+                if isinstance(event, Response) and event.id == identity:
+                    assert event.success, event
+                    return event.data.require_payload()
+
+        initial = await state()
+        if driver == "sdk_callbacks":
+            assert len(observed()) == 1 and observed()[0]["sessionId"] == initial.session_id
+        # Fork-before requires an actual user message, unlike clone-at. Ask
+        # the active SDK owner, not the raw saved-file tail, for that operand.
+        messages = await replacement({"type": "get_fork_messages"})
+        entry = messages.payload["messages"][-1]["entryId"]
+        for frame in (
+            {"type": "switch_session", "sessionPath": created.session_file},
+            {"type": "clone"},
+            {"type": "fork", "entryId": entry},
+            {"type": "new_session"},
+        ):
+            previous = await state()
+            if driver == "sdk_callbacks":
+                count = len(observed())
+            await replacement(frame)
+            current = await state()
+            assert current.session_id
+            if frame["type"] == "switch_session":
+                assert current.identity == previous.identity
+            else:
+                assert current.session_id != previous.session_id
+            if driver == "sdk_callbacks":
+                assert len(observed()) == count + 1, (frame, observed())
+                assert observed()[-1]["sessionId"] == current.session_id
+        if driver == "sdk_callbacks":
+            before = await state()
+            count = len(observed())
+            await replacement({"type": "switch_session", "sessionPath": str(cancelled_target)})
+            after = await state()
+            assert after.identity == before.identity and len(observed()) == count
+            assert not cancelled_target.exists()
+        assert native.provider.posts == 0 and native.saved_inputs() == []
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
+        print("actual_native_replacement", driver, observed() if driver == "sdk_callbacks" else current.session_id, flush=True)
+    assert child.returncode is not None and not child.alive()
+    assert await errors == ""
+
+
+async def test_actual_compaction_writer_borrows_acquired_native_launch(native_backend, monkeypatch):
+    """Original SDK fork/get_state/writer resources; no input or provider call."""
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms import native_compaction_writer as writer
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+
+    native = native_backend
+    source_name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+    source = Path(source_name).resolve(strict=True)
+    original = hashlib.sha256(source.read_bytes()).hexdigest()
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        directory=str(native.project / "writer-sessions"),
+    ), cwd=native.project)
+    launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+        "pi", ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+               "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+               "--no-prompt-templates", "--no-tools"),
+        worktree=native.project, session_file=created.session_file,
+    ))
+    child = await PiSessionChild.start(
+        (launch, launch.configuration.auth_revision()), launch.session.attestation(),
+    )
+    calls = []
+    verify = writer.verify_native_package
+
+    def observe(package):
+        calls.append(package)
+        return verify(package)
+
+    monkeypatch.setattr(writer, "verify_native_package", observe)
+    try:
+        async with asyncio.timeout(30):
+            pending = child.attestation
+            response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+            child.attestation = pending.accept(response)
+            child.attestation.require_identity().require_same_session(created)
+            async with OwnerCompactionCommit.open(
+                native.root / "registry.json", launch.package, created.session_file,
+                native_launch=launch,
+            ) as bridge:
+                assert bridge.native.package_dir == launch.package
+                bridge.boundary.native_reader.require_path(created.path)
+                assert calls == []
+            # An unrelated path cannot borrow this acquired artifact; the check
+            # occurs before helper access or journal creation.
+            with pytest.raises(ValueError, match="differs from its acquired"):
+                OwnerCompactionCommit(native.project / "registry.json", native.project,
+                                      native_launch=launch)
+            assert not (native.project / "compaction-commits.sqlite3").exists()
+            await Coordination.run_worker(partial(writer.NativeCompactionWriter, launch.package))
+            assert calls == [launch.package]
+            response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+            assert pending.accept(response).require_identity() == child.attestation.require_identity()
+            assert native.provider.posts == 0 and native.saved_inputs() == []
+            assert hashlib.sha256(source.read_bytes()).hexdigest() == original
+    finally:
+        await child.close()
+    assert not child.proc.alive() and child.proc.retired
+    assert await child.stderr_task == ""
+    print("actual_compaction_launch_borrow", json.dumps({
+        "source_bytes": source.stat().st_size, "source_sha256": original,
+        "fork": created.session_file, "pid": child.proc.pid,
+        "child_retired": child.proc.retired, "borrowed_tree_verifications": 0,
+        "fresh_tree_verifications": len(calls), "provider_requests": native.provider.posts,
+    }), flush=True)
+
+
+async def test_actual_saved_source_reservation_borrows_native_coverage(native_backend, monkeypatch):
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_entries import NativeEvidenceRead
+    from agent_comms.native_fork import ForkSessionRequest
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from selected_summary_cases import manual_summary_record
+
+    native = native_backend
+    name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not name:
+        pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+    donor = Path(name).resolve(strict=True)
+    before = hashlib.sha256(donor.read_bytes()).hexdigest()
+    journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
+    created = await journal.private_inputs.fork(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor), str(native.project),
+        directory=str(native.root / "native-sessions"),
+    ), cwd=native.project)
+    source = manual_summary_record(created.path,
+        selected=SelectedModel("response-local", "fixture", 2000000),
+        settings=PiCompactionSettings(2048, 1))
+    # The actual SDK creation is published in the journal, so continued-source
+    # coverage must verify its original prefix; no invented enrollment/marker.
+    with NativeEvidenceRead.open(created.path) as reader:
+        reader.observe()
+        decoded = []
+        decode = reader.decode_rows
+
+        def observe(rows):
+            rows = tuple(rows)
+            decoded.extend(rows)
+            return decode(rows)
+
+        monkeypatch.setattr(reader, "decode_rows", observe)
+        operation = await Coordination.run_worker(partial(
+            journal.summaries.reserve, created.session_file, source, native_reader=reader,
+        ))
+        assert decoded == [] and reader.entries
+    assert journal.summaries.get(operation).request == source
+    assert journal.summaries.blocking(created.session_file)
+    assert native.provider.posts == 0 and native.saved_inputs() == []
+    assert hashlib.sha256(donor.read_bytes()).hexdigest() == before
+    print("actual_saved_prefix_reservation", json.dumps({
+        "operation": operation, "source_bytes": donor.stat().st_size,
+        "source_sha256": before, "redecoded_rows": len(decoded), "provider_requests": 0,
+        "scope": "returned SDK fork/coverage reservation; no provider/commit/input authority",
+    }), flush=True)

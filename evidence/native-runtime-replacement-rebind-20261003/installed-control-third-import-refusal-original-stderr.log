@@ -1,0 +1,121 @@
+F
+=================================== FAILURES ===================================
+___________ test_actual_native_replacement_callback_once_and_cancel ____________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f455eb0b8c0>
+
+    async def test_actual_native_replacement_callback_once_and_cancel(native_backend):
+        """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+        from functools import partial
+        from uuid import uuid4
+    
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_custody import PiSessionChild
+        from agent_comms.native_entries import NativeEvidenceRead
+        from agent_comms.pi_commands import GetState, UnknownCommand
+    
+        native = native_backend
+        events = native.project / "replacement-events.jsonl"
+        cancelled_target = native.project / "cancelled.jsonl"
+        extension = native.project / "replacement-observer.mjs"
+        extension.write_text(
+            "import {appendFileSync} from 'node:fs';\n"
+            "export default function(pi) {\n"
+            "  pi.on('session_start', (event,ctx) => appendFileSync("
+            + json.dumps(str(events))
+            + ",JSON.stringify({event:'session_start',reason:event.reason,"
+            "sessionId:ctx.sessionManager.getSessionId()})+'\\n'));\n"
+            "  pi.on('session_before_switch', (event) => {\n"
+            "    if (event.targetSessionFile === "
+            + json.dumps(str(cancelled_target))
+            + ") return {cancel:true};\n"
+            "  });\n"
+            "}\n"
+        )
+        launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+            "pi", ("--model", "response-local/fixture", "--thinking", "off",
+                   "--offline", "--no-extensions", "--extension", str(extension),
+                   "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+            worktree=native.project, session_file=str(native.session),
+        ))
+    
+        def observed():
+            return [json.loads(row) for row in events.read_text().splitlines()]
+    
+        async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
+            channel = PiRpcChannel(child.stdout)
+            errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+    
+            async def state():
+                request = GetState(id=uuid4().hex)
+                try:
+                    response = await request.exchange(channel, child.stdin, strict=True)
+                except EOFError as error:
+                    error.add_note(await errors)
+                    raise
+                return response.require_request(request)
+    
+            async def replacement(frame):
+                # These are vendor RPC frames, including fork's external entryId.
+                # The original open-command representation and channel decode own
+                # framing; this control creates no replacement pending registry.
+                identity = uuid4().hex
+                command = UnknownCommand(wire={"id": identity, **frame})
+                child.stdin.write(channel.command_bytes(command))
+                await child.stdin.drain()
+                while True:
+                    event = await channel.receive(strict=True)
+                    assert event is not None, await errors
+                    if isinstance(event, Response) and event.id == identity:
+                        assert event.success, event
+                        return
+    
+>           initial = await state()
+                      ^^^^^^^^^^^^^
+
+tests/test_native_catalog_discovery.py:261: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_catalog_discovery.py:240: in state
+    response = await request.exchange(channel, child.stdin, strict=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetState(id='a83c63ce95094f8d951405583fc7a6d4')
+channel = <agent_comms.pi_rpc.PiRpcChannel object at 0x7f455e8a9400>
+writer = <StreamWriter transport=<_UnixWritePipeTransport closed fd=16 closed>>
+strict = True, max_bytes = None
+
+    async def exchange(
+        self, channel: PiRpcChannel, writer: asyncio.StreamWriter, *,
+        strict: bool = False, max_bytes: int | None = None,
+    ) -> Response:
+        from .pi_events import Response
+        async with self.pending_response(channel,writer) as future:
+            while not future.done():
+                event = await channel.receive(strict=strict, max_bytes=max_bytes)
+                if event is None:
+>                   raise EOFError("Pi RPC ended before the requested response")
+E                   EOFError: Pi RPC ended before the requested response
+E                   file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-import-fence.mjs:10
+E                   const deny = detail => Object.assign(new Error(`Native import boundary refused: ${detail}`),
+E                                                        ^
+E                   
+E                   Error: Native import boundary refused: package source not in deployment manifest
+E                       at deny (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-import-fence.mjs:10:38)
+E                       at assertApprovedPackage (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-import-fence.mjs:107:15)
+E                       at DefaultPackageManager.resolvePackageSources (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/core/package-manager.js:1001:13)
+E                       at DefaultPackageManager.resolveExtensionSources (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/core/package-manager.js:738:20)
+E                       at DefaultResourceLoader.reload (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/core/resource-loader.js:277:61)
+E                       at async createAgentSessionServices (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-services.js:72:5)
+E                       at async createRuntime (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/main.js:582:26)
+E                       at async createAgentSessionRuntime (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-runtime.js:314:20)
+E                       at async main (file:///home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist/main.js:676:21) {
+E                     code: 'ERR_NATIVE_IMPORT_BOUNDARY'
+E                   }
+E                   
+E                   Node.js v26.10.0
+
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/pi_commands.py:235: EOFError
+=========================== short test summary info ============================
+FAILED tests/test_native_catalog_discovery.py::test_actual_native_replacement_callback_once_and_cancel
+1 failed in 3.44s

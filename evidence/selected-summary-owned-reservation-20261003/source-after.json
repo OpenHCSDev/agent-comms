@@ -1,0 +1,716 @@
+{
+  "head": "e9b4784a2d196052223e5a9de3500bea31a7d0ba",
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 232,
+      "call": "NativeEntry.open_evidence(session_file)"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 45,
+      "owner": "PrivateInputs",
+      "bases": [
+        "JournalRole"
+      ],
+      "members": [
+        "async def fork(self, request, *, cwd: Path, env=None):",
+        "def requires_raw_marker(self, session_file: Path) -> bool:",
+        "def require_source_coverage(self, db: sqlite3.Connection, session_file: Path, source: SelectedSource, inputs: InputDocument, *, fresh: FreshPrivateSession | None, admission_generation: int | None, native_reader: NativeEvidenceRead | None=None) -> None:",
+        "def enroll(self, fresh: FreshPrivateSession, *, incarnation: ThreadIncarnation, owner_lookup: str, owner_generation: int, admission_generation: int) -> None:",
+        "def reserve(self, session_file: Path, input_id: str) -> None:",
+        "@contextmanager",
+        "@contextmanager",
+        "def require_coverage(self, enrollment: EnrolledPrivateSession, fresh: FreshPrivateSession, witness: SelectedSource, admission_generation: int | None) -> None:",
+        "@staticmethod"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 60,
+      "call": "NativeEntry.open_evidence(created.path)"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 121,
+      "call": "verify_continued_private_session(self.journal.path.parent, session_file, source, raw_ids, inputs, journal_db=db, native_reader=native_reader)"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 58,
+      "owner": "SelectedSummaries",
+      "bases": [
+        "JournalRole"
+      ],
+      "members": [
+        "def reserve(self, session_file: str, source: SelectedSummarySource, *, operation_id: str | None=None, fresh_session: FreshPrivateSession | None=None, admission_generation: int | None=None, future_queue: FutureInputQueue | None=None, native_reader: NativeEvidenceRead | None=None) -> str:",
+        "def get(self, operation_id: str) -> SelectedSummaryAttempt:",
+        "def require_current(self, attempt: SelectedSummaryAttempt, session_file: str) -> None:",
+        "def unresolved(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:",
+        "def blocking(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:",
+        "def refuse(self, operation_id: str, reason: str) -> None:",
+        "def retire_unchanged(self, attempt: SelectedSummaryAttempt, check: ReservationCheck) -> None:",
+        "def history(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:",
+        "def attempted_boundary(self, session_file: str, boundary) -> bool:",
+        "def mark_unknown(self, operation_id: str) -> None:",
+        "def fail(self, operation_id: str, reason: str) -> None:",
+        "def decline_prestart(self, operation_id: str, reason: str, *, admission: SelectedAdmissionIdentity | None=None) -> SelectedSummaryAdmission | None:",
+        "def link_commit(self, operation_id: str, commit_id: str, *, admission: SelectedAdmissionIdentity | None=None, state_type: type[LinkedSummary]=LinkedSummary) -> SelectedSummaryAdmission | None:",
+        "def require_original_admission(self, expected: SelectedSummaryAttempt) -> None:"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 114,
+      "call": "self.journal.private_inputs.require_source_coverage(db, Path(canonical), envelope.source, covered_inputs, fresh=fresh_session, admission_generation=admission_generation, native_reader=native_reader)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 39,
+      "call": "NativeEvidenceRead.borrow(session, native_reader)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 198,
+      "owner": "NativeEvidenceRead",
+      "bases": [],
+      "members": [
+        "def __init__(self, source):",
+        "def require_path(self, session_file):",
+        "@classmethod",
+        "@classmethod",
+        "def close(self):",
+        "def observe(self):",
+        "def decode_rows(self, rows):",
+        "def retained_task_facts(self, witness):",
+        "def entry_index(self, entries):",
+        "def branch(self, leaf_id, entries):",
+        "def recorded_source_prefix(self, entries, contexts):",
+        "def covered_prefix(self, entries, db):"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 854,
+      "call": "NativeEvidenceRead.borrow(session_file, evidence)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 116,
+      "call": "SelectedSummarySlot(owner.name, prepared.witness.session_id, request_observer=partial(record_request_progress, self.journal.path.parent, owner.require_turn_lease())).run_selected_summary(persistent, self.journal, prepared.witness, SelectedSummarySource(source=source, selected=selected, settings=settings.summary_settings(), retained=captured.retained), owner=owner, expected_package=package, tokens_before=prepared.tokens_before, custom_instructions=instructions, future_queue=self.boundary.future_queue, native_reader=self.boundary.native_reader, on_event=on_event, reason=reason)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 58,
+      "call": "NativeEvidenceRead.borrow(Path(self.session_file), reader)"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 146,
+      "owner": "SelectedSummaryData",
+      "bases": [
+        "PiResponseData"
+      ],
+      "members": [
+        "version: Literal[1]",
+        "operation_id: str = field(metadata={'wire_name': 'operationId'})",
+        "def require_request(self, request):",
+        "@abstractmethod",
+        "def settle(self, journal):",
+        "def require_result(self):",
+        "def manual_summary(self, journal, reason, settle_refusal):",
+        "def adaptive_summary(self, journal, identity):",
+        "@classmethod"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 179,
+      "owner": "SummaryDeclinedData",
+      "bases": [
+        "SelectedSummaryData"
+      ],
+      "members": [
+        "status: Literal['declined']",
+        "reason: str",
+        "def response(self, request, tokens_before):",
+        "@property",
+        "def require_clean_prestart(self):",
+        "def settle(self, journal):",
+        "def manual_summary(self, journal, reason, settle_refusal):",
+        "def adaptive_summary(self, journal, identity):",
+        "def __post_init__(self):"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 291,
+      "owner": "SummaryFailedData",
+      "bases": [
+        "WitnessedSummaryData"
+      ],
+      "members": [
+        "status: Literal['failed']",
+        "witness: NativeWitness",
+        "selected: SelectedModel",
+        "settings: PiCompactionSettings",
+        "reason: str",
+        "def response(self, request, tokens_before):",
+        "def settle(self, journal):",
+        "def require_result(self):",
+        "def __post_init__(self):"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 66,
+      "owner": "SelectedSummarySlot",
+      "bases": [],
+      "members": [
+        "owner: str",
+        "session: str",
+        "lock: asyncio.Lock = field(default_factory=asyncio.Lock)",
+        "request_observer: Callable[[RequestProgress, ProcessIdentity, SummaryOperationIdentity], None] | None = field(default=None, kw_only=True, repr=False, compare=False)",
+        "async def run_selected_summary(self, persistent: PersistentPiSession, journal: CompactionJournal, witness: NativeWitness, source: SelectedSummarySource, *, owner: Thread, expected_package: Path, tokens_before: int, custom_instructions: str | None=None, fresh_session: FreshPrivateSession | None=None, admission_generation: int | None=None, future_queue: FutureInputQueue | None=None, native_reader: NativeEvidenceRead | None=None, idle_timeout_seconds: float=MODEL_WAIT_TIMEOUT_SECONDS, on_event: Callable[[AgentEvent], Awaitable[None]] | None=None, reason: str='adaptive') -> SelectedSummaryData:"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 70,
+      "call": "NativeEntry.open_evidence(Path(path))"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 113,
+      "call": "NativeEntry.open_evidence(path)"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 154,
+      "call": "NativeEntry.open_evidence(Path(self.reference.session_file))"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 464,
+      "call": "NativeEntry.open_evidence(Path(self.session.session_file))"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 164,
+      "call": "bridge.journal.summaries.reserve(fork.session_file, SelectedSummarySource(source, selected, decision.summary_settings(), retained))"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 166,
+      "call": "bridge.journal.summaries.mark_unknown(op)"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 451,
+      "call": "NativeEntry.open_evidence(Path(owner.session_file))"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 779,
+      "call": "NativeEntry.open_evidence(history[0].context.session_file)"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 270,
+      "call": "NativeEntry.open_evidence(Path(native.session_file))"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 78,
+      "call": "journal.summaries.reserve(file, {'source': FieldCodec.encode(admission_identity(file, text=inputs.read().rows['acp:original'].source_text, key='acp:original', turn=owner.active_turn.id, owner=owner.name, incarnation=owner.incarnation, admission=owner.active_turn.admission_generation).source), 'selected': {'provider': 'openai', 'modelId': 'gpt-4.1-mini', 'contextWindow': info.model.context_window}, 'settings': {'reserveTokens': 1000, 'keepRecentTokens': 10}})"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 143,
+      "call": "journal.summaries.reserve(file, {'source': manual_source(file, incarnation=registry.require('owner').incarnation), 'selected': {'provider': 'openai', 'modelId': 'gpt-4.1-mini', 'contextWindow': info.model.context_window}, 'settings': {'reserveTokens': 1000, 'keepRecentTokens': 10}})"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 156,
+      "call": "journal.summaries.mark_unknown(operation)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 49,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 52,
+      "call": "journal.summaries.mark_unknown(first)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 69,
+      "call": "journal.summaries.reserve(str(other), unrelated_source)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 70,
+      "call": "journal.summaries.mark_unknown(later)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 96,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 109,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 114,
+      "call": "journal.summaries.mark_unknown(operation)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 150,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 151,
+      "call": "journal.summaries.mark_unknown(operation)"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 210,
+      "call": "NativeEntry.open_evidence(owner.session)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 67,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 82,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 71,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 147,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 258,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 322,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 382,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 256,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 325,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 385,
+      "call": "journal.summaries.reserve(str(session), source)"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 519,
+      "call": "journal.summaries.reserve(str(fresh.path), {'source': manual_source(fresh.path, 'beta', incarnation=people[2].incarnation), 'selected': {'provider': 'openrouter', 'modelId': 'test', 'contextWindow': 200000}, 'settings': {'keepRecentTokens': 2000, 'reserveTokens': 1000}}, fresh_session=fresh, admission_generation=coverage[4])"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 657,
+      "call": "journal.summaries.reserve(str(visible[0]), {'source': manual_source(visible[0], 'beta', incarnation=people[2].incarnation), 'selected': {'provider': 'openrouter', 'modelId': 'test', 'contextWindow': 200000}, 'settings': {'keepRecentTokens': 2000, 'reserveTokens': 1000}})"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 958,
+      "call": "journal.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1042,
+      "call": "journal.summaries.reserve(str(saved), {'source': manual_source(saved, 'beta', incarnation=people[2].incarnation), 'selected': {'provider': 'fake', 'modelId': 'test', 'contextWindow': 200000}, 'settings': {'keepRecentTokens': 2000, 'reserveTokens': 1000}})"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 367,
+      "call": "journal.summaries.reserve(str(fresh.path), next_turn, fresh_session=fresh, admission_generation=3)"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 341,
+      "call": "journal.summaries.reserve(str(fresh.path), _private_source(fresh.path))"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 350,
+      "call": "journal.summaries.reserve(str(fresh.path), _private_source(fresh.path), fresh_session=fresh, admission_generation=4)"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 363,
+      "call": "journal.summaries.reserve(str(fresh.path), changed_owner, fresh_session=fresh, admission_generation=3)"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 383,
+      "call": "journal.summaries.reserve(str(outward), _private_source(fresh.path))"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 402,
+      "call": "journal.summaries.reserve(str(fresh.path), _private_source(fresh.path), fresh_session=fresh, admission_generation=3)"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 442,
+      "call": "journal.summaries.reserve(str(fresh.path), _private_source(fresh.path), fresh_session=fresh, admission_generation=3)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 319,
+      "call": "NativeEntry.open_evidence(Path(receiver.session_file))"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 263,
+      "call": "NativeEntry.open_evidence(fixture.session)"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 27,
+      "call": "NativeEntry.open_evidence(file)"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 51,
+      "call": "NativeEntry.open_evidence(session)"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 74,
+      "call": "NativeEntry.open_evidence(session)"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 116,
+      "call": "NativeEntry.open_evidence(session)"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 217,
+      "call": "NativeEntry.open_evidence(session)"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 346,
+      "call": "NativeEntry.open_evidence(self.session)"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 71,
+      "call": "journal.summaries.reserve(str(session), _source(identity, text))"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 485,
+      "call": "reopened.summaries.reserve(session, _source(next_identity, 'Next original'))"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 162,
+      "call": "journal.summaries.reserve(str(session), _source(identity, 'input'))"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 183,
+      "call": "journal.summaries.reserve(str(other), _source(forged, 'injected replacement'))"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 473,
+      "call": "reopened.summaries.reserve(session, _source(identity, text))"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 90,
+      "call": "slot.run_selected_summary(native.persistent, journal, preparation.witness, source, owner=owner, expected_package=expected_package, tokens_before=preparation.tokens_before, **options)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 608,
+      "call": "slot.run_selected_summary(native.persistent, journal, preparation.witness, envelope, owner=owner, expected_package=package, tokens_before=preparation.tokens_before, custom_instructions='Preserve the two original retained questions', idle_timeout_seconds=15, on_event=observed)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 636,
+      "call": "slot.run_selected_summary(native.persistent, journal, preparation.witness, envelope, owner=owner, expected_package=package, tokens_before=preparation.tokens_before)"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 319,
+      "call": "slot.run_selected_summary(persistent, journal, preparation.witness, dict(source=manual_source(session), selected=selected.to_wire(), settings=dict(reserveTokens=2048, keepRecentTokens=1024), retained=FieldCodec.encode(RetainedTaskFacts(()))), expected_package=package, tokens_before=preparation.tokens_before, idle_timeout_seconds=20)"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 273,
+      "call": "slot.run_selected_summary(persistent, journal, preparation.witness, dict(source=manual_source(session), selected=selected.to_wire(), settings=dict(reserveTokens=2048, keepRecentTokens=1024), retained=FieldCodec.encode(RetainedTaskFacts(()))), expected_package=package, tokens_before=preparation.tokens_before, idle_timeout_seconds=20)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 82,
+      "call": "journal.summaries.reserve(session, source, operation_id='a' * 32)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 95,
+      "call": "reopened.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 138,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 211,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 232,
+      "call": "reopened.summaries.reserve(str(other), manual_summary_record(other))"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 244,
+      "call": "journal.summaries.reserve(str(other), manual_summary_record(other))"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 255,
+      "call": "journal.summaries.reserve(str(fresh_alias), manual_summary_record(fresh_alias))"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 321,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 400,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 407,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 420,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 442,
+      "call": "journal.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 457,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 476,
+      "call": "journal.summaries.reserve(session, source, operation_id='a' * 32)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 539,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 542,
+      "call": "journal.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 612,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 92,
+      "call": "reopened.summaries.reserve(session, source, operation_id=operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 94,
+      "call": "reopened.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 129,
+      "call": "reopened.summaries.reserve(session, request)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 200,
+      "call": "journal.summaries.reserve(str(saved), private_source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 210,
+      "call": "journal.summaries.reserve(str(saved), private_source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 221,
+      "call": "reopened.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 241,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 291,
+      "call": "reopened.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 304,
+      "call": "reopened.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 349,
+      "call": "journal.summaries.reserve(session, source, operation_id=operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 351,
+      "call": "journal.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 411,
+      "call": "journal.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 467,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 525,
+      "call": "reopened.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 557,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 566,
+      "call": "journal.summaries.reserve(session, source, operation_id='b' * 32)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 606,
+      "call": "journal.summaries.reserve(session, source, operation_id='not-hex')"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 141,
+      "call": "journal.summaries.mark_unknown(operation_id)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 168,
+      "call": "journal.summaries.reserve(session, source)"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 146,
+      "call": "journal.summaries.reserve(str(session), envelope)"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 195,
+      "call": "journal.summaries.reserve(str(session), envelope)"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 75,
+      "call": "bridge.journal.summaries.reserve(session, SelectedSummarySource(source=SelectedAdmissionSource(owner=owner.process_identity, incarnation=owner.incarnation, turn=TurnId('earlier-failed-turn'), originals=inputs.read().original_provenances(('acp:original',)), admission_generation=owner.active_turn.admission_generation, correction_witness='prior', input_digest=digest, reserved_revision=SessionRevision.observe(session).require_available()), selected=selected, settings=PiCompactionSettings(1000, 10), retained=RetainedTaskFacts((InputTaskFact(inputs.read().rows['acp:original']),))))"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 93,
+      "call": "bridge.journal.summaries.mark_unknown(operation)"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 147,
+      "call": "journal.summaries.mark_unknown(operation)"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 162,
+      "call": "NativeEntry.open_evidence(Path(session_file))"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 105,
+      "call": "NativeEntry.open_evidence(Path(session.session_file))"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 245,
+      "call": "NativeEntry.open_evidence(Path(session.session_file))"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 290,
+      "call": "NativeEntry.open_evidence(Path(session.session_file))"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 149,
+      "call": "NativeEntry.open_evidence(selected)"
+    }
+  ],
+  "limits": "Syntactic declarations/dotted calls; dynamic callbacks and response family hooks read semantically. No parse omissions; embedded native runtime unchanged."
+}

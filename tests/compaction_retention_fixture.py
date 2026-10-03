@@ -23,6 +23,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_tools import CodingTool
 from agent_comms.message_reference import MessageReference
 from agent_comms.turn_context import JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -149,12 +150,9 @@ class RecordedNativeProbes:
             if a["fork"].source_revision != b["fork"].source_revision:
                 raise ValueError("Matched probes have different original source revisions")
             settings = original["scoped_facts"]["configured_settings"], control["scoped_facts"]["configured_settings"]
-            if not all(item["evaluated"] for item in settings):
-                pairs[identity] = {"evaluated": False, "reason": "Original configured model/effort unavailable"}
-                continue
-            for name in ("model", "thinking"):
-                if settings[0][name] != settings[1][name]:
-                    raise ValueError("Matched probes have different configured model/effort")
+            configured = {name: self.same_observations(f"captured model/effort ({name})", tuple(
+                (item[name],) if item["evaluated"] else (None,) for item in settings))
+                for name in ("model", "thinking")}
             if a["sdk_manifest"] is None or b["sdk_manifest"] is None:
                 pairs[identity] = {"evaluated": False, "reason": "Original request manifests unavailable"}
                 continue
@@ -169,23 +167,27 @@ class RecordedNativeProbes:
             if tuple((item.sha256, item.utf8_bytes) for item in catalogs[0]) != tuple(
                     (item.sha256, item.utf8_bytes) for item in catalogs[1]):
                 raise ValueError("Matched probes have different native tool catalogs")
-            request = self.request_alignment(original, control, settings[0]["model"])
+            request = self.request_alignment(original, control)
             completion = self.completion_alignment(original, control)
+            terminals = a["request_completion"], b["request_completion"]
+            unavailable = tuple(item["reason"] for item in (request, completion, *terminals)
+                                if not item["evaluated"])
             pairs[identity] = {
-                "evaluated": request["evaluated"] and completion["evaluated"],
-                "scope": "Common original SDK fork source, configured selection, admitted request model, journaled completion selections, tool catalog and frozen probe; not complete intervention/construction proof",
+                "evaluated": not unavailable,
+                "scope": "Common original SDK fork source, admitted request models joined to original SDK terminals, tool catalog and frozen probe; captured settings are independent, not complete intervention/construction proof",
+                "captured_settings": configured,
                 "request_selection": request,
                 "completion_selection": completion,
+                "request_completion": terminals,
                 "sdk_manifest_changes": a["sdk_manifest"].changed_since(b["sdk_manifest"]),
-                "reason": request["reason"] if not request["evaluated"] else (
-                    "Original completion selections unavailable" if not completion["evaluated"]
-                    else "Original request and completion selections corroborate the source match"),
+                "reason": "; ".join(unavailable) if unavailable else
+                          "Original request and completion selections corroborate the source match",
             }
         return pairs
 
     @staticmethod
-    def request_alignment(original, control, selection):
-        """Consume the probe's exact admitted request, never infer it from config.
+    def request_alignment(original, control):
+        """Compare the probes' exact admitted models, never infer from config.
 
         ContextBudget owns every estimate/allowance. Its recorded model owns
         selection; this comparison does not recalculate capacity or turn an
@@ -199,12 +201,14 @@ class RecordedNativeProbes:
         points = tuple(group["observations"] for group in groups)
         if not all(points):
             raise ValueError("An evaluated request admission requires its original observations")
+        observed = tuple(point.model for group in points for point in group)
+        if any(model is None or model.display_name is None for model in observed):
+            return {"evaluated": False, "reason": "Original admitted request model unavailable"}
+        selection = points[1][0].model.display_name
         models = []
         for group in points:
             selected = []
             for point in group:
-                if point.model is None or point.model.display_name is None:
-                    return {"evaluated": False, "reason": "Original admitted request model unavailable"}
                 selected.append(point.model.require_selection(selection))
             models.append(tuple(selected))
         capacity = {
@@ -221,7 +225,7 @@ class RecordedNativeProbes:
             "minimum_output_tokens": RecordedNativeProbes.same_observations("request minimum output", tuple(
                 (group[0].minimum_output_tokens,) for group in points)),
         }
-        return {"evaluated": True, "reason": "Original admitted request models match the captured selection",
+        return {"evaluated": True, "reason": "Original admitted request models match each other",
                 "model_capacity": capacity, "request_contract": contract,
                 "candidate": groups[0], "baseline": groups[1],
                 "scope": "Original native admission observations; not full-history capacity, HTTP bytes or returned model/effort"}
@@ -482,6 +486,9 @@ class Question:
     # Original execution coordinates, distinct from an authored answer or a
     # Decision alternative. This does not assert proposal/constraint validity.
     action_source: JournalProvenance | None = None
+    # Frozen oracle intent, never reconstructed from a model answer or receipt.
+    # CodingTool owns the native invocation; no second argument schema lives here.
+    expected_tool: CodingTool | None = None
 
     def __post_init__(self) -> None:
         if not self.identity or not self.prompt or not self.evidence_ref:
@@ -495,6 +502,8 @@ class Question:
                 raise ValueError("An execution source belongs on an action question")
             if len(self.action_source.entries) != 2 or len(set(self.action_source.entries)) != 2:
                 raise ValueError("An execution source requires distinct original request/result entries")
+        if self.expected_tool is not None and self.measurement is not Measurement.ACTION:
+            raise ValueError("A frozen intended invocation belongs on an action question")
 
     def score(self, answer: str | None) -> AnswerScore:
         return AnswerScore(
@@ -511,27 +520,31 @@ class Question:
         result = {"execution": self.executed_action(original),
                   "constraint_validity": {"evaluated": False,
                                           "reason": "Decision membership does not evaluate every constraint"}}
+        return dict(result, declared_alternative=self.declared_alternative(answer, original))
+
+    def declared_alternative(self, answer, original):
+        """Resolve the original scoped Decision once for proposal and execution."""
         if self.decision_source is None or original is None:
-            return dict(result, declared_alternative={"evaluated": False,
-                "reason": "No original Decision reference and recorded probe supplied"})
+            return {"evaluated": False,
+                "reason": "No original Decision reference and recorded probe supplied"}
         observed = original["scoped_facts"]
         if not observed["evaluated"]:
-            return dict(result, declared_alternative=observed)
+            return observed
         selected = tuple(item for item in observed["decisions"]
                          if item["lineage"] == self.decision_source)
         if not selected:
-            return dict(result, declared_alternative={"evaluated": False,
-                "reason": "Referenced Decision is not current in the original captured scope"})
+            return {"evaluated": False,
+                "reason": "Referenced Decision is not current in the original captured scope"}
         item, = selected
         decision = item["declaration"]
-        if self.expected not in (decision.chosen, *decision.rejected):
+        if not decision.contains_alternative(self.expected):
             raise ValueError("Frozen action oracle contradicts its original Decision alternatives")
-        return dict(result, declared_alternative={
+        return {
             "evaluated": True, "missing": answer is None,
-            "valid": answer in (decision.chosen, *decision.rejected),
-            "chosen": answer == decision.chosen, "source": FieldCodec.encode(item["current"]),
+            "valid": decision.contains_alternative(answer),
+            "chosen": answer == decision.chosen, "source": item["current"],
             "scope": observed["scope"],
-        })
+        }
 
     def executed_action(self, original):
         """Corroborate a named SDK result without crediting a lexical proposal."""
@@ -542,10 +555,26 @@ class Question:
         if len(selected) != 1:
             raise ValueError("Execution source is outside this original probe branch")
         step, = selected
-        return dict(step["completion"], source=FieldCodec.encode(step["source"]), call=step["call"],
+        return dict(step["completion"], source=step["source"], call=step["call"],
                     scope="Original SDK tool result, not current filesystem or every task constraint",
-                    proposal_alignment={"evaluated": False,
-                        "reason": "A tool receipt does not bind its arguments to a declared Decision alternative"})
+                    proposal_alignment=self.bind_execution(step["call"], original))
+
+    def bind_execution(self, request, original):
+        """Match frozen invocation intent to an original scoped alternative.
+
+        This is oracle-to-request alignment. A successful result and permission
+        under prose constraints remain separate questions; neither is inferred.
+        """
+        if self.expected_tool is None:
+            return {"evaluated": False, "reason": "No frozen intended tool invocation supplied"}
+        alternative = self.declared_alternative(self.expected, original)
+        if not alternative["evaluated"]:
+            return alternative
+        return {"evaluated": True,
+                "matches": self.expected_tool.matches_request(request),
+                "alternative": self.expected, "decision_source": alternative["source"],
+                "expected_tool": self.expected_tool,
+                "scope": "Frozen oracle invocation and current original Decision; not task constraint permission"}
 
 
 @dataclass(frozen=True)
