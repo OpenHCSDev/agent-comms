@@ -9,7 +9,6 @@ from pathlib import Path
 
 from .catalog_store import ChannelCatalog
 from .compaction_publication_lease import publication_identity_fence
-from .errors import UnregisteredThreadError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
@@ -321,10 +320,7 @@ class Registration:
 
         with self.store.locked():
             document = self.store._read_unlocked()
-            canonical = document.canonical_name(name)
-            thread = document.threads.get(canonical)
-            if thread is None:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            thread = document.require(name)
             return GoalHistoryStore(self.store.path).history(
                 thread.created_at, thread.goal, goal_id=goal_id
             )
@@ -336,16 +332,15 @@ class Registration:
 
     def last_seen(self, name: str) -> float:
         with self.store.reading() as document:
-            name = document.canonical_name(name)
-            if name not in document.threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return document.last_seen.get(name, 0.0)
+            return document.seen_at(name)
 
     def require(self, name: str) -> Thread:
-        return self.snapshot().require(name)
+        with self.store.reading() as document:
+            return document.require(name)
 
     def status(self, name: str) -> ThreadStatus:
-        return self.snapshot().status(name)
+        with self.store.reading() as document:
+            return document.status(name)
 
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
