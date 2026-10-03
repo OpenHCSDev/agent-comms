@@ -1,4 +1,4 @@
-/** Private installed journey only: original call frames, hashes/counts, no bodies.
+/** Private installed journey: original frames and separately pinned SDK bodies.
  * Inspector observes the actual route formation and selected request; it does
  * not substitute provider, transport, response, session or product source.
  */

@@ -37,7 +37,7 @@ from selected_summary_cases import manual_source
 
 
 @asynccontextmanager
-async def native_summary_owner(tmp_path, status, *, observe_launch=None):
+async def native_summary_owner(tmp_path, status):
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
         pytest.skip("Set PI_COMPACTION_TEST_PACKAGE to the matched native candidate")
@@ -214,7 +214,7 @@ async def native_summary_owner(tmp_path, status, *, observe_launch=None):
     )
     children = {}
 
-    async def launch():
+    async def launch(*, observe_launch=None):
         environment = dict(env)
         if observe_launch is not None:
             observe_launch(environment)
@@ -294,10 +294,10 @@ async def test_original_summary_assembly_inspector(tmp_path):
     summaries = tmp_path / "summary-assemblies"
     summaries.mkdir(mode=0o700)
     observation = tmp_path / "original-observations.jsonl"
-    with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
-        async with native_summary_owner(tmp_path, 200, observe_launch=observe_launch) as fixture:
+    async with native_summary_owner(tmp_path, 200) as fixture:
+        with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
             package, session, original, preparation, selected, settings, calls, _, launch = fixture
-            child, _, exchange, errors = await launch()
+            child, _, exchange, errors = await launch(observe_launch=observe_launch)
             command = AgentCommsSummarizeCompaction(
                 id="original-source-capture", version=1, operation_id=uuid4().hex,
                 witness=preparation.witness, selected=selected, settings=settings,
@@ -323,8 +323,29 @@ async def test_original_summary_assembly_inspector(tmp_path):
             assert len([row for row in records if row.get("stage") == "summary-assembly"]) == 1
             assert calls and child.returncode is None
             child.stdin.close()
-            await child.wait()
-            assert not await errors
+        # EOF exit waits for debugger disconnect. Release the original inspector
+        # resource before joining the native child, then retain its actual stderr.
+        await child.wait()
+        (tmp_path / "native-stderr.log").write_text(await errors)
+
+
+async def test_summary_observer_releases_before_native_eof(tmp_path):
+    """The same observation resource closes before native EOF; no generation."""
+    from summary_prefix_configured_installed_journey import observe_native_requests
+
+    pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+    summaries = tmp_path / "summary-assemblies"
+    summaries.mkdir(mode=0o700)
+    async with native_summary_owner(tmp_path, 200) as fixture:
+        package, session, original, _, _, _, calls, _, launch = fixture
+        with observe_native_requests(pin, tmp_path / "observations.jsonl",
+                                     summaries=summaries) as observe_launch:
+            child, _, _, errors = await launch(observe_launch=observe_launch)
+            child.stdin.close()
+        await child.wait()
+        (tmp_path / "native-stderr.log").write_text(await errors)
+        assert not calls
+        assert session.read_bytes() == original
 
 
 @pytest.mark.parametrize("status", [400, 429])
