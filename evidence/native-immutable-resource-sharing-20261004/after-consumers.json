@@ -1,0 +1,2050 @@
+{
+  "revision": "2f1a64c590c488f0c01751e70a2510ce64b84c48",
+  "parser": "Existing refactor-audit Package.load/ParsedModule AST",
+  "parsed_root_counts": {
+    "src/agent_comms": 311,
+    "stack": 13,
+    "tools/cutover": 51,
+    "experiments/pi-context-proof": 0,
+    "Toad src/toad": 288
+  },
+  "parsed_modules": 663,
+  "python_parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 91,
+      "kind": "ClassDef",
+      "source": "class CommsAgent(SessionEffects, InputEffects, TurnEffects):\n    \"\"\"ACP agent bound to one Comms wire.\n\n    Session -> thread. Coding prompts run the configured backend; targeted\n    prompts relay through the shared wire and drain replies back to the client.\n    \"\"\"\n    session_lifecycle_class = SessionLifecycle\n\n    def __init__(self, comms: Comms, agent_bin: str | None=None, agent_args: list[str] | None=None, reply_window: float | None=None, no_reply_window: float | None=None, reply_quiet: float | None=None, runtime_enabled: bool=False, auto_wake: bool=True, private_nk_native_package: Path | None=None, private_nk_wire_root_id: str | None=None, private_selected_tool_intent: SelectedToolIntent | None=None):\n        if (private_nk_native_package is None) != (private_nk_wire_root_id is None):\n            raise ValueError('private N/K ACP requires both reviewed Pi package and exact root')\n        if private_selected_tool_intent is not None:\n            from .selected_tool_broker import SelectedToolIntent\n            if type(private_selected_tool_intent) is not SelectedToolIntent:\n                raise TypeError('private selected tool needs a nominal owner intent')\n            if priva"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 500,
+      "kind": "FunctionDef",
+      "source": "def main() -> int:\n    from .active_route import resolve_comms_route\n    with resolve_comms_route().admit_client():\n        if '--login' in sys.argv[1:]:\n            from .login import run_login\n            index = sys.argv.index('--login')\n            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else '')\n        debug_path = os.environ.get('AGENT_COMMS_DEBUG_LOG')\n        if debug_path:\n            import logging\n            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)s %(levelname)s %(message)s', filename=debug_path + '.log')\n        from .private_nk_entrypoint import private_nk_from_environment\n        private_nk = private_nk_from_environment()\n        comms = wire(private_nk.validated_root) if private_nk is not None else wire()\n        if private_nk is not None:\n            comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)\n\n        async def run() -> None:\n            if os.environ.get('AGENT_COMMS_DEBUG_LOG'):\n\n                async def watchdog() -> None:\n                    while True:\n                        await asyncio.sleep(5)\n                        tasks = [t f"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 100,
+      "kind": "FunctionDef",
+      "source": "def __init__(self, comms: Comms, agent_bin: str | None=None, agent_args: list[str] | None=None, reply_window: float | None=None, no_reply_window: float | None=None, reply_quiet: float | None=None, runtime_enabled: bool=False, auto_wake: bool=True, private_nk_native_package: Path | None=None, private_nk_wire_root_id: str | None=None, private_selected_tool_intent: SelectedToolIntent | None=None):\n    if (private_nk_native_package is None) != (private_nk_wire_root_id is None):\n        raise ValueError('private N/K ACP requires both reviewed Pi package and exact root')\n    if private_selected_tool_intent is not None:\n        from .selected_tool_broker import SelectedToolIntent\n        if type(private_selected_tool_intent) is not SelectedToolIntent:\n            raise TypeError('private selected tool needs a nominal owner intent')\n        if private_nk_wire_root_id is None or private_nk_native_package is None:\n            raise ValueError('private selected tool requires exact N/K root and native package')\n    self._private_selected_tool_intent = private_selected_tool_intent\n    self._private_nk_native_package = private_nk_native_package\n    self._private_nk_wire_root_id = private_nk_wire"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 340,
+      "kind": "FunctionDef",
+      "source": "def _private_nk_marker(self) -> str:\n    \"\"\"Require the configured, certified root before any selected request.\"\"\"\n    from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked\n    if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:\n        raise PublicationActivationBlocked('private N/K ACP session requires explicit matching root and package')\n    with self._comms.bus.log.locked():\n        marker = self._comms.bus.log._private_marker_unlocked()\n        if marker.root_id != self._private_nk_wire_root_id:\n            raise PublicationActivationBlocked('private N/K ACP root does not match configuration')\n        verify_private_bus_checkpoint_unlocked(self._comms.bus.log, marker)\n        return marker.root_id"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 124,
+      "kind": "Assign",
+      "source": "self._private_nk_native_package = private_nk_native_package"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 365,
+      "kind": "Assign",
+      "source": "package = self._private_nk_native_package"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 114,
+      "kind": "Compare",
+      "source": "(private_nk_native_package is None) != (private_nk_wire_root_id is None)"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 410,
+      "kind": "Assign",
+      "source": "execution = SelectedExecution(root=self._comms.root, wire_root_id=wire_root_id, owner_name=thread_name, native_package=package, write_authority=AcpSelectedWriteAuthority(self, session_id, SelectedWritePlans(self._comms, wire_root_id)), **{'selected_tool_intent': self._private_selected_tool_intent} if self._private_selected_tool_intent is not None else {})"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 549,
+      "kind": "Assign",
+      "source": "agent = CommsClient(comms, runtime_enabled=True, private_nk_native_package=private_nk.native_package if private_nk else None, private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None)"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 114,
+      "kind": "Compare",
+      "source": "private_nk_native_package is None"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 344,
+      "kind": "Compare",
+      "source": "self._private_nk_native_package is None"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 397,
+      "kind": "Call",
+      "source": "_accept_visible_deliveries(bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0, owner_name=owner.name, native_package=package)"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 410,
+      "kind": "Call",
+      "source": "SelectedExecution(root=self._comms.root, wire_root_id=wire_root_id, owner_name=thread_name, native_package=package, write_authority=AcpSelectedWriteAuthority(self, session_id, SelectedWritePlans(self._comms, wire_root_id)), **{'selected_tool_intent': self._private_selected_tool_intent} if self._private_selected_tool_intent is not None else {})"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 526,
+      "kind": "Call",
+      "source": "comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 549,
+      "kind": "Call",
+      "source": "CommsClient(comms, runtime_enabled=True, private_nk_native_package=private_nk.native_package if private_nk else None, private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None)"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 121,
+      "kind": "Compare",
+      "source": "private_nk_native_package is None"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 61,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass LocalRoute(CommsRoute):\n    \"\"\"Explicit/environment roots and the unconfigured historical default.\"\"\"\n\n    def bind_owners(self, owners: OwnerLifecycle) -> None:\n        from .private_nk_entrypoint import PrivateNkLaunch\n        launch = PrivateNkLaunch.from_environment(self.root, os.environ)\n        if launch is not None:\n            owners.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 95,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass ActiveRoute(CommsRoute):\n    root: Annotated[Path, AbsoluteRoutePathText]\n    wire_root_id: Annotated[str, WireRootIdText]\n    native_package: Annotated[Path, AbsoluteRoutePathText]\n    version: Literal[1] = field(default=1, kw_only=True, metadata={'wire_required': True})\n\n    @classmethod\n    def from_record(cls, value: object) -> ActiveRoute:\n        try:\n            route = FieldCodec.decode(cls, value)\n        except TypeError as error:\n            raise ValueError(f'active comms route is invalid: {error}') from error\n        if not route.root.is_dir():\n            raise ValueError('active comms route root is missing')\n        return route\n\n    def observe_root(self) -> Path:\n        from .wire_log import WireLog\n        marker = WireLog(self.root / 'bus.jsonl')._private_marker_unlocked()\n        if marker.root_id != self.wire_root_id:\n            raise RelationViolationError('private route root ID changed')\n        return super(ActiveRoute, self).observe_root()\n\n    def bind_owners(self, owners: OwnerLifecycle) -> None:\n        owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 157,
+      "kind": "FunctionDef",
+      "source": "def read_active_route(path: Path | None=None) -> ActiveRoute | None:\n    \"\"\"Decode the one trusted default route; explicit roots bypass this file.\"\"\"\n    path = active_route_path() if path is None else path\n    try:\n        fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))\n    except FileNotFoundError:\n        return None\n    try:\n        parent = path.parent.lstat()\n        if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid() or stat.S_IMODE(parent.st_mode) != 448:\n            raise ValueError('active comms route directory must be owner-only')\n        info = os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 384 or (info.st_nlink != 1) or (not 0 < info.st_size <= 4096):\n            raise ValueError('active comms route must be one owner-only regular file')\n        raw = os.read(fd, 4097)\n    finally:\n        os.close(fd)\n    try:\n        current = path.lstat()\n    except FileNotFoundError as error:\n        raise ValueError('active comms route changed while reading') from error\n    if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (info.st_dev, info.st_ino, inf"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 234,
+      "kind": "FunctionDef",
+      "source": "def publish_active_route(route: ActiveRoute, path: Path | None=None) -> None:\n    \"\"\"Atomically install the first private default after owner migration.\n\n    Existing routes are never overwritten by a stale migration. Publication\n    uses the same no-replace hardlink pattern as the private store initializer;\n    a reader fails closed during the brief two-link staging window.\n    \"\"\"\n    from .cohort_foreground import _preflight\n    path = active_route_path() if path is None else path\n    if path.name != 'active-route.json' or not path.is_absolute():\n        raise ValueError('active comms route requires its absolute route path')\n    FieldCodec.encode(route)\n    _preflight(route.root, route.wire_root_id, route.native_package, True)\n    path.parent.mkdir(mode=448, parents=True, exist_ok=True)\n    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, 'O_NOFOLLOW', 0))\n    try:\n        fcntl.flock(directory, fcntl.LOCK_EX)\n        _publish_active_route_locked(route, path, directory)\n    finally:\n        os.close(directory)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 257,
+      "kind": "FunctionDef",
+      "source": "def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int, *, expected: ActiveRoute | None=None) -> None:\n    \"\"\"Publish through a checked directory FD already held with route EX.\"\"\"\n    from .cohort_foreground import _preflight\n    temporary: str | None = None\n    try:\n        info = os.fstat(directory)\n        parent = path.parent.lstat()\n        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or parent.st_dev != info.st_dev or (parent.st_ino != info.st_ino):\n            raise ValueError('active comms route directory changed or is not owned')\n        os.fchmod(directory, 448)\n        current = read_active_route(path)\n        if current != expected:\n            raise ValueError('active comms route is already installed' if expected is None else 'active comms route is not the expected private root')\n        payload = (json.dumps(FieldCodec.encode(route), sort_keys=True) + '\\n').encode()\n        temporary = f'.active-route-{uuid.uuid4().hex}.tmp'\n        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 384, dir_fd=directory)\n        try:\n            view = memoryview(payload)\n            while view:\n  "
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 64,
+      "kind": "FunctionDef",
+      "source": "def bind_owners(self, owners: OwnerLifecycle) -> None:\n    from .private_nk_entrypoint import PrivateNkLaunch\n    launch = PrivateNkLaunch.from_environment(self.root, os.environ)\n    if launch is not None:\n        owners.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 98,
+      "kind": "AnnAssign",
+      "source": "native_package: Annotated[Path, AbsoluteRoutePathText]"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 122,
+      "kind": "FunctionDef",
+      "source": "def bind_owners(self, owners: OwnerLifecycle) -> None:\n    owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 247,
+      "kind": "Call",
+      "source": "_preflight(route.root, route.wire_root_id, route.native_package, True)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 124,
+      "kind": "Call",
+      "source": "owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 304,
+      "kind": "Call",
+      "source": "_preflight(route.root, route.wire_root_id, route.native_package, True)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 69,
+      "kind": "Call",
+      "source": "owners.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 177,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 320,
+      "kind": "Call",
+      "source": "os.unlink(temporary, dir_fd=directory)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 341,
+      "kind": "Call",
+      "source": "os.unlink(temporary, dir_fd=directory)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 274,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef _opened_selected_file(worktree: Path, normalized: str) -> Iterator[tuple[int, Callable[[], None]]]:\n    \"\"\"Anchor every parent component to physical worktree directory FDs.\n\n    Path normalization alone is not enough: a parent can be replaced by a\n    symlink before a final-component O_NOFOLLOW open. Preflight stability is\n    required before truncation; post-fsync drift is UNKNOWN, not success.\n    This does not promise hostile same-UID rename exclusion during a write.\n    \"\"\"\n    relative = Path(normalized).relative_to(worktree)\n    if not relative.parts or not hasattr(os, 'O_DIRECTORY'):\n        raise IdentityConflict('Selected write needs a physical directory chain')\n    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC\n    with ExitStack() as opened:\n        try:\n            root_fd = os.open(worktree, directory_flags)\n            opened.callback(os.close, root_fd)\n            chain: list[tuple[int | None, str | Path, int]] = [(None, worktree, root_fd)]\n            parent_fd = root_fd\n            for part in relative.parts[:-1]:\n                next_fd = os.open(part, directory_flags, dir_fd=parent_fd)\n                opened.call"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 311,
+      "kind": "FunctionDef",
+      "source": "def stable() -> None:\n    for parent, name, directory_fd in chain:\n        visible = os.stat(name, dir_fd=parent, follow_symlinks=False)\n        held = os.fstat(directory_fd)\n        if not stat.S_ISDIR(visible.st_mode) or (visible.st_dev, visible.st_ino) != (held.st_dev, held.st_ino):\n            raise IdentityConflict('Selected write parent directory changed')\n    visible_file = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)\n    held_file = os.fstat(fd)\n    if not stat.S_ISREG(visible_file.st_mode) or held_file.st_nlink != 1 or (visible_file.st_dev, visible_file.st_ino) != (held_file.st_dev, held_file.st_ino):\n        raise IdentityConflict('Selected write opened file changed')"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 306,
+      "kind": "Compare",
+      "source": "actual.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 324,
+      "kind": "Compare",
+      "source": "held_file.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 749,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)\nclass ContextCliCommand(CliCommand):\n    help = 'Inspect original context contributors without sending an input'\n    thread: str = option('thread')\n    turn: int | None = option('--turn', default=None, help='Original admitted turn generation')\n    diff: bool = option('--diff', default=False, action='store_true')\n\n    def apply(self, ctx: Comms) -> Any:\n        import asyncio\n        from .private_nk_entrypoint import PrivateNkLaunch\n        from .context_tokens import NativeTokenCounter\n        from .field_codec import FieldCodec\n        from .native_turn_context import NativeContextData\n        from .runtime import RuntimeConnection, socket_path\n        from .turn_context import TurnContext, NextContextTurn\n        if self.turn is not None or self.diff:\n            manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)\n            selected = tuple((manifest for manifest in manifests if self.turn is None or manifest.turn.matches_generation(self.turn)))\n            if not selected:\n                raise ValueError('No original context manifest exists for the requested turn')\n            if self.diff:\n                return selected"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 755,
+      "kind": "FunctionDef",
+      "source": "def apply(self, ctx: Comms) -> Any:\n    import asyncio\n    from .private_nk_entrypoint import PrivateNkLaunch\n    from .context_tokens import NativeTokenCounter\n    from .field_codec import FieldCodec\n    from .native_turn_context import NativeContextData\n    from .runtime import RuntimeConnection, socket_path\n    from .turn_context import TurnContext, NextContextTurn\n    if self.turn is not None or self.diff:\n        manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)\n        selected = tuple((manifest for manifest in manifests if self.turn is None or manifest.turn.matches_generation(self.turn)))\n        if not selected:\n            raise ValueError('No original context manifest exists for the requested turn')\n        if self.diff:\n            return selected[-1].changed_from_history(manifests)\n        return {'manifests': FieldCodec.encode(selected), 'text_recorded': False}\n    owner = ctx.registry.require(self.thread)\n    context = TurnContext.for_owner(owner, NextContextTurn(), '', ctx.views.thread_views())\n    for segment in owner.context_goal_segments():\n        context = context.prepend(segment)\n    for segment in ctx.bus.awareness_segments(owner):\n        c"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 786,
+      "kind": "Assign",
+      "source": "counter = NativeTokenCounter(launch.native_package)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 786,
+      "kind": "Call",
+      "source": "NativeTokenCounter(launch.native_package)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 58,
+      "kind": "FunctionDef",
+      "source": "def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool) -> Path:\n    if not opt_in:\n        raise PublicationActivationBlocked('foreground cohort requires explicit activation')\n    _private_session_dir(root)\n    cli = _trusted_package(native_package)\n    comms = Comms(root)\n    bus = MessageBus(root / 'bus.jsonl', comms.registry, private_response_writes=True)\n    with bus.log.locked():\n        marker = bus.log._private_marker_unlocked()\n    if marker.root_id != wire_root_id:\n        raise IdentityConflict('private initial wire root changed')\n    return cli"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 241,
+      "kind": "FunctionDef",
+      "source": "def _read_selected_write_source(path: Path) -> bytes:\n    \"\"\"Read explicit operator input before reserving an owner or native input.\"\"\"\n    if not hasattr(os, 'O_NOFOLLOW'):\n        raise ValueError('selected source requires no-follow descriptors')\n    before = path.lstat()\n    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 1024 * 1024:\n        raise ValueError('selected source must be a bounded regular file')\n    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)\n    try:\n        info = os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 1024 * 1024 or ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)):\n            raise ValueError('selected source must be a bounded regular file')\n        contents = os.read(fd, 1024 * 1024 + 1)\n        if len(contents) > 1024 * 1024:\n            raise ValueError('selected source exceeds 1 MiB')\n        return contents\n    finally:\n        os.close(fd)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 266,
+      "kind": "FunctionDef",
+      "source": "def main(argv: Sequence[str] | None=None) -> int:\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--root', type=Path, required=True)\n    parser.add_argument('--wire-root-id', required=True)\n    parser.add_argument('--name', required=True)\n    parser.add_argument('--worktree', type=Path, required=True)\n    parser.add_argument('--tags', default='', help='Comma-separated recipient tags')\n    parser.add_argument('--native-package', type=Path, required=True)\n    parser.add_argument('--wait-seconds', type=float, default=60.0)\n    parser.add_argument('--selected-write-resource', type=Path, help=\"Existing file under the selected owner's worktree; requires --selected-write-source\")\n    parser.add_argument('--selected-write-source', type=Path, help='Bounded regular source of bytes for a successful selected FULL file replacement')\n    parser.add_argument('--opt-in', action='store_true', default=True, help=argparse.SUPPRESS)\n    args = parser.parse_args(argv)\n\n    def ready(thread: Thread) -> None:\n        print(json.dumps({'ready': True, 'name': thread.name, 'pid': os.getpid()}), flush=True)\n    try:\n        if (args.selected_write_resource is None) != (args"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 64,
+      "kind": "Assign",
+      "source": "cli = _trusted_package(native_package)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 90,
+      "kind": "FunctionDef",
+      "source": "def accept(resource: Coordination) -> int:\n    sealed = sealed_cohort_sequences(resource, root_id)\n    with bus.log.certified_read() as source:\n        _require_no_private_owner_rename(bus.log.path.parent)\n        marker = bus.log._private_marker_unlocked()\n        if marker.root_id != root_id:\n            raise IdentityConflict('private initial wire root changed')\n        admitted_after = max(after_seq, marker.admission_after_seq)\n    visited_after = admitted_after\n    unaccepted = []\n    for initial in bus.log.addressed_sources(lookup, admitted_after):\n        visited_after = initial.message.seq\n        if initial.message.seq not in sealed and any((r.recipient_lookup == lookup and r.canonical_thread == owner_name for r in initial.audience.recipients)):\n            unaccepted.append(initial)\n    if len(unaccepted) > 100:\n        raise IdentityConflict('recipient initial cohort batch exceeds bounded foreground scan')\n    if unaccepted and native_package is not None:\n        _preflight(bus.log.path.parent, root_id, native_package, True)\n    for initial in unaccepted:\n        accept_delivery_cohort(bus, root_id, initial.message.seq, resource)\n    return visited_after"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 64,
+      "kind": "Call",
+      "source": "_trusted_package(native_package)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 306,
+      "kind": "Assign",
+      "source": "result = asyncio.run(run_foreground_once(args.root, wire_root_id=args.wire_root_id, name=args.name, worktree=args.worktree, tags=frozenset(filter(None, args.tags.split(','))), native_package=args.native_package, opt_in=args.opt_in, wait_seconds=args.wait_seconds, ready=ready, selected_existing_file_write=selected_write))"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 153,
+      "kind": "Call",
+      "source": "Coordination.run_worker(partial(_preflight, root, wire_root_id, native_package, opt_in))"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 210,
+      "kind": "Assign",
+      "source": "result = await SelectedExecution(root=root, wire_root_id=wire_root_id, owner_name=name, native_package=native_package, opt_in=True, selected_existing_file_write=selected_existing_file_write).run()"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 246,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 306,
+      "kind": "Call",
+      "source": "asyncio.run(run_foreground_once(args.root, wire_root_id=args.wire_root_id, name=args.name, worktree=args.worktree, tags=frozenset(filter(None, args.tags.split(','))), native_package=args.native_package, opt_in=args.opt_in, wait_seconds=args.wait_seconds, ready=ready, selected_existing_file_write=selected_write))"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 111,
+      "kind": "Compare",
+      "source": "native_package is not None"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 114,
+      "kind": "Call",
+      "source": "_preflight(bus.log.path.parent, root_id, native_package, True)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 153,
+      "kind": "Call",
+      "source": "partial(_preflight, root, wire_root_id, native_package, opt_in)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 253,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 295,
+      "kind": "Call",
+      "source": "_preflight(Path(args.root).absolute(), args.wire_root_id, args.native_package, args.opt_in)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 307,
+      "kind": "Call",
+      "source": "run_foreground_once(args.root, wire_root_id=args.wire_root_id, name=args.name, worktree=args.worktree, tags=frozenset(filter(None, args.tags.split(','))), native_package=args.native_package, opt_in=args.opt_in, wait_seconds=args.wait_seconds, ready=ready, selected_existing_file_write=selected_write)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 210,
+      "kind": "Call",
+      "source": "SelectedExecution(root=root, wire_root_id=wire_root_id, owner_name=name, native_package=native_package, opt_in=True, selected_existing_file_write=selected_existing_file_write).run()"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 210,
+      "kind": "Call",
+      "source": "SelectedExecution(root=root, wire_root_id=wire_root_id, owner_name=name, native_package=native_package, opt_in=True, selected_existing_file_write=selected_existing_file_write)"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 30,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass CompactionBoundary:\n    registry: Registration\n    inputs: InputDispositions\n    future_queue: FutureInputQueue | None = None\n    native_reader: NativeEvidenceRead | None = field(default=None, kw_only=True)\n\n    @property\n    def root(self) -> Path:\n        return self.registry.store.path.parent.resolve(strict=True)\n\n    def retained_history(self, owner: Thread, *, diff: bool=False):\n        \"\"\"Inspect original attempts without constructing a journal writer.\"\"\"\n        from .compaction_journal import CompactionJournal\n        try:\n            session_file = owner.require_saved_session()\n        except ValueError as error:\n            return dict(available=False, reason=str(error), scope='no canonical saved session; native facts cannot be inferred')\n        path = self.root / 'compaction-commits.sqlite3'\n        if diff:\n            return CompactionJournal.retained_changes(path, session_file)\n        return CompactionJournal.retained_history(path, session_file)\n\n    def inspect(self, name: str):\n        \"\"\"Observe current sources and original compaction cuts separately.\n\n        The current wire/registry/input cut is certified by its existing reader.\n "
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 124,
+      "kind": "FunctionDef",
+      "source": "@staticmethod\ndef ingress_revision(path: Path) -> str:\n    try:\n        info = path.lstat()\n    except FileNotFoundError:\n        return 'missing'\n    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:\n        raise RelationViolationError('Compaction ingress must be regular storage')\n    with path.open('rb') as stream:\n        digest = hashlib.file_digest(stream, 'sha256').hexdigest()\n    return f'{info.st_dev}:{info.st_ino}:{info.st_size}:{info.st_mtime_ns}:{info.st_ctime_ns}:{digest}'"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 140,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef settings_revision(cls, paths: tuple[str, ...] | None) -> tuple[str, ...] | None:\n    if paths is None:\n        return None\n    if not paths or any((not Path(path).is_absolute() for path in paths)):\n        raise RelationViolationError('Exact effective settings paths required')\n    states = []\n    for path in paths:\n        file = Path(path)\n        try:\n            info = file.lstat()\n        except FileNotFoundError:\n            states.append('missing')\n            continue\n        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 1048576:\n            raise RelationViolationError('Unsafe effective settings source')\n        states.append(cls.ingress_revision(file))\n    return tuple(states)"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 129,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 153,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 27,
+      "kind": "ClassDef",
+      "source": "class CompactionJournal:\n\n    @classmethod\n    def snapshot(cls, path: Path, session_file: str, incarnation: ThreadIncarnation, registry: RegistryProvenance):\n        \"\"\"Observe the original journal without the writer's creation/durability path.\n\n        mode=ro respects commits; immutable=1 would conceal genuine transitions.\n        This current journal uses rollback mode. Reject WAL before SQLite opens\n        it so even a read cannot create a shared-memory sidecar. No absent file\n        or schema is initialized, and no admission/durability receipt is minted.\n        \"\"\"\n        from .compaction_outcomes import CompactionOutcomeSnapshot\n        return cls.observe_readonly(path, lambda db: CompactionOutcomeSnapshot.read(db, session_file, incarnation, registry), absent=CompactionOutcomeSnapshot(()))\n\n    @classmethod\n    def observe_readonly(cls, path: Path, observe: Callable, *, absent):\n        \"\"\"One read lifetime for original journal consumers; no writer setup.\n\n        All consumers share the custody, rollback-format and transaction checks\n        below. Missing storage is observed without creating a database or sidecar.\n        \"\"\"\n        try:\n            initial = path.lst"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 44,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef observe_readonly(cls, path: Path, observe: Callable, *, absent):\n    \"\"\"One read lifetime for original journal consumers; no writer setup.\n\n        All consumers share the custody, rollback-format and transaction checks\n        below. Missing storage is observed without creating a database or sidecar.\n        \"\"\"\n    try:\n        initial = path.lstat()\n    except FileNotFoundError:\n        return absent\n    if not stat.S_ISREG(initial.st_mode) or initial.st_nlink != 1:\n        raise CompactionJournalError('Journal must be a regular private file')\n    try:\n        with path.open('rb') as stream:\n            info = os.fstat(stream.fileno())\n            if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:\n                raise CompactionJournalError('Journal must be a regular private file')\n            header = stream.read(100)\n    except FileNotFoundError as error:\n        raise CompactionJournalError('Journal removed before read') from error\n    if header[:16] != b'SQLite format 3\\x00' or header[18:20] != b'\\x01\\x01':\n        raise CompactionJournalError('Read-only journal requires current rollback format')\n    custody = JournalCustody.captu"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 55,
+      "kind": "Compare",
+      "source": "initial.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 60,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication_lease.py",
+      "line": 19,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef publication_identity_fence(root: Path, *, nonblocking: bool=False) -> Iterator[None]:\n    if os.name != 'posix':\n        yield\n        return\n    import fcntl\n    path = root / '.compaction-publication-handoff.lock'\n    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW, 384)\n    try:\n        info = os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid():\n            raise ValueError('Unsafe compaction publication identity fence')\n        try:\n            fcntl.flock(fd, fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0))\n        except BlockingIOError as error:\n            from .errors import RelationViolationError\n            raise RelationViolationError('Canonical session identity is publishing; retry the identity change') from error\n        yield\n    finally:\n        os.close(fd)"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication_lease.py",
+      "line": 31,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 58,
+      "kind": "ClassDef",
+      "source": "class SelectedSummaries(JournalRole):\n\n    def reserve(self, session_file: str, source: SelectedSummarySource, *, operation_id: str | None=None, fresh_session: FreshPrivateSession | None=None, admission_generation: int | None=None, future_queue: FutureInputQueue | None=None, native_reader: NativeEvidenceRead | None=None) -> str:\n        \"\"\"Durably reserve BEFORE any selected Pi RPC send or auth side effect.\n\n        All selected attempts, including terminal-looking ones, remain blocking\n        until separately reviewed exact-ID recovery exists. A failure before\n        writing stdin does not authorize retry.\n        The caller must separately retain owner/turn/ingress authority; this\n        journal is only an exclusion and recovery record, never a bearer grant.\n        \"\"\"\n        operation_id = uuid4().hex if operation_id is None else operation_id\n        if not re.fullmatch('[0-9a-f]{32}', operation_id):\n            raise ValueError('Expected exact selected summary operation ID')\n        canonical = str(Path(session_file).resolve(strict=True))\n        info = Path(canonical).lstat()\n        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:\n            raise CompactionJour"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "source": "def reserve(self, session_file: str, source: SelectedSummarySource, *, operation_id: str | None=None, fresh_session: FreshPrivateSession | None=None, admission_generation: int | None=None, future_queue: FutureInputQueue | None=None, native_reader: NativeEvidenceRead | None=None) -> str:\n    \"\"\"Durably reserve BEFORE any selected Pi RPC send or auth side effect.\n\n        All selected attempts, including terminal-looking ones, remain blocking\n        until separately reviewed exact-ID recovery exists. A failure before\n        writing stdin does not authorize retry.\n        The caller must separately retain owner/turn/ingress authority; this\n        journal is only an exclusion and recovery record, never a bearer grant.\n        \"\"\"\n    operation_id = uuid4().hex if operation_id is None else operation_id\n    if not re.fullmatch('[0-9a-f]{32}', operation_id):\n        raise ValueError('Expected exact selected summary operation ID')\n    canonical = str(Path(session_file).resolve(strict=True))\n    info = Path(canonical).lstat()\n    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:\n        raise CompactionJournalError('Selected saved session must have one private inode link')\n    env"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 83,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 8,
+      "kind": "ImportFrom",
+      "source": "from .native_package import verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 29,
+      "kind": "ClassDef",
+      "source": "class NativeTokenCounter:\n\n    def __init__(self, package: Path):\n        self.package = package\n\n    def measure(self, segments: tuple[str, ...]) -> ContextTokenCounts:\n        verify_native_package(self.package)\n        return asyncio.run(ContextTokensHelper.run(ContextTokenRequest(str(self.package), segments), cwd=Path.cwd()))"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 33,
+      "kind": "FunctionDef",
+      "source": "def measure(self, segments: tuple[str, ...]) -> ContextTokenCounts:\n    verify_native_package(self.package)\n    return asyncio.run(ContextTokensHelper.run(ContextTokenRequest(str(self.package), segments), cwd=Path.cwd()))"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 34,
+      "kind": "Call",
+      "source": "verify_native_package(self.package)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 100,
+      "kind": "FunctionDef",
+      "source": "def _recorded_private_contexts(root: Path, session: NativeSessionIdentity) -> dict[str, NativeContextProof]:\n    \"\"\"Read immutable live-result columns; journal parsing never supplies them.\"\"\"\n    database = root / 'coordination.sqlite3'\n    info = database.lstat()\n    PrivateFileRole.require(info)\n    if database != database.resolve(strict=True) or info.st_nlink != 1:\n        raise ValueError('Continued private coordinator is not canonical private storage')\n    from .coordination_database import CoordinationStore\n    with CoordinationStore.observing(database, lock_timeout=1) as db:\n        assert_native_runtime_schema(db)\n        return NativeRuntimeInput.recorded_contexts(db, session)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 108,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 31,
+      "kind": "ClassDef",
+      "source": "@dataclass(kw_only=True)\nclass SelectedExecution:\n    root: Path\n    wire_root_id: str\n    owner_name: str\n    native_package: Path\n    opt_in: bool = True\n    after_seq: int = 0\n    session_file: Path | None = None\n    fresh_private_enrollment: bool = False\n    selected_thinking_level: str | None = None\n    selected_existing_file_write: SelectedExistingFileWrite | None = None\n    selected_tool_intent: SelectedToolIntent | None = None\n    write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)\n    _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)\n    _native_launch: NativePiRpcLaunch | None = field(init=False, default=None, repr=False, compare=False)\n\n    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:\n        \"\"\"Lend the actual acquired artifact across this execution's stages.\n\n        The first child still acquires a fresh launch. Subsequent stages rebuild\n        their complete source/configuration through that immutable acquisition;\n        no native child, input proof or readiness is borrowed from a prior turn.\n        \"\"\"\n        if package != self.native_package:\n            raise IdentityCo"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 35,
+      "kind": "AnnAssign",
+      "source": "native_package: Path"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 49,
+      "kind": "FunctionDef",
+      "source": "def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:\n    \"\"\"Lend the actual acquired artifact across this execution's stages.\n\n        The first child still acquires a fresh launch. Subsequent stages rebuild\n        their complete source/configuration through that immutable acquisition;\n        no native child, input proof or readiness is borrowed from a prior turn.\n        \"\"\"\n    if package != self.native_package:\n        raise IdentityConflict('Selected launch differs from its execution package')\n    launch = NativePiRpcLaunch.tracked(package, acquired_launch=self._native_launch, **options)\n    if self._native_launch is None:\n        self._native_launch = launch\n    return launch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 65,
+      "kind": "FunctionDef",
+      "source": "def validate(self) -> None:\n    if not self.opt_in:\n        raise PublicationActivationBlocked('coordinated runtime requires explicit activation')\n    _private_session_dir(self.root)\n    if type(self.fresh_private_enrollment) is not bool:\n        raise IdentityConflict('Fresh private enrollment requires an explicit boolean')\n    if self.fresh_private_enrollment and self.session_file is not None:\n        raise IdentityConflict('Fresh private enrollment requires a new, explicit session')\n    if self.selected_thinking_level is not None:\n        if not self.fresh_private_enrollment:\n            raise IdentityConflict('Selected level requires explicitly supported fresh enrollment')\n        if type(self.selected_thinking_level) is not str or not ThinkingLevel.supports_selected(self.selected_thinking_level):\n            raise IdentityConflict('Selected level requires explicitly supported fresh enrollment')\n    _trusted_package(self.native_package)\n    if self.selected_existing_file_write is not None and type(self.selected_existing_file_write) is not SelectedExistingFileWrite:\n        raise TypeError('selected write requires an explicit trusted plan')\n    if self.selected_tool_intent is no"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 56,
+      "kind": "Compare",
+      "source": "package != self.native_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 84,
+      "kind": "Call",
+      "source": "_trusted_package(self.native_package)"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 34,
+      "kind": "ClassDef",
+      "source": "class CoordinationStore:\n    \"\"\"Open or initialize the private versioned coordination database.\"\"\"\n\n    @staticmethod\n    def _require_timeout(lock_timeout: float) -> None:\n        if type(lock_timeout) not in (int, float) or not 0 <= lock_timeout <= 5:\n            raise ValueError('coordination lock timeout must be bounded')\n\n    @staticmethod\n    @contextmanager\n    def observing(path: Path, *, lock_timeout: float):\n        \"\"\"Own an existing committed read, never initialization or write admission.\n\n        The caller validates its declared tables and returns detached values.\n        Contention establishes neither missing rows nor a successful snapshot.\n        This same boundary closes partial acquisition and rolls back before\n        exporting an unavailable read to presentation or recovery consumers.\n        \"\"\"\n        CoordinationStore._require_timeout(lock_timeout)\n        try:\n            with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, isolation_level=None, timeout=lock_timeout)) as db:\n                db.row_factory = sqlite3.Row\n                db.execute('PRAGMA query_only=ON')\n                db.execute('PRAGMA foreign_keys=ON')\n           "
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 96,
+      "kind": "FunctionDef",
+      "source": "def _prepare_private_file(self) -> None:\n    self.path.parent.mkdir(parents=True, exist_ok=True)\n    try:\n        info = self.path.lstat()\n    except FileNotFoundError:\n        descriptor, staging = tempfile.mkstemp(prefix='.coord-init-', dir=self.path.parent)\n        try:\n            os.close(descriptor)\n            with suppress(FileExistsError):\n                os.link(staging, self.path, follow_symlinks=False)\n        finally:\n            os.unlink(staging)\n        info = self.path.lstat()\n    if not stat.S_ISREG(info.st_mode):\n        raise IntegrityViolationError('coordination database must be a regular file')\n    if os.name != 'nt' and stat.S_IMODE(info.st_mode) != 384:\n        os.chmod(self.path, 384, follow_symlinks=False)"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 111,
+      "kind": "Call",
+      "source": "os.unlink(staging)"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 39,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass FileClaimPath(ABC):\n    \"\"\"A caller's file operation owns which physical paths may be claimed.\"\"\"\n    resource: Path\n\n    def __post_init__(self) -> None:\n        if not isinstance(self.resource, Path):\n            raise TypeError('File claim requires a parsed path')\n\n    def normalized(self, root: Path) -> str:\n        base = Path(root).absolute()\n        try:\n            physical_root = base.resolve(strict=True)\n            if physical_root != base or not base.is_dir():\n                raise ClaimTransitionError('Worktree must be a physical existing directory.')\n            requested = self.resource\n            if '..' in requested.parts:\n                raise ClaimTransitionError('Parent traversal is not a resource identifier.')\n            candidate = requested if requested.is_absolute() else base / requested\n            resolved = candidate.resolve(strict=False)\n            if resolved != candidate:\n                raise ClaimTransitionError('Symlink aliases are not supported.')\n            relative = resolved.relative_to(physical_root)\n            if not relative.parts:\n                raise ClaimTransitionError('Worktree directories cannot be cl"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 78,
+      "kind": "FunctionDef",
+      "source": "@staticmethod\ndef validate_regular(info) -> None:\n    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:\n        raise ClaimTransitionError('Only regular singly-linked files can be claimed.')"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 79,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 381,
+      "kind": "ClassDef",
+      "source": "class WireTranscriptExporter:\n    \"\"\"Stream a fixed wire boundary into one private atomic artifact.\"\"\"\n    SCHEMA: ClassVar[str] = 'agent-comms/wire-export'\n    VERSION: ClassVar[int] = 1\n\n    def __init__(self, *, format: WireExportFormat, scope: WireExportScope, limit: WireExportLimit, boundary: WireExportBoundary) -> None:\n        self.format = format\n        self.scope = scope\n        self.limit = limit\n        self.boundary = boundary\n\n    def export(self, envelopes: Iterable[Message | Mapping[str, object]], destination: Path, *, overwrite: bool=False) -> WireExportReceipt:\n        \"\"\"Consume ascending envelopes once and atomically publish the artifact.\"\"\"\n        header = self._header()\n        self.limit.validate_header(len(header))\n        destination = Path(destination)\n        destination.parent.mkdir(parents=True, exist_ok=True)\n        if not overwrite and os.path.lexists(destination):\n            raise FileExistsError(f'Wire-export destination {str(destination)!r} already exists.')\n        descriptor, temporary = tempfile.mkstemp(prefix=f'.{destination.name}.', suffix='.tmp', dir=destination.parent)\n        temporary_path = Path(temporary)\n        stats = ExportSelecti"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 400,
+      "kind": "FunctionDef",
+      "source": "def export(self, envelopes: Iterable[Message | Mapping[str, object]], destination: Path, *, overwrite: bool=False) -> WireExportReceipt:\n    \"\"\"Consume ascending envelopes once and atomically publish the artifact.\"\"\"\n    header = self._header()\n    self.limit.validate_header(len(header))\n    destination = Path(destination)\n    destination.parent.mkdir(parents=True, exist_ok=True)\n    if not overwrite and os.path.lexists(destination):\n        raise FileExistsError(f'Wire-export destination {str(destination)!r} already exists.')\n    descriptor, temporary = tempfile.mkstemp(prefix=f'.{destination.name}.', suffix='.tmp', dir=destination.parent)\n    temporary_path = Path(temporary)\n    stats = ExportSelectionStats()\n    exported = 0\n    first_selected: Message | None = None\n    last_selected: Message | None = None\n    try:\n        with os.fdopen(descriptor, 'wb') as output:\n            writer = _ArtifactWriter(output)\n            writer.write(header)\n            rows = self._rows(envelopes, stats)\n            for row in self.limit.select(rows, len(header), self.boundary.export_started_at, stats):\n                writer.write(row.data)\n                exported += 1\n                if fir"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 444,
+      "kind": "Call",
+      "source": "temporary_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 106,
+      "kind": "ClassDef",
+      "source": "class LinkedFreshFileRule(FreshFileRule):\n\n    @classmethod\n    def violated(cls, check):\n        return check.observed.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 443,
+      "kind": "FunctionDef",
+      "source": "def create_fresh_private_session(session_dir: Path, *, worktree: Path, selected_thinking_level: str | None=None) -> FreshPrivateSession:\n    \"\"\"Create a unique v3 header with O_EXCL, file fsync, then parent fsync.\n\n    Call only for explicit fresh-session enrollment. An existing path, reused\n    ID, failed fsync or uncertain return is not eligible, even if a header is\n    later visible. This API never opens an old saved session for enrollment.\n    \"\"\"\n    if selected_thinking_level is not None and (type(selected_thinking_level) is not str or not ThinkingLevel.supports_selected(selected_thinking_level)):\n        raise ValueError('Explicit supported selected thinking level required')\n    session_dir = Path(session_dir).absolute()\n    worktree = Path(worktree).absolute()\n    if not worktree.is_dir():\n        raise NativePiUnavailable('Fresh-session worktree is unavailable')\n    _durable_private_session_dir(session_dir)\n    session_id = uuid4().hex\n    path = session_dir / f'enrolled-{session_id}.jsonl'\n    header_row = {'type': 'session', 'version': 3, 'id': session_id, 'timestamp': datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'cwd': str(worktree)}\n    "
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 108,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef violated(cls, check):\n    return check.observed.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 109,
+      "kind": "Compare",
+      "source": "check.observed.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 515,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 64,
+      "kind": "ClassDef",
+      "source": "class InputDrain(FutureInputQueue):\n\n    def __init__(self, comms: Comms, sessions: SessionLifecycle, runtime: RuntimeServer, effects: InputEffects, auto_wake: bool):\n        self.comms = comms\n        self.sessions = sessions\n        self.runtime = runtime\n        self.effects = effects\n        self.drain_tasks: dict[str, asyncio.Task[None]] = {}\n        self.backend_inboxes: dict[str, asyncio.Queue[str | dict[str, Any]]] = {}\n        self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}\n        self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}\n        self.queue_revisions: dict[str, int] = {}\n        self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}\n        self.turn_input_keys: dict[str, set[str]] = {}\n        self.original_sources: dict[str, OriginalTurnInput] = {}\n        self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}\n        self.dispositions = InputDispositions(comms.root / InputDispositions.filename)\n        self.auto_wake = auto_wake\n        self.pending_turns: dict[str, list[ScheduledTurn]] = {}\n        self.drain_locks: dict[str, asyncio.Lock] = {}\n        self.closing = False\n        self.wake_tasks: di"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 286,
+      "kind": "FunctionDef",
+      "source": "def _private_observation_revision(self, session_id: str, root_id: str, wire: tuple, store: Coordination) -> tuple:\n    \"\"\"Original owner/work observations, never delivery or replay authority.\n\n        Other owners' registry phases and SQL writes cannot change this owner's\n        observation. Committed wire messages, own pending/recovered work and\n        physical replacement still can. Silent context records consume bytes,\n        not the message cut used to select delivery.\n        \"\"\"\n    registry = self.comms.registry.snapshot()\n    thread = registry.require(self.sessions.require(session_id))\n    owner = RegistryOwner(thread=thread, admission_generation=registry.admission_generations[thread.name])\n    with store.session.read():\n        participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))\n        pending = next_sealed_assignment(store, participant.lookup, owner.thread.name, after_seq=wire[-1])\n        cursor = CursorOwner(thread=owner.thread, admission_generation=owner.admission_generation, wire_root_id=root_id, generation=participant.participant_generation).cursor(store.session._connection)\n        original = store.session.path.stat()\n    return ("
+    },
+    {
+      "path": "src/agent_comms/input_effects.py",
+      "line": 14,
+      "kind": "ClassDef",
+      "source": "class InputEffects(ABC):\n    cursors: CursorPublication\n    turns: TurnRunner\n\n    @abstractmethod\n    def _debug_log(self, message: str) -> None:\n        ...\n\n    @abstractmethod\n    async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:\n        ...\n\n    @abstractmethod\n    def _private_nk_marker(self) -> str:\n        ...\n    _private_nk_native_package: Path | None"
+    },
+    {
+      "path": "src/agent_comms/input_effects.py",
+      "line": 27,
+      "kind": "AnnAssign",
+      "source": "_private_nk_native_package: Path | None"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 23,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass LockedStore(ABC, Generic[T]):\n    \"\"\"One document owner; subclasses declare its type and missing-file value.\n\n    Update callbacks return a replacement value, or the original object to skip\n    writing. They must not mutate the original or call this store recursively.\n    No public method may be called while holding this document's canonical lock\n    on another descriptor. Distinct outer locks (for example wire) are allowed.\n    The append-only wire is not a document and must not use this abstraction.\n    \"\"\"\n    path: Path\n    json_indent: ClassVar[int | None] = None\n    json_sort_keys: ClassVar[bool] = False\n    json_suffix: ClassVar[str] = ''\n\n    @property\n    @abstractmethod\n    def record_type(self) -> type[T]:\n        \"\"\"The declaration decoded by FieldCodec, including container types.\"\"\"\n\n    @abstractmethod\n    def empty(self) -> T:\n        \"\"\"Return a fresh value for a missing document.\"\"\"\n\n    def _read_unlocked(self) -> T:\n        try:\n            text = self.path.read_text(encoding='utf-8')\n            return self._decode(json.loads(text))\n        except FileNotFoundError:\n            return self.empty()\n        except (OSError"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 108,
+      "kind": "FunctionDef",
+      "source": "def _write_unlocked(self, text: str) -> None:\n    \"\"\"Stage before publication; retain the old inode until directory sync.\n\n        A reported staging/publication/fsync failure restores the old bytes and\n        mode while the exclusive lock is held. A second failure during rollback\n        is propagated too; no filesystem can promise recovery from arbitrary\n        repeated I/O failure. Process death after replace has the usual atomic\n        old-or-new semantics, not a multi-file transaction or recovery journal.\n        \"\"\"\n    fd, temporary = tempfile.mkstemp(prefix=f'.{self.path.name}.', suffix='.tmp', dir=self.path.parent)\n    staged = Path(temporary)\n    backup = staged.with_suffix('.previous')\n    directory_fd = None\n    published = False\n    had_original = False\n    keep_backup = False\n    try:\n        with os.fdopen(fd, 'w', encoding='utf-8') as output:\n            try:\n                mode = stat.S_IMODE(self.path.stat().st_mode)\n            except FileNotFoundError:\n                mode = 384\n            output.write(text)\n            output.flush()\n            os.chmod(staged, mode)\n            os.fsync(output.fileno())\n        if os.name == 'posix':\n            director"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 151,
+      "kind": "Call",
+      "source": "backup.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 170,
+      "kind": "Call",
+      "source": "staged.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 172,
+      "kind": "Call",
+      "source": "backup.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 163,
+      "kind": "Call",
+      "source": "self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 105,
+      "kind": "ClassDef",
+      "source": "class MaintenanceBarrier:\n    \"\"\"One root's read-only admission gate; no in-process operator exists.\n\n    Ordinary workers, ACP adapters and tools import this package under the\n    same OS identity as the wire owner. A public in-package transition would\n    therefore grant any caller permanent host-wide denial authority. Only a\n    future separately protected control plane may write phase witnesses.\n    \"\"\"\n\n    def __init__(self, registry_path: Path):\n        self.registry_path = Path(registry_path)\n        self.wire_path = self.registry_path.parent / 'wire'\n        self.marker_path = self.registry_path.parent / '.maintenance-enabled'\n        self.state_path = self.registry_path.parent / '.maintenance-state'\n\n    @staticmethod\n    def _read(path: Path, declaration):\n        try:\n            descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))\n        except FileNotFoundError:\n            return None\n        except OSError as error:\n            raise RelationViolationError('Maintenance witness is inaccessible') from error\n        try:\n            info = os.fstat(descriptor)\n            if not stat.S_ISREG(info.st_mode) or (os.name == 'posix' and info.st_uid != os."
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 121,
+      "kind": "FunctionDef",
+      "source": "@staticmethod\ndef _read(path: Path, declaration):\n    try:\n        descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))\n    except FileNotFoundError:\n        return None\n    except OSError as error:\n        raise RelationViolationError('Maintenance witness is inaccessible') from error\n    try:\n        info = os.fstat(descriptor)\n        if not stat.S_ISREG(info.st_mode) or (os.name == 'posix' and info.st_uid != os.geteuid()) or (os.name == 'posix' and stat.S_IMODE(info.st_mode) != 384) or (info.st_nlink != 1) or (info.st_size > 4096):\n            raise RelationViolationError('Maintenance witness is not private and regular')\n        with os.fdopen(descriptor, 'r', encoding='utf-8') as stream:\n            descriptor = -1\n            value = FieldCodec.decode(declaration, json.load(stream, object_pairs_hook=unique_wire_object))\n    except (OSError, UnicodeError, ValueError) as error:\n        raise RelationViolationError('Maintenance witness is invalid') from error\n    finally:\n        if descriptor >= 0:\n            os.close(descriptor)\n    return value"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 134,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from .native_package import COMPACTION_HELPER, verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 28,
+      "kind": "ClassDef",
+      "source": "class NativeCompactionWriter:\n\n    def __init__(self, package_dir: Path, *, native_launch: NativePiRpcLaunch | None=None):\n        BoundedRun.require_inherited_deadline()\n        self.package_dir = package_dir.resolve(strict=True)\n        self.helper = self.package_dir / 'dist/agent-comms-compaction-commit-child.mjs'\n        self.import_fence = self.package_dir / 'dist/agent-comms-import-fence.mjs'\n        node = shutil.which('node')\n        if node is None:\n            raise ValueError('Node executable unavailable')\n        self.node = node\n        environment_launcher = shutil.which('env')\n        if environment_launcher is None:\n            raise ValueError('Isolated native environment launcher unavailable')\n        self.environment_launcher = environment_launcher\n        self.verify(native_launch)\n\n    def verify(self, native_launch: NativePiRpcLaunch | None=None) -> None:\n        if native_launch is None:\n            verify_native_package(self.package_dir)\n        elif native_launch.package != self.package_dir:\n            raise ValueError('Compaction writer differs from its acquired native launch')\n        copied_helper = self.package_dir / 'dist/agent-comms-compaction-commit"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 47,
+      "kind": "FunctionDef",
+      "source": "def verify(self, native_launch: NativePiRpcLaunch | None=None) -> None:\n    if native_launch is None:\n        verify_native_package(self.package_dir)\n    elif native_launch.package != self.package_dir:\n        raise ValueError('Compaction writer differs from its acquired native launch')\n    copied_helper = self.package_dir / 'dist/agent-comms-compaction-commit-child.mjs'\n    if not copied_helper.is_file() or copied_helper.read_bytes() != COMPACTION_HELPER.read_bytes():\n        raise ValueError('Trusted compaction helper differs from packaged resource')\n    if not self.import_fence.is_file():\n        raise ValueError('Native import boundary unavailable')"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 49,
+      "kind": "Call",
+      "source": "verify_native_package(self.package_dir)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 27,
+      "kind": "ClassDef",
+      "source": "class NativePackageError(ValueError):\n    \"\"\"Package bytes or filesystem shape are not the pinned native artifact.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 31,
+      "kind": "FunctionDef",
+      "source": "def _resource_root() -> Path:\n    module = Path(__file__).resolve()\n    packaged = module.with_name('_native')\n    if packaged.is_dir():\n        return packaged\n    if module.parent.name == 'agent_comms' and module.parent.parent.name == 'src':\n        return module.parents[2] / 'stack'\n    raise NativePackageError('Installed native package resources are unavailable')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 41,
+      "kind": "Assign",
+      "source": "MANIFEST = _resource_root() / 'pi-native.sha256'"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 46,
+      "kind": "FunctionDef",
+      "source": "def package_tree_digest(root: Path) -> str:\n    \"\"\"Hash sorted path/type/execute-mode/size/content records with bounded reads.\"\"\"\n    if os.name != 'posix':\n        raise NativePackageError('Native package filesystem verification requires POSIX')\n    digest = hashlib.sha256()\n    count, total = (1, 0)\n\n    def identity(info: os.stat_result) -> tuple[int, ...]:\n        return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink if info.st_mode & 146 else 0, info.st_uid, info.st_size, info.st_mtime_ns, info.st_ctime_ns if info.st_mode & 146 else 0)\n\n    def visit(path: Path, relative: str, depth: int) -> None:\n        nonlocal count, total\n        if count > MAX_ENTRIES or depth > MAX_DEPTH:\n            raise NativePackageError('Native package inventory limit exceeded')\n        before = path.lstat()\n        if before.st_uid not in (0, os.getuid()) or before.st_mode & 18:\n            raise NativePackageError('Native package is not owner-controlled')\n        if stat.S_ISDIR(before.st_mode):\n            record = ['directory', relative, before.st_mode & 73]\n            digest.update((json.dumps(record, ensure_ascii=True) + '\\n').encode())\n            names = []\n            with os.scan"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 120,
+      "kind": "FunctionDef",
+      "source": "def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:\n    \"\"\"Seal a NEW patched package, then reuse matching frozen resource inodes.\n\n    The existing build lifetime calls this only after every patch. Old handed\n    packages have a different import fence and are never changed or borrowed.\n    No donor metadata becomes authority: every shared byte/mode must equal the\n    already built resource, and the resulting tree still requires its own pin.\n    \"\"\"\n    root = root.resolve(strict=True)\n    package_tree_digest(root)\n    fence = Path('dist/agent-comms-import-fence.mjs')\n    current_fence = (root / fence).read_bytes()\n    donors = []\n    for deployment in sorted(deployments.glob('.pi-native-*')):\n        donor = deployment / 'node_modules/@earendil-works/pi-coding-agent'\n        candidate = donor / fence\n        if not candidate.is_file() or candidate.is_symlink() or donor == root:\n            continue\n        info = candidate.lstat()\n        if info.st_mode & 146 or candidate.read_bytes() != current_fence:\n            continue\n        package_tree_digest(donor)\n        donors.append(donor)\n    shared_files = shared_bytes = 0\n    for path in sorted(root.rglob("
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 179,
+      "kind": "FunctionDef",
+      "source": "def verify_native_package(root: Path) -> None:\n    \"\"\"Verify the entire copied package against the repository-owned commitment.\"\"\"\n    pins = [line[len(TREE_PREFIX):] for line in MANIFEST.read_text().splitlines() if line.startswith(TREE_PREFIX)]\n    if len(pins) != 1 or len(pins[0]) != 64 or any((c not in '0123456789abcdef' for c in pins[0])):\n        raise NativePackageError('Pinned native package tree commitment unavailable')\n    if package_tree_digest(root) != pins[0]:\n        raise NativePackageError('Native package tree differs from pinned artifact')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 53,
+      "kind": "FunctionDef",
+      "source": "def identity(info: os.stat_result) -> tuple[int, ...]:\n    return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink if info.st_mode & 146 else 0, info.st_uid, info.st_size, info.st_mtime_ns, info.st_ctime_ns if info.st_mode & 146 else 0)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 65,
+      "kind": "FunctionDef",
+      "source": "def visit(path: Path, relative: str, depth: int) -> None:\n    nonlocal count, total\n    if count > MAX_ENTRIES or depth > MAX_DEPTH:\n        raise NativePackageError('Native package inventory limit exceeded')\n    before = path.lstat()\n    if before.st_uid not in (0, os.getuid()) or before.st_mode & 18:\n        raise NativePackageError('Native package is not owner-controlled')\n    if stat.S_ISDIR(before.st_mode):\n        record = ['directory', relative, before.st_mode & 73]\n        digest.update((json.dumps(record, ensure_ascii=True) + '\\n').encode())\n        names = []\n        with os.scandir(path) as entries:\n            for entry in entries:\n                count += 1\n                if count > MAX_ENTRIES:\n                    raise NativePackageError('Native package inventory limit exceeded')\n                names.append(entry.name)\n        for name in sorted(names):\n            visit(path / name, f'{relative}/{name}', depth + 1)\n    elif stat.S_ISREG(before.st_mode):\n        if before.st_nlink != 1 and before.st_mode & 146:\n            raise NativePackageError('Native package shared resource is writable')\n        total += before.st_size\n        if total > MAX_BYTES:\n           "
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 181,
+      "kind": "Assign",
+      "source": "pins = [line[len(TREE_PREFIX):] for line in MANIFEST.read_text().splitlines() if line.startswith(TREE_PREFIX)]"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "NativePackageError('Installed native package resources are unavailable')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 129,
+      "kind": "Call",
+      "source": "package_tree_digest(root)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 175,
+      "kind": "Call",
+      "source": "package_tree_digest(root)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 188,
+      "kind": "Compare",
+      "source": "package_tree_digest(root) != pins[0]"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 49,
+      "kind": "Call",
+      "source": "NativePackageError('Native package filesystem verification requires POSIX')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 143,
+      "kind": "Call",
+      "source": "package_tree_digest(donor)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 187,
+      "kind": "Call",
+      "source": "NativePackageError('Pinned native package tree commitment unavailable')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 188,
+      "kind": "Call",
+      "source": "package_tree_digest(root)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 189,
+      "kind": "Call",
+      "source": "NativePackageError('Native package tree differs from pinned artifact')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 194,
+      "kind": "Call",
+      "source": "print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 68,
+      "kind": "Call",
+      "source": "NativePackageError('Native package inventory limit exceeded')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 71,
+      "kind": "Call",
+      "source": "NativePackageError('Native package is not owner-controlled')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 111,
+      "kind": "Call",
+      "source": "NativePackageError('Native package changed during verification')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 116,
+      "kind": "Call",
+      "source": "NativePackageError('Native package could not be verified')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 183,
+      "kind": "Call",
+      "source": "MANIFEST.read_text().splitlines()"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 194,
+      "kind": "Call",
+      "source": "json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3])))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 196,
+      "kind": "Call",
+      "source": "print(package_tree_digest(Path(sys.argv[2])))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 109,
+      "kind": "Call",
+      "source": "NativePackageError('Native package contains symlinks or special files')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 171,
+      "kind": "Call",
+      "source": "replacement.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 194,
+      "kind": "Call",
+      "source": "share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 196,
+      "kind": "Call",
+      "source": "package_tree_digest(Path(sys.argv[2]))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 198,
+      "kind": "Call",
+      "source": "verify_native_package(Path(sys.argv[1]))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 200,
+      "kind": "Call",
+      "source": "SystemExit('Usage: native_package.py [--digest] PACKAGE_DIR | --share-resources NEW_PACKAGE DEPLOYMENTS')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 85,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 86,
+      "kind": "Call",
+      "source": "NativePackageError('Native package shared resource is writable')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 89,
+      "kind": "Call",
+      "source": "NativePackageError('Native package byte limit exceeded')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 168,
+      "kind": "Call",
+      "source": "NativePackageError('Native resource changed while sharing')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 183,
+      "kind": "Call",
+      "source": "MANIFEST.read_text()"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 80,
+      "kind": "Call",
+      "source": "NativePackageError('Native package inventory limit exceeded')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 94,
+      "kind": "Call",
+      "source": "NativePackageError('Native package changed while opening')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 103,
+      "kind": "Call",
+      "source": "NativePackageError('Native package changed while hashing')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 99,
+      "kind": "Call",
+      "source": "NativePackageError('Native package truncated while hashing')"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 24,
+      "kind": "ImportFrom",
+      "source": "from .native_package import OWNER_INSTRUCTIONS"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 182,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass NativeContextJournal(NativeContextRecord, TypedTable):\n    \"\"\"One proof declaration owns wire facts and the indexed durable journal.\"\"\"\n    schema: Literal[1]\n    type: Literal['context_committed']\n    without_rowid = True\n    indexes = (Index(('request_generation',)), Index(('session_id',)))\n\n    @classmethod\n    def triggers(cls) -> dict[str, str]:\n        table = cls.declared_name\n        return {f'{table}_append': f\"CREATE TRIGGER {table}_append BEFORE INSERT ON {table}\\n            WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)\\n              OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation\\n                        AND llm_context_digest != NEW.llm_context_digest)\\n              OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)\\n            BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END\", **{f'{table}_{action.lower()}': f\"CREATE TRIGGER {table}_{action.lower()} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END\" for action in ('UPDATE', 'DELETE')}}\n\n    @classmethod\n    def native_"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 394,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass NativePiRpcLaunch:\n    \"\"\"Verified native Pi subprocess launch, not an authorization to send input.\"\"\"\n    argv: tuple[str, ...]\n    cwd: Path\n    env: dict[str, str]\n    session: SelectedSession\n    package: Path\n    configuration: RestartEnvironment = field(kw_only=True)\n\n    @classmethod\n    def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):\n        \"\"\"Encode the held launch configuration at the native process boundary.\"\"\"\n        try:\n            instructions = OWNER_INSTRUCTIONS.resolve(strict=True)\n        except OSError as error:\n            raise NativePiUnavailable('Canonical owner instruction asset is unavailable') from error\n        env = dict(environment)\n        for name in ('NODE_OPTIONS', 'NODE_PATH', 'NODE_COMPILE_CACHE'):\n            env.pop(name, None)\n        env['NODE_DISABLE_COMPILE_CACHE'] = '1'\n        env['PI_WORKTREE'] = str(cwd)\n        env['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), env.get('PATH', os.defpath)))\n        env.update(configuration.encode_native())\n        argv = ('node', '--no-global-search-paths', '--import', str(cli.with_name('agent-comms-impor"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 742,
+      "kind": "FunctionDef",
+      "source": "def _trusted_package(package: Path) -> Path:\n    package = package.absolute()\n    if '..' in package.parts:\n        raise NativePiUnavailable('Pinned native Pi package path is not lexical')\n    if package.parts[-3:] != ('node_modules', '@earendil-works', 'pi-coding-agent'):\n        raise NativePiUnavailable('Canonical native Pi package layout is required')\n    for ancestor in (package, *package.parents):\n        info = ancestor.lstat()\n        failed = TrustedAncestorRole.violation(info)\n        if failed is not None:\n            raise NativePiUnavailable(f'Native Pi package has unsafe ancestor: {failed.declared_name}')\n    root = package.parents[2]\n    if PrivateDirectoryRole.violation(root.lstat()) is not None:\n        raise NativePiUnavailable('Disposable native Pi root must be owner-only')\n    from .native_package import NativePackageError, verify_native_package\n    try:\n        verify_native_package(package)\n    except (OSError, NativePackageError) as error:\n        raise NativePiUnavailable('Pinned native Pi package differs from reviewed fork') from error\n    return package / 'dist/cli.js'"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 228,
+      "kind": "FunctionDef",
+      "source": "@classmethod\n@contextmanager\ndef open_evidence(cls, session_file: Path) -> Iterator[sqlite3.Connection]:\n    \"\"\"Read an indexed snapshot after SQLite's bounded hot-journal recovery.\n\n        A read is corroboration, never a fresh receipt. Keep the private inode\n        pinned across SQLite's transaction and refuse redirection or schema drift.\n        Open existing storage read/write for SQLite rollback, then forbid SQL\n        writes. A cold history view can recover without a model turn or receipt.\n        \"\"\"\n    path = Path(str(session_file) + '.input-proof')\n    with ExitStack() as custody:\n        try:\n            held = custody.enter_context(closing(os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb')))\n            before = os.fstat(held.fileno())\n            PrivateFileRole.require(before)\n            if before.st_nlink != 1:\n                raise NativePiUnavailable('Native proof must be private and unaliased')\n            db = custody.enter_context(closing(sqlite3.connect(path.as_uri() + '?mode=rw', uri=True)))\n            db.execute('PRAGMA query_only=ON')\n            db.execute('BEGIN')\n            actual = SQLiteSchemaObject.read(db.execute('SELECT"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 435,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef _command_selection(cls, command: str):\n    \"\"\"Decode the original launcher selection without acquiring its package.\n\n        Executable names never establish capability. Configured commands must\n        name this installation's entrypoint, its pinned CLI, or the source stack\n        launcher; execution always uses the verified native package.\n        \"\"\"\n    import hashlib\n    from .native_package import MANIFEST\n    from .private_nk_entrypoint import PrivateNkLaunch\n    stack_launcher = MANIFEST.parent / 'bin' / 'pi-native'\n    executable = Path(shutil.which(command) or command).resolve(strict=True) if command != 'pi' else None\n    route = PrivateNkLaunch.current()\n    if route is not None:\n        package = route.native_package\n    elif executable is not None and executable == stack_launcher.resolve():\n        build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]\n        package = MANIFEST.parent / f'.pi-native-{build}' / 'node_modules/@earendil-works/pi-coding-agent'\n    else:\n        raise NativePiUnavailable('Native owner requires a configured pinned package')\n    allowed = (Path(sys.executable).with_name('pi-comms-native').resolve(), stack_launcher.r"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 760,
+      "kind": "ImportFrom",
+      "source": "from .native_package import NativePackageError, verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 444,
+      "kind": "ImportFrom",
+      "source": "from .native_package import MANIFEST"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 447,
+      "kind": "Assign",
+      "source": "stack_launcher = MANIFEST.parent / 'bin' / 'pi-native'"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 453,
+      "kind": "Assign",
+      "source": "package = route.native_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 763,
+      "kind": "Call",
+      "source": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Assign",
+      "source": "build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 456,
+      "kind": "Assign",
+      "source": "package = MANIFEST.parent / f'.pi-native-{build}' / 'node_modules/@earendil-works/pi-coding-agent'"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 244,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Call",
+      "source": "hashlib.sha256(MANIFEST.read_bytes()).hexdigest()"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Call",
+      "source": "hashlib.sha256(MANIFEST.read_bytes())"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Call",
+      "source": "MANIFEST.read_bytes()"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "source": "from .native_package import verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 21,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass NativeSessionIdentity:\n    \"\"\"SessionManager's observed saved-session identity.\"\"\"\n    session_id: str = field(metadata={'wire_name': 'sessionId'})\n    session_file: str = field(metadata={'wire_name': 'sessionFile'})\n\n    def __post_init__(self):\n        if not self.session_id or not Path(self.session_file).is_absolute():\n            raise NativeReopenError('Saved native session identity is incomplete')\n\n    @property\n    def path(self) -> Path:\n        return Path(self.session_file)\n\n    def require_same_session(self, other: NativeSessionIdentity) -> None:\n        if not self.same_session(other):\n            raise NativeReopenError('Native saved source identity changed')\n\n    def require_context(self, context) -> None:\n        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))\n\n    def same_session(self, other: NativeSessionIdentity) -> bool:\n        \"\"\"A cutpoint may extend this identity without changing its meaning.\"\"\"\n        return self.session_id == other.session_id and self.session_file == other.session_file\n\n    def require_session(self, canonical: str) -> None:\n        if self.session_file != canoni"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 62,
+      "kind": "ClassDef",
+      "source": "class SessionIdentityHelper(PiHelper):\n    script = Path(__file__).with_name('_pi_helpers') / 'session_identity.mjs'\n    request = SessionHelperRequest\n    result = NativeSessionIdentity\n\n    @classmethod\n    def locate(cls, package: Path, session_file: str) -> NativeSessionIdentity:\n        \"\"\"Locate the original header without constructing another history index.\n\n        A located identity is not history readiness. The actual native loader\n        validates the whole journal before get_state; custody compares that\n        attestation with this identity before any input can be granted.\n        \"\"\"\n        try:\n            file = Path(session_file).absolute()\n            if file != file.resolve(strict=True):\n                raise NativeReopenError('Saved native session path is not canonical')\n            before = file.stat()\n            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid not in (0, os.getuid()) or (before.st_size <= 0):\n                raise NativeReopenError('Saved native session is not a regular file')\n            identity = asyncio.run(cls.run(SessionHelperRequest(str(package), str(file)), cwd=file.parent))\n            if FileRevision.fr"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 51,
+      "kind": "FunctionDef",
+      "source": "@staticmethod\ndef locate(package: Path, session_file: str) -> NativeSessionIdentity:\n    \"\"\"Acquire a verified package before a standalone saved-header lookup.\"\"\"\n    try:\n        verify_native_package(package)\n        return SessionIdentityHelper.locate(package, session_file)\n    except (OSError, ValueError) as error:\n        if isinstance(error, NativeReopenError):\n            raise\n        raise NativeReopenError('Saved native session identity cannot be read') from error"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 68,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef locate(cls, package: Path, session_file: str) -> NativeSessionIdentity:\n    \"\"\"Locate the original header without constructing another history index.\n\n        A located identity is not history readiness. The actual native loader\n        validates the whole journal before get_state; custody compares that\n        attestation with this identity before any input can be granted.\n        \"\"\"\n    try:\n        file = Path(session_file).absolute()\n        if file != file.resolve(strict=True):\n            raise NativeReopenError('Saved native session path is not canonical')\n        before = file.stat()\n        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid not in (0, os.getuid()) or (before.st_size <= 0):\n            raise NativeReopenError('Saved native session is not a regular file')\n        identity = asyncio.run(cls.run(SessionHelperRequest(str(package), str(file)), cwd=file.parent))\n        if FileRevision.from_stat(before) != FileRevision.from_stat(file.stat()):\n            raise NativeReopenError('Saved native session identity changed during read')\n        identity.require_session(str(file))\n        return identity\n    except (OSError, Va"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 54,
+      "kind": "Call",
+      "source": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 82,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 43,
+      "kind": "ClassDef",
+      "source": "@dataclass(slots=True)\nclass ForegroundOwner:\n    \"\"\"The registration belongs to this process and authorizes at most one GO.\"\"\"\n    root: Path\n    wire_root_id: str\n    name: str\n    native_package: Path\n    _started: bool = field(default=False, init=False, repr=False)\n\n    async def run_go(self, line: str) -> CoordinatedTurn | None:\n        match = _GO.fullmatch(line)\n        if match is None:\n            raise ValueError('Expected one GO <nonnegative sequence> command')\n        if self._started:\n            raise PublicationActivationBlocked('Foreground owner accepts exactly one GO')\n        self._started = True\n        return await SelectedExecution(root=self.root, wire_root_id=self.wire_root_id, owner_name=self.name, native_package=self.native_package, opt_in=True, after_seq=int(match.group(1))).run()"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 69,
+      "kind": "FunctionDef",
+      "source": "def reserve_foreground_owner(root: Path, *, wire_root_id: str, name: str, task: str, tags: frozenset[str], native_package: Path, opt_in: bool=True) -> ForegroundOwner:\n    \"\"\"Atomically reserve a fresh recipient in THIS process before publication.\n\n    Never attach to/replace an existing owner; even a stopped owner may retain\n    an uncertain model input. This only works on an initialized private root.\n    \"\"\"\n    root = Path(root).absolute()\n    if type(opt_in) is not bool or not opt_in or root == Path('/var/tmp') or (not root.is_relative_to('/var/tmp')):\n        raise PublicationActivationBlocked('Foreground N/K requires a private /var/tmp root')\n    _private_session_dir(root)\n    if type(wire_root_id) is not str or not wire_root_id:\n        raise ValueError('A private wire-root ID is required')\n    package = Path(native_package).absolute()\n    _trusted_package(package)\n    worktree = root / 'work'\n    _private_session_dir(worktree)\n    comms = Comms(root)\n    with comms.bus.log.locked():\n        marker = comms.bus.log._private_marker_unlocked()\n    if marker.root_id != wire_root_id:\n        raise RelationViolationError('Private wire root changed before owner reservation')\n    ow"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 149,
+      "kind": "FunctionDef",
+      "source": "def main(argv: Sequence[str] | None=None) -> int:\n    parser = argparse.ArgumentParser(prog='agent-comms-nk-foreground', description=__doc__)\n    parser.add_argument('--root', type=Path, required=True)\n    parser.add_argument('--wire-root-id', required=True)\n    parser.add_argument('--name', required=True)\n    parser.add_argument('--task', required=True)\n    parser.add_argument('--tags', default='')\n    parser.add_argument('--native-package', type=Path, required=True)\n    parser.add_argument('--private-opt-in', action='store_true', default=True, help=argparse.SUPPRESS)\n    parser.add_argument('--native-model-opt-in', action='store_true', default=True, help=argparse.SUPPRESS)\n    parser.add_argument('--go-timeout', type=int, default=30)\n    args = parser.parse_args(argv)\n    if not 1 <= args.go_timeout <= _MAX_GO_WAIT_SECONDS:\n        return _error('GO timeout must be between 1 and 120 seconds')\n    try:\n        owner = reserve_foreground_owner(args.root, wire_root_id=args.wire_root_id, name=args.name, task=args.task, tags=frozenset((tag.strip() for tag in args.tags.split(',') if tag.strip())), native_package=args.native_package, opt_in=args.private_opt_in and args.native_model_opt_"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 49,
+      "kind": "AnnAssign",
+      "source": "native_package: Path"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 95,
+      "kind": "Assign",
+      "source": "package = Path(native_package).absolute()"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 95,
+      "kind": "Call",
+      "source": "Path(native_package).absolute()"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 168,
+      "kind": "Assign",
+      "source": "owner = reserve_foreground_owner(args.root, wire_root_id=args.wire_root_id, name=args.name, task=args.task, tags=frozenset((tag.strip() for tag in args.tags.split(',') if tag.strip())), native_package=args.native_package, opt_in=args.private_opt_in and args.native_model_opt_in)"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 168,
+      "kind": "Call",
+      "source": "reserve_foreground_owner(args.root, wire_root_id=args.wire_root_id, name=args.name, task=args.task, tags=frozenset((tag.strip() for tag in args.tags.split(',') if tag.strip())), native_package=args.native_package, opt_in=args.private_opt_in and args.native_model_opt_in)"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 59,
+      "kind": "Call",
+      "source": "SelectedExecution(root=self.root, wire_root_id=self.wire_root_id, owner_name=self.name, native_package=self.native_package, opt_in=True, after_seq=int(match.group(1))).run()"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 95,
+      "kind": "Call",
+      "source": "Path(native_package)"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 59,
+      "kind": "Call",
+      "source": "SelectedExecution(root=self.root, wire_root_id=self.wire_root_id, owner_name=self.name, native_package=self.native_package, opt_in=True, after_seq=int(match.group(1)))"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 60,
+      "kind": "Assign",
+      "source": "package = runner.effects._private_nk_native_package"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "source": "from .native_package import verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 156,
+      "kind": "FunctionDef",
+      "source": "def prepare_native_source(package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int, retained_text: str='') -> NativePreparationResult:\n    \"\"\"Derive Pi's actual cut point without a model call or a session mutation.\n\n    The caller supplies the actual selected window and effective settings.\n    The returned witness is not authority: the owner captures source and the\n    writer later CASes on disk.\n    \"\"\"\n    try:\n        package = package.resolve(strict=True)\n        verify_native_package(package)\n        file = Path(session_file).absolute()\n        if file != file.resolve(strict=True):\n            raise NativePreparationError('Native session path is not canonical')\n        before = file.stat()\n        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid not in (0, os.getuid()) or (before.st_size <= 0):\n            raise NativePreparationError('Native session is not regular storage')\n        result = asyncio.run(PrepareCompactionHelper.run(PreparationRequest(str(package), str(file), settings, context_window, retained_text), cwd=file.parent))\n        after = file.stat()\n        revision = FileRevision.from_stat(before)\n        "
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 168,
+      "kind": "Call",
+      "source": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 175,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 137,
+      "kind": "ClassDef",
+      "source": "class OwnerLifecycle:\n\n    def __init__(self, root: Path, registry: Registration, bus: MessageBus):\n        self.root = root\n        self.registry = registry\n        self.bus = bus\n        self._wire_lock_path = root / 'wire'\n        self.maintenance = MaintenanceBarrier(registry.store.path)\n        self.releases = OwnerReleaseStore(root / 'owner_release_receipts.json')\n        self._private_nk_launch: PrivateNkLaunch | None = None\n\n    def pin_private_nk_launch(self, validated_root: Path, wire_root_id: str, native_package: Path) -> None:\n        \"\"\"Bind an already preflighted ACP/worker launch to future owner handoffs.\n\n        A marker never grants authority. Service factories validate explicit\n        environment pairs; direct composition requires a caller-supplied pin.\n        Recheck the root marker before retaining the exact lexical absolute\n        path; child env is generated from this pin, not a later cwd/env read.\n        \"\"\"\n        if not isinstance(validated_root, Path) or not validated_root.is_absolute() or validated_root != self.root or (not isinstance(native_package, Path)) or (not native_package.is_absolute()):\n            raise ValueError('private owner launch req"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 147,
+      "kind": "FunctionDef",
+      "source": "def pin_private_nk_launch(self, validated_root: Path, wire_root_id: str, native_package: Path) -> None:\n    \"\"\"Bind an already preflighted ACP/worker launch to future owner handoffs.\n\n        A marker never grants authority. Service factories validate explicit\n        environment pairs; direct composition requires a caller-supplied pin.\n        Recheck the root marker before retaining the exact lexical absolute\n        path; child env is generated from this pin, not a later cwd/env read.\n        \"\"\"\n    if not isinstance(validated_root, Path) or not validated_root.is_absolute() or validated_root != self.root or (not isinstance(native_package, Path)) or (not native_package.is_absolute()):\n        raise ValueError('private owner launch requires the validated absolute root/package')\n    with self.bus.log.locked():\n        marker = self.bus.log._private_marker_unlocked()\n        if marker.root_id != wire_root_id:\n            raise RelationViolationError('private owner launch root ID changed')\n    self._private_nk_launch = PrivateNkLaunch(validated_root, wire_root_id, native_package, None)"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 169,
+      "kind": "Assign",
+      "source": "self._private_nk_launch = PrivateNkLaunch(validated_root, wire_root_id, native_package, None)"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 169,
+      "kind": "Call",
+      "source": "PrivateNkLaunch(validated_root, wire_root_id, native_package, None)"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 161,
+      "kind": "Call",
+      "source": "isinstance(native_package, Path)"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 162,
+      "kind": "Call",
+      "source": "native_package.is_absolute()"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 28,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass PrivateNkLaunch:\n    validated_root: Path\n    wire_root_id: str\n    native_package: Path\n    selected_tool_intent: SelectedToolIntent | None\n\n    @classmethod\n    def from_environment(cls, root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:\n        \"\"\"Decode the explicit launch selection without performing an admission.\n\n        Observing a thread or publishing activity does not launch a native owner.\n        Actual worker/ACP entrypoints and process handoffs call validate before\n        admission; retaining this selection cannot grant that authority.\n        \"\"\"\n        root_id = environment.get(ROOT_ID_ENV)\n        package = environment.get(PACKAGE_ENV)\n        if root_id is None and package is None:\n            return None\n        from .active_route import AbsoluteRoutePathText\n        try:\n            root_id = WireRootIdText.decode(root_id)\n            native_package = AbsoluteRoutePathText.decode(package)\n        except (TypeError, ValueError) as error:\n            raise PublicationActivationBlocked('private N/K owner requires exact root ID and absolute reviewed package') from error\n        if environment.get('PI_PR"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 31,
+      "kind": "AnnAssign",
+      "source": "native_package: Path"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 35,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef from_environment(cls, root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:\n    \"\"\"Decode the explicit launch selection without performing an admission.\n\n        Observing a thread or publishing activity does not launch a native owner.\n        Actual worker/ACP entrypoints and process handoffs call validate before\n        admission; retaining this selection cannot grant that authority.\n        \"\"\"\n    root_id = environment.get(ROOT_ID_ENV)\n    package = environment.get(PACKAGE_ENV)\n    if root_id is None and package is None:\n        return None\n    from .active_route import AbsoluteRoutePathText\n    try:\n        root_id = WireRootIdText.decode(root_id)\n        native_package = AbsoluteRoutePathText.decode(package)\n    except (TypeError, ValueError) as error:\n        raise PublicationActivationBlocked('private N/K owner requires exact root ID and absolute reviewed package') from error\n    if environment.get('PI_PROMPT'):\n        raise PublicationActivationBlocked('private N/K owner cannot start with an unbound prompt')\n    validated_root = Path(root).expanduser().absolute()\n    return cls(validated_root, root_id, native_package, None)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 65,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef current(cls) -> PrivateNkLaunch | None:\n    \"\"\"Decode the original explicit environment or owner-installed route.\"\"\"\n    environment = dict(os.environ)\n    if 'AGENT_COMMS_ROOT' not in environment:\n        from .active_route import read_active_route\n        active_route = read_active_route()\n        if active_route is not None:\n            environment['AGENT_COMMS_ROOT'] = str(active_route.root)\n            environment.setdefault(ROOT_ID_ENV, active_route.wire_root_id)\n            environment.setdefault(PACKAGE_ENV, str(active_route.native_package))\n    root = Path(environment.get('AGENT_COMMS_ROOT', '~/.agent-comms')).expanduser().absolute()\n    return cls.from_environment(root, environment)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 79,
+      "kind": "FunctionDef",
+      "source": "def validate(self) -> Path:\n    \"\"\"Recheck this authority before a new owner process can be reserved.\"\"\"\n    from .cohort_foreground import _preflight\n    return _preflight(self.validated_root, self.wire_root_id, self.native_package, True)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 85,
+      "kind": "FunctionDef",
+      "source": "def apply_environment(self, environment: dict[str, str]) -> None:\n    \"\"\"Derive the child handoff solely from this retained launch authority.\"\"\"\n    environment.update({'AGENT_COMMS_ROOT': str(self.validated_root), ROOT_ID_ENV: self.wire_root_id, PACKAGE_ENV: str(self.native_package)})"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 50,
+      "kind": "Assign",
+      "source": "native_package = AbsoluteRoutePathText.decode(package)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 62,
+      "kind": "Call",
+      "source": "cls(validated_root, root_id, native_package, None)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 83,
+      "kind": "Call",
+      "source": "_preflight(self.validated_root, self.wire_root_id, self.native_package, True)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 87,
+      "kind": "Call",
+      "source": "environment.update({'AGENT_COMMS_ROOT': str(self.validated_root), ROOT_ID_ENV: self.wire_root_id, PACKAGE_ENV: str(self.native_package)})"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 75,
+      "kind": "Call",
+      "source": "environment.setdefault(PACKAGE_ENV, str(active_route.native_package))"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "str(self.native_package)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 75,
+      "kind": "Call",
+      "source": "str(active_route.native_package)"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 36,
+      "kind": "FunctionDef",
+      "source": "def registry_digest(path: Path) -> bytes:\n    \"\"\"Hash the exact owned registry bytes, distinguishing absence from empty.\"\"\"\n    try:\n        fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))\n    except FileNotFoundError:\n        return _EMPTY\n    except OSError as error:\n        _reject(f'registry cannot be opened: {error.__class__.__name__}')\n    try:\n        info = os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 384 or (info.st_nlink != 1) or (info.st_size > _MAX_REGISTRY):\n            _reject('registry is not a bounded owner-only regular file')\n        digest = hashlib.sha256(b'present\\x00')\n        total = 0\n        while (data := os.read(fd, 65536)):\n            total += len(data)\n            if total > _MAX_REGISTRY:\n                _reject('registry grew beyond the bounded evidence read')\n            digest.update(data)\n        if total != info.st_size:\n            _reject('registry changed during its evidence read')\n        return digest.digest()\n    finally:\n        os.close(fd)"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 91,
+      "kind": "ClassDef",
+      "source": "class PrivateRegistryGuard:\n\n    def __init__(self, registry_path: Path, wire_root_id: str):\n        if type(wire_root_id) is not str or len(wire_root_id) != 32 or any((ch not in '0123456789abcdef' for ch in wire_root_id)):\n            _reject('root ID is invalid')\n        self.registry_path = registry_path\n        self.path = registry_path.parent / '.registry-owner-guard'\n        self.root_id = bytes.fromhex(wire_root_id)\n\n    def _trusted_root(self) -> None:\n        if os.name != 'posix' or not all((hasattr(os, name) for name in ('O_DIRECTORY', 'O_NOFOLLOW', 'pread', 'pwrite'))):\n            _reject('requires POSIX directory and fixed-slot durability')\n        if '..' in self.registry_path.parts:\n            _reject('has an ambiguous root path')\n        root = self.registry_path.parent.absolute()\n        cursor = root\n        while True:\n            try:\n                info = cursor.lstat()\n            except OSError:\n                _reject('has a missing directory ancestor')\n            sticky_root = info.st_uid == 0 and bool(info.st_mode & stat.S_ISVTX)\n            if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, os.geteuid()) or (info.st_mode & 18 and (not sticky_"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 132,
+      "kind": "FunctionDef",
+      "source": "def _open(self, *, writable: bool=True) -> int:\n    self._trusted_root()\n    try:\n        flags = os.O_RDWR if writable else os.O_RDONLY\n        fd = os.open(self.path, flags | getattr(os, 'O_NOFOLLOW', 0))\n    except OSError as error:\n        _reject(f'file is missing or redirected: {error.__class__.__name__}')\n    info = os.fstat(fd)\n    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 384 or (info.st_nlink != 1) or (info.st_size != 2 * _SIZE):\n        os.close(fd)\n        _reject('file is not a fixed owner-only regular file')\n    return fd"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 50,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 144,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 50,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)\nclass PrivateSendAdmission:\n    selected: SelectedParticipant\n    stage: NativeSendStage\n    input_id: str\n    token_digest: str\n    prompt: RenderedInput\n    session: SelectedSession\n    _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)\n    _journal: CompactionJournal = field(init=False, repr=False)\n    _measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, init=False, compare=False, repr=False)\n\n    @property\n    def bus(self) -> MessageBus:\n        return self.selected.bus\n\n    @property\n    def store_path(self) -> Path:\n        return self.selected.store.session.path\n\n    @property\n    def wire_root_id(self) -> str:\n        return self.selected.root_id\n\n    @property\n    def owner(self) -> RegistryOwner:\n        return self.selected.owner\n\n    @property\n    def participant(self) -> ParticipantOwner:\n        return self.selected.identity\n\n    def __post_init__(self) -> None:\n        object.__setattr__(self, '_journal', CompactionJournal(self.bus.log.path.parent / 'compaction-commits.sqlite3'))\n\n    @classmethod\n    def reserve(cls, *, selected: SelectedParticipant, stage: N"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 157,
+      "kind": "Assign",
+      "source": "result = await TrackedTurnSession.execute(execution.native_package, input_id=self.input_id, prompt=self.prompt.text, context_contributions=self.prompt.contributions, worktree=Path(self.owner.thread.worktree).absolute(), session=self.session, provider=provider, model=model, thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level), environment=self.owner.thread.native_environment(self.bus.log.path.parent, self.bus._registry.snapshot(), self.owner.thread.worktree), maintenance_root=self.bus.log.path.parent, selected_tool_mode=selected_tool_mode, observe_event=observe_event, request_observer=partial(record_request_progress, self.bus.log.path.parent, self.owner.thread.require_turn_lease()), prompt_send_boundary=self, acquisition_measurements=self._measurements, launch_owner=execution)"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 157,
+      "kind": "Call",
+      "source": "TrackedTurnSession.execute(execution.native_package, input_id=self.input_id, prompt=self.prompt.text, context_contributions=self.prompt.contributions, worktree=Path(self.owner.thread.worktree).absolute(), session=self.session, provider=provider, model=model, thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level), environment=self.owner.thread.native_environment(self.bus.log.path.parent, self.bus._registry.snapshot(), self.owner.thread.worktree), maintenance_root=self.bus.log.path.parent, selected_tool_mode=selected_tool_mode, observe_event=observe_event, request_observer=partial(record_request_progress, self.bus.log.path.parent, self.owner.thread.require_turn_lease()), prompt_send_boundary=self, acquisition_measurements=self._measurements, launch_owner=execution)"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 44,
+      "kind": "FunctionDef",
+      "source": "def _require_file(info: os.stat_result) -> None:\n    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 384 or (info.st_nlink != 1):\n        raise IdentityConflict('Private sidecar file must be regular, owner-only and unaliased.')"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 259,
+      "kind": "FunctionDef",
+      "source": "def _publish(directory: _PinnedDirectory, name: str, expected: os.stat_result | None, raw: bytes) -> None:\n    if not 100 <= len(raw) <= _MAX_SIDECAR_BYTES:\n        raise IdentityConflict('Private sidecar snapshot exceeds its bounded capacity.')\n    directory.unchanged(name, expected)\n    intent = f'.{name}.pending'\n    staging = f'.{name}.{secrets.token_hex(16)}.staging'\n    begun = False\n    try:\n        marker = os.open(intent, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 384, dir_fd=directory.fd)\n        begun = True\n        try:\n            _write_all(marker, b'sidecar-snapshot-v1\\n')\n            os.fsync(marker)\n        finally:\n            os.close(marker)\n        os.fsync(directory.fd)\n        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 384, dir_fd=directory.fd)\n        try:\n            _write_all(fd, raw)\n            os.fsync(fd)\n            staged = os.fstat(fd)\n            _require_file(staged)\n        finally:\n            os.close(fd)\n        directory.unchanged(name, expected)\n        directory.unchanged(staging, staged)\n        os.replace(staging, name, src_dir_fd=directory.fd, dst_dir_fd=directory.fd)\n        os.fsync(director"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 49,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 304,
+      "kind": "Call",
+      "source": "os.unlink(intent, dir_fd=directory.fd)"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 189,
+      "kind": "ClassDef",
+      "source": "class RecoveryGateway:\n    \"\"\"Explicitly started local service; production integration is a separate gate.\"\"\"\n\n    def __init__(self, trusted_root: Path):\n        self.root = Path(trusted_root).expanduser().absolute()\n        self.database = self.root / 'coordination.sqlite3'\n        self.directory = self.root / '.recovery-viewer'\n        self.path = self.directory / 'gateway.sock'\n        self._server: asyncio.AbstractServer | None = None\n        self._lock_fd: int | None = None\n        self._socket_identity: tuple[int, int] | None = None\n        self._clients = asyncio.Semaphore(_MAX_CLIENTS)\n        self._worker_slots = asyncio.Semaphore(_MAX_CLIENTS)\n        self._workers: set[asyncio.Task[bytes]] = set()\n        self._handlers: set[asyncio.Task[None]] = set()\n        self._closing = False\n        self._orphaned = False\n\n    def _prepare_directory(self) -> None:\n        if fcntl is None or os.getuid() != os.geteuid():\n            raise GatewayUnavailableError('gateway platform or privileges unsupported')\n        _validate_paths(self.root, self.database)\n        with suppress(FileExistsError):\n            self.directory.mkdir(mode=448)\n        _owned(self.directory, stat.S_IFDIR"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 230,
+      "kind": "FunctionDef",
+      "source": "def _remove_stale_socket(self) -> None:\n    try:\n        info = self.path.lstat()\n    except FileNotFoundError:\n        return\n    if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.geteuid():\n        raise GatewayUnavailableError('foreign socket entry')\n    if stat.S_IMODE(info.st_mode) != 384:\n        raise GatewayUnavailableError('socket permissions are not private')\n    with closing(socket.socket(socket.AF_UNIX)) as probe:\n        probe.settimeout(0.1)\n        with PrivateSocketRole.address(self.path) as address:\n            error = probe.connect_ex(str(address))\n        if error == 0:\n            raise GatewayUnavailableError('another listener already owns the socket')\n        if error != errno.ECONNREFUSED:\n            raise GatewayUnavailableError('socket liveness could not be proved')\n    current = self.path.lstat()\n    if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):\n        raise GatewayUnavailableError('socket identity changed')\n    self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 250,
+      "kind": "Call",
+      "source": "self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 419,
+      "kind": "Call",
+      "source": "self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 135,
+      "kind": "FunctionDef",
+      "source": "def _save(path: Path, record: QueuedRestart) -> None:\n    temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')\n    try:\n        with temporary.open('x', encoding='utf-8') as stream:\n            os.chmod(temporary, 384)\n            json.dump(FieldCodec.encode(record), stream, sort_keys=True)\n            stream.flush()\n            os.fsync(stream.fileno())\n        os.replace(temporary, path)\n        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)\n        try:\n            os.fsync(directory)\n        finally:\n            os.close(directory)\n    finally:\n        temporary.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 150,
+      "kind": "Call",
+      "source": "temporary.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 146,
+      "kind": "ClassDef",
+      "source": "class RuntimeServer:\n\n    def __init__(self, agent: Any):\n        self.agent = agent\n        self.server: asyncio.Server | None = None\n        self.clients: dict[str, set[SocketClient]] = {}\n        self.controller: ContextVar[SocketClient | None | object] = ContextVar('runtime_permission_controller', default=UNBOUND_CONTROLLER)\n        self.path = socket_path(agent._comms.root, os.getpid())\n        self._resources = ExitStack()\n\n    def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:\n        \"\"\"Launch owner work without inheriting an attached human controller.\"\"\"\n        token = self.controller.set(UNBOUND_CONTROLLER)\n        try:\n            return asyncio.create_task(work)\n        finally:\n            self.controller.reset(token)\n\n    async def start(self) -> None:\n        if self.server is not None or os.name == 'nt':\n            return\n        self.path.parent.mkdir(parents=True, exist_ok=True)\n        try:\n            address = self._resources.enter_context(PrivateSocketRole.address(self.path))\n            self.server = await asyncio.start_unix_server(self.handle, path=address, limit=8 * 1024 * 1024)\n        except BaseException:\n            self._res"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 273,
+      "kind": "Call",
+      "source": "self.path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 31,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass SelectedSession:\n    \"\"\"Selected native source before its first original input is written.\n\n    directory is an acquired private launch/tool resource. It is not a claim\n    that an already selected saved journal lives in that directory.\n    \"\"\"\n    directory: Path\n    creation: FreshPrivateSession | None = field(default=None, kw_only=True)\n\n    @property\n    def path(self) -> Path | None:\n        return None\n\n    @property\n    def session_file(self) -> str | None:\n        \"\"\"Wire projection of the original selected source, not another field.\"\"\"\n        return None\n\n    def attestation(self):\n        from .native_attestation import PendingAttestation\n        return PendingAttestation()\n\n    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:\n        \"\"\"A new unbound native source has no saved context to compact.\"\"\"\n\n    def startup_admission(self, launch, root, boundary, *, measurements: PublicationMeasurements | None=None):\n        from .native_startup import NativeStartupAdmission\n        return NativeStartupAdmission.for_launch(launch, root=root, measurements=measurements)\n\n    def default_action(self)"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 127,
+      "kind": "FunctionDef",
+      "source": "def acquire() -> SelectedSession:\n    directory = participant.comms.root / 'native-sessions' / participant.lookup\n    worktree = Path(participant.owner.thread.worktree).absolute()\n    if not worktree.is_dir():\n        raise IdentityConflict('registered participant worktree is unavailable')\n    if not fresh:\n        directory.mkdir(parents=True, mode=448, exist_ok=True)\n        selected = path if path is not None else participant.owner.thread.session_file\n        if selected is None:\n            return cls(directory)\n        return SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(execution.native_package, str(Path(selected).absolute())))\n    with _response_boundary(participant.bus) as registry, Coordination(str(participant.store.session.path)) as resource, resource.session.read():\n        try:\n            participant.owner.require_snapshot(registry, 'fresh-session owner changed before enrollment')\n        except RelationViolationError as error:\n            raise StaleFence('fresh-session owner changed before enrollment') from error\n        participant.identity.require(resource, participant.lookup)\n        MaintenanceBarrier(participant.bus._registry.store.path)."
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 139,
+      "kind": "Call",
+      "source": "SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(execution.native_package, str(Path(selected).absolute())))"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 139,
+      "kind": "Call",
+      "source": "SessionIdentityHelper.locate(execution.native_package, str(Path(selected).absolute()))"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 350,
+      "kind": "ClassDef",
+      "source": "class OwnerToolSocket(ABC, Generic[Call]):\n    \"\"\"Authenticated native child transport; the policy owns request admission.\"\"\"\n    max_request = _MAX_REQUEST\n\n    def __init__(self, directory: Path, token: str) -> None:\n        if type(token) is not str or not _TOKEN.fullmatch(token):\n            raise ValueError('Selected tool transport requires a random 256-bit token')\n        self.path = Path(directory).absolute() / 's'\n        self._resources = ExitStack()\n        self.token = token\n        self.expected_pid: int | None = None\n        self._server: asyncio.AbstractServer | None = None\n        self._created = False\n        self.calls: dict[str, Call] = {}\n        self._handlers: set[asyncio.Task] = set()\n\n    @abstractmethod\n    def decode_call(self, call_id: object, name: object, arguments: object) -> Call:\n        ...\n\n    @abstractmethod\n    def decode_request(self, raw: bytes) -> Call:\n        ...\n\n    @abstractmethod\n    def admit(self, call: Call) -> None:\n        ...\n\n    def call_for(self, candidate: Call) -> Call:\n        existing = self.calls.get(candidate.call_id)\n        if existing is not None:\n            existing.correlate(candidate)\n            return existing\n   "
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 464,
+      "kind": "Call",
+      "source": "self.path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 113,
+      "kind": "ClassDef",
+      "source": "class SelectedWritePlans:\n\n    def __init__(self, comms: Comms, root_id: str):\n        self.comms = comms\n        self.root_id = root_id\n        self.directory = comms.root / 'selected-write-plans'\n\n    def _path(self, source_seq: int, lookup: str) -> Path:\n        if type(source_seq) is not int or source_seq <= 0:\n            raise IdentityConflict('Selected write requires a positive source sequence')\n        return self.directory / f'{source_seq}-{lookup}.json'\n\n    @staticmethod\n    def _fsync_dir(path: Path) -> None:\n        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)\n        try:\n            os.fsync(fd)\n        finally:\n            os.close(fd)\n\n    def _prepare_dir(self) -> None:\n        with suppress(FileExistsError):\n            self.directory.mkdir(mode=448)\n        self._validate_dir()\n        self._fsync_dir(self.comms.root)\n\n    def _validate_dir(self) -> bool:\n        try:\n            info = self.directory.lstat()\n        except FileNotFoundError:\n            return False\n        if PrivateDirectoryRole.violation(info) is not None:\n            raise IdentityConflict('Selected write plan directory is not private')\n        return True\n\n    def _read"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 150,
+      "kind": "FunctionDef",
+      "source": "def _read(self, path: Path) -> SelectedWriteIntent | None:\n    if not self._validate_dir():\n        return None\n    try:\n        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)\n    except FileNotFoundError:\n        return None\n    try:\n        info = os.fstat(fd)\n        if PrivateFileRole.violation(info) is not None:\n            raise IdentityConflict('Selected write intent is not private')\n        if info.st_nlink != 1 or info.st_size > 2 * _MAX_BYTES:\n            raise IdentityConflict('Selected write intent has unsafe identity')\n        with os.fdopen(fd, 'rb') as stream:\n            fd = -1\n            try:\n                return FieldCodec.decode(SelectedWriteIntent, json.loads(stream.read(), object_pairs_hook=unique_fields))\n            except (ValueError, TypeError) as error:\n                raise IdentityConflict('Selected write intent is malformed') from error\n    finally:\n        if fd >= 0:\n            os.close(fd)"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 161,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 163,
+      "kind": "FunctionDef",
+      "source": "def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool=False, mode: int=PrivateFileRole.permissions) -> None:\n    \"\"\"Replace a snapshot; private guarded writes also durably sync its name.\"\"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.tmp', dir=path.parent)\n    temporary_path = Path(temporary)\n    try:\n        with os.fdopen(fd, 'w', encoding='utf-8') as output:\n            os.chmod(temporary_path, mode)\n            output.write(text)\n            output.flush()\n            os.fsync(output.fileno())\n        _replace_snapshot(temporary_path, path)\n        if fsync_parent and os.name == 'posix':\n            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))\n            try:\n                os.fsync(directory_fd)\n            finally:\n                os.close(directory_fd)\n    finally:\n        temporary_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 187,
+      "kind": "Call",
+      "source": "temporary_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 88,
+      "kind": "ClassDef",
+      "source": "class ThreadManagement:\n\n    def __init__(self, root: Path, registry: Registration, bus: MessageBus, channels: ChannelManagement, agents: AgentActivity, owners: OwnerLifecycle, ledger: CollaborationLedger):\n        self.root = root\n        self.registry = registry\n        self.bus = bus\n        self.channels = channels\n        self.agents = agents\n        self.owners = owners\n        self.ledger = ledger\n        self._wire_lock_path = root / 'wire'\n\n    def import_thread(self, source: Path | str, format: ImportFormat, *, name: str, session_id: str | None=None, worktree: str | None=None, model: str | None=None, tags: frozenset[str]=frozenset(), limits: ImportLimits | None=None) -> ImportReceipt:\n        \"\"\"Import a stopped, resumable snapshot without adopting a source executor.\"\"\"\n        source_path = Path(source).expanduser().resolve()\n        snapshot = format.read(source_path, limits or ImportLimits(), session_id)\n        directory = worktree or snapshot.project\n        if not directory:\n            raise ValueError('The source has no project directory; supply --worktree.')\n        project = Path(directory).expanduser().resolve()\n        if not project.is_dir():\n            rais"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 108,
+      "kind": "FunctionDef",
+      "source": "def import_thread(self, source: Path | str, format: ImportFormat, *, name: str, session_id: str | None=None, worktree: str | None=None, model: str | None=None, tags: frozenset[str]=frozenset(), limits: ImportLimits | None=None) -> ImportReceipt:\n    \"\"\"Import a stopped, resumable snapshot without adopting a source executor.\"\"\"\n    source_path = Path(source).expanduser().resolve()\n    snapshot = format.read(source_path, limits or ImportLimits(), session_id)\n    directory = worktree or snapshot.project\n    if not directory:\n        raise ValueError('The source has no project directory; supply --worktree.')\n    project = Path(directory).expanduser().resolve()\n    if not project.is_dir():\n        raise ValueError('The imported project does not exist locally; supply --worktree.')\n    session_path = self.root / 'imported_sessions' / f'{uuid4().hex}.jsonl'\n    thread = Thread(name, tags, str(project), session_file=str(session_path), title=snapshot.title or name, model=model)\n    with _store_lock(self._wire_lock_path):\n        if self.registry.name_reserved(name):\n            raise ValueError(f'Thread name {name!r} is already reserved.')\n        session_path.parent.mkdir(mode=448, parents="
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 303,
+      "kind": "FunctionDef",
+      "source": "def _rename_thread_unlocked(self, name: str, new_name: str, *, title: str | None=None) -> RenameThreadResult:\n    from .bus_publication import stable_thread_lookup\n    from .coordinator import Coordination\n    before = self.registry.require(name)\n    private_meta = self.root / 'bus_meta.json'\n    if private_meta.is_symlink():\n        raise RelationViolationError('Bus metadata cannot be a symlink.')\n    private = False\n    if private_meta.exists():\n        with self.bus.log.locked():\n            metadata = self.bus.log.read_metadata_unlocked(required=True)\n            if metadata.private:\n                self.bus.log._private_marker_unlocked()\n                private = True\n    if private:\n        _require_no_private_owner_rename(self.root)\n    coordinator = self.root / 'coordination.sqlite3'\n    intent = self.root / PRIVATE_OWNER_RENAME_PENDING\n    intent_created = False\n    if not private or not coordinator.exists() or before.name == new_name:\n        previous, current = self.registry.rename(name, new_name)\n    else:\n        if not self.registry.status(before.name).running:\n            raise RelationViolationError('Only a running thread can rename itself.')\n        if self.registr"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 423,
+      "kind": "Call",
+      "source": "intent.unlink()"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 158,
+      "kind": "Call",
+      "source": "session_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 81,
+      "kind": "ClassDef",
+      "source": "class TranscriptReadState:\n    \"\"\"Index completed replies incrementally; keep the human cursor separate.\n\n    The SQLite index is a disposable projection of the native session files. It\n    stores reply end offsets and ordinals, so a new process can count unread\n    replies with an indexed predecessor lookup instead of parsing all history.\n    Source inode and revision invalidate an old projection after replacement.\n    \"\"\"\n\n    def __init__(self, path: Path):\n        self.path = path.with_name(ReadLedger.filename)\n        self.reads = ReadLedger(self.path)\n        self._index_path = path.with_name(f'transcript_reply_index.v{_INDEX_VERSION}.sqlite3')\n        self._connection: sqlite3.Connection | None = None\n        self._database_inode: int | None = None\n        self._lock = RLock()\n        self._cancelled = Event()\n        self._next_source = 0\n\n    def close(self) -> None:\n        \"\"\"Cancel indexing before waiting for its transaction and closing SQLite.\"\"\"\n        self._cancelled.set()\n        with self._lock:\n            self._close_database()\n\n    def _close_database(self) -> None:\n        if self._connection is not None:\n            self._connection.close()\n            self._"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 149,
+      "kind": "FunctionDef",
+      "source": "def _discard_database(self) -> None:\n    self._close_database()\n    for suffix in ('', '-journal', '-wal', '-shm'):\n        self._index_path.with_name(self._index_path.name + suffix).unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 152,
+      "kind": "Call",
+      "source": "self._index_path.with_name(self._index_path.name + suffix).unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 52,
+      "kind": "ClassDef",
+      "source": "class WireLog:\n\n    def __init__(self, path: Path):\n        self.path = Path(path)\n\n    @contextmanager\n    def locked(self, *, blocking: bool=True, max_bus_bytes: int | None=None, contention: StoreLockContention | None=None):\n        \"\"\"The existing canonical bus lock and durability read barrier.\"\"\"\n        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes, contention=contention) as lock:\n            yield lock\n\n    @contextmanager\n    def certified_read(self, *, blocking: bool=True, contention: StoreLockContention | None=None):\n        \"\"\"Borrow the original source verified by this canonical lock barrier.\"\"\"\n        with _store_lock(self.path, blocking=blocking, contention=contention) as lock:\n            with self._certified_source(lock) as source:\n                yield source\n\n    async def read_certified_async(self, read: Callable):\n        \"\"\"Acquire cancellably, then consume the whole source in its worker.\n\n        Return detached observations only. Verification and the callback share\n        one resource thread; no SQLite connection crosses to the event loop.\n        The worker closes physical custody before returning its result; result\n        deli"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 586,
+      "kind": "FunctionDef",
+      "source": "def read_metadata_unlocked(self, *, required: bool=False) -> WireMetadata:\n    \"\"\"Read one marker inode under its leaf lock, independently of registry reads.\n\n        Callers still own any required bus/registry transaction. Marker ownership\n        is checked on the opened inode before this lock lets publication retire\n        it; zero or multiple links are never accepted as owner-only storage.\n        \"\"\"\n    with _store_lock(self.metadata_path, shared=True):\n        try:\n            descriptor = os.open(self.metadata_path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))\n        except FileNotFoundError as error:\n            if required or self.metadata_path.is_symlink() or self.path.exists():\n                raise RelationViolationError('Bus protocol marker is missing or redirected.') from error\n            return WireMetadata()\n        except OSError as error:\n            raise RelationViolationError('Bus protocol marker is unreadable or redirected.') from error\n        with os.fdopen(descriptor, encoding='utf-8') as source:\n            info = os.fstat(source.fileno())\n            if not stat.S_ISREG(info.st_mode):\n                raise RelationViolati"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 628,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 25,
+      "kind": "Assign",
+      "source": "agent = CommsAgent(comms, runtime_enabled=True, private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None, private_nk_native_package=private_nk.native_package if private_nk else None, private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None)"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 25,
+      "kind": "Call",
+      "source": "CommsAgent(comms, runtime_enabled=True, private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None, private_nk_native_package=private_nk.native_package if private_nk else None, private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None)"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 20,
+      "kind": "Call",
+      "source": "comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)"
+    },
+    {
+      "path": "stack/test-native-import-rpc.py",
+      "line": 46,
+      "kind": "FunctionDef",
+      "source": "def ancestor_probe(package: Path, root: Path, env: dict[str, str], deny: Callable[[], None]) -> dict:\n    \"\"\"Admit real PR77, then reach a committed ws entry's optional ancestor require.\"\"\"\n    assert package.is_relative_to('/var/tmp') or package.is_relative_to('/dev/shm'), 'Disposable package required'\n    ancestor = package.parent.parent / 'bufferutil'\n    ancestor.mkdir(mode=448)\n    marker = root / 'ancestor-executed'\n    code = f\"require('node:fs').writeFileSync({json.dumps(str(marker))}, 'executed'); module.exports={{mask(){{}},unmask(){{}}}};\"\n    (root / 'ancestor-sentinel.cjs').write_text(code)\n    try:\n        (ancestor / 'package.json').write_text('{\"name\":\"bufferutil\",\"main\":\"index.cjs\"}')\n        (ancestor / 'index.cjs').write_text(code)\n        node = shutil.which('node')\n        assert node\n        control = subprocess.run([node, '--no-global-search-paths', '-e', f\"require({json.dumps(str(package / 'node_modules/ws/lib/buffer-util.js'))})\"], env=env, preexec_fn=deny, capture_output=True, timeout=15)\n        assert control.returncode == 0 and marker.exists(), (control.returncode, control.stderr)\n        marker.unlink()\n        script = \"import {registerHooks} from 'no"
+    },
+    {
+      "path": "stack/test-native-import-rpc.py",
+      "line": 79,
+      "kind": "Call",
+      "source": "marker.unlink()"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 53,
+      "kind": "FunctionDef",
+      "source": "def main():\n    root, descriptor, root_id, receipt, *mode = sys.argv[1:]\n    root, receipt = (Path(root), Path(receipt))\n    bus = require_retained_writer(root, descriptor, root_id)\n    packet = json.load(sys.stdin)\n    marker, original, target, changed = prepare(bus, packet)\n    if mode == ['--validate']:\n        print(json.dumps({'target_validated': True, 'changed_messages': len(changed)}), flush=True)\n        return\n    if mode:\n        raise ValueError('Unknown task carry operation.')\n    originals = receipt.with_name(receipt.name + '.originals')\n    if (originals / 'bus.jsonl').read_bytes() != original:\n        raise ValueError('Original bus preimage must be retained before publication.')\n    if (originals / 'bus_meta.json').read_bytes() != bus.metadata_path.read_bytes():\n        raise ValueError('Original admission marker preimage changed.')\n    if receipt.exists():\n        raise ValueError('Task carry receipt cannot be replaced.')\n    candidate = WakeCandidateIndex(Comms(root).bus).path\n    indices = [BusActivityIndex(bus.path).path, *root.glob('bus_display_*.json'), candidate, candidate.with_name(candidate.name + '-wal'), candidate.with_name(candidate.name + '-shm')]\n    re"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 89,
+      "kind": "Call",
+      "source": "(root / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 91,
+      "kind": "Call",
+      "source": "path.unlink()"
+    },
+    {
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 13,
+      "kind": "FunctionDef",
+      "source": "def main():\n    wire_descriptor, route_descriptor = map(int, sys.argv[1:])\n    packet = json.load(sys.stdin)\n    handoff = FieldCodec.decode(OwnerRestartHandoff, packet['handoff'])\n    original = ActiveRoute.from_record(packet['original_route'])\n    target = ActiveRoute.from_record(packet['target_route'])\n    path, receipt = (Path(packet['route_path']), Path(packet['receipt']))\n    service = Comms(Path(handoff.root))\n    stopped = StoppedOwnerBatch.accept(service.owners, wire_descriptor, handoff)\n    snapshot = service.registry.snapshot()\n    for owner in handoff.owners:\n        owner.require_current(snapshot)\n    service.owners.pin_private_nk_launch(target.root, target.wire_root_id, target.native_package)\n    _publish_active_route_locked(target, path, route_descriptor, expected=original)\n    assert read_active_route(path) == target\n    proof = json.loads(receipt.read_text())\n    proof['phase'] = 'target_route_published'\n    _atomic_write_text(receipt, json.dumps(proof, indent=2), fsync_parent=True)\n    results = stopped.launch()\n    proof.update(phase='target_owners_launched', owners=len(results), route_published_before_first_launch=True, original_wire_descriptor_retained=True)\n  "
+    },
+    {
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 26,
+      "kind": "Call",
+      "source": "service.owners.pin_private_nk_launch(target.root, target.wire_root_id, target.native_package)"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 113,
+      "kind": "FunctionDef",
+      "source": "def run(base, source_python, root):\n    \"\"\"Final installed operator control; caller provides an actual stopped copy.\"\"\"\n    base.mkdir(mode=448, exist_ok=True)\n    PrivateDirectoryRole.require(base.lstat())\n    PrivateDirectoryRole.require(root.lstat())\n    if not root.resolve(strict=True).is_relative_to(base.resolve(strict=True)) or root == base:\n        raise ValueError('Stopped original copy must be private under this owned control root')\n    if (base / 'receipt.json').exists() or (base / 'receipt.json').is_symlink():\n        raise ValueError('Control receipt must be fresh')\n    original = original_declaration(source_python)\n    source_hashes = {path.name: digest(path) for path in RuntimeNativeFiles(root).paths if path.exists()}\n    before_journal = journal_observation(root / 'compaction-commits.sqlite3')\n    if not before_journal['selected_summary_attempts']:\n        raise ValueError('Actual historical selected summary evidence is required')\n    installed = CarryNativeRuntimeInstallation(original=original, source_python=source_python, candidate=base / 'matched-candidate')\n    if FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installed)) != installed:\n        raise Ass"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 157,
+      "kind": "Call",
+      "source": "path.unlink()"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 27,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.native_package import verify_native_package"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 65,
+      "kind": "FunctionDef",
+      "source": "def require_stage(args):\n    if sys.executable != str(TARGET / 'bin/python'):\n        raise RuntimeError('Use the exact reviewed target interpreter')\n    for path, expected in ((TARGET / 'activation.json', args.activation_sha256), (SOURCE_PROOF, args.source_proof_sha256), (WRITER, args.writer_sha256), (INSTALLER, args.installer_sha256), (SCHEMA, args.schema_script_sha256)):\n        if digest(path) != expected:\n            raise RuntimeError(f'Reviewed artifact changed: {path}')\n    activation = json.loads((TARGET / 'activation.json').read_text())\n    if activation['stage'] != str(TARGET) or activation['pins'] != PINS:\n        raise RuntimeError('Wrong frozen source cohort')\n    if activation['sdk'] != '0.12.1' or activation['native_package'] != str(NATIVE):\n        raise RuntimeError('Wrong SDK/native pair')\n    if activation['staging_receipt'] != str(SOURCE_PROOF):\n        raise RuntimeError('Wrong source proof relation')\n    proof = json.loads(SOURCE_PROOF.read_text())\n    if {row['module']: row['head'] for row in proof['sources']} != PINS:\n        raise RuntimeError('Source proof names another cohort')\n    if not all((row['byte_equal'] for row in proof['sources'])) or not proof["
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 174,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass PublishOpenhcsRecovery(StoppedOwnerInstallation):\n    audience: tuple[OwnerRestartSelection, ...]\n    originals: tuple\n    original_route: ActiveRoute\n    route_directory: int\n    current: Path\n    receipt: Path\n    manifest_bytes: bytes\n    candidate: tuple[HistorySource, ...]\n    carry_proof: dict\n\n    def failed(self, failure):\n        self.leave_stopped(failure)\n\n    def complete(self, stopped):\n        results = super().complete(stopped)\n        after = stopped.lifecycle.registry.snapshot()\n        for previous, result in zip(self.originals, results, strict=True):\n            current = after.threads[result.thread]\n            if result.thread != previous.name or replace(current, process_identity=previous.process_identity) != previous:\n                raise RuntimeError('Original configuration readback differs under retained custody')\n            RetainedOwnerLaunch.capture(current, after, interpreter=str(TARGET / 'bin/python'))\n        self.note('retained-batch-launched-configurations-verified-public-ui-pending', finished=time.time(), results=FieldCodec.encode(results))\n        return results\n\n    def bind_target_launch(self, lifecycle):\n        l"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 281,
+      "kind": "FunctionDef",
+      "source": "def after_stopped(self, lifecycle):\n    require_publication_preimages(self.original_route, self.current)\n    require_no_clients(self.audience)\n    snapshot = lifecycle.registry.snapshot()\n    for original in self.originals:\n        if snapshot.threads[original.name] != original:\n            raise RuntimeError('Original settings changed during retirement')\n    self.require_sources()\n    self.retain_preimages()\n    protected = self.protected_originals()\n    self.note('all-original-owners-stopped-original-writer-installation')\n    for source in self.candidate:\n        subprocess.run([str(OLD_WRITER), str(WRITER), source.root, str(TARGET / 'bin/python'), str(INSTALLER), source.wire_root_id], env=clean_environment(), check=True)\n        source.validate()\n    carried, final_proof = carry(self.manifest)\n    if FieldCodec.decode(tuple[HistorySource, ...], carried) != self.candidate:\n        raise RuntimeError('Determining provenance changed during index installation')\n    if self.manifest.read_bytes() != self.manifest_bytes:\n        raise RuntimeError('Manifest CAS preimage changed')\n    _atomic_write_text(self.manifest, json.dumps(carried, indent=2) + '\\n', fsync_parent=True)\n    if self."
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 86,
+      "kind": "Call",
+      "source": "verify_native_package(NATIVE)"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 310,
+      "kind": "Assign",
+      "source": "target_route = replace(self.original_route, native_package=NATIVE)"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 77,
+      "kind": "Compare",
+      "source": "activation['native_package'] != str(NATIVE)"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 310,
+      "kind": "Call",
+      "source": "replace(self.original_route, native_package=NATIVE)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 25,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.native_package import verify_native_package"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 51,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass CohortActivation:\n    \"\"\"The existing verify.py artifact format, including its fourth dependency.\"\"\"\n    stage: Annotated[Path, PathText]\n    pins: dict[str, str]\n    sdk: str\n    textual_diff_view: str\n    native_package: Annotated[Path, PathText]\n    state: str\n    staging_receipt: Annotated[Path, PathText]\n    bins: dict[str, str]\n    native_cli: str\n    native_manifest: str\n    native_tree: str\n    native_configuration_note: str\n\n    def source_heads(self):\n        return {**self.pins, 'textual_diff_view': self.textual_diff_view}"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 150,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass InstalledSourceProof:\n    state: str\n    prefix: Annotated[Path, PathText]\n    sources: tuple[InstalledSource, ...]\n    native_package: Annotated[Path, PathText]\n    native_cli: str\n    native_manifest: str\n    native_tree: str\n    native_full_trust: bool\n    sdk: str\n    package_count: int\n    packages: tuple[tuple[str, str], ...]\n    requirements_sha256: str\n    protected_old_prefix_files: int\n    protected_old_prefix_files_unchanged: bool\n    public_install_changed: bool\n    new_native_build: bool\n    source_overlay: bool\n    dependency_bypass: bool\n    journey_owners: tuple[str, ...]\n    journey_assessment: str\n    archive_artifacts: tuple[ReviewedArtifact, ...] = field(default=(), metadata={'wire_omit_default': True})\n\n    def require_activation(self, activation: CohortActivation):\n        actual = {source.module: source.head for source in self.sources}\n        if len(actual) != len(self.sources) or actual != activation.source_heads():\n            raise RuntimeError('Source proof differs from the complete activation dependencies')\n        if self.prefix != activation.stage or self.sdk != activation.sdk:\n            raise RuntimeError('Source proof"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 190,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass ReviewedRetainedSummaryCohort:\n    target: Annotated[Path, PathText]\n    source_interpreter: Annotated[Path, PathText]\n    current_prefix: Annotated[Path, PathText]\n    original_route: ActiveRoute\n    native: Annotated[Path, PathText]\n    activation: ReviewedArtifact\n    source_proof: ReviewedArtifact\n    actual_gates: tuple[ReviewedArtifact, ...]\n\n    def require_original(self):\n        if self.original_route.root != ROOT:\n            raise RuntimeError('This reviewed one-use publisher names another public root')\n        if sys.executable != str(self.target / 'bin/python'):\n            raise RuntimeError('Use the reviewed target interpreter')\n        if not self.source_interpreter.is_absolute() or not self.source_interpreter.is_file():\n            raise RuntimeError('Authentic source interpreter is required')\n        self.activation.require_original()\n        self.source_proof.require_original()\n        if self.activation.path != self.target / 'activation.json':\n            raise RuntimeError('Activation is not the selected immutable target')\n        activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))\n       "
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 57,
+      "kind": "AnnAssign",
+      "source": "native_package: Annotated[Path, PathText]"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 154,
+      "kind": "AnnAssign",
+      "source": "native_package: Annotated[Path, PathText]"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 174,
+      "kind": "FunctionDef",
+      "source": "def require_activation(self, activation: CohortActivation):\n    actual = {source.module: source.head for source in self.sources}\n    if len(actual) != len(self.sources) or actual != activation.source_heads():\n        raise RuntimeError('Source proof differs from the complete activation dependencies')\n    if self.prefix != activation.stage or self.sdk != activation.sdk:\n        raise RuntimeError('Source proof names another prefix/SDK')\n    if (self.native_package, self.native_manifest, self.native_tree) != (activation.native_package, activation.native_manifest, activation.native_tree):\n        raise RuntimeError('Source proof names another native artifact')\n    for source in self.sources:\n        source.require_original(self.archive_artifacts)\n    if not self.native_full_trust or self.source_overlay or self.dependency_bypass:\n        raise RuntimeError('Package/source/native trust is incomplete')"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 200,
+      "kind": "FunctionDef",
+      "source": "def require_original(self):\n    if self.original_route.root != ROOT:\n        raise RuntimeError('This reviewed one-use publisher names another public root')\n    if sys.executable != str(self.target / 'bin/python'):\n        raise RuntimeError('Use the reviewed target interpreter')\n    if not self.source_interpreter.is_absolute() or not self.source_interpreter.is_file():\n        raise RuntimeError('Authentic source interpreter is required')\n    self.activation.require_original()\n    self.source_proof.require_original()\n    if self.activation.path != self.target / 'activation.json':\n        raise RuntimeError('Activation is not the selected immutable target')\n    activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))\n    if activation.stage != self.target:\n        raise RuntimeError('Activation names another source cohort')\n    if activation.sdk != '0.12.1' or activation.native_package != self.native:\n        raise RuntimeError('Activation names another SDK/native pair')\n    if activation.staging_receipt != self.source_proof.path:\n        raise RuntimeError('Activation names another source proof')\n    proof = FieldCodec.decode(InstalledSourcePro"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 241,
+      "kind": "FunctionDef",
+      "source": "def publish(self, directory: int):\n    self.require_publication_originals()\n    target_route = replace(self.original_route, native_package=self.native)\n    _publish_active_route_locked(target_route, active_route_path(), directory, expected=self.original_route)\n    for command in COMMANDS:\n        link = LINKS / command\n        if link.readlink() != self.current_prefix / 'bin' / command:\n            raise RuntimeError('Default changed during publication; remain stopped')\n        temporary = LINKS / (command + '.retained-summary-publish')\n        temporary.symlink_to(self.target / 'bin' / command)\n        temporary.replace(link)\n    fsync_directory(LINKS)\n    if read_active_route() != target_route:\n        raise RuntimeError('Target route readback differs')"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 243,
+      "kind": "Assign",
+      "source": "target_route = replace(self.original_route, native_package=self.native)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 180,
+      "kind": "Compare",
+      "source": "(self.native_package, self.native_manifest, self.native_tree) != (activation.native_package, activation.native_manifest, activation.native_tree)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 226,
+      "kind": "Call",
+      "source": "verify_native_package(self.native)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 243,
+      "kind": "Call",
+      "source": "replace(self.original_route, native_package=self.native)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 214,
+      "kind": "Compare",
+      "source": "activation.native_package != self.native"
+    },
+    {
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 13,
+      "kind": "FunctionDef",
+      "source": "def main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--root', type=Path, required=True)\n    parser.add_argument('--original-python', type=Path, required=True)\n    parser.add_argument('--root-id', required=True)\n    parser.add_argument('--native-package', type=Path, required=True)\n    parser.add_argument('--receipt', type=Path, required=True)\n    arguments = parser.parse_args()\n    os.environ.update(AGENT_COMMS_ROOT=str(arguments.root), **{ROOT_ID_ENV: arguments.root_id, PACKAGE_ENV: str(arguments.native_package)})\n    operation = RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)\n    results = Comms(arguments.root).owners.restart_owners(cutover=operation)\n    print(json.dumps(FieldCodec.encode(results)), flush=True)"
+    },
+    {
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 23,
+      "kind": "Assign",
+      "source": "operation = RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)"
+    },
+    {
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 21,
+      "kind": "Call",
+      "source": "os.environ.update(AGENT_COMMS_ROOT=str(arguments.root), **{ROOT_ID_ENV: arguments.root_id, PACKAGE_ENV: str(arguments.native_package)})"
+    },
+    {
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 23,
+      "kind": "Call",
+      "source": "RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)"
+    },
+    {
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 22,
+      "kind": "Call",
+      "source": "str(arguments.native_package)"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 32,
+      "kind": "FunctionDef",
+      "source": "def main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--original-python', type=Path, required=True)\n    parser.add_argument('--root', type=Path, required=True)\n    parser.add_argument('--root-id', required=True)\n    parser.add_argument('--native-package', type=Path, required=True)\n    parser.add_argument('--route-path', type=Path, required=True)\n    parser.add_argument('--receipt', type=Path, required=True)\n    arguments = parser.parse_args()\n    _trusted_package(arguments.native_package)\n    descriptor = os.open(arguments.route_path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)\n    try:\n        fcntl.flock(descriptor, fcntl.LOCK_EX)\n        original = read_active_route(arguments.route_path)\n        if original is None or original.root != arguments.root or original.wire_root_id != arguments.root_id:\n            raise ValueError('Original active route does not name the requested root')\n        original.observe_root()\n        target = replace(original, native_package=arguments.native_package)\n        runtime = Path(sys.executable).parent\n        environment = dict(os.environ, AGENT_COMMS_ROOT=str(target.root), AGENT_COMMS_PRIVATE_NK_WI"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 43,
+      "kind": "Call",
+      "source": "_trusted_package(arguments.native_package)"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 52,
+      "kind": "Assign",
+      "source": "target = replace(original, native_package=arguments.native_package)"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 54,
+      "kind": "Assign",
+      "source": "environment = dict(os.environ, AGENT_COMMS_ROOT=str(target.root), AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=target.wire_root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(target.native_package), VIRTUAL_ENV=str(runtime.parent), PATH=str(runtime) + os.pathsep + os.environ.get('PATH', ''))"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 52,
+      "kind": "Call",
+      "source": "replace(original, native_package=arguments.native_package)"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 54,
+      "kind": "Call",
+      "source": "dict(os.environ, AGENT_COMMS_ROOT=str(target.root), AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=target.wire_root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(target.native_package), VIRTUAL_ENV=str(runtime.parent), PATH=str(runtime) + os.pathsep + os.environ.get('PATH', ''))"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 66,
+      "kind": "Call",
+      "source": "authentic.update(AGENT_COMMS_ROOT=str(original.root), AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=original.wire_root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(original.native_package))"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 56,
+      "kind": "Call",
+      "source": "str(target.native_package)"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 68,
+      "kind": "Call",
+      "source": "str(original.native_package)"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.native_package import verify_native_package"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 22,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass RetainedIndexCutover(StoppedOwnerInstallation):\n    original_python: Path\n    wire_root_id: str\n    native_package: Path\n    writer_script: ClassVar[str] = 'retained_index_writer.py'\n    installer_script: ClassVar[str] = 'install_retained_index.py'\n\n    def failed(self, failure):\n        self.leave_stopped(failure)\n\n    @property\n    def operation_arguments(self) -> tuple[str, ...]:\n        return ()\n\n    def require_selection(self, snapshot, owners) -> None:\n        audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}\n        if {thread.name for thread in owners} != audience:\n            raise RelationViolationError('Index cutover requires every managed restart owner.')\n        if not self.original_python.is_absolute() or not self.original_python.is_file():\n            raise RelationViolationError('Original installed writer interpreter is required.')\n        WireRootIdText.from_text(self.wire_root_id)\n        verify_native_package(self.native_package)\n        environment = dict(os.environ)\n        environment.pop('PYTHONPATH', None)\n        original_schema = subprocess.run([str(self.original_python), str(Path(__file__).with_n"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 25,
+      "kind": "AnnAssign",
+      "source": "native_package: Path"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 38,
+      "kind": "FunctionDef",
+      "source": "def require_selection(self, snapshot, owners) -> None:\n    audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}\n    if {thread.name for thread in owners} != audience:\n        raise RelationViolationError('Index cutover requires every managed restart owner.')\n    if not self.original_python.is_absolute() or not self.original_python.is_file():\n        raise RelationViolationError('Original installed writer interpreter is required.')\n    WireRootIdText.from_text(self.wire_root_id)\n    verify_native_package(self.native_package)\n    environment = dict(os.environ)\n    environment.pop('PYTHONPATH', None)\n    original_schema = subprocess.run([str(self.original_python), str(Path(__file__).with_name('checkpoint_schema.py'))], env=environment, check=True, capture_output=True, text=True).stdout.strip()\n    if original_schema == declared_schema_digest():\n        raise RelationViolationError('Installed schemas already match; retained reset is unnecessary.')"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 67,
+      "kind": "FunctionDef",
+      "source": "def bind_target_launch(self, lifecycle) -> None:\n    lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 45,
+      "kind": "Call",
+      "source": "verify_native_package(self.native_package)"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 68,
+      "kind": "Call",
+      "source": "lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)"
+    },
+    {
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 19,
+      "kind": "FunctionDef",
+      "source": "def main():\n    root, target_python, installer, root_id = sys.argv[1:]\n    service = Comms(Path(root))\n    with service.bus.log.locked() as custody:\n        marker = service.bus.log._private_marker_unlocked()\n        if marker.root_id != root_id or marker.checkpoint_seal is None:\n            raise RelationViolationError('Original private writer proof changed.')\n        environment = dict(os.environ)\n        environment.pop('PYTHONPATH', None)\n        target_schema = subprocess.run([target_python, str(Path(installer).with_name('checkpoint_schema.py'))], env=environment, check=True, capture_output=True, text=True).stdout.strip()\n        if target_schema == declared_schema_digest():\n            raise RelationViolationError('Target schema no longer requires retained reset.')\n        before = bus_digest(service.bus.log.path)\n        retained = replace(marker, checkpoint_version=None, checkpoint_seal=None)\n        service.bus.log.write_metadata_unlocked(retained)\n        (service.root / 'private_bus_checkpoint.sqlite3').unlink()\n        subprocess.run([target_python, installer, root, str(custody.descriptor), root_id], env=environment, pass_fds=(custody.descriptor,), check=True)\n        a"
+    },
+    {
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "(service.root / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 16,
+      "kind": "FunctionDef",
+      "source": "def main():\n    root, target_python, installer, root_id, receipt = sys.argv[1:]\n    service = Comms(Path(root))\n    environment = dict(os.environ)\n    environment.pop('PYTHONPATH', None)\n    with service.bus.log.locked() as custody, _store_lock(service.root / 'registry.json'), _store_lock(service.root / 'transcript_routes.sqlite3'):\n        marker = service.bus.log._private_marker_unlocked()\n        if marker.root_id != root_id or marker.checkpoint_seal is None:\n            raise ValueError('Original certified writer identity changed.')\n        plan = prepare_original(service, marker)\n        encoded = json.dumps(FieldCodec.encode(plan))\n        subprocess.run([target_python, str(Path(installer).with_name('validate_retained_routing.py')), root, str(custody), root_id], input=encoded, text=True, env=environment, pass_fds=(custody,), check=True)\n        retain_originals(service, Path(receipt), plan)\n        retained = replace(marker, checkpoint_version=None, checkpoint_seal=None)\n        service.bus.log.write_metadata_unlocked(retained)\n        (service.root / 'private_bus_checkpoint.sqlite3').unlink()\n        subprocess.run([target_python, installer, root, str(custody), root_id, rece"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "(service.root / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 22,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass RetainedRuntimeFile:\n    path: Path\n    revision: FileRevision\n    sha256: str\n    descriptor: int\n\n    def checksum(self):\n        os.lseek(self.descriptor, 0, os.SEEK_SET)\n        with os.fdopen(os.dup(self.descriptor), 'rb') as stream:\n            return hashlib.file_digest(stream, 'sha256').hexdigest()\n\n    def require_original(self):\n        named = self.path.lstat()\n        opened = os.fstat(self.descriptor)\n        PrivateFileRole.require(named)\n        PrivateFileRole.require(opened)\n        if named.st_nlink != 1 or opened.st_nlink != 1:\n            raise RuntimeError('Runtime journal has another hardlink')\n        if FileRevision.from_stat(named) != self.revision:\n            raise RuntimeError('Named runtime journal changed during stopped custody')\n        if FileRevision.from_stat(opened) != self.revision:\n            raise RuntimeError('Opened runtime journal changed during stopped custody')\n\n    def evidence(self):\n        return {'path': str(self.path), 'sha256': self.sha256, 'revision': FieldCodec.encode(self.revision)}\n\n    @contextmanager\n    def prepare_replacement(self, candidate: Path, expected_sha256: str):\n        \"\"\"Hold a priva"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 95,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass AcquiredRuntimeFiles:\n    paths: tuple[Path, ...]\n    originals: tuple[RetainedRuntimeFile, ...]\n\n    def unchanged_by(self, changed: set[Path]):\n        \"\"\"Project these same opened resources after a declared carry replaces files.\"\"\"\n        return AcquiredRuntimeFiles(tuple((path for path in self.paths if path not in changed)), tuple((original for original in self.originals if original.path not in changed)))\n\n    def require_original(self):\n        present = {item.path for item in self.originals}\n        if {path for path in self.paths if path.exists() or path.is_symlink()} != present:\n            raise RuntimeError('Runtime journal membership changed under stopped custody')\n        for original in self.originals:\n            original.require_original()\n            if original.checksum() != original.sha256:\n                raise RuntimeError('Runtime journal bytes changed under stopped custody')\n            original.require_original()\n\n    def evidence(self):\n        return [item.evidence() for item in self.originals]\n\n    def retain_and_remove(self, destination: Path):\n        \"\"\"Retain EVERY present named member before removing ANY runtime file.\"\"\""
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 34,
+      "kind": "FunctionDef",
+      "source": "def require_original(self):\n    named = self.path.lstat()\n    opened = os.fstat(self.descriptor)\n    PrivateFileRole.require(named)\n    PrivateFileRole.require(opened)\n    if named.st_nlink != 1 or opened.st_nlink != 1:\n        raise RuntimeError('Runtime journal has another hardlink')\n    if FileRevision.from_stat(named) != self.revision:\n        raise RuntimeError('Named runtime journal changed during stopped custody')\n    if FileRevision.from_stat(opened) != self.revision:\n        raise RuntimeError('Opened runtime journal changed during stopped custody')"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 51,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef prepare_replacement(self, candidate: Path, expected_sha256: str):\n    \"\"\"Hold a private candidate on this destination's filesystem.\n\n        Recovery archives may live elsewhere. Failure retains the staged bytes;\n        only a completed publication retires its disposable staging directory.\n        \"\"\"\n    self.require_original()\n    PrivateDirectoryRole.require(self.path.parent.lstat())\n    directory = Path(tempfile.mkdtemp(prefix=f'.{self.path.name}.carry-', dir=self.path.parent))\n    PrivateDirectoryRole.require(directory.lstat())\n    fsync_directory(self.path.parent)\n    path = directory / self.path.name\n    proof = retain_file(candidate, path)\n    fsync_directory(directory)\n    if proof['sha256'] != expected_sha256:\n        raise ValueError('Staged candidate differs from reviewed carry')\n    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)\n    try:\n        replacement = RetainedRuntimeFile(path, FileRevision.from_stat(os.fstat(descriptor)), expected_sha256, descriptor)\n        replacement.require_original()\n        if replacement.checksum() != expected_sha256:\n            raise ValueError('Opened staged candidate differs from reviewed carry')\n       "
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 119,
+      "kind": "FunctionDef",
+      "source": "def retain_and_remove(self, destination: Path):\n    \"\"\"Retain EVERY present named member before removing ANY runtime file.\"\"\"\n    self.require_original()\n    PrivateDirectoryRole.require(destination.parent.lstat())\n    destination.mkdir(mode=448)\n    PrivateDirectoryRole.require(destination.lstat())\n    retained = []\n    for original in self.originals:\n        proof = retain_file(original.path, destination / original.path.name)\n        if proof['sha256'] != original.sha256:\n            raise RuntimeError('Preimage differs from acquired original runtime file')\n        retained.append(proof)\n    fsync_directory(destination)\n    fsync_directory(destination.parent)\n    self.require_original()\n    for original in self.originals:\n        original.path.unlink()\n    fsync_directory(self.paths[0].parent)\n    if any((path.exists() or path.is_symlink() for path in self.paths)):\n        raise RuntimeError('Runtime journal reappeared under stopped custody')\n    return {'classification': 'runtime/reset', 'original_files': retained, 'retired': [str(item.path) for item in self.originals], 'original_revisions': [FieldCodec.encode(item.revision) for item in self.originals]}"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 39,
+      "kind": "Compare",
+      "source": "named.st_nlink != 1"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 39,
+      "kind": "Compare",
+      "source": "opened.st_nlink != 1"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 77,
+      "kind": "Call",
+      "source": "path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 135,
+      "kind": "Call",
+      "source": "original.path.unlink()"
+    },
+    {
+      "path": "tools/cutover/routing_carry.py",
+      "line": 29,
+      "kind": "FunctionDef",
+      "source": "def file_witness(path: Path) -> dict[str, Any]:\n    try:\n        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)\n    except FileNotFoundError:\n        return {'missing': True}\n    with os.fdopen(descriptor, 'rb') as stream:\n        info = os.fstat(stream.fileno())\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1:\n            raise ValueError('Carry source must be original owned regular storage.')\n        return {'sha256': hashlib.file_digest(stream, 'sha256').hexdigest(), 'mode': stat.S_IMODE(info.st_mode), 'device': info.st_dev, 'inode': info.st_ino, 'size': info.st_size}"
+    },
+    {
+      "path": "tools/cutover/routing_carry.py",
+      "line": 36,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 52,
+      "kind": "FunctionDef",
+      "source": "def old_client_write_case(stage, root, original_python, environment):\n    \"\"\"Quarantine the destructive negative after all fixture workers retire.\"\"\"\n    copied = stage / 'old-client-wire'\n    shutil.copytree(root, copied)\n    RegistryDocument.from_wire(json.loads((copied / 'registry.json').read_text()))\n    with _store_lock(copied / 'wire'):\n        log = WireLog(copied / 'bus.jsonl')\n        marker = log.read_metadata_unlocked()\n        log.write_metadata_unlocked(replace(marker, checkpoint_version=None, checkpoint_seal=None))\n        (copied / 'private_bus_checkpoint.sqlite3').unlink()\n        install_private_bus_checkpoint(log)\n    control = FixtureMaintenanceControl(Comms(copied).owners.maintenance)\n    control.advance(control.begin('disposable-old-client-probe'), PausedPhase)\n    result = subprocess.run([original_python, str(Path(__file__).with_name('old_thread_client_probe.py')), str(copied)], env=environment, capture_output=True, text=True, timeout=8)\n    (stage / 'old-client-stderr.txt').write_text(result.stderr)\n    assert result.returncode == 0, result.stderr\n    evidence = json.loads(result.stdout)\n    try:\n        RegistryDocument.from_wire(json.loads((copied / 'regist"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 86,
+      "kind": "FunctionDef",
+      "source": "def main():\n    stage = Path(os.environ['AC_PHASE_FIXTURE_STAGE'])\n    stage.mkdir(mode=448, parents=True, exist_ok=False)\n    root, route, receipt = (stage / 'wire', stage / 'route' / 'active-route.json', stage / 'receipt.json')\n    original_python = os.environ['AC_PHASE_ORIGINAL_PYTHON']\n    environment = dict(os.environ)\n    environment.pop('PYTHONPATH', None)\n    environment['AC_NATIVE_COPIED_PACKAGE'] = os.environ['AC_PHASE_ORIGINAL_PACKAGE']\n    seed = subprocess.Popen([original_python, str(Path(__file__).with_name('seed_thread_retirement_fixture.py')), str(root), str(route)], env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=(stage / 'seed-stderr.txt').open('w'), text=True)\n    originals, replacements = ([], [])\n    try:\n        line = seed.stdout.readline()\n        assert line, (stage / 'seed-stderr.txt').read_text()\n        source = json.loads(line)\n        originals = [FieldCodec.decode(ProcessIdentity, item) for item in source['owners']]\n        expected = [FieldCodec.decode(Thread, item) for item in source['original_threads']]\n        expected[1] = replace(expected[1], active_turn=None)\n        protected = [root / 'bus.jsonl', root / 'protected-nati"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 64,
+      "kind": "Call",
+      "source": "(copied / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 155,
+      "kind": "Compare",
+      "source": "read_active_route(route).native_package == Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])"
+    },
+    {
+      "path": "Toad:src/toad/acp/agent.py",
+      "line": 71,
+      "kind": "ClassDef",
+      "source": "@rich.repr.auto\nclass Agent(AgentBase):\n    comms_consumer_class = CommsUpdateConsumer\n    'An agent that speaks the APC (https://agentclientprotocol.com/overview/introduction) protocol.'\n\n    def __init__(self, project_root: Path, agent: AgentDefinition, session_id: str | None, session_pk: int | None=None) -> None:\n        \"\"\"\n\n        Args:\n            project_root: Project root path.\n            command: Command to launch agent.\n        \"\"\"\n        super().__init__(project_root)\n        self.process = AgentProcess(self)\n        self.presentation = ACPAgentPresentation(self)\n        self.permissions = PermissionController(self)\n        self.controller = AgentController(self)\n        self.tools = SessionToolCalls(self)\n        self.definition = agent\n        self.session_id = session_id\n        self.server = jsonrpc.Server()\n        self.updates = SessionNotificationOwner(self)\n        self.server.expose_instance(self)\n        for owner in ClientRequestOwner.members_with(ClientRequestOwner):\n            self.server.expose_instance(owner.resolve(self))\n        self.session = AgentSession(self, session_pk)\n        self.done_event = asyncio.Event()\n        self._private_cursor = Proj"
+    },
+    {
+      "path": "Toad:src/toad/acp/agent.py",
+      "line": 76,
+      "kind": "FunctionDef",
+      "source": "def __init__(self, project_root: Path, agent: AgentDefinition, session_id: str | None, session_pk: int | None=None) -> None:\n    \"\"\"\n\n        Args:\n            project_root: Project root path.\n            command: Command to launch agent.\n        \"\"\"\n    super().__init__(project_root)\n    self.process = AgentProcess(self)\n    self.presentation = ACPAgentPresentation(self)\n    self.permissions = PermissionController(self)\n    self.controller = AgentController(self)\n    self.tools = SessionToolCalls(self)\n    self.definition = agent\n    self.session_id = session_id\n    self.server = jsonrpc.Server()\n    self.updates = SessionNotificationOwner(self)\n    self.server.expose_instance(self)\n    for owner in ClientRequestOwner.members_with(ClientRequestOwner):\n        self.server.expose_instance(owner.resolve(self))\n    self.session = AgentSession(self, session_pk)\n    self.done_event = asyncio.Event()\n    self._private_cursor = ProjectionAttachment()\n    self._private_cursor_sequence = 0\n    self.queue_attachment = QueueAttachment()\n    log_filename: str = generate_datetime_filename(f'{agent.name}', '.txt')\n    if (log_path := os.environ.get('TOAD_LOG')):\n        self.presentation.log_pat"
+    },
+    {
+      "path": "Toad:src/toad/acp/agent.py",
+      "line": 111,
+      "kind": "Call",
+      "source": "self.presentation.log_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "Toad:src/toad/acp/maintenance_ingress.py",
+      "line": 129,
+      "kind": "FunctionDef",
+      "source": "def spawn_under_lock() -> None:\n    try:\n        with selection.route.admit_client(), admission(root, ingress_root=ingress_root, cwd=child_cwd):\n            from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch\n            child_env['AGENT_COMMS_ROOT'] = str(ingress_root)\n            if selection.implicit:\n                from agent_comms.active_route import read_active_route\n                route = read_active_route()\n                if route is not None:\n                    if route != selection.route:\n                        raise ValueError('ACP root changed before private launch')\n                    for key, expected in ((ROOT_ID_ENV, route.wire_root_id), (PACKAGE_ENV, str(route.native_package))):\n                        if key in child_env and child_env[key] != expected:\n                            raise ValueError('ACP private launch identity conflicts with route')\n                        child_env[key] = expected\n            elif ROOT_ID_ENV in child_env or PACKAGE_ENV in child_env:\n                launch = PrivateNkLaunch.from_environment(ingress_root, child_env)\n                if launch is None:\n                    raise ValueError('ACP"
+    },
+    {
+      "path": "Toad:src/toad/acp/maintenance_ingress.py",
+      "line": 153,
+      "kind": "Call",
+      "source": "str(route.native_package)"
+    },
+    {
+      "path": "Toad:src/toad/atomic.py",
+      "line": 10,
+      "kind": "FunctionDef",
+      "source": "def write(path: str, content: str) -> None:\n    \"\"\"Write a file in an atomic manner.\n\n    Args:\n        filename: Filename of new file.\n        content: Content to write.\n\n    \"\"\"\n    path = os.path.abspath(path)\n    dir_name = os.path.dirname(path) or '.'\n    temp_name: str | None = None\n    try:\n        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, dir=dir_name, prefix=f'.{os.path.basename(path)}_tmp_') as temporary_file:\n            temp_name = temporary_file.name\n            temporary_file.write(content)\n        os.replace(temp_name, path)\n    except Exception as error:\n        raise AtomicWriteError(f'Failed to write {path!r}; {error}') from error\n    finally:\n        if temp_name is not None:\n            Path(temp_name).unlink(missing_ok=True)"
+    },
+    {
+      "path": "Toad:src/toad/atomic.py",
+      "line": 36,
+      "kind": "Call",
+      "source": "Path(temp_name).unlink(missing_ok=True)"
+    },
+    {
+      "path": "Toad:src/toad/danger.py",
+      "line": 107,
+      "kind": "Assign",
+      "source": "UNSAFE_COMMANDS = {'mkdir', 'touch', 'mktemp', 'mkfifo', 'mknod', 'rm', 'rmdir', 'shred', 'mv', 'cp', 'rsync', 'scp', 'install', 'sed', 'awk', 'tee', 'chmod', 'chown', 'chgrp', 'chattr', 'setfacl', 'ln', 'link', 'unlink', 'tar', 'untar', 'zip', 'unzip', 'gzip', 'gunzip', 'bzip2', 'bunzip2', 'xz', 'unxz', '7z', 'rar', 'unrar', 'wget', 'curl', 'fetch', 'aria2c', 'dd', 'truncate', 'fallocate', 'split', 'csplit', 'sync', 'useradd', 'userdel', 'usermod', 'groupadd', 'groupdel', 'passwd', 'mount', 'umount', 'mkfs', 'fdisk', 'parted', 'swapon', 'swapoff', 'patch'}"
+    }
+  ],
+  "dynamic_resolution": "Imported aliases, CLI/subprocess, callable factories and compiled JS bindings are source evidence, not dynamic-resolution proof."
+}

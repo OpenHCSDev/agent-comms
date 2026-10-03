@@ -1,0 +1,1333 @@
+{
+  "parser": "Existing installed tree-sitter JavaScript/Bash grammars; no dependency installation",
+  "roots": [
+    "stack",
+    "experiments/pi-context-proof"
+  ],
+  "modules": [
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/crash-helper.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/crash-restart.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/native-runtime.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/prepare-copied-pi.sh",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/proof-records.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/real-rpc.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "experiments/pi-context-proof/required-contract.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/pi-native",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/prepare-pi-native",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/toad-comms",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/inspect-native-compaction-plan.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-compaction-commit-child.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-compaction-policy.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-compaction-source.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-context-budget.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-file-artifact-schema.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-file-artifact.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-schema.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-request-input.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-request-observation.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-session-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-session-entry-store.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-turn-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/prepare-native-global-extensions.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-adaptive-settings.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-adaptive-writer-prototype.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-auto-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-committed-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-compaction-journal.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-compaction-progress.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-fork-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-global-extensions-installed.sh",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-import-fence.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-package-processes.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-parallel-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-selected-owner-host.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-shared-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-state-count.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-task-packing.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-exclusivity.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/crash-helper.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/crash-restart.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/native-runtime.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/prepare-copied-pi.sh",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/proof-records.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/real-rpc.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "experiments/pi-context-proof/required-contract.test.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/pi-native",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/toad-comms",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/inspect-native-compaction-plan.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-compaction-commit-child.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-compaction-policy.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-compaction-source.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-context-budget.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-file-artifact-schema.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-file-artifact.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-schema.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-request-input.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-request-observation.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-session-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-session-entry-store.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-turn-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/prepare-native-global-extensions.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-adaptive-settings.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-adaptive-writer-prototype.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-auto-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-committed-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-compaction-journal.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-compaction-progress.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-fork-context.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-global-extensions-installed.sh",
+      "language": "bash",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-import-fence.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-package-processes.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-parallel-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-selected-owner-host.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-shared-compaction.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-state-count.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-task-packing.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-exclusivity.mjs",
+      "language": "javascript",
+      "error": false
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "language": "javascript",
+      "error": false
+    }
+  ],
+  "parse_errors": [],
+  "sites": [
+    {
+      "phase": "before",
+      "path": "stack/bin/pi-native",
+      "line": 8,
+      "kind": "command",
+      "source": "printf 'Immutable native deployment: prepare and verify a new release; never self-update this copy.\\n'"
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/pi-native",
+      "line": 21,
+      "kind": "command",
+      "source": "python3 \"$stack_root/../src/agent_comms/native_package.py\" \"${cli%/dist/cli.js}\""
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 17,
+      "kind": "function_definition",
+      "source": "verify() (\n    cd -- \"$1/node_modules/@earendil-works/pi-coding-agent\"\n    sha256sum --check --status \"$manifest\" &&\n        python3 \"$repo_root/src/agent_comms/native_package.py\" \"$PWD\"\n)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 20,
+      "kind": "command",
+      "source": "python3 \"$repo_root/src/agent_comms/native_package.py\" \"$PWD\""
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 24,
+      "kind": "command",
+      "source": "verify \"$target\""
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 98,
+      "kind": "command",
+      "source": "python3 \"$stack_root/prepare-native-import-boundary.py\" \\\n    \"$stage/node_modules/@earendil-works/pi-coding-agent\""
+    },
+    {
+      "phase": "before",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 100,
+      "kind": "command",
+      "source": "verify \"$stage\""
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 16,
+      "kind": "function_declaration",
+      "source": "function checkedFile(path) {\n    const lexical = resolve(path);\n    if (!contained(lexical)) throw deny('outside committed deployment root');\n    const stat = lstatSync(lexical);\n    if (!stat.isFile() || stat.nlink !== 1) throw deny('not an independent regular file');\n    const actual = realpathSync(lexical);\n    if (actual !== lexical || !contained(actual)) throw deny('noncanonical file path');\n    return actual;\n}"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 20,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 20,
+      "kind": "binary_expression",
+      "source": "stat.nlink !== 1"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 25,
+      "kind": "function_declaration",
+      "source": "function manifestFile(path) {\n    if (typeof path !== 'string' || path.length > 4096 || isAbsolute(path) ||\n        path.split(/[\\\\/]/).some(part => part === '..' || part === '.' || part === ''))\n        throw deny('invalid manifest-relative file');\n    return checkedFile(resolve(root, path));\n}"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 29,
+      "kind": "call_expression",
+      "source": "checkedFile(resolve(root, path))"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 31,
+      "kind": "variable_declarator",
+      "source": "manifestPath = checkedFile(resolve(root, 'dist/agent-comms-imports.json'))"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 31,
+      "kind": "call_expression",
+      "source": "checkedFile(resolve(root, 'dist/agent-comms-imports.json'))"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 72,
+      "kind": "function_declaration",
+      "source": "function checkedURL(url) {\n    if (isBuiltin(url)) return url;\n    let parsed;\n    try { parsed = new URL(url); } catch { throw deny('non-URL resolution'); }\n    if (parsed.protocol !== 'file:') throw deny('non-file, non-builtin module');\n    checkedFile(fileURLToPath(parsed));\n    return url;\n}"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 77,
+      "kind": "call_expression",
+      "source": "checkedFile(fileURLToPath(parsed))"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 119,
+      "kind": "function_declaration",
+      "source": "async function loadApprovedExtension(path) {\n    // Resource discovery can preserve an outer installation-path alias; authority\n    // is the exact canonical entry in the already verified deployment tree.\n    const actual = realpathSync(path);\n    const declaration = sourceEntries.get(actual);\n    if (declaration) {\n        for (const source of declaration.sources) {\n            const stat = lstatSync(source.path);\n            if (!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||\n                realpathSync(source.path) !== source.path ||\n                createHash('sha256').update(readFileSync(source.path)).digest('hex') !== source.sha256)\n                throw deny(`extension source changed; prepare a new deployment: ${source.path}`);\n        }\n        return (await import(pathToFileURL(declaration.entry).href)).default;\n    }\n    const entry = checkedFile(actual);\n    if (!entries.has(entry)) throw deny('extension entry not in deployment manifest');\n    return (await import(pathToFileURL(entry).href)).default;\n}"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 127,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||\n                realpathSync(source.path) !== source.path ||\n                createHash('sha256').update(readFileSync(source.path)).digest('hex') !== source.sha256"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 127,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||\n                realpathSync(source.path) !== source.path"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 127,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 127,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 127,
+      "kind": "binary_expression",
+      "source": "stat.nlink !== 1"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 134,
+      "kind": "variable_declarator",
+      "source": "entry = checkedFile(actual)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-import-fence.mjs",
+      "line": 134,
+      "kind": "call_expression",
+      "source": "checkedFile(actual)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 6,
+      "kind": "import_statement",
+      "source": "import { closeSync, existsSync, fsyncSync, linkSync, lstatSync, openSync, renameSync, unlinkSync } from 'node:fs';"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||\n            info.uid !== process.getuid() || (info.mode & 0o077) !== 0"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||\n            info.uid !== process.getuid()"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "!info.isFile() || info.isSymbolicLink() || info.nlink !== 1"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "info.nlink !== 1"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 59,
+      "kind": "call_expression",
+      "source": "unlinkSync(temporary)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 64,
+      "kind": "binary_expression",
+      "source": "info.nlink !== 2"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 70,
+      "kind": "call_expression",
+      "source": "unlinkSync(staged)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-session-entry-store.mjs",
+      "line": 2,
+      "kind": "import_statement",
+      "source": "import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';"
+    },
+    {
+      "phase": "before",
+      "path": "stack/native-session-entry-store.mjs",
+      "line": 11676,
+      "kind": "call_expression",
+      "source": "unlinkSync(index)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "line": 56,
+      "kind": "variable_declarator",
+      "source": "{ existsSync, unlinkSync } = await import('node:fs')"
+    },
+    {
+      "phase": "before",
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "line": 58,
+      "kind": "call_expression",
+      "source": "unlinkSync(lockPath)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-compaction-journal.mjs",
+      "line": 4,
+      "kind": "import_statement",
+      "source": "import { mkdtempSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-compaction-journal.mjs",
+      "line": 88,
+      "kind": "call_expression",
+      "source": "unlinkSync(lock)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-import-fence.mjs",
+      "line": 75,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(sourceDependency)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-import-fence.mjs",
+      "line": 78,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(sourceDependency)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-package-processes.mjs",
+      "line": 5,
+      "kind": "import_statement",
+      "source": "import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-package-processes.mjs",
+      "line": 28,
+      "kind": "variable_declarator",
+      "source": "reset = () => { if (existsSync(marker)) unlinkSync(marker); }"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-package-processes.mjs",
+      "line": 28,
+      "kind": "call_expression",
+      "source": "unlinkSync(marker)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 66,
+      "kind": "variable_declarator",
+      "source": "cases = {\n    'duplicate-entry-id': () => {\n        const { file } = fixture();\n        const original = fs.readFileSync(file);\n        fs.appendFileSync(file, JSON.stringify(rows(file)[1]) + '\\n');\n        const invalid = fs.readFileSync(file);\n        assert.throws(() => opened(file), /Invalid|duplicate/i);\n        assert.deepEqual(fs.readFileSync(file), invalid);\n        assert.deepEqual(invalid.subarray(0, original.length), original);\n    },\n    'forward-parent-id': () => {\n        const { file } = fixture();\n        const entries = rows(file);\n        entries[1].parentId = entries[2].id;\n        fs.writeFileSync(file, entries.map(JSON.stringify).join('\\n') + '\\n');\n        const invalid = fs.readFileSync(file);\n        assert.throws(() => opened(file), /ancestry/i);\n        assert.deepEqual(fs.readFileSync(file), invalid);\n    },\n    'newline-repair': () => {\n        const { file } = fixture();\n        const raw = fs.readFileSync(file).subarray(0, -1);\n        fs.writeFileSync(file, raw);\n        fs.writeFileSync(`${file}.pr48-writer.lock`, 'held\\n');\n        try {\n            assert.throws(() => opened(file), /Incomplete/);\n            assert.deepEqual(fs.readFileSync(file), raw);\n        } finally { fs.unlinkSync(`${file}.pr48-writer.lock`); }\n    },\n    'malformed-load': () => {\n        const { file } = fixture();\n        fs.appendFileSync(file, '{broken}\\n');\n        const raw = fs.readFileSync(file);\n        assert.throws(() => opened(file));\n        assert.deepEqual(fs.readFileSync(file), raw);\n    },\n    'invalid-utf8-load': () => {\n        const { file } = fixt"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 93,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${file}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 208,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${file}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 222,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${destination}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 11676,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${file}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 37,
+      "kind": "function_declaration",
+      "source": "function identity(path) {\n    const stat = fs.statSync(path, { bigint: true });\n    // Reads may update atime; identity, permissions and mutation timestamps must not change.\n    return ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].map(key => stat[key].toString());\n}"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 40,
+      "kind": "call_expression",
+      "source": "['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].map(key => stat[key].toString())"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 95,
+      "kind": "variable_declarator",
+      "source": "scenarios = {\n    'branch-destination-lock': f => {\n        let target;\n        inject('openSync', (original, path, ...args) => {\n            if (typeof path === 'string' && path.endsWith('.jsonl.pr48-writer.lock') &&\n                path !== `${f.file}.pr48-writer.lock`) {\n                target = path.slice(0, -'.pr48-writer.lock'.length);\n                throw Object.assign(new Error('injected destination contention'), { code: 'EEXIST' });\n            }\n            return original(path, ...args);\n        }, () => assert.throws(() => f.manager.createBranchedSession(f.manager.getLeafId()), /lock unavailable/));\n        assert.ok(target);\n        assert.equal(fs.existsSync(target), false);\n    },\n    'switch-malformed': f => {\n        const target = join(f.dir, 'malformed.jsonl');\n        fs.writeFileSync(target, fs.readFileSync(f.file));\n        fs.appendFileSync(target, '{\"bad\":\"tail\"');\n        assert.throws(() => f.manager.setSessionFile(target), /Incomplete/);\n    },\n    'switch-direct-malformed': f => {\n        const target = join(f.dir, 'malformed-direct.jsonl');\n        fs.writeFileSync(target, '{\"bad\":\"tail\"');\n        assert.throws(() => f.manager._setSessionFile(target), /Incomplete/);\n    },\n    'branch-summary-lock': f => {\n        const lock = `${f.file}.pr48-writer.lock`;\n        fs.writeFileSync(lock, 'fixture-held\\n');\n        try { assert.throws(() => f.manager.branchWithSummary(f.kept, 'summary'), /lock unavailable/); }\n        finally { fs.unlinkSync(lock); }\n    },\n    'new-session-invalid-id': f => {\n        assert.throws(() => f.manager.newSession({ i"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 124,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(lock)"
+    },
+    {
+      "phase": "before",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 133,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(lock)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/pi-native",
+      "line": 8,
+      "kind": "command",
+      "source": "printf 'Immutable native deployment: prepare and verify a new release; never self-update this copy.\\n'"
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/pi-native",
+      "line": 21,
+      "kind": "command",
+      "source": "python3 \"$stack_root/../src/agent_comms/native_package.py\" \"${cli%/dist/cli.js}\""
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 17,
+      "kind": "function_definition",
+      "source": "verify() (\n    cd -- \"$1/node_modules/@earendil-works/pi-coding-agent\"\n    sha256sum --check --status \"$manifest\" &&\n        python3 \"$repo_root/src/agent_comms/native_package.py\" \"$PWD\"\n)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 20,
+      "kind": "command",
+      "source": "python3 \"$repo_root/src/agent_comms/native_package.py\" \"$PWD\""
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 24,
+      "kind": "command",
+      "source": "verify \"$target\""
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 98,
+      "kind": "command",
+      "source": "python3 \"$stack_root/prepare-native-import-boundary.py\" \\\n    \"$stage/node_modules/@earendil-works/pi-coding-agent\""
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 100,
+      "kind": "command",
+      "source": "python3 \"$repo_root/src/agent_comms/native_package.py\" --share-resources \\\n    \"$stage/node_modules/@earendil-works/pi-coding-agent\" \"$stack_root\""
+    },
+    {
+      "phase": "after",
+      "path": "stack/bin/prepare-pi-native",
+      "line": 102,
+      "kind": "command",
+      "source": "verify \"$stage\""
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 16,
+      "kind": "function_declaration",
+      "source": "function checkedFile(path) {\n    const lexical = resolve(path);\n    if (!contained(lexical)) throw deny('outside committed deployment root');\n    const stat = lstatSync(lexical);\n    if (!stat.isFile() || (stat.nlink !== 1 && (stat.mode & 0o222)))\n        throw deny('not an independent or read-only shared regular file');\n    const actual = realpathSync(lexical);\n    if (actual !== lexical || !contained(actual)) throw deny('noncanonical file path');\n    return actual;\n}"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 20,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || (stat.nlink !== 1 && (stat.mode & 0o222))"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 20,
+      "kind": "binary_expression",
+      "source": "stat.nlink !== 1 && (stat.mode & 0o222)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 20,
+      "kind": "binary_expression",
+      "source": "stat.nlink !== 1"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 26,
+      "kind": "function_declaration",
+      "source": "function manifestFile(path) {\n    if (typeof path !== 'string' || path.length > 4096 || isAbsolute(path) ||\n        path.split(/[\\\\/]/).some(part => part === '..' || part === '.' || part === ''))\n        throw deny('invalid manifest-relative file');\n    return checkedFile(resolve(root, path));\n}"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 30,
+      "kind": "call_expression",
+      "source": "checkedFile(resolve(root, path))"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 32,
+      "kind": "variable_declarator",
+      "source": "manifestPath = checkedFile(resolve(root, 'dist/agent-comms-imports.json'))"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 32,
+      "kind": "call_expression",
+      "source": "checkedFile(resolve(root, 'dist/agent-comms-imports.json'))"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 73,
+      "kind": "function_declaration",
+      "source": "function checkedURL(url) {\n    if (isBuiltin(url)) return url;\n    let parsed;\n    try { parsed = new URL(url); } catch { throw deny('non-URL resolution'); }\n    if (parsed.protocol !== 'file:') throw deny('non-file, non-builtin module');\n    checkedFile(fileURLToPath(parsed));\n    return url;\n}"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 78,
+      "kind": "call_expression",
+      "source": "checkedFile(fileURLToPath(parsed))"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 120,
+      "kind": "function_declaration",
+      "source": "async function loadApprovedExtension(path) {\n    // Resource discovery can preserve an outer installation-path alias; authority\n    // is the exact canonical entry in the already verified deployment tree.\n    const actual = realpathSync(path);\n    const declaration = sourceEntries.get(actual);\n    if (declaration) {\n        for (const source of declaration.sources) {\n            const stat = lstatSync(source.path);\n            if (!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||\n                realpathSync(source.path) !== source.path ||\n                createHash('sha256').update(readFileSync(source.path)).digest('hex') !== source.sha256)\n                throw deny(`extension source changed; prepare a new deployment: ${source.path}`);\n        }\n        return (await import(pathToFileURL(declaration.entry).href)).default;\n    }\n    const entry = checkedFile(actual);\n    if (!entries.has(entry)) throw deny('extension entry not in deployment manifest');\n    return (await import(pathToFileURL(entry).href)).default;\n}"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 128,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||\n                realpathSync(source.path) !== source.path ||\n                createHash('sha256').update(readFileSync(source.path)).digest('hex') !== source.sha256"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 128,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||\n                realpathSync(source.path) !== source.path"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 128,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 128,
+      "kind": "binary_expression",
+      "source": "!stat.isFile() || stat.nlink !== 1"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 128,
+      "kind": "binary_expression",
+      "source": "stat.nlink !== 1"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 135,
+      "kind": "variable_declarator",
+      "source": "entry = checkedFile(actual)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-import-fence.mjs",
+      "line": 135,
+      "kind": "call_expression",
+      "source": "checkedFile(actual)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 6,
+      "kind": "import_statement",
+      "source": "import { closeSync, existsSync, fsyncSync, linkSync, lstatSync, openSync, renameSync, unlinkSync } from 'node:fs';"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||\n            info.uid !== process.getuid() || (info.mode & 0o077) !== 0"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||\n            info.uid !== process.getuid()"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "!info.isFile() || info.isSymbolicLink() || info.nlink !== 1"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 19,
+      "kind": "binary_expression",
+      "source": "info.nlink !== 1"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 59,
+      "kind": "call_expression",
+      "source": "unlinkSync(temporary)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 64,
+      "kind": "binary_expression",
+      "source": "info.nlink !== 2"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-proof-journal.mjs",
+      "line": 70,
+      "kind": "call_expression",
+      "source": "unlinkSync(staged)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-session-entry-store.mjs",
+      "line": 2,
+      "kind": "import_statement",
+      "source": "import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';"
+    },
+    {
+      "phase": "after",
+      "path": "stack/native-session-entry-store.mjs",
+      "line": 11676,
+      "kind": "call_expression",
+      "source": "unlinkSync(index)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "line": 56,
+      "kind": "variable_declarator",
+      "source": "{ existsSync, unlinkSync } = await import('node:fs')"
+    },
+    {
+      "phase": "after",
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "line": 58,
+      "kind": "call_expression",
+      "source": "unlinkSync(lockPath)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-compaction-journal.mjs",
+      "line": 4,
+      "kind": "import_statement",
+      "source": "import { mkdtempSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-compaction-journal.mjs",
+      "line": 88,
+      "kind": "call_expression",
+      "source": "unlinkSync(lock)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-import-fence.mjs",
+      "line": 86,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(sourceDependency)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-import-fence.mjs",
+      "line": 89,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(sourceDependency)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-package-processes.mjs",
+      "line": 5,
+      "kind": "import_statement",
+      "source": "import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-package-processes.mjs",
+      "line": 28,
+      "kind": "variable_declarator",
+      "source": "reset = () => { if (existsSync(marker)) unlinkSync(marker); }"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-package-processes.mjs",
+      "line": 28,
+      "kind": "call_expression",
+      "source": "unlinkSync(marker)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 66,
+      "kind": "variable_declarator",
+      "source": "cases = {\n    'duplicate-entry-id': () => {\n        const { file } = fixture();\n        const original = fs.readFileSync(file);\n        fs.appendFileSync(file, JSON.stringify(rows(file)[1]) + '\\n');\n        const invalid = fs.readFileSync(file);\n        assert.throws(() => opened(file), /Invalid|duplicate/i);\n        assert.deepEqual(fs.readFileSync(file), invalid);\n        assert.deepEqual(invalid.subarray(0, original.length), original);\n    },\n    'forward-parent-id': () => {\n        const { file } = fixture();\n        const entries = rows(file);\n        entries[1].parentId = entries[2].id;\n        fs.writeFileSync(file, entries.map(JSON.stringify).join('\\n') + '\\n');\n        const invalid = fs.readFileSync(file);\n        assert.throws(() => opened(file), /ancestry/i);\n        assert.deepEqual(fs.readFileSync(file), invalid);\n    },\n    'newline-repair': () => {\n        const { file } = fixture();\n        const raw = fs.readFileSync(file).subarray(0, -1);\n        fs.writeFileSync(file, raw);\n        fs.writeFileSync(`${file}.pr48-writer.lock`, 'held\\n');\n        try {\n            assert.throws(() => opened(file), /Incomplete/);\n            assert.deepEqual(fs.readFileSync(file), raw);\n        } finally { fs.unlinkSync(`${file}.pr48-writer.lock`); }\n    },\n    'malformed-load': () => {\n        const { file } = fixture();\n        fs.appendFileSync(file, '{broken}\\n');\n        const raw = fs.readFileSync(file);\n        assert.throws(() => opened(file));\n        assert.deepEqual(fs.readFileSync(file), raw);\n    },\n    'invalid-utf8-load': () => {\n        const { file } = fixt"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 93,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${file}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 208,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${file}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 222,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${destination}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 11676,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(`${file}.pr48-writer.lock`)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 37,
+      "kind": "function_declaration",
+      "source": "function identity(path) {\n    const stat = fs.statSync(path, { bigint: true });\n    // Reads may update atime; identity, permissions and mutation timestamps must not change.\n    return ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].map(key => stat[key].toString());\n}"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 40,
+      "kind": "call_expression",
+      "source": "['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].map(key => stat[key].toString())"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 95,
+      "kind": "variable_declarator",
+      "source": "scenarios = {\n    'branch-destination-lock': f => {\n        let target;\n        inject('openSync', (original, path, ...args) => {\n            if (typeof path === 'string' && path.endsWith('.jsonl.pr48-writer.lock') &&\n                path !== `${f.file}.pr48-writer.lock`) {\n                target = path.slice(0, -'.pr48-writer.lock'.length);\n                throw Object.assign(new Error('injected destination contention'), { code: 'EEXIST' });\n            }\n            return original(path, ...args);\n        }, () => assert.throws(() => f.manager.createBranchedSession(f.manager.getLeafId()), /lock unavailable/));\n        assert.ok(target);\n        assert.equal(fs.existsSync(target), false);\n    },\n    'switch-malformed': f => {\n        const target = join(f.dir, 'malformed.jsonl');\n        fs.writeFileSync(target, fs.readFileSync(f.file));\n        fs.appendFileSync(target, '{\"bad\":\"tail\"');\n        assert.throws(() => f.manager.setSessionFile(target), /Incomplete/);\n    },\n    'switch-direct-malformed': f => {\n        const target = join(f.dir, 'malformed-direct.jsonl');\n        fs.writeFileSync(target, '{\"bad\":\"tail\"');\n        assert.throws(() => f.manager._setSessionFile(target), /Incomplete/);\n    },\n    'branch-summary-lock': f => {\n        const lock = `${f.file}.pr48-writer.lock`;\n        fs.writeFileSync(lock, 'fixture-held\\n');\n        try { assert.throws(() => f.manager.branchWithSummary(f.kept, 'summary'), /lock unavailable/); }\n        finally { fs.unlinkSync(lock); }\n    },\n    'new-session-invalid-id': f => {\n        assert.throws(() => f.manager.newSession({ i"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 124,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(lock)"
+    },
+    {
+      "phase": "after",
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 133,
+      "kind": "call_expression",
+      "source": "fs.unlinkSync(lock)"
+    }
+  ],
+  "scope": "All tracked JS/MJS and Bash producers in declared roots; dependencies compiled in immutable handed artifacts are not reparsed. AST call references do not prove dynamic resolution."
+}

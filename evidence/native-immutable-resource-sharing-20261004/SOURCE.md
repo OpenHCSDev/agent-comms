@@ -17,3 +17,11 @@ Mendel owns selected acquisition consumers in native_pi.py/coordinated_runtime.p
 ## Completed source checks and honest limits
 
 Original source package batch: 26 passed; two existing compaction-journal controls could not import ACP in the system Python (ModuleNotFoundError: acp), before reaching their assertions. The original failure log is retained; no dependency install, mock or product workaround. All new sharing/content controls passed. Existing real Node import-fence contract: 16 cases passed, including read-only shared SDK code loading and writable shared code refusal. Bash producer syntax and Node import-fence syntax passed. This is source/filesystem/module qualification, not a compiled SDK deployment, installed live path or readiness claim. No new native artifact/provider/public run.
+
+## Complete declaration/consumer evidence
+
+Before and after Python consumer output uses the existing refactor-audit Package.load parser across Core, stack Python, canonical cutover tools and Toad dependency roots: 663 modules, zero Python parse omissions. After output records 339 declaration/import/decision/consumer source sites; it includes related private-state checks that remain intentionally single-link.
+
+The initial system-Python lookup lacked JS/Bash grammar packages. The existing installed dependency holder has those parsers, so the original and implemented tracked stack/experiment JS/MJS and Bash sources were parsed without installing dependencies: 47 files per revision, zero parse-error modules. This fills the earlier explicit non-Python omission; compiled dependency bodies in immutable handed artifacts are outside this source enumeration. Dynamic import, subprocess and callable-factory resolution remain behavioral boundaries rather than AST proof.
+
+Production change: 75 additions / 7 deletions across native_package, the sole build script and import fence. Replaced independent-file-only decisions are deleted at those owners; mutable extension binding/private state retain their separate contract. Final compiled sharing and SDK launch qualification remains pending a reviewed matching future artifact. No readiness or disk-reclamation claim.
