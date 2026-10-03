@@ -46,7 +46,8 @@ RuntimeInfoStore, metadata and ACP/frontend ContextMeasurement consumers determi
 ownership.603 NativeCustody generic query seam remains untouched. Patterns IMPL-12,
 BOUND-2, AGENT-2. Original failed/cold406 evidence and all UNKNOWN remain untouched.
 
-Working source only; configured installed cold/native/ACP qualification pending.
+Configured installed cold/native/ACP qualification completed; see READY.md and
+installed-receipt.json. Production unchanged from283dfc18.
 No whole-latency/provider-duration or physical-footer pass claim.
 
 Retained inspection is a separate missing-publication edge: it can consume the idle
@@ -71,5 +72,5 @@ turn before/after AgentInfo hooks preserve exact native-attachment/lease/config 
 Package605 preimage is archived/readback-verified separately before granted540 reuse.
 603 whole-head normal integration carries its reviewed f3dd manifest; native89 differs
 from that fulltree commitment. No installed trust mutation or manifest edit is performed:
-matched existing native artifact selection is coordinated with parent/Sch for qualification.
+parent authorized the matching existing f3dd artifact for this installed qualification.
 603's new recorded-parts query is not exercised by606 cold/current-context acceptance.
