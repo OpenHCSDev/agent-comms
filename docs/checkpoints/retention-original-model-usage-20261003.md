@@ -58,8 +58,11 @@ paid-study approval. No runtime policy is activated.
 Bohr verified that current357 installed runtime290 activation differs from the
 historical staging290 metadata archived in560's borrow-release receipt. That
 archive records its named original files/hashes faithfully; it must not be used
-as the current installed-package declaration. Bohr separately retained matching
-current activation/full-source/native proof before granting Mendel the holder.
+as the current installed-package declaration. Bohr separately retained the authentic original357 activation and original
+full-source/native proof files. Mendel had already installed the authorized
+receiving wheel before this metadata archive; it is not a preinstall module or
+dist-info clone. Mendel retains that UV preimage receipt. Bohr's exact ordering
+is recorded in `/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/released-holder-originals/runtime-historical-handling290-current-20261001-for-mendel562/release-receipt.json`.
 The original release receipt remains unchanged. This does not change560's direct
 production-byte checks, the final Core563/de166 functional receipt, or protection
 of its original records. No reconstruction, package capture or gate is repeated.
