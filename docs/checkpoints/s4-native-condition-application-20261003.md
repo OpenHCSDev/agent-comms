@@ -19,3 +19,27 @@ owners or their checkouts. Source/AST and the complete related caller migration
 come first, then one final affected SDK/application and original-source check.
 A configured functional fork is authorized if needed for original capture and
 commit qualification. The separate 30-pair study remains unapproved.
+
+## Changed consumer relation
+
+RecordedNativeCheckpoint.fork_condition_source reads the original journal's
+NativeForkCreation, corroborates its source and exact child prefix, and requires
+the committed checkpoint entry to be inherited unchanged. The CLI accepts that
+journal and child path together. The original checkpoint_session/narrative
+provenance stays original; session identifies the selected distinct child.
+Missing raw assembly remains unavailable even for a corroborated child. No
+creation enrollment, native input grant or original disposition is reconstructed.
+
+The private bounded construction now produces one raw SDK message array and its
+converted preview together, using existing native EntryStore/SessionContext/
+TurnContext behavior. Preview and application consume that same construction;
+application calls the current storedContext.requireReady/install. It never
+installs render() output, creates ReadyContext or edits agent.state directly.
+The SessionManager's original compaction witness captures the complete selected
+source across awaited conversion before installation; it grants no input.
+
+All runtime/native files and artifacts remain unchanged. SDK installation is
+not a submitted baseline, HTTP-byte observation or model comparison. The current
+captured historical cuts remain unavailable; the completed596 narrative has no
+corroborated commit. New original capture/commit qualification is separate from
+these private consumer/resource changes.
