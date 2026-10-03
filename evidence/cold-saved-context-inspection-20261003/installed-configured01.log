@@ -1,0 +1,22 @@
+{"state": "FAILED_NO_REPLAY", "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python", "core": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/__init__.py", "fixture": ".artifacts/cold-context595-configured01", "public_inputs": 0, "original_inputs_retried": 0, "model": "openai-codex/gpt-6.1-sol", "thinking": "high", "original_name": "openhcs-audit-merged-runtime", "original_worktree": "/home/ts/code/projects/openhcs", "source_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl", "source_bytes": 42376246, "original_process": {"pid": 275406, "start_time": 51408968}, "original_sha256": "b503439b38deb341d03cce064fe5e73b64366c3054836fe19c548db07e90e26c", "error": "AssertionError()", "elapsed_seconds": 8.064954615023453}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/turn_context_installed_journey.py", line 401, in <module>
+    asyncio.run(run_configured(options) if options.configured_source_root
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                else run(options.root, receiving_only=options.receiving_only,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         authored_operations_only=options.authored_operations_only))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/turn_context_installed_journey.py", line 93, in run_configured
+    assert Path(identity.session_file).is_relative_to(root)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+AssertionError
