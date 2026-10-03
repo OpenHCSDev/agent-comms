@@ -14,6 +14,7 @@ from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitnes
 from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import _commit_native_summary
 from agent_comms.private_path import FileRevision
+from agent_comms.pi_vocabulary import ManualCompactionReason
 
 
 @pytest.mark.asyncio
@@ -62,6 +63,7 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
             await _commit_native_summary(
                 Bridge(), SimpleNamespace(), 1, Persistent(), prepared,
                 SimpleNamespace(), NativeSummary("worker lifetime control, no provider", None, None),
+                reason=ManualCompactionReason,
             )
 
     task = asyncio.create_task(owner(), name="actual-owner-turn")

@@ -1,0 +1,24 @@
+[
+  {
+    "case": "receipt_mismatch",
+    "commit_id": "5e801eaa120e4dbda2cf1015dba2bc5f",
+    "journal_sha256": "2457a905f3cb41a9a7bcf22f82c0ff3250ddc0fd6b23b026f9b465a025d1bf1b",
+    "session": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/known-runtime593-faults05/test_known_compaction_retains_0/wire/native-sessions/2026-10-03T15-52-59-530Z_01a10277-f98b-7257-a876-c57e89446088.jsonl",
+    "inherited_tracked_input_ids": 1,
+    "new_native_input_ids": 0,
+    "donor_unchanged": true,
+    "raw_log": "installed-faults05.log",
+    "scope": "original fault assertions reached actual retirement and zero provider/input; terminal pytest failed only subsequent unsupported select keyword. This supplement reads retained journals without dispatch."
+  },
+  {
+    "case": "cancel_hook",
+    "commit_id": "61fe2daadddd4a27b98f949653b482f6",
+    "journal_sha256": "d6a31ef3e7482b7c9f3fe7cea17038af1ae9082c29e4fd10a853f4cb5acba063",
+    "session": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/known-runtime593-faults05/test_known_compaction_retains_1/wire/native-sessions/2026-10-03T15-53-07-743Z_01a10278-199f-70c0-acbe-d1772a387e43.jsonl",
+    "inherited_tracked_input_ids": 1,
+    "new_native_input_ids": 0,
+    "donor_unchanged": true,
+    "raw_log": "installed-faults05.log",
+    "scope": "original fault assertions reached actual retirement and zero provider/input; terminal pytest failed only subsequent unsupported select keyword. This supplement reads retained journals without dispatch."
+  }
+]

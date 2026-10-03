@@ -1,0 +1,457 @@
+{
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 50,
+      "node": "alias",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 147,
+      "node": "AsyncFunctionDef",
+      "name": "external_write"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 128,
+      "node": "Name",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 21,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 29,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 176,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 179,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 92,
+      "node": "ClassDef",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 135,
+      "node": "FunctionDef",
+      "name": "reconciliation"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 122,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 214,
+      "node": "ClassDef",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 235,
+      "node": "AsyncFunctionDef",
+      "name": "reload"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 22,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 103,
+      "node": "Name",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 230,
+      "node": "Name",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 245,
+      "node": "alias",
+      "name": "AgentCommsRestoreCompaction"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 246,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 236,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 259,
+      "node": "Name",
+      "name": "AgentCommsRestoreCompaction"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 260,
+      "node": "Attribute",
+      "name": "reconciliation"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 260,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 27,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 40,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 286,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 83,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 345,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 371,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 378,
+      "node": "Attribute",
+      "name": "reconciliation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 166,
+      "node": "AsyncFunctionDef",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 27,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 175,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 179,
+      "node": "Attribute",
+      "name": "external_write"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 219,
+      "node": "Attribute",
+      "name": "reload"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 144,
+      "node": "Name",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 11,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 44,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 413,
+      "node": "ClassDef",
+      "name": "SwitchSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 480,
+      "node": "ClassDef",
+      "name": "AgentCommsRestoreCompaction"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 19,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 483,
+      "node": "Name",
+      "name": "reconciliation"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 455,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 485,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 15,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 230,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 278,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 302,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 46,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 47,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 219,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 121,
+      "node": "ClassDef",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 152,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 156,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 160,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 164,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 168,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 172,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 18,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 81,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 129,
+      "node": "Name",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 114,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 125,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 27,
+      "node": "Attribute",
+      "name": "external_write"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 273,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 286,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 34,
+      "node": "alias",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 657,
+      "node": "Name",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 717,
+      "node": "Name",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 958,
+      "node": "Name",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 15,
+      "node": "alias",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 56,
+      "node": "AsyncFunctionDef",
+      "name": "external_write"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 63,
+      "node": "Name",
+      "name": "_commit_native_summary"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 24,
+      "node": "alias",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 196,
+      "node": "Name",
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/guards/test_pi_vocabulary_ownership.py",
+      "line": 9,
+      "node": "alias",
+      "name": "CompactionReason"
+    },
+    {
+      "path": "tests/guards/test_pi_vocabulary_ownership.py",
+      "line": 79,
+      "node": "Name",
+      "name": "CompactionReason"
+    }
+  ],
+  "limits": "Python AST does not resolve dynamic dispatch, extension hooks or JavaScript held in strings."
+}

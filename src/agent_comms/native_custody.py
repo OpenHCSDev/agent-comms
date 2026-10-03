@@ -18,6 +18,8 @@ from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
+    from .compaction_records import CompactionOperation
+    from .pi_vocabulary import CompactionReason
     from .selected_source import SessionRevision
     from .owner_compaction_prepare import NativeWitness
 
@@ -230,15 +232,18 @@ class RetainedNative(NativeCustody):
             raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
         return self.idle()
 
-    async def reload(self, witness: NativeWitness) -> None:
-        """Replace the old SDK runtime from this exact committed saved source.
+    async def reload(self, witness: NativeWitness, operation: CompactionOperation,
+                     reason: type[CompactionReason]) -> None:
+        """Install this exact known commit through the acquired compaction owner.
 
         The caller owns PersistentPiSession.external_write and its borrow lock.
-        Switching is a real SDK load, not a revision update pretending the old
-        manager saw the disk write. The original preflight attests its replacement.
+        The original manager opens and reconciles the real disk source, closes
+        its old entry store, and installs context through the native compaction
+        hook. Its SDK runtime, services and extension bindings remain acquired.
         """
         from .owner_compaction_prepare import PrepareCompactionHelper
-        from .pi_commands import SwitchSession
+        from .pi_commands import AgentCommsRestoreCompaction
+        from .native_compaction_request import NativeIntent
         from .selected_source import SessionRevision
         from .session_fence import session_writer_fence
 
@@ -251,9 +256,12 @@ class RetainedNative(NativeCustody):
             # order used for normal execution, not another global BUS grant.
             async with session_writer_fence(self.identity.session_file):
                 witness.require_current_file(self.identity.path)
-                request = SwitchSession(session_path=self.identity.session_file, id=uuid4().hex)
+                request = AgentCommsRestoreCompaction(
+                    reconciliation=NativeIntent.read(operation).reconciliation(operation.commit_id),
+                    expected=operation.committed_outcome(), reason=reason, id=uuid4().hex,
+                )
                 response = await request.exchange(self.child.reader, self.child.proc.stdin, strict=True)
-                response.require_request(request).require_switched()
+                response.require_request(request)
                 attestation = PendingAttestation(self.identity)
                 response = await attestation.request.exchange(
                     self.child.reader, self.child.proc.stdin, strict=True,
