@@ -25,6 +25,12 @@ class NativeBackendFixture:
         self.children = []
         self.observed = []
 
+    async def force_reopen(self):
+        """Retire this fixture's actual attested child, preserving saved identity."""
+        identity = self.persistent.custody.child.attestation.require_identity()
+        self.persistent.require_reopen(identity)
+        await self.persistent.close_idle()
+
     def started(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
         child = backend.TurnSession.active[asyncio.current_task()].native.proc
@@ -175,7 +181,7 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     retained = owner.persistent.custody.child.proc
     assert retained is not None and retained.alive()
 
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     assert not retained.alive()
     owner.provider.text = "Reopened retained context."
     reopened = await owner.run("after validated reopen")

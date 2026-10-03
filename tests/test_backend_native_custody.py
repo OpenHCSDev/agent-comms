@@ -11,6 +11,34 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
+@pytest.mark.parametrize("failure", ["cancel", "stale"])
+async def test_external_write_failure_retires_original_child_without_new_input(native_backend, failure):
+    import asyncio
+    from agent_comms.native_custody import ReopenNative
+    from agent_comms.native_pi import NativePiUnavailable
+
+    owner = native_backend
+    assert (await owner.run("One original input before external writer custody"))[-1].ok
+    retained = owner.persistent.custody.idle()
+    child = retained.child.proc
+    before = owner.session.read_bytes()
+    expected = asyncio.CancelledError if failure == "cancel" else NativePiUnavailable
+    with pytest.raises(expected):
+        async with owner.persistent.external_write(retained.identity):
+            assert isinstance(owner.persistent.custody, ReopenNative)
+            assert not owner.persistent.available and child.alive()
+            if failure == "cancel":
+                raise asyncio.CancelledError
+            stat = owner.session.stat()
+            os.utime(owner.session, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1000000))
+            # An external write without a successful SDK reload cannot return
+            # the old in-memory manager to available custody.
+    assert isinstance(owner.persistent.custody, ReopenNative)
+    assert not child.alive() and not owner.persistent.lock.locked()
+    assert owner.provider.posts == len(owner.starts) == 1
+    assert owner.session.read_bytes() == before
+
+
 async def test_actual_native_attestation_refuses_foreign_expected_identity(native_backend):
     owner = native_backend
     first = await owner.run("Diagnostic input before attestation mismatch")
@@ -64,7 +92,7 @@ async def test_actual_native_strict_reopen_refuses_changed_identity_without_inpu
     assert first[-1].ok, first[-1]
     original = owner.session.read_bytes()
     previous = owner.persistent.custody.child.proc
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     assert not previous.alive()
     rows = original.decode().splitlines()
     header = json.loads(rows[0])
@@ -75,7 +103,7 @@ async def test_actual_native_strict_reopen_refuses_changed_identity_without_inpu
     assert not refused[-1].ok and refused[-1].reason_code == "compaction_reopen_invalid"
     assert owner.session.read_bytes() == altered
     assert not owner.persistent.available
-    assert owner.persistent.custody.session_file == str(owner.session)
+    assert owner.persistent.custody.identity.session_file == str(owner.session)
     assert len(owner.starts) == owner.provider.posts == 1
     # Repair only this disposable fixture. Send a NEW explicit input, never the refused one.
     owner.session.write_bytes(original)
@@ -109,7 +137,7 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
         await close(child)
 
     monkeypatch.setattr(PiSessionChild, "close", held_close)
-    retire = asyncio.create_task(owner.persistent.discard_for_external_write(str(owner.session)))
+    retire = asyncio.create_task(owner.force_reopen())
     try:
         await asyncio.wait_for(entered.wait(), 5)
         retire.cancel()

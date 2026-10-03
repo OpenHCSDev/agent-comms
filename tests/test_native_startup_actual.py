@@ -60,7 +60,7 @@ async def prepare(owner, preparation_type, monkeypatch):
     seeded = await owner.run("Saved history, never replay this input")
     assert seeded[-1].ok, seeded[-1]
     launch = owner.persistent.custody.child.key[0]
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
     admission = NativeStartupAdmission(owner.root)
     preparation = preparation_type(

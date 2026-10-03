@@ -1,0 +1,1080 @@
+{
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist",
+  "parsed": 0,
+  "omissions": [
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bun/cli.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bun/restore-sandbox-env.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bun/runtime-setup.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bun/sandbox-env-setup.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/anthropic-messages-VWZZOSJQ.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/anthropic.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/azure-openai-responses-BJLAM6CD.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/bedrock-converse-stream.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-4L3WN2XY.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-6CYCI3EJ.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-6R7UI4IY.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-7ZC4UXSL.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-AXIIZGTV.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-CLNPYIDP.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-DRQDKNXA.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-GMWCTUPB.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-IDDQWTHI.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-JVUZSMYM.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-L2ZPNLYD.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-NUHFSC37.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-OUXLLA64.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-PGXDEOVV.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-PJACZCIR.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-PRRNXB7S.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-TEPMHNKQ.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-TRDNDS6A.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-U6ZMQKGD.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-UAQELI3K.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-USJZMAIR.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-XDUWOHPL.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-XNGRGP62.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/github-copilot.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/google-generative-ai-Q2K7FBDI.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/google-vertex-7UJBF4S7.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/https-proxy-agent-2VXB7436.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/image-resize-worker.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/kimi-coding.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/lib-HGQMNYVT.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/mistral-conversations-4M6BZBX6.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/multipart-parser-SQ6GDJL7.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/node-KG362ECQ.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/node-TWVVAGPO.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/openai-codex-responses-R6VYZTVY.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/openai-codex.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/openai-completions-EKZT2IH2.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/openai-responses-TFDINO6W.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/openrouter-images-N4XVVFSD.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/openrouter.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/pi-messages-PML4SPVJ.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/radius.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/src-UK77SYZE.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/xai.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/bundle/rpc-entry.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/auth-check.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/auth-command.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/config-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/credential-print.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/file-processor.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/initial-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/list-models.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/project-trust.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/session-picker.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/setup.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli/startup-ui.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/config.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-runtime.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-services.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/auth-guidance.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/bash-executor.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/cache-stats.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-policy.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-source.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/defaults.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/diagnostics.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/experimental.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/ansi-to-html.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/template.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/tool-renderer.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/vendor/highlight.min.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/vendor/marked.min.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/wrapper.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/footer-data-provider.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/http-dispatcher.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/model-config.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/model-registry.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/model-resolver.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/model-runtime.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/models-store.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/native-proof-journal.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/native-proof-schema.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/output-guard.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/package-manager.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/pi-manifest.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/project-trust.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/prompt-templates.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/provider-attribution.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/provider-composer.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/radius.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/remote-catalog-provider.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/resolve-config-value.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/resource-loader.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/runtime-credentials.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/session-cwd.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/session-entry-store.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/session-export.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-diagnostics.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/slash-commands.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/source-info.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/telemetry.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/timings.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/agent-comms-file-artifact.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/bash.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/edit-diff.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/edit.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/file-mutation-queue.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/find.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/grep.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/ls.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/output-accumulator.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/path-utils.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/powershell.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/read.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/render-utils.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/bash.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/edit.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/find.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/grep.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/ls.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/read.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/renderers/write.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/tool-definition-wrapper.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/truncate.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/write.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/trust-manager.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/core/usage-totals.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/extensions/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/client.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/huggingface.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/provider.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/ui.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/migrations.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/chat-viewport.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/armin.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/bash-execution.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/bordered-loader.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/branch-summary-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/compaction-summary-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/config-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/countdown-timer.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/custom-editor.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/custom-entry.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/custom-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/daxnuts.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/diff.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/dynamic-border.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/earendil-announcement.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/extension-editor.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/extension-input.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/extension-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/first-time-setup.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/footer.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/index.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/keybinding-hints.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/login-dialog.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/markdown-transform.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/mermaid.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/model-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/oauth-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/scoped-models-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/session-selector-search.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/session-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/settings-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/settings-submenu.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/show-images-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/skill-invocation-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/status-indicator.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/theme-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/thinking-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/tool-execution.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/tree-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/trust-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/user-message-selector.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/user-message.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/visual-truncate.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/external-editor.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/model-catalog-refresh.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/model-search.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/session-share.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-controller.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-json.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/tui-renderer.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/json-event.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/print-mode.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/jsonl.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-client.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-types.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/package-manager-cli.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/rpc-entry.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/abort.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/ansi.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/changelog.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/child-process.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/clipboard-image.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/clipboard-native.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/clipboard.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/deprecation.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/exif-orientation.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/frontmatter.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/fs-watch.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/git.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/html.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/image-convert.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/image-process.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/image-resize-core.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/image-resize-worker.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/image-resize.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/json.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/management-http.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/mime.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/open-browser.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/paths.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/photon.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/pi-user-agent.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/shell.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/sleep.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/syntax-highlight.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/text.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/tool-result-images.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/tools-manager.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/version-check.js",
+      "error": "TypeError: acorn.parse is not a function"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/utils/windows-self-update.js",
+      "error": "TypeError: acorn.parse is not a function"
+    }
+  ],
+  "sites": [],
+  "ambiguity": "Syntactic member references do not prove runtime resolution; actual AgentSessionRuntime and RPC binding were read. Compiled SDK is unchanged."
+}

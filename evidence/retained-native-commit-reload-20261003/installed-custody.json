@@ -1,0 +1,33 @@
+{
+  "root": "/home/ts/.cache/agent-scratch/m581-retained-native-commit-20261003/wire",
+  "identity_exit_proof": [
+    {
+      "thread": "source529",
+      "process": {
+        "pid": 3545889,
+        "start_time": 49828418
+      },
+      "active_turn_absent": true,
+      "exact_process_absent": true
+    },
+    {
+      "thread": "peer529",
+      "process": {
+        "pid": 3545889,
+        "start_time": 49828418
+      },
+      "active_turn_absent": true,
+      "exact_process_absent": true
+    },
+    {
+      "native": {
+        "pid": 3546425,
+        "start_time": 49829544
+      },
+      "exact_process_absent": true
+    }
+  ],
+  "summary_finished_to_distinct_preparing_seconds": 4.972526025,
+  "summary_finished_seconds": 98.010980649,
+  "scope": "Original per-request monotonic observations, exact captured native and private controller identities absent; no current public owner inspected or stopped. This is one changed source journey, not controlled speedup or provider-duration solution."
+}

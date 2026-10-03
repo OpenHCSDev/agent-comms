@@ -1,0 +1,896 @@
+{
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist",
+  "parsed": 268,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "bundle/chunks/chunk-CLNPYIDP.js",
+      "line": 2,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-CLNPYIDP.js",
+      "line": 2,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 140,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 140,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 140,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 140,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 141,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 141,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 141,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 141,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 141,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 268,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 269,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 269,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 269,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 269,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 269,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 275,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 275,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 658,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 815,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1004,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1004,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1007,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1066,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1066,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "rebindSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MethodDefinition",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MethodDefinition",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "rebindSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "rebindSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MethodDefinition",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "kind": "MethodDefinition",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1547,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1547,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1547,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1547,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/chunk-U6ZMQKGD.js",
+      "line": 49,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/node-KG362ECQ.js",
+      "line": 2,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/node-KG362ECQ.js",
+      "line": 5,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/node-KG362ECQ.js",
+      "line": 5,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/node-KG362ECQ.js",
+      "line": 5,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/node-KG362ECQ.js",
+      "line": 5,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "bundle/chunks/node-KG362ECQ.js",
+      "line": 6,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 46,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 66,
+      "kind": "MemberExpression",
+      "name": "rebindSession"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 103,
+      "kind": "MethodDefinition",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 121,
+      "kind": "MethodDefinition",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 122,
+      "kind": "MemberExpression",
+      "name": "rebindSession"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 123,
+      "kind": "MemberExpression",
+      "name": "rebindSession"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 129,
+      "kind": "MethodDefinition",
+      "name": "switchSession"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 135,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 137,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 138,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 145,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 161,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 162,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 172,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 207,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 208,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 214,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 220,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 225,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 226,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 232,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 236,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 243,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 249,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 285,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 287,
+      "kind": "MemberExpression",
+      "name": "teardownCurrent"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 288,
+      "kind": "MemberExpression",
+      "name": "createRuntime"
+    },
+    {
+      "path": "core/agent-session-runtime.js",
+      "line": 294,
+      "kind": "MemberExpression",
+      "name": "finishSessionReplacement"
+    },
+    {
+      "path": "core/export-html/index.js",
+      "line": 249,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/extensions/runner.js",
+      "line": 258,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "core/extensions/runner.js",
+      "line": 607,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "core/native-proof-journal.js",
+      "line": 16,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "core/native-proof-journal.js",
+      "line": 84,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/native-proof-journal.js",
+      "line": 98,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 70,
+      "kind": "MethodDefinition",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 131,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 142,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 218,
+      "kind": "MethodDefinition",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 298,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 301,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 304,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 306,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 324,
+      "kind": "MethodDefinition",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 340,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 351,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 418,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 790,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 876,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1237,
+      "kind": "MethodDefinition",
+      "name": "open"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1295,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1308,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "main.js",
+      "line": 261,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "main.js",
+      "line": 329,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "main.js",
+      "line": 341,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "main.js",
+      "line": 543,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "modes/interactive/interactive-mode.js",
+      "line": 4492,
+      "kind": "MemberExpression",
+      "name": "open"
+    },
+    {
+      "path": "modes/interactive/interactive-mode.js",
+      "line": 4504,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "modes/interactive/interactive-mode.js",
+      "line": 4521,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "modes/print-mode.js",
+      "line": 72,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "modes/rpc/rpc-client.js",
+      "line": 288,
+      "kind": "MethodDefinition",
+      "name": "switchSession"
+    },
+    {
+      "path": "modes/rpc/rpc-mode.js",
+      "line": 105,
+      "kind": "MemberExpression",
+      "name": "assertCurrent"
+    },
+    {
+      "path": "modes/rpc/rpc-mode.js",
+      "line": 662,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    },
+    {
+      "path": "modes/rpc/rpc-mode.js",
+      "line": 955,
+      "kind": "MemberExpression",
+      "name": "switchSession"
+    }
+  ],
+  "ambiguity": "Syntactic member references do not prove runtime resolution; actual AgentSessionRuntime and RPC binding were read. Compiled SDK is unchanged."
+}
