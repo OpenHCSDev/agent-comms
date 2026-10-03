@@ -31,6 +31,11 @@ AST before/after: 726 Python production/test/tool modules, no omissions. The
 after census includes the other native/input/message fact declarations, which
 own different evidence. Attribute resolution remains a stated ambiguity;
 semantic reads cover the actual resource, query and applicability consumers.
+The final census exposed the retired method in three older control modules and
+the existing retained-task cutover pilot. All migrate to the same certified
+resource; there is no compatibility method left. Their nine affected installed
+controls passed in4.26s, covering original incarnation reuse, rename, direct
+failed-input pins, original choice/correction/drop and human supersession.
 
 ## Installed verification
 
