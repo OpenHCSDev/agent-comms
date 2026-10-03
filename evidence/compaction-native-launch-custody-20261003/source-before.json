@@ -1,0 +1,308 @@
+{
+  "head": "a24f696c7caf8deeb59c75d14c1dc8fc97107f31",
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 34,
+      "call": "verify_native_package(self.package)"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 24,
+      "owner": "NativeCompactionWriter",
+      "bases": [],
+      "members": [
+        "__init__",
+        "verify",
+        "exchange",
+        "settle"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 44,
+      "call": "verify_native_package(self.package_dir)"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 26,
+      "owner": "PiSessionChild",
+      "bases": [],
+      "members": [
+        "reply_ui",
+        "start",
+        "stderr_tail",
+        "close",
+        "failures"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 212,
+      "owner": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "members": [
+        "current",
+        "idle",
+        "selected",
+        "reload",
+        "inspect_context",
+        "reuse",
+        "managed_launch",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 133,
+      "call": "verify_native_package(Path(sys.argv[1]))"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 394,
+      "owner": "NativePiRpcLaunch",
+      "bases": [],
+      "members": [
+        "bootstrap",
+        "_build",
+        "_command_selection",
+        "package_for_command",
+        "managed",
+        "_managed",
+        "retained_managed",
+        "tracked"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 756,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 54,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 70,
+      "call": "OwnerCompactionCommit.open(registry.store.path, package, session_file, future_queue=future_queue)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 43,
+      "owner": "OwnerCompactionCommit",
+      "bases": [],
+      "members": [
+        "__init__",
+        "open",
+        "compact_selected",
+        "capture_source",
+        "prepare_source",
+        "require_source_current",
+        "reconcile_interrupted_summaries",
+        "settle_selected_refusal",
+        "commit",
+        "admit_selected_decline",
+        "admit_selected_original",
+        "reconcile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 48,
+      "call": "NativeCompactionWriter(package_dir)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 62,
+      "call": "OwnerCompactionCommit.open(runner.comms.registry.store.path, Path(package), session_file)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 168,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 228,
+      "call": "OwnerCompactionCommit.open(participant.comms.registry.store.path, turn.launch.package, self.session_file)"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 72,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/explicit_private_owner_installed_journey.py",
+      "line": 47,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 42,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 26,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 50,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 75,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 42,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 89,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 50,
+      "call": "verify_native_package(arguments.package)"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 70,
+      "call": "OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 43,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 44,
+      "call": "verify_native_package(copy)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 63,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 82,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 89,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 109,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 127,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 134,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 150,
+      "call": "commit.OwnerCompactionCommit(tmp_path / 'registry.json', package)"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 166,
+      "call": "commit.OwnerCompactionCommit(tmp_path / 'registry.json', package)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 83,
+      "call": "OwnerCompactionCommit(tmp_path / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 97,
+      "call": "OwnerCompactionCommit.open(original_bridge.registry.store.path, Path(PACKAGE), witness.session_file)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 132,
+      "call": "OwnerCompactionCommit(root / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 604,
+      "call": "OwnerCompactionCommit(root / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 642,
+      "call": "OwnerCompactionCommit(root / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 685,
+      "call": "OwnerCompactionCommit(root / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 834,
+      "call": "OwnerCompactionCommit(root / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 907,
+      "call": "OwnerCompactionCommit(root / 'registry.json', Path(PACKAGE))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 532,
+      "call": "OwnerCompactionCommit(root / 'registry.json', package)"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 42,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 85,
+      "call": "verify_native_package(package)"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 86,
+      "call": "verify_native_package(NATIVE)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 171,
+      "call": "verify_native_package(self.native)"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 45,
+      "call": "verify_native_package(self.native_package)"
+    }
+  ],
+  "limits": "Syntactic dotted calls/class declarations; alias/dynamic resolution checked by semantic read. Native immutable resource content and launch are distinct from source/input custody."
+}
