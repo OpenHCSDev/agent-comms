@@ -27,6 +27,7 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .native_compaction_request import NativeIntent, NativeSummaryPayload
 from .native_compaction_writer import NativeCompactionWriter
 from .native_entries import NativeEvidenceRead
+from .native_pi import NativePiRpcLaunch
 from .owner_compaction_prepare import NativePreparation, NativePreparationResult, NativeWitness
 from .owner_compaction_settings import PiCompactionDecision
 from .pi_summary_payloads import SelectedModel, SummaryDeclinedData, SummaryFiles, SummaryUsage
@@ -43,9 +44,10 @@ from .diagnostics import record_request_progress
 class OwnerCompactionCommit:
     def __init__(self, registry_path: Path, package_dir: Path, *,
                  future_queue: FutureInputQueue | None = None,
-                 native_reader: NativeEvidenceRead | None = None):
+                 native_reader: NativeEvidenceRead | None = None,
+                 native_launch: NativePiRpcLaunch | None = None):
         root = registry_path.parent.resolve(strict=True)
-        self.native = NativeCompactionWriter(package_dir)
+        self.native = NativeCompactionWriter(package_dir, native_launch=native_launch)
         self.registry = Registration(registry_path)
         self.inputs = InputDispositions(root / InputDispositions.filename)
         self.boundary = CompactionBoundary(
@@ -58,6 +60,7 @@ class OwnerCompactionCommit:
     async def open(
         cls, registry_path: Path, package_dir: Path, session_file: str, *,
         future_queue: FutureInputQueue | None = None,
+        native_launch: NativePiRpcLaunch | None = None,
     ) -> AsyncIterator[OwnerCompactionCommit]:
         """One acquired native reader for the original compaction operation.
 
@@ -69,7 +72,7 @@ class OwnerCompactionCommit:
         with NativeEvidenceRead.open(Path(session_file)) as reader:
             bridge = await Coordination.run_worker(partial(
                 cls, registry_path, package_dir,
-                future_queue=future_queue, native_reader=reader,
+                future_queue=future_queue, native_reader=reader, native_launch=native_launch,
             ))
             yield bridge
 

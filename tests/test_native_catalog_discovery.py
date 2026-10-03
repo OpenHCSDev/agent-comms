@@ -304,3 +304,80 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
         print("actual_native_replacement", driver, observed() if driver == "sdk_callbacks" else current.session_id, flush=True)
     assert child.returncode is not None and not child.alive()
     assert await errors == ""
+
+
+async def test_actual_compaction_writer_borrows_acquired_native_launch(native_backend, monkeypatch):
+    """Original SDK fork/get_state/writer resources; no input or provider call."""
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms import native_compaction_writer as writer
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+
+    native = native_backend
+    source_name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+    source = Path(source_name).resolve(strict=True)
+    original = hashlib.sha256(source.read_bytes()).hexdigest()
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        directory=str(native.project / "writer-sessions"),
+    ), cwd=native.project)
+    launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+        "pi", ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+               "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+               "--no-prompt-templates", "--no-tools"),
+        worktree=native.project, session_file=created.session_file,
+    ))
+    child = await PiSessionChild.start(
+        (launch, launch.configuration.auth_revision()), launch.session.attestation(),
+    )
+    calls = []
+    verify = writer.verify_native_package
+
+    def observe(package):
+        calls.append(package)
+        return verify(package)
+
+    monkeypatch.setattr(writer, "verify_native_package", observe)
+    try:
+        async with asyncio.timeout(30):
+            pending = child.attestation
+            response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+            child.attestation = pending.accept(response)
+            child.attestation.require_identity().require_same_session(created)
+            async with OwnerCompactionCommit.open(
+                native.root / "registry.json", launch.package, created.session_file,
+                native_launch=launch,
+            ) as bridge:
+                assert bridge.native.package_dir == launch.package
+                bridge.boundary.native_reader.require_path(created.path)
+                assert calls == []
+            # An unrelated path cannot borrow this acquired artifact; the check
+            # occurs before helper access or journal creation.
+            with pytest.raises(ValueError, match="differs from its acquired"):
+                OwnerCompactionCommit(native.project / "registry.json", native.project,
+                                      native_launch=launch)
+            assert not (native.project / "compaction-commits.sqlite3").exists()
+            await Coordination.run_worker(partial(writer.NativeCompactionWriter, launch.package))
+            assert calls == [launch.package]
+            response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+            assert pending.accept(response).require_identity() == child.attestation.require_identity()
+            assert native.provider.posts == 0 and native.saved_inputs() == []
+            assert hashlib.sha256(source.read_bytes()).hexdigest() == original
+    finally:
+        await child.close()
+    assert not child.proc.alive() and child.proc.retired
+    assert await child.stderr_task == ""
+    print("actual_compaction_launch_borrow", json.dumps({
+        "source_bytes": source.stat().st_size, "source_sha256": original,
+        "fork": created.session_file, "pid": child.proc.pid,
+        "child_retired": child.proc.retired, "borrowed_tree_verifications": 0,
+        "fresh_tree_verifications": len(calls), "provider_requests": native.provider.posts,
+    }), flush=True)

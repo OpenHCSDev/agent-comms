@@ -1,0 +1,93 @@
+..F
+=================================== FAILURES ===================================
+_________ test_actual_compaction_writer_borrows_acquired_native_launch _________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fa3e78078c0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa3e762dd90>
+
+    async def test_actual_compaction_writer_borrows_acquired_native_launch(native_backend, monkeypatch):
+        """Original SDK fork/get_state/writer resources; no input or provider call."""
+        import hashlib
+        import os
+        from functools import partial
+        from pathlib import Path
+    
+        from agent_comms import native_compaction_writer as writer
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_attestation import PendingAttestation
+        from agent_comms.native_custody import PiSessionChild
+        from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+        from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+    
+        native = native_backend
+        source_name = os.environ.get("PI_WRITER_TEST_SOURCE")
+        if not source_name:
+            pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+        source = Path(source_name).resolve(strict=True)
+        original = hashlib.sha256(source.read_bytes()).hexdigest()
+        created = await ForkSessionHelper.run(ForkSessionRequest(
+            os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+            directory=str(native.project / "writer-sessions"),
+        ), cwd=native.project)
+        launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+            "pi", ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                   "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                   "--no-prompt-templates", "--no-tools"),
+            worktree=native.project, session_file=created.session_file,
+        ))
+        child = await PiSessionChild.start(
+            (launch, launch.configuration.auth_revision()), PendingAttestation(created),
+        )
+        calls = []
+        verify = writer.verify_native_package
+    
+        def observe(package):
+            calls.append(package)
+            return verify(package)
+    
+        monkeypatch.setattr(writer, "verify_native_package", observe)
+        try:
+            async with asyncio.timeout(30):
+                pending = child.attestation
+                response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+>               child.attestation = pending.accept(response)
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_catalog_discovery.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PendingAttestation(expected=NativeForkCreation(session_id='01a10199-ca24-700d-9044-2f6a1aa73549', session_file='/home/...60a8b73728cfd16541'), entry_count=9587), request=GetState(id='agent-comms-preflight-dbf4c2fd97baa0592728fc9abe65746a'))
+event = Response(command=<class 'agent_comms.pi_commands.GetState'>, data=StateData(session_id='01a10199-ca24-700d-9044-2f6a1a...ing=False, is_compacting=False), error=None, id='agent-comms-preflight-dbf4c2fd97baa0592728fc9abe65746a', success=True)
+
+    def accept(self, event: PiEvent) -> ObservedAttestation:
+        if not isinstance(event, Response) or event.command is not commands.GetState:
+            raise AttestationError(
+                failures.InputIdUnavailable(
+                    "Pi native input-ID capability preflight returned another event."
+                )
+            )
+        if event.id != self.request.id or not event.success:
+            raise AttestationError(
+                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+            )
+        try:
+            data = event.data.require_payload()
+        except ValueError as error:
+            raise AttestationError(
+                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+            ) from error
+        if data.native_input_proof_capability != CAPABILITY:
+            raise AttestationError(
+                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+            )
+        observed = self.observe(data)
+        if self.expected is not None and observed.identity != self.expected:
+>           raise IdentityAttestationError(
+                failures.IdentityUncertain("Pi session identity changed during this turn.")
+            )
+E           agent_comms.native_attestation.IdentityAttestationError: Pi session identity changed during this turn.
+
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/native_attestation.py:108: IdentityAttestationError
+=========================== short test summary info ============================
+FAILED tests/test_native_catalog_discovery.py::test_actual_compaction_writer_borrows_acquired_native_launch
+1 failed, 2 passed in 6.59s
