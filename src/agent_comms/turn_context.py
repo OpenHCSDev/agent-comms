@@ -186,6 +186,14 @@ class SegmentManifest:
     def public_description(self) -> str:
         return f"{self.kind.replace('_', ' ').title()} · {self.tokens} estimated tokens"
 
+    def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
+        selected = self
+        for position in positions:
+            if not 0 <= position < len(selected.contributors):
+                raise ValueError("Original request has no selected contributor")
+            selected = selected.contributors[position]
+        return selected
+
     def capture_public(self, values: tuple[MeasuredNativeSegment, ...]) -> SegmentManifest:
         """Project the original SDK publication; never capture a later preview."""
         matched = tuple(value for value in values if value.measured_manifest() == self)
@@ -586,6 +594,11 @@ class ContextManifest:
             raise ValueError("Original request ID was not captured by this historical context")
         return self.request_id
 
+    def selected_segment(self, position: int, contributors: tuple[int, ...] = ()) -> SegmentManifest:
+        if not 0 <= position < len(self.segments):
+            raise ValueError("Original request has no selected segment")
+        return self.segments[position].selected_contributor(contributors)
+
     def require_source(self, source: Provenance) -> Provenance:
         for segment in self.segments:
             if source in segment.source_membership():
@@ -602,9 +615,7 @@ class ContextManifest:
         return selected[0]
 
     def public_source_text(self, comms, segment: int, source: Provenance) -> ContextSourceText:
-        if not 0 <= segment < len(self.segments):
-            raise ValueError("Source has no original recorded context segment")
-        if source not in self.segments[segment].source_membership():
+        if source not in self.selected_segment(segment).source_membership():
             raise ValueError("Source is outside the original recorded context segment")
         return ContextSourceText(source.public_description(), source.public_text(comms))
 

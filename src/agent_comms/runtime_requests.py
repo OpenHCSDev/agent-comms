@@ -395,11 +395,11 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
+    contributors: tuple[int, ...] = ()
+
     async def result(self, ctx):
         manifest = await self.manifest(ctx)
-        if not 0 <= self.segment < len(manifest.segments):
-            raise ValueError("Original request has no selected segment")
-        segment = manifest.segments[self.segment]
+        segment = manifest.selected_segment(self.segment, self.contributors)
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
 
