@@ -60,6 +60,7 @@ async def test_selected_handlers_preserve_replacements_and_identity(synchronous)
 
     selected = []
     seen = []
+    borrowed = object()
 
     class SyncConsumer(MroDispatch):
         def handlers_for(self, value):
@@ -67,36 +68,38 @@ async def test_selected_handlers_preserve_replacements_and_identity(synchronous)
             yield from super().handlers_for(value)
 
         @handles(Value)
-        def specific(self, value):
+        def specific(self, value, context):
+            assert context is borrowed
             if value.text == "wrong":
                 return events.Notice("wrong event")
             return replace(value, text="replacement")
 
         @handles(events.AgentEvent)
-        def shared(self, value):
+        def shared(self, value, context):
+            assert context is borrowed
             seen.append(value.text)
 
     class AsyncConsumer(SyncConsumer):
         @handles(Value)
-        async def specific(self, value):
-            return super().specific(value)
+        async def specific(self, value, context):
+            return super().specific(value, context)
 
         @handles(events.AgentEvent)
-        async def shared(self, value):
-            return super().shared(value)
+        async def shared(self, value, context):
+            return super().shared(value, context)
 
     consumer = SyncConsumer() if synchronous else AsyncConsumer()
     value = Value("original")
-    result = (consumer.dispatch_sync(value) if synchronous
-              else await consumer.dispatch(value))
+    result = (consumer.dispatch_sync(value, borrowed) if synchronous
+              else await consumer.dispatch(value, borrowed))
     assert selected == [value]
     assert seen == ["replacement"]
     assert result == Value("replacement")
     with pytest.raises(TypeError, match="preserve event identity"):
         if synchronous:
-            consumer.dispatch_sync(Value("wrong"))
+            consumer.dispatch_sync(Value("wrong"), borrowed)
         else:
-            await consumer.dispatch(Value("wrong"))
+            await consumer.dispatch(Value("wrong"), borrowed)
 
 
 def test_payload_fields_and_frozen_multiple_inheritance():
