@@ -1,0 +1,110 @@
+{
+  "source_checkpoint": "74f67b000c1b769e9c033dbf0cf64d78b2dcd835",
+  "builder_source": "38bd6212636c56a87476932f11b343aef6388375",
+  "manifest": "51bff517be67ae98213760beebd2c070591e5df61cb2c9ebbf87cacbf9f039ab",
+  "tree": "e74115621526343102e3f7074a1ddfda406c2db4d1fe94029030cdc09f47e68d",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/agent-session.js",
+      "original_sha256": "59e1b9c59ad80a9b31881032ba4e042dad74b72f0b65e3a788d3ded55b7b1db8",
+      "new_sha256": "1e3c92eae16489662829d44e85a342a75d8b00818588e53a16aa262091a898e0"
+    },
+    {
+      "path": "dist/core/turn-context.d.ts",
+      "original_sha256": "df2ebb8371c88bff73253bad57fb485965360fb959187d84a7267e2d41b618b9",
+      "new_sha256": "91383d3e0bf1985605dbbb0a3a3b5ef17da0f29c59c32db5c14af764999e696d"
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "original_sha256": "247561c7f0dde1dd14734b03f1fc1a864895cbe93970e38f8af215d40fe4768c",
+      "new_sha256": "07518abbacece28c63eb9a1c40d4a3ce5d795db2c7434a675627f703b9920a3a"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "original_sha256": "9a9d83766216bad1bfd4bbc7307a2a610843548bfd15b031a555f74d4ff4bb28",
+      "new_sha256": "97c1ab4b6eeb2ceef2b20d2b439109c316fae3aa96e4ee1519cc68d02bd06a06"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts",
+      "original_sha256": "3a7bf091426e01aa7513116d60eb3e24bb4f8c584160e52fe3401d9b892996f6",
+      "new_sha256": "7ac656219e72b9f915ac8ab98d8e5a942f08b7a5cd0380ddd00626f707553081"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/types.d.ts",
+      "original_sha256": "07bae37d12469f43b003c9e874263f40c1e3e7584d45b44e8ce1a25c2139c54f",
+      "new_sha256": "e5e62ee12c9267ac10b6708fb62afdb4f4e32cf5d98aa07cd2631263c62ae799"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+      "original_sha256": "5966a1dad3c0a8344c0b2707f2e23939a99cd1a806e4b992dcc07e3b25c52347",
+      "new_sha256": "f75f8b979ea77fbe113747ae9bf88c33b83f50029623cf9a3f2d74368e83237b"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "original_sha256": "18e31d26ef1fd603442c3d22fc1c3eeb9576b03cda5018a24e617734ff2b9d34",
+      "new_sha256": "42b36bb09f913448df139339c7ee5aad1fb5d8c29622e04a78996d4c0c2a326d"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "original_sha256": "d6327c233c87a07f580f3f983c51929c41dd5a6d7fcb3670b75c0ca1691329ae",
+      "new_sha256": "fb6535802df509df8ec33de7d0a94c34531ce76f15c301a511ec50c492cdcdf7"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "original_sha256": "2f419e00e26c32462a8643d694fcfb8d793cf7119a1995023f19b3acbc492059",
+      "new_sha256": "b905c6ba22db6f8783efde300559116607ef4ad5cf6b9b604d3cec1f3e8aaf38"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "original_sha256": "bffb924d3c540ea0deeb9818c0ee1c479d49412a34159dde084390b88913cfe4",
+      "new_sha256": "0bfb01de640c8c1f3b7a32ce329e567d00944b50341b43bc082db3e6dfa4882b"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "original_sha256": "50e59adbedd97bc6a8f2923eff13c3e845ae1bc45484821b51b86309bae5b07b",
+      "new_sha256": "9c10e205407a532eb1336d2cf5265b32e7b4ff140fa79b3cd11d625f681b2237"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "original_sha256": "84e5a9c8f4fefd6218265a024c2cea23724faf7552d2e1e4a89e5b08de481d9d",
+      "new_sha256": "1b19e21ac92b6e44b2ffe07bdcc58f1c360be9e5518e1793fbedb356a107adf9"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "original_sha256": "06a4680c58af0f25da396da8f59a32d52c7f61f1fc8e2fdf4124c22bcc58f35d",
+      "new_sha256": "36dbc384296aea10f7eccf84809e3b7bf078176ac378ae414df52c02da61623e"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "original_sha256": "29a53e609b7a28e0976af49efb3ec0bd2334cd18f23fe8b2f2ad1b5456b51763",
+      "new_sha256": "4997fe9facc7cd1623e9dbc18e64fdcfbcceee5c1b5a43946ba7140d73682347"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "original_sha256": "ff2fab0a533a5a3b9e0316169a2dcac522ebf2acfaf4305041a11cce99026b49",
+      "new_sha256": "ecbe10417b15fe7680241d7628aff8d4837a83500ea541a58eb70d25afa4d87b"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "original_sha256": "c8708543a42959475b15f7aa0e07412cfa0bd29bd61249841a16aa2e200ddaed",
+      "new_sha256": "e30bbbbd2043d6b3c9ad87876cf488cce4a3eafa0c27ad3556d39dd35a47f648"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts",
+      "original_sha256": "c34367013db36532374819b0b78739e15949a376220e4f848c17aba23458ae91",
+      "new_sha256": "92b604f8fe824fcb018d35fb9736319803a3caf0f90ef5e2fd53178857514086"
+    }
+  ],
+  "all_other_members_equal_native569_915": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138412409,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; request construction/context correlation acceptance remains Arendt-owned, not Ready/live."
+}
