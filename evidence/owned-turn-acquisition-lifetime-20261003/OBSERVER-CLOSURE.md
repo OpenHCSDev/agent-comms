@@ -1,3 +1,5 @@
+Final completion is recorded in READY.md:45 production files,506 deleted/680 added; installed source1b09822c and configured02. The historical927 scope below is retained.
+
 # Complete acquisition / observer source batch (working, not Ready)
 
 416 production lines deleted / 572 added across 26 existing files,

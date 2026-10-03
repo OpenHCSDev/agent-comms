@@ -1,0 +1,179 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling FAILED [ 16%]
+tests/test_runtime_goal_snapshot.py::test_goal_actions_check_revision_and_preserve_owner_pause FAILED [ 33%]
+tests/test_runtime_goal_snapshot.py::test_goal_update_cannot_bypass_blocked_retry_or_replace_owner PASSED [ 50%]
+tests/test_runtime_goal_snapshot.py::test_goal_update_rechecks_snapshot_inside_write_lock PASSED [ 66%]
+tests/test_goal_ui_creation.py::test_ui_set_goal_creates_ledger_before_reporting_success PASSED [ 83%]
+tests/test_goal_ui_creation.py::test_explicit_retry_cannot_invent_missing_launch_authority PASSED [100%]
+
+=================================== FAILURES ===================================
+_____ test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling _____
+
+goal_owner = (<agent_comms.comms.Comms object at 0x7f3493b5cd70>, <agent_comms.acp.CommsAgent object at 0x7f3493a6a120>, <agent_comms.runtime.RuntimeProxy object at 0x7f34938c5be0>, 'project', [])
+
+    async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(goal_owner):
+        comms, owner, proxy, session, scheduled = goal_owner
+>       assert await proxy.request("goal_snapshot") == {"goal": None, "goalExecution": None}
+E       AssertionError: assert {'goal': None, 'goalExecution': None, '_meta': {'agentComms': {'updates': [{'kind': 'turn_changed', 'state': {'active': None, 'finished_turn_id': None}}]}}} == {'goal': None, 'goalExecution': None}
+E         
+E         Common items:
+E         {'goal': None, 'goalExecution': None}
+E         Left contains 1 more item:
+E         {'_meta': {'agentComms': {'updates': [{'kind': 'turn_changed',
+E                                                'state': {'active': None,
+E                                                          'finished_turn_id': None}}]}}}
+E         
+E         Full diff:
+E           {
+E               'goal': None,
+E               'goalExecution': None,
+E         +     '_meta': {
+E         +         'agentComms': {
+E         +             'updates': [
+E         +                 {
+E         +                     'kind': 'turn_changed',
+E         +                     'state': {
+E         +                         'active': None,
+E         +                         'finished_turn_id': None,
+E         +                     },
+E         +                 },
+E         +             ],
+E         +         },
+E         +     },
+E           }
+
+tests/test_runtime_goal_snapshot.py:51: AssertionError
+__________ test_goal_actions_check_revision_and_preserve_owner_pause ___________
+
+goal_owner = (<agent_comms.comms.Comms object at 0x7f3493651590>, <agent_comms.acp.CommsAgent object at 0x7f3493653610>, <agent_comms.runtime.RuntimeProxy object at 0x7f3492b9d810>, 'project', ['project'])
+
+    async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
+        comms, owner, proxy, session, scheduled = goal_owner
+        goal = comms.goals.update_goal(
+            session,
+            SetGoalAction(text="Review child output"),
+            owner_store=owner.turns.goals.open_goal_store(),
+        )
+        paused = await proxy.request(
+            "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision
+        )
+        assert (
+            FieldCodec.decode(Goal, paused["goal"]).state.declared_name
+            == paused["goalExecution"]["state"]
+            == "paused"
+        )
+        assert comms.registry.require(session).goal.state.pause_source.declared_name == "owner"
+        assert scheduled == []
+    
+        with pytest.raises(RuntimeError, match="changed"):
+            await proxy.request(
+                "update_goal", status="clear", goal_id=goal.id, expected_revision=goal.revision
+            )
+        assert await proxy.request("goal_snapshot") == paused
+        resumed = await proxy.request(
+            "update_goal",
+            status="active",
+            goal_id=goal.id,
+            expected_revision=paused["goal"]["revision"],
+        )
+        assert FieldCodec.decode(Goal, resumed["goal"]).state.declared_name == "active"
+        assert scheduled == [session]
+>       assert await proxy.request(
+            "update_goal",
+            status="clear",
+            goal_id=goal.id,
+            expected_revision=resumed["goal"]["revision"],
+        ) == {"goal": None, "goalExecution": None}
+E       AssertionError: assert {'goal': None, 'goalExecution': None, '_meta': {'agentComms': {'updates': [{'kind': 'turn_changed', 'state': {'active': None, 'finished_turn_id': None}}]}}} == {'goal': None, 'goalExecution': None}
+E         
+E         Common items:
+E         {'goal': None, 'goalExecution': None}
+E         Left contains 1 more item:
+E         {'_meta': {'agentComms': {'updates': [{'kind': 'turn_changed',
+E                                                'state': {'active': None,
+E                                                          'finished_turn_id': None}}]}}}
+E         
+E         Full diff:
+E           {
+E               'goal': None,
+E               'goalExecution': None,
+E         +     '_meta': {
+E         +         'agentComms': {
+E         +             'updates': [
+E         +                 {
+E         +                     'kind': 'turn_changed',
+E         +                     'state': {
+E         +                         'active': None,
+E         +                         'finished_turn_id': None,
+E         +                     },
+E         +                 },
+E         +             ],
+E         +         },
+E         +     },
+E           }
+
+tests/test_runtime_goal_snapshot.py:108: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling - AssertionError: assert {'goal': None, 'goalExecution': None, '_meta': {'agentComms': {'updates': [{'kind': 'turn_changed', 'state': {'active': None, 'finished_turn_id': None}}]}}} == {'goal': None, 'goalExecution': None}
+  
+  Common items:
+  {'goal': None, 'goalExecution': None}
+  Left contains 1 more item:
+  {'_meta': {'agentComms': {'updates': [{'kind': 'turn_changed',
+                                         'state': {'active': None,
+                                                   'finished_turn_id': None}}]}}}
+  
+  Full diff:
+    {
+        'goal': None,
+        'goalExecution': None,
+  +     '_meta': {
+  +         'agentComms': {
+  +             'updates': [
+  +                 {
+  +                     'kind': 'turn_changed',
+  +                     'state': {
+  +                         'active': None,
+  +                         'finished_turn_id': None,
+  +                     },
+  +                 },
+  +             ],
+  +         },
+  +     },
+    }
+FAILED tests/test_runtime_goal_snapshot.py::test_goal_actions_check_revision_and_preserve_owner_pause - AssertionError: assert {'goal': None, 'goalExecution': None, '_meta': {'agentComms': {'updates': [{'kind': 'turn_changed', 'state': {'active': None, 'finished_turn_id': None}}]}}} == {'goal': None, 'goalExecution': None}
+  
+  Common items:
+  {'goal': None, 'goalExecution': None}
+  Left contains 1 more item:
+  {'_meta': {'agentComms': {'updates': [{'kind': 'turn_changed',
+                                         'state': {'active': None,
+                                                   'finished_turn_id': None}}]}}}
+  
+  Full diff:
+    {
+        'goal': None,
+        'goalExecution': None,
+  +     '_meta': {
+  +         'agentComms': {
+  +             'updates': [
+  +                 {
+  +                     'kind': 'turn_changed',
+  +                     'state': {
+  +                         'active': None,
+  +                         'finished_turn_id': None,
+  +                     },
+  +                 },
+  +             ],
+  +         },
+  +     },
+    }
+========================= 2 failed, 4 passed in 2.60s ==========================

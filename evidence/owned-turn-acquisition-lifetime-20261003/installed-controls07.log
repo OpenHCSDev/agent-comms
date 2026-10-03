@@ -1,0 +1,1039 @@
+{"source_head": "a414e954e0975fa7777527b37e32b1dafc8cdf51", "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python", "installed": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms", "files_byte_equal": true, "source_file_count": 339}
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 25 items
+
+tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin] Timeout (0:00:20)!
+Thread 0x00007f03bf7fe6c0 [asyncio_2] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f03bffff6c0 [asyncio_1] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f03c49286c0 [asyncio_0] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f03c9674780 [python] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/selectors.py", line 452 in select
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 2008 in _run_once
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 677 in run_forever
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 706 in run_until_complete
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127 in run
+  File "/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py", line 905 in inner
+  File "/usr/lib/python3.14/site-packages/_pytest/python.py", line 167 in pytest_pyfunc_call
+  File "/usr/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/usr/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/usr/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/usr/lib/python3.14/site-packages/_pytest/python.py", line 1707 in runtest
+  File "/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py", line 569 in runtest
+  File "/usr/lib/python3.14/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/usr/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/usr/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/usr/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/usr/lib/python3.14/site-packages/_pytest/runner.py", line 250 in <lambda>
+  File "/usr/lib/python3.14/site-packages/_pytest/runner.py", line 361 in from_call
+  File "/usr/lib/python3.14/site-packages/_pytest/runner.py", line 249 in call_and_report
+  File "/usr/lib/python3.14/site-packages/_pytest/runner.py", line 139 in runtestprotocol
+  File "/usr/lib/python3.14/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/usr/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/usr/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/usr/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/usr/lib/python3.14/site-packages/_pytest/main.py", line 408 in pytest_runtestloop
+  File "/usr/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/usr/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/usr/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/usr/lib/python3.14/site-packages/_pytest/main.py", line 384 in _main
+  File "/usr/lib/python3.14/site-packages/_pytest/main.py", line 330 in wrap_session
+  File "/usr/lib/python3.14/site-packages/_pytest/main.py", line 377 in pytest_cmdline_main
+  File "/usr/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/usr/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/usr/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/usr/lib/python3.14/site-packages/_pytest/config/__init__.py", line 229 in _main
+  File "/usr/lib/python3.14/site-packages/_pytest/config/__init__.py", line 201 in main
+  File "<stdin>", line 19 in <module>
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+self = <asyncio.runners.Runner object at 0x7f03c5398830>
+coro = <coroutine object test_acquired_claim_and_lease_retire_on_each_pre_native_failure at 0x3534eb60>
+context = <_contextvars.Context object at 0x7f03c5497600>
+
+    def run(self, coro, *, context=None):
+        """Run code in the embedded event loop."""
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+            raise RuntimeError(
+                "Runner.run() cannot be called from a running event loop")
+    
+        self._lazy_init()
+    
+        if not coroutines.iscoroutine(coro):
+            if inspect.isawaitable(coro):
+                async def _wrap_awaitable(awaitable):
+                    return await awaitable
+    
+                coro = _wrap_awaitable(coro)
+            else:
+                raise TypeError('An asyncio.Future, a coroutine or an '
+                                'awaitable is required')
+    
+        if context is None:
+            context = self._context
+    
+        task = self._loop.create_task(coro, context=context)
+    
+        if (threading.current_thread() is threading.main_thread()
+            and signal.getsignal(signal.SIGINT) is signal.default_int_handler
+        ):
+            sigint_handler = functools.partial(self._on_sigint, main_task=task)
+            try:
+                signal.signal(signal.SIGINT, sigint_handler)
+            except ValueError:
+                # `signal.signal` may throw if `threading.main_thread` does
+                # not support signals (e.g. embedded interpreter with signals
+                # not registered - see gh-91880)
+                sigint_handler = None
+        else:
+            sigint_handler = None
+    
+        self._interrupt_count = 0
+        try:
+>           return self._loop.run_until_complete(task)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+future = <Task cancelled name='Task-1' coro=<test_acquired_claim_and_lease_retire_on_each_pre_native_failure() done, defined at /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_turn_goal_account.py:77>>
+
+    def run_until_complete(self, future):
+        """Run until the Future is done.
+    
+        If the argument is a coroutine, it is wrapped in a Task.
+    
+        WARNING: It would be disastrous to call run_until_complete()
+        with the same coroutine twice -- it would wrap it in two
+        different Tasks and that can't be good.
+    
+        Return the Future's result, or raise its exception.
+        """
+        self._check_closed()
+        self._check_running()
+    
+        new_task = not futures.isfuture(future)
+        future = tasks.ensure_future(future, loop=self)
+        if new_task:
+            # An exception is raised if the future didn't complete, so there
+            # is no need to log the "destroy pending task" message
+            future._log_destroy_pending = False
+    
+        future.add_done_callback(_run_until_complete_cb)
+        try:
+            self.run_forever()
+        except:
+            if new_task and future.done() and not future.cancelled():
+                # The coroutine raised a BaseException. Consume the exception
+                # to not log a warning, the caller doesn't have access to the
+                # local task.
+                future.exception()
+            raise
+        finally:
+            future.remove_done_callback(_run_until_complete_cb)
+        if not future.done():
+            raise RuntimeError('Event loop stopped before Future completed.')
+    
+>       return future.result()
+               ^^^^^^^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+comms = <agent_comms.comms.Comms object at 0x7f03c6bc6660>
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls07/test_acquired_claim_and_lease_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f03c6ea8fc0>
+failure = 'begin'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+        session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+        name = owner.sessions.bindings[session.session_id]
+        goal = await owner.turns.goals.set_goal(session.session_id, "preserve failed original")
+        execution = OwnedTurn(owner.turns, session.session_id, name, "work", autonomous_goal=True)
+        store = owner.turns.goals.open_goal_store()
+        pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))
+    
+        def fail(*args, **kwargs):
+            raise RuntimeError("injected acquired resource failure")
+    
+        targets = {
+            "begin": (comms.agents, "begin_turn"),
+            "prepare": (OwnedTurn, "prepare_prompt"),
+            "reserve": (OriginalTurnInput, "reserve"),
+            "receipt_capture": (OriginalTurnInput, "reserve"),
+            "goal_retirement": (TurnGoalAccount, "finish"),
+        }
+        target, method = targets[failure]
+        if failure == "receipt_capture":
+            reserve = target.reserve
+    
+            def fail(*args, **kwargs):
+                original = reserve(*args, **kwargs)
+                assert original.batch.originals
+                raise RuntimeError("injected acquired resource failure")
+    
+        monkeypatch.setattr(target, method, fail)
+        if failure == "goal_retirement":
+            async def native_preparation_failure():
+                raise ValueError("private preparation failure")
+            monkeypatch.setattr(execution, "prepare_native", native_preparation_failure)
+        try:
+            with pytest.raises(RuntimeError, match="injected acquired resource failure"):
+                await execution.run()
+            assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
+            assert comms.registry.require(name).active_turn is None
+            assert session.session_id not in owner.inputs.backend_inboxes
+            assert session.session_id not in owner.inputs.original_sources
+            assert session.session_id not in owner.inputs.turn_input_keys
+            assert tuple(owner.inputs.pending_turns.get(session.session_id, ())) == pending_before
+            if failure == "receipt_capture":
+                originals = tuple(owner.inputs.dispositions.read().rows.values())
+                assert len(originals) == 1
+                assert isinstance(originals[0], NotSentInput)
+            with pytest.raises(GoalAttemptError):
+                store.ready_grant(goal.id, store.snapshot(goal.id).number)
+        finally:
+>           await owner.shutdown()
+
+tests/test_turn_goal_account.py:135: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7f03c5399010>
+
+    async def shutdown(self) -> None:
+        """Stop drains and mark threads owned by this ACP connection offline."""
+        await self.inputs.stop_wakes()
+        await self.sessions.close_proxies()
+        await self.turns.close()
+>       await self.inputs.close()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:444: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.input_drain.InputDrain object at 0x7f03c539b4d0>
+
+    async def close(self) -> None:
+        tasks = tuple(self.drain_tasks.values())
+        self.drain_tasks.clear()
+        self._idle_private_revisions.clear()
+        for task in tasks:
+            task.cancel()
+>       await asyncio.gather(*tasks, return_exceptions=True)
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:502: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.input_drain.InputDrain object at 0x7f03c539b4d0>
+session_id = 'test_acquired_claim_and_lease_0'
+
+    async def observe(self, session_id: str) -> None:
+        next_goal_wait_check = 0.0
+        async with aclosing(WireWatch.observations(self.comms.root)) as observations:
+>           async for _ in observations:
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls07/test_acquired_claim_and_lease_0/comms')
+
+    @staticmethod
+    async def observations(root: Path) -> AsyncIterator[None]:
+        watcher = open_wire_watcher(root)
+        try:
+            while True:
+                await watcher.prepare()
+                yield None
+>               watcher = await watcher.wait()
+                          ^^^^^^^^^^^^^^^^^^^^
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_watch.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_watch.WireChangeWatch object at 0x7f03c57c67b0>
+
+    async def wait(self) -> WireWatch:
+        if self.invalid:
+            self.close()
+            return PollingWireWatch()
+        with suppress(TimeoutError):
+            async with asyncio.timeout(1.0):
+>               await self.changed.wait()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_watch.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f03c539bcb0 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+During handling of the above exception, another exception occurred:
+
+config = <_pytest.config.Config object at 0x7f03c702c1a0>
+doit = <function _main at 0x7f03c7244300>
+
+    def wrap_session(
+        config: Config, doit: Callable[[Config, Session], int | ExitCode | None]
+    ) -> int | ExitCode:
+        """Skeleton command line program."""
+        session = Session.from_config(config)
+        session.exitstatus = ExitCode.OK
+        initstate = 0
+        try:
+            try:
+                config._do_configure()
+                initstate = 1
+                config.hook.pytest_sessionstart(session=session)
+                initstate = 2
+>               session.exitstatus = doit(config, session) or 0
+                                     ^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/main.py:330: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = <_pytest.config.Config object at 0x7f03c702c1a0>
+session = <Session  exitstatus=<ExitCode.OK: 0> testsfailed=0 testscollected=25>
+
+    def _main(config: Config, session: Session) -> int | ExitCode | None:
+        """Default command line protocol for initialization, session,
+        running tests and reporting."""
+        config.hook.pytest_collection(session=session)
+>       config.hook.pytest_runtestloop(session=session)
+
+/usr/lib/python3.14/site-packages/_pytest/main.py:384: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <HookCaller 'pytest_runtestloop'>
+kwargs = {'session': <Session  exitstatus=<ExitCode.OK: 0> testsfailed=0 testscollected=25>}
+
+    def __call__(self, **kwargs: object) -> Any:
+        """Call the hook.
+    
+        Only accepts keyword arguments, which should match the hook
+        specification.
+    
+        Returns the result(s) of calling all registered plugins, see
+        :ref:`calling`.
+        """
+        assert not self.is_historic(), (
+            "Cannot directly call a historic hook - use call_historic instead."
+        )
+        self._verify_all_args_are_provided(kwargs)
+        firstresult = self.spec.opts.get("firstresult", False) if self.spec else False
+        # Copy because plugins may register other plugins during iteration (#438).
+>       return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_hooks.py:512: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.config.PytestPluginManager object at 0x7f03c72778c0>
+hook_name = 'pytest_runtestloop'
+methods = [<HookImpl plugin_name='main', plugin=<module '_pytest.main' from '/usr/lib/python3.14/site-packages/_pytest/main.py'>...03c6bc52b0>>, <HookImpl plugin_name='logging-plugin', plugin=<_pytest.logging.LoggingPlugin object at 0x7f03c6bc57f0>>]
+kwargs = {'session': <Session  exitstatus=<ExitCode.OK: 0> testsfailed=0 testscollected=25>}
+firstresult = True
+
+    def _hookexec(
+        self,
+        hook_name: str,
+        methods: Sequence[HookImpl],
+        kwargs: Mapping[str, object],
+        firstresult: bool,
+    ) -> object | list[object]:
+        # called from all hookcaller instances.
+        # enable_tracing will set its own wrapping function at self._inner_hookexec
+>       return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_manager.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.logging.LoggingPlugin object at 0x7f03c6bc57f0>
+session = <Session  exitstatus=<ExitCode.OK: 0> testsfailed=0 testscollected=25>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtestloop(self, session: Session) -> Generator[None, object, object]:
+        if session.config.option.collectonly:
+            return (yield)
+    
+        if self._log_cli_enabled() and self._config.get_verbosity() < 1:
+            # The verbose flag is needed to avoid messy test progress output.
+            self._config.option.verbose = 1
+    
+        with catching_logs(self.log_cli_handler, level=self.log_cli_level):
+            with catching_logs(self.log_file_handler, level=self.log_file_level):
+>               return (yield)  # Run all the tests.
+                        ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/logging.py:816: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.terminal.TerminalReporter object at 0x7f03c6bc52b0>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtestloop(self) -> Generator[None, object, object]:
+>       result = yield
+                 ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/terminal.py:708: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+session = <Session  exitstatus=<ExitCode.OK: 0> testsfailed=0 testscollected=25>
+
+    def pytest_runtestloop(session: Session) -> bool:
+        if session.testsfailed and not session.config.option.continue_on_collection_errors:
+            raise session.Interrupted(
+                f"{session.testsfailed} error{'s' if session.testsfailed != 1 else ''} during collection"
+            )
+    
+        if session.config.option.collectonly:
+            return True
+    
+        for i, item in enumerate(session.items):
+            nextitem = session.items[i + 1] if i + 1 < len(session.items) else None
+>           item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+
+/usr/lib/python3.14/site-packages/_pytest/main.py:408: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <HookCaller 'pytest_runtest_protocol'>
+kwargs = {'item': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>, 'nextitem': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare]>}
+
+    def __call__(self, **kwargs: object) -> Any:
+        """Call the hook.
+    
+        Only accepts keyword arguments, which should match the hook
+        specification.
+    
+        Returns the result(s) of calling all registered plugins, see
+        :ref:`calling`.
+        """
+        assert not self.is_historic(), (
+            "Cannot directly call a historic hook - use call_historic instead."
+        )
+        self._verify_all_args_are_provided(kwargs)
+        firstresult = self.spec.opts.get("firstresult", False) if self.spec else False
+        # Copy because plugins may register other plugins during iteration (#438).
+>       return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_hooks.py:512: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.config.PytestPluginManager object at 0x7f03c72778c0>
+hook_name = 'pytest_runtest_protocol'
+methods = [<HookImpl plugin_name='runner', plugin=<module '_pytest.runner' from '/usr/lib/python3.14/site-packages/_pytest/runne...ugin_name='warnings', plugin=<module '_pytest.warnings' from '/usr/lib/python3.14/site-packages/_pytest/warnings.py'>>]
+kwargs = {'item': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>, 'nextitem': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare]>}
+firstresult = True
+
+    def _hookexec(
+        self,
+        hook_name: str,
+        methods: Sequence[HookImpl],
+        kwargs: Mapping[str, object],
+        firstresult: bool,
+    ) -> object | list[object]:
+        # called from all hookcaller instances.
+        # enable_tracing will set its own wrapping function at self._inner_hookexec
+>       return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_manager.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @pytest.hookimpl(wrapper=True, tryfirst=True)
+    def pytest_runtest_protocol(item: Item) -> Generator[None, object, object]:
+        with catch_warnings_for_item(
+            config=item.config, ihook=item.ihook, when="runtest", item=item
+        ):
+>           return (yield)
+                    ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/warnings.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @hookimpl(wrapper=True, tryfirst=True)
+    def pytest_runtest_protocol(item: Item) -> Generator[None, object, object]:
+        """Setup the pytest_assertrepr_compare and pytest_assertion_pass hooks.
+    
+        The rewrite module will use util._reprcompare if it exists to use custom
+        reporting via the pytest_assertrepr_compare hook.  This sets up this custom
+        comparison for the test.
+        """
+        ihook = item.ihook
+    
+        def callbinrepr(op, left: object, right: object) -> str | None:
+            """Call the pytest_assertrepr_compare hook and prepare the result.
+    
+            This uses the first result from the hook and then ensures the
+            following:
+            * Overly verbose explanations are truncated unless configured otherwise
+              (eg. if running in verbose mode).
+            * Embedded newlines are escaped to help util.format_explanation()
+              later.
+            * If the rewrite mode is used embedded %-characters are replaced
+              to protect later % formatting.
+    
+            The result can be formatted by util.format_explanation() for
+            pretty printing.
+            """
+            hook_result = ihook.pytest_assertrepr_compare(
+                config=item.config, op=op, left=left, right=right
+            )
+            for new_expl in hook_result:
+                if new_expl:
+                    new_expl = truncate.truncate_if_required(new_expl, item)
+                    new_expl = [line.replace("\n", "\\n") for line in new_expl]
+                    res = "\n~".join(new_expl)
+                    if item.config.getvalue("assertmode") == "rewrite":
+                        res = res.replace("%", "%%")
+                    return res
+            return None
+    
+        saved_assert_hooks = util._reprcompare, util._assertion_pass
+        util._reprcompare = callbinrepr
+        util._config = item.config
+    
+        if ihook.pytest_assertion_pass.get_hookimpls():
+    
+            def call_assertion_pass_hook(lineno: int, orig: str, expl: str) -> None:
+                ihook.pytest_assertion_pass(item=item, lineno=lineno, orig=orig, expl=expl)
+    
+            util._assertion_pass = call_assertion_pass_hook
+    
+        try:
+>           return (yield)
+                    ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/assertion/__init__.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtest_protocol(item: Item) -> Iterator[None]:
+        if _get_twisted_version() is TwistedVersion.Version24:
+            import twisted.python.failure as ut
+    
+            # Monkeypatch `Failure.__init__` to store the raw exception info.
+            original__init__ = ut.Failure.__init__
+    
+            def store_raw_exception_info(
+                self, exc_value=None, exc_type=None, exc_tb=None, captureVars=None
+            ):  # pragma: no cover
+                if exc_value is None:
+                    raw_exc_info = sys.exc_info()
+                else:
+                    if exc_type is None:
+                        exc_type = type(exc_value)
+                    if exc_tb is None:
+                        exc_tb = sys.exc_info()[2]
+                    raw_exc_info = (exc_type, exc_value, exc_tb)
+                setattr(self, TWISTED_RAW_EXCINFO_ATTR, tuple(raw_exc_info))
+                try:
+                    original__init__(
+                        self, exc_value, exc_type, exc_tb, captureVars=captureVars
+                    )
+                except TypeError:  # pragma: no cover
+                    original__init__(self, exc_value, exc_type, exc_tb)
+    
+            with MonkeyPatch.context() as patcher:
+                patcher.setattr(ut.Failure, "__init__", store_raw_exception_info)
+                return (yield)
+        else:
+>           return (yield)
+                    ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/unittest.py:612: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @pytest.hookimpl(wrapper=True, trylast=True)
+    def pytest_runtest_protocol(item: Item) -> Generator[None, object, object]:
+        timeout = get_timeout_config_value(item.config)
+        exit_on_timeout = get_exit_on_timeout_config_value(item.config)
+        if timeout > 0:
+            import faulthandler
+    
+            stderr = item.config.stash[fault_handler_stderr_fd_key]
+            faulthandler.dump_traceback_later(timeout, file=stderr, exit=exit_on_timeout)
+            try:
+>               return (yield)
+                        ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/faulthandler.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+nextitem = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare]>
+
+    def pytest_runtest_protocol(item: Item, nextitem: Item | None) -> bool:
+        ihook = item.ihook
+        ihook.pytest_runtest_logstart(nodeid=item.nodeid, location=item.location)
+>       runtestprotocol(item, nextitem=nextitem)
+
+/usr/lib/python3.14/site-packages/_pytest/runner.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+log = True
+nextitem = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare]>
+
+    def runtestprotocol(
+        item: Item, log: bool = True, nextitem: Item | None = None
+    ) -> list[TestReport]:
+        hasrequest = hasattr(item, "_request")
+        if hasrequest and not item._request:  # type: ignore[attr-defined]
+            # This only happens if the item is re-run, as is done by
+            # pytest-rerunfailures.
+            item._initrequest()  # type: ignore[attr-defined]
+        try:
+            rep = call_and_report(item, "setup", log)
+            reports = [rep]
+            if rep.passed:
+                setup_only = item.config.getoption("setuponly", False)
+                if item.config.getoption("setupshow", False):
+                    show_test_item(item, add_space=not setup_only)
+                if not setup_only:
+>                   reports.append(call_and_report(item, "call", log))
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/runner.py:139: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+when = 'call', log = True, kwds = {}
+
+    def call_and_report(
+        item: Item, when: Literal["setup", "call", "teardown"], log: bool = True, **kwds
+    ) -> TestReport:
+        ihook = item.ihook
+        if when == "setup":
+            runtest_hook: Callable[..., None] = ihook.pytest_runtest_setup
+        elif when == "call":
+            runtest_hook = ihook.pytest_runtest_call
+        elif when == "teardown":
+            runtest_hook = ihook.pytest_runtest_teardown
+        else:
+            assert False, f"Unhandled runtest hook case: {when}"
+    
+>       call = CallInfo.from_call(
+            lambda: runtest_hook(item=item, **kwds),
+            when=when,
+            reraise=get_reraise_exceptions(item.config),
+        )
+
+/usr/lib/python3.14/site-packages/_pytest/runner.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7f03c53649e0>
+when = 'call'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>       lambda: runtest_hook(item=item, **kwds),
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        when=when,
+        reraise=get_reraise_exceptions(item.config),
+    )
+
+/usr/lib/python3.14/site-packages/_pytest/runner.py:250: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <HookCaller 'pytest_runtest_call'>
+kwargs = {'item': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>}
+
+    def __call__(self, **kwargs: object) -> Any:
+        """Call the hook.
+    
+        Only accepts keyword arguments, which should match the hook
+        specification.
+    
+        Returns the result(s) of calling all registered plugins, see
+        :ref:`calling`.
+        """
+        assert not self.is_historic(), (
+            "Cannot directly call a historic hook - use call_historic instead."
+        )
+        self._verify_all_args_are_provided(kwargs)
+        firstresult = self.spec.opts.get("firstresult", False) if self.spec else False
+        # Copy because plugins may register other plugins during iteration (#438).
+>       return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_hooks.py:512: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.config.PytestPluginManager object at 0x7f03c72778c0>
+hook_name = 'pytest_runtest_call'
+methods = [<HookImpl plugin_name='threadexception', plugin=<module '_pytest.threadexception' from '/usr/lib/python3.14/site-pack...xture=None>>, <HookImpl plugin_name='logging-plugin', plugin=<_pytest.logging.LoggingPlugin object at 0x7f03c6bc57f0>>]
+kwargs = {'item': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>}
+firstresult = False
+
+    def _hookexec(
+        self,
+        hook_name: str,
+        methods: Sequence[HookImpl],
+        kwargs: Mapping[str, object],
+        firstresult: bool,
+    ) -> object | list[object]:
+        # called from all hookcaller instances.
+        # enable_tracing will set its own wrapping function at self._inner_hookexec
+>       return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_manager.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.logging.LoggingPlugin object at 0x7f03c6bc57f0>
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtest_call(self, item: nodes.Item) -> Generator[None]:
+        self.log_cli_handler.set_when("call")
+    
+        with self._runtest_for(item, "call"):
+>           yield
+
+/usr/lib/python3.14/site-packages/_pytest/logging.py:865: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <CaptureManager _method='fd' _global_capturing=None _capture_fixture=None>
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtest_call(self, item: Item) -> Generator[None]:
+        with self.item_capture("call", item):
+>           return (yield)
+                    ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/capture.py:900: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtest_call(item: Item) -> Generator[None]:
+        xfailed = item.stash.get(xfailed_key, None)
+        if xfailed is None:
+            item.stash[xfailed_key] = xfailed = evaluate_xfail_marks(item)
+    
+        if xfailed and not item.config.option.runxfail and not xfailed.run:
+            xfail("[NOTRUN] " + xfailed.reason)
+    
+        try:
+>           return (yield)
+                    ^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/skipping.py:268: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    def pytest_runtest_call(item: Item) -> None:
+        _update_current_test_var(item, "call")
+        try:
+            del sys.last_type
+            del sys.last_value
+            del sys.last_traceback
+            if sys.version_info >= (3, 12, 0):
+                del sys.last_exc  # type:ignore[attr-defined]
+        except AttributeError:
+            pass
+        try:
+>           item.runtest()
+
+/usr/lib/python3.14/site-packages/_pytest/runner.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    def runtest(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        runner = self._request.getfixturevalue(runner_fixture_id)
+        context = contextvars.copy_context()
+        synchronized_obj = _synchronize_coroutine(
+            getattr(*self._synchronization_target_attr), runner, context
+        )
+        with MonkeyPatch.context() as c:
+            c.setattr(*self._synchronization_target_attr, synchronized_obj)
+>           super().runtest()
+
+/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py:569: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    def runtest(self) -> None:
+        """Execute the underlying test function."""
+>       self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+
+/usr/lib/python3.14/site-packages/_pytest/python.py:1707: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <HookCaller 'pytest_pyfunc_call'>
+kwargs = {'pyfuncitem': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>}
+
+    def __call__(self, **kwargs: object) -> Any:
+        """Call the hook.
+    
+        Only accepts keyword arguments, which should match the hook
+        specification.
+    
+        Returns the result(s) of calling all registered plugins, see
+        :ref:`calling`.
+        """
+        assert not self.is_historic(), (
+            "Cannot directly call a historic hook - use call_historic instead."
+        )
+        self._verify_all_args_are_provided(kwargs)
+        firstresult = self.spec.opts.get("firstresult", False) if self.spec else False
+        # Copy because plugins may register other plugins during iteration (#438).
+>       return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_hooks.py:512: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_pytest.config.PytestPluginManager object at 0x7f03c72778c0>
+hook_name = 'pytest_pyfunc_call'
+methods = [<HookImpl plugin_name='python', plugin=<module '_pytest.python' from '/usr/lib/python3.14/site-packages/_pytest/pytho...io.plugin', plugin=<module 'pytest_asyncio.plugin' from '/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py'>>]
+kwargs = {'pyfuncitem': <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>}
+firstresult = True
+
+    def _hookexec(
+        self,
+        hook_name: str,
+        methods: Sequence[HookImpl],
+        kwargs: Mapping[str, object],
+        firstresult: bool,
+    ) -> object | list[object]:
+        # called from all hookcaller instances.
+        # enable_tracing will set its own wrapping function at self._inner_hookexec
+>       return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_manager.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hook_impl = <HookImpl plugin_name='pytest_asyncio.plugin', plugin=<module 'pytest_asyncio.plugin' from '/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py'>>
+hook_name = 'pytest_pyfunc_call'
+args = [<Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>]
+
+    def run_old_style_hookwrapper(
+        hook_impl: HookImpl, hook_name: str, args: Sequence[object]
+    ) -> Teardown:
+        """
+        backward compatibility wrapper to run a old style hookwrapper as a wrapper
+        """
+    
+        teardown: Teardown = cast(Teardown, hook_impl.function(*args))
+        try:
+            next(teardown)
+        except StopIteration:
+            _raise_wrapfail(teardown, "did not yield")
+        try:
+            res = yield
+            result = Result(res, None)
+        except BaseException as exc:
+            result = Result(None, exc)
+        try:
+            teardown.send(result)
+        except StopIteration:
+            pass
+        except BaseException as e:
+            _warn_teardown_exception(hook_name, hook_impl, e)
+            raise
+        else:
+            _raise_wrapfail(teardown, "has second yield")
+        finally:
+            teardown.close()
+>       return result.get_result()
+               ^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_callers.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hook_impl = <HookImpl plugin_name='pytest_asyncio.plugin', plugin=<module 'pytest_asyncio.plugin' from '/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py'>>
+hook_name = 'pytest_pyfunc_call'
+args = [<Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>]
+
+    def run_old_style_hookwrapper(
+        hook_impl: HookImpl, hook_name: str, args: Sequence[object]
+    ) -> Teardown:
+        """
+        backward compatibility wrapper to run a old style hookwrapper as a wrapper
+        """
+    
+        teardown: Teardown = cast(Teardown, hook_impl.function(*args))
+        try:
+            next(teardown)
+        except StopIteration:
+            _raise_wrapfail(teardown, "did not yield")
+        try:
+>           res = yield
+                  ^^^^^
+
+/usr/lib/python3.14/site-packages/pluggy/_callers.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pyfuncitem = <Coroutine test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]>
+
+    @hookimpl(trylast=True)
+    def pytest_pyfunc_call(pyfuncitem: Function) -> object | None:
+        testfunction = pyfuncitem.obj
+        if is_async_function(testfunction):
+            async_fail(pyfuncitem.nodeid)
+        funcargs = pyfuncitem.funcargs
+        testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}
+>       result = testfunction(**testargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+/usr/lib/python3.14/site-packages/_pytest/python.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ()
+kwargs = {'comms': <agent_comms.comms.Comms object at 0x7f03c6bc6660>, 'tmp_path': PosixPath('/home/ts/wt/comms-goal-ledger-sch...red_claim_and_lease_0'), 'monkeypatch': <_pytest.monkeypatch.MonkeyPatch object at 0x7f03c6ea8fc0>, 'failure': 'begin'}
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        coro = func(*args, **kwargs)
+>       runner.run(coro, context=context)
+
+/usr/lib/python3.14/site-packages/pytest_asyncio/plugin.py:905: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.runners.Runner object at 0x7f03c5398830>
+coro = <coroutine object test_acquired_claim_and_lease_retire_on_each_pre_native_failure at 0x3534eb60>
+context = <_contextvars.Context object at 0x7f03c5497600>
+
+    def run(self, coro, *, context=None):
+        """Run code in the embedded event loop."""
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+            raise RuntimeError(
+                "Runner.run() cannot be called from a running event loop")
+    
+        self._lazy_init()
+    
+        if not coroutines.iscoroutine(coro):
+            if inspect.isawaitable(coro):
+                async def _wrap_awaitable(awaitable):
+                    return await awaitable
+    
+                coro = _wrap_awaitable(coro)
+            else:
+                raise TypeError('An asyncio.Future, a coroutine or an '
+                                'awaitable is required')
+    
+        if context is None:
+            context = self._context
+    
+        task = self._loop.create_task(coro, context=context)
+    
+        if (threading.current_thread() is threading.main_thread()
+            and signal.getsignal(signal.SIGINT) is signal.default_int_handler
+        ):
+            sigint_handler = functools.partial(self._on_sigint, main_task=task)
+            try:
+                signal.signal(signal.SIGINT, sigint_handler)
+            except ValueError:
+                # `signal.signal` may throw if `threading.main_thread` does
+                # not support signals (e.g. embedded interpreter with signals
+                # not registered - see gh-91880)
+                sigint_handler = None
+        else:
+            sigint_handler = None
+    
+        self._interrupt_count = 0
+        try:
+            return self._loop.run_until_complete(task)
+        except exceptions.CancelledError:
+            if self._interrupt_count > 0:
+                uncancel = getattr(task, "uncancel", None)
+                if uncancel is not None and uncancel() == 0:
+>                   raise KeyboardInterrupt()
+E                   KeyboardInterrupt
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:132: KeyboardInterrupt
+======================= no tests ran in 64.59s (0:01:04) =======================
