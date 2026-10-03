@@ -1,0 +1,9 @@
+{
+  "pid": 4162061,
+  "sid": 4162061,
+  "owner_module": "agent_comms.child_process",
+  "tty": true,
+  "returncode": 0,
+  "stderr": "",
+  "scope": "Source real PTY child; not installed Toad392 gate"
+}

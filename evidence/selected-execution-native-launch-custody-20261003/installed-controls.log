@@ -1,0 +1,95 @@
+FBoth independent native replies published provider_calls 4
+Original and every peer-reply claim settled provider_calls 7
+Native original timing samples 112 inputs 7 maximum parent receipt lag seconds 0.130749172
+.
+=================================== FAILURES ===================================
+_________ test_actual_selected_launch_custody_rebuilds_source_and_auth _________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f274e70f0e0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f274e63f950>
+
+    async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_backend, monkeypatch):
+        """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
+        import hashlib
+        import os
+        from functools import partial
+        from pathlib import Path
+    
+        from agent_comms import native_pi
+        from agent_comms.coordinated_runtime import SelectedExecution
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_custody import PiSessionChild
+        from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+        from agent_comms.native_session_reopen import NativeSessionIdentity
+        from agent_comms.selected_session import SavedSelectedSession
+    
+        source_name = os.environ.get("PI_LAUNCH_TEST_SOURCE")
+        if not source_name:
+            pytest.skip("Set PI_LAUNCH_TEST_SOURCE to an actual completed native source")
+        native = native_backend
+        source = Path(source_name).resolve(strict=True)
+        before = hashlib.sha256(source.read_bytes()).hexdigest()
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        created = await ForkSessionHelper.run(ForkSessionRequest(
+            str(package), str(source), str(native.project),
+            directory=str(native.project / "launch-sessions"),
+        ), cwd=native.project)
+        session = SavedSelectedSession(created.path.parent,
+            identity=NativeSessionIdentity(created.session_id, created.session_file))
+        execution = SelectedExecution(root=native.root,
+            wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+            owner_name="launch-custody", native_package=package)
+        verifications = []
+        verify = native_pi._trusted_package
+    
+        def observed(artifact):
+            verifications.append(artifact)
+            return verify(artifact)
+    
+        monkeypatch.setattr(native_pi, "_trusted_package", observed)
+        await Coordination.run_worker(execution.validate)
+        launches, children = [], []
+        for stage in range(2):
+            if stage:
+                # A new stage consumes current auth/config, not the old launch key.
+                (native.config / "auth.json").write_text(json.dumps({
+                    "response-local": {"type": "api_key", "key": "changed-local-only"},
+                }))
+            launch = await Coordination.run_worker(partial(execution.tracked_launch,
+                package, worktree=native.project, session=session,
+                provider="response-local", model="fixture", thinking_level="off"))
+            authentication = launch.configuration.auth_revision()
+            launches.append((launch, authentication))
+            child = await PiSessionChild.start((launch, authentication), session.attestation())
+            children.append(child)
+            try:
+                async with asyncio.timeout(20):
+                    pending = child.attestation
+                    response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+                    pending.accept(response).require_identity().require_same_session(session.identity)
+            finally:
+                await child.close()
+            assert child.proc.retired and await child.stderr_task == ""
+>       assert len(verifications) == 2  # pre-claim plus first fresh acquired launch
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 1 == 2
+E        +  where 1 = len([PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent')])
+
+tests/test_native_catalog_discovery.py:85: AssertionError
+=============================== warnings summary ===============================
+tests/test_native_catalog_discovery.py:235
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_native_catalog_discovery.py:235: PytestUnknownMarkWarning: Unknown pytest.mark.refactor_guard - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.refactor_guard
+
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/_pytest/cacheprovider.py:469
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/_pytest/cacheprovider.py:469: PytestCacheWarning: could not create cache path /dev/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/dev/pytest-cache-files-6kzf9ypy'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/_pytest/cacheprovider.py:423
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/_pytest/cacheprovider.py:423: PytestCacheWarning: could not create cache path /dev/.pytest_cache/v/cache/lastfailed: [Errno 13] Permission denied: '/dev/pytest-cache-files-nh668pc7'
+    config.cache.set("cache/lastfailed", self.lastfailed)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../../dev::test_actual_selected_launch_custody_rebuilds_source_and_auth
+1 failed, 1 passed, 3 warnings in 27.16s

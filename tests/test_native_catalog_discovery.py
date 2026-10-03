@@ -20,6 +20,101 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
+async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_backend, monkeypatch):
+    """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms import native_pi
+    from agent_comms import coordinated_runtime
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_session_reopen import NativeSessionIdentity
+    from agent_comms.selected_session import SavedSelectedSession
+
+    source_name = os.environ.get("PI_LAUNCH_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_LAUNCH_TEST_SOURCE to an actual completed native source")
+    native = native_backend
+    source = Path(source_name).resolve(strict=True)
+    before = hashlib.sha256(source.read_bytes()).hexdigest()
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        str(package), str(source), str(native.project),
+        directory=str(native.project / "launch-sessions"),
+    ), cwd=native.project)
+    session = SavedSelectedSession(created.path.parent,
+        identity=NativeSessionIdentity(created.session_id, created.session_file))
+    execution = SelectedExecution(root=native.root,
+        wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+        owner_name="launch-custody", native_package=package)
+    verifications = []
+    verify = native_pi._trusted_package
+
+    def observed(artifact):
+        verifications.append(artifact)
+        return verify(artifact)
+
+    monkeypatch.setattr(native_pi, "_trusted_package", observed)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", observed)
+    await Coordination.run_worker(execution.validate)
+    launches, children = [], []
+    for stage in range(2):
+        if stage:
+            # A new stage consumes current auth/config, not the old launch key.
+            (native.config / "auth.json").write_text(json.dumps({
+                "response-local": {"type": "api_key", "key": "changed-local-only"},
+            }))
+        launch = await Coordination.run_worker(partial(execution.tracked_launch,
+            package, worktree=native.project, session=session,
+            provider="response-local", model="fixture", thinking_level="off"))
+        authentication = launch.configuration.auth_revision()
+        launches.append((launch, authentication))
+        child = await PiSessionChild.start((launch, authentication), session.attestation())
+        children.append(child)
+        try:
+            async with asyncio.timeout(20):
+                pending = child.attestation
+                response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+                pending.accept(response).require_identity().require_same_session(session.identity)
+        finally:
+            await child.close()
+        assert child.proc.retired and await child.stderr_task == ""
+    assert len(verifications) == 2  # pre-claim plus first fresh acquired launch
+    assert launches[0][1] != launches[1][1]
+    assert children[0].proc.identity != children[1].proc.identity
+    with pytest.raises(native_pi.NativePiUnavailable, match="differs from its acquired"):
+        await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
+            package.parent, acquired_launch=launches[0][0],
+            worktree=native.project, session=session,
+            provider="response-local", model="fixture"))
+    malformed = native.project / "malformed.jsonl"
+    malformed.write_text("{}\n")
+    wrong = SavedSelectedSession(malformed.parent,
+        identity=NativeSessionIdentity(created.session_id, str(malformed)))
+    with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
+        await Coordination.run_worker(partial(execution.tracked_launch,
+            package, worktree=native.project, session=wrong,
+            provider="response-local", model="fixture"))
+    # Independent new acquisition still verifies the real artifact.
+    await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
+        package, worktree=native.project, session=session,
+        provider="response-local", model="fixture"))
+    assert len(verifications) == 3 and native.provider.posts == 0
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == before
+    print("actual_selected_launch_custody", json.dumps({
+        "preclaim_and_first_verifications": 2, "borrowed_verifications": 0,
+        "independent_verifications": 1, "auth_changed": True,
+        "children_retired": [child.proc.retired for child in children],
+        "source_bytes": source.stat().st_size, "source_sha256": before,
+        "provider_requests": native.provider.posts,
+    }), flush=True)
+
+
 @pytest.fixture
 async def catalog_owner(native_backend, monkeypatch):
     native = native_backend
