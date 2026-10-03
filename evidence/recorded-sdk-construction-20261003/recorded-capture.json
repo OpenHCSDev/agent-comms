@@ -1,0 +1,24 @@
+{
+  "source_head": "0a1b45d8",
+  "installed_decoder": "Existing normal Core573 artifact .artifacts/s523-runtime",
+  "scope": "Recorded measurement of the previously completed configured native capture; no new native/provider process",
+  "sanity": {
+    "controls": 2,
+    "passed": 2,
+    "risk": "Corrupted or missing original SDK bytes cannot become construction evidence; no retained facts cannot erase available byte evidence"
+  },
+  "serialized_sdk_source_evaluated": true,
+  "sdk_segments": 4,
+  "sdk_serialized_utf8_bytes": 698093,
+  "context_digest": "7fd41b22752488a0f1b2ceae0c33e4573913eb1f676205bcec656c35081d94b0",
+  "retained_presence_evaluated": false,
+  "retained_presence_reason": "No eligible original retained fact denominator",
+  "original_native_and_proof_unchanged": true,
+  "provider_inputs": 0,
+  "input_replays": 0,
+  "runtime_native_changes": 0,
+  "intervention_evaluated": false,
+  "full_history_capacity_evaluated": false,
+  "final_HTTP_bytes_evaluated": false,
+  "comparative_study_evaluated": false
+}
