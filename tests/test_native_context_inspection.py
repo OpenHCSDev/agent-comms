@@ -46,17 +46,14 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
             socket_path(owner._comms.root, thread.require_process().pid))
         try:
             async with asyncio.timeout(20):
-                # Browsing an unopened native source cannot acquire its writer.
-                with pytest.raises(RuntimeError, match="requires an acquired native child"):
-                    await connection.request("context")
-                assert not owner.turns.persistent_backends[thread.name].available
+                assert thread.name not in owner.turns.persistent_backends
                 assert fixture.session.read_bytes() == before
-                # Explicit selected startup owns SDK model/thinking declarations.
-                await owner.turns.prepare_selected_session(thread.name, thread)
+                # Cold browsing asks the runtime owner to acquire its saved
+                # source through the original selected startup, without input.
+                first = FieldCodec.decode(NativeContextData, await connection.request("context"))
                 selected_before = fixture.session.read_bytes()
                 prepared_child = owner.turns.persistent_backends[thread.name].custody.idle().child.proc
                 assert prepared_child.alive()
-                first = FieldCodec.decode(NativeContextData, await connection.request("context"))
                 second = FieldCodec.decode(NativeContextData, await connection.request("context"))
             assert first.identity == second.identity
             assert first.segments == second.segments
@@ -73,6 +70,11 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.session.read_bytes().startswith(before)
         assert fixture.saved_inputs() == []
     assert not prepared_child.alive()
+    print("cold_context_runtime", json.dumps({"pid": prepared_child.pid,
+        "source": str(fixture.session), "cold_acquisition": True,
+        "provider_requests": fixture.provider.posts, "new_inputs": 0,
+        "repeat_source_unchanged": True, "original_source_prefix_preserved": True,
+        "child_exited": not prepared_child.alive()}), flush=True)
 
 
 async def test_context_manifest_native_acp_and_cli_continuous(

@@ -1,0 +1,1130 @@
+{
+  "revision": "413a1979fa699b180683857df178bf21c064d98f",
+  "modules": 311,
+  "unparsed": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 157,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 308,
+      "kind": "Call",
+      "source": "PiDiagnostic.from_wire(FieldCodec.encode(child))"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 157,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 169,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 188,
+      "kind": "ClassDef",
+      "source": "class ActivityLog:"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 163,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 213,
+      "kind": "FunctionDef",
+      "source": "def current(self, thread: str, *, active: bool=False) -> Activity:"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 226,
+      "kind": "FunctionDef",
+      "source": "def all_current(self, *, active: frozenset[str]=frozenset()) -> dict[str, Activity]:"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 181,
+      "kind": "Call",
+      "source": "Activity(self.thread, self.state, self.detail, self.timestamp, self.readiness.source_diagnostic())"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 217,
+      "kind": "Call",
+      "source": "Activity(thread=thread, state=ActivityState.IDLE)"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 223,
+      "kind": "Call",
+      "source": "Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 236,
+      "kind": "Call",
+      "source": "Activity(thread=thread, state=ActivityState.IDLE, timestamp=activity.timestamp)"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 280,
+      "kind": "Call",
+      "source": "Activity.from_wire(record)"
+    },
+    {
+      "path": "src/agent_comms/activity_checkpoint.py",
+      "line": 10,
+      "kind": "ImportFrom",
+      "source": "from .activity import Activity"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from .activity import Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 99,
+      "kind": "ClassDef",
+      "source": "class AgentActivity:"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 112,
+      "kind": "FunctionDef",
+      "source": "def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None=None) -> ObservedActivity:"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 123,
+      "kind": "FunctionDef",
+      "source": "def all_activity(self, *, snapshot: RegistrySnapshot | None=None) -> Mapping[str, ObservedActivity]:"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 103,
+      "kind": "Call",
+      "source": "ActivityLog(root / 'activity.jsonl')"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 146,
+      "kind": "Call",
+      "source": "self.activity_of(activity.thread)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 61,
+      "kind": "Call",
+      "source": "self.incarnation.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 117,
+      "kind": "Call",
+      "source": "self.activity.current(participant.name, active=participant.executing)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 126,
+      "kind": "Call",
+      "source": "self.activity_of(name, snapshot=snapshot)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 157,
+      "kind": "Call",
+      "source": "self.activity_of(thread)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 110,
+      "kind": "Call",
+      "source": "Activity(thread=canonical, state=state, detail=detail)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 195,
+      "kind": "Call",
+      "source": "Activity(name, ActivityState.IDLE)"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 176,
+      "kind": "FunctionDef",
+      "source": "def current(self) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 166,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 163,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 833,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 954,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1098,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1341,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1484,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 52,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 55,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 608,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 699,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1265,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1069,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 776,
+      "kind": "Call",
+      "source": "ctx.views.thread_views()"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 407,
+      "kind": "Call",
+      "source": "ctx.agents.all_activity()"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 8,
+      "kind": "ImportFrom",
+      "source": "from .agent_activity import AgentActivity"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "source": "from .history_views import HistoryViews"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 39,
+      "kind": "Call",
+      "source": "AgentActivity(self.root, self.registry)"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 47,
+      "kind": "Call",
+      "source": "HistoryViews(self.root, self.registry, self.bus, self.channels, self.agents, self.transcripts, self.messaging, self.goals, self.ledger)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 96,
+      "kind": "Call",
+      "source": "source.reserved_revision.current(str(session))"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 150,
+      "kind": "Call",
+      "source": "SchemaMeta.current()"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/metadata.py",
+      "line": 29,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/metadata.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "cls.current()"
+    },
+    {
+      "path": "src/agent_comms/display_order.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "source": "from .presentation import ChannelView"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 58,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 65,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 107,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 74,
+      "kind": "Call",
+      "source": "cls.from_wire(value)"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 445,
+      "kind": "Call",
+      "source": "representation.from_wire(data)"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 318,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 331,
+      "kind": "Call",
+      "source": "GoalAttemptSchema.current()"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 563,
+      "kind": "Call",
+      "source": "GoalAttemptSchema.current()"
+    },
+    {
+      "path": "src/agent_comms/goal_presentation.py",
+      "line": 99,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 101,
+      "kind": "Call",
+      "source": "self.peer.current(registry)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "source": "from .agent_activity import AgentActivity"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 39,
+      "kind": "ImportFrom",
+      "source": "from .presentation import ChannelView, CoordinationSnapshot, MessageNotification, ThreadView, WireRevision"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 56,
+      "kind": "ClassDef",
+      "source": "class HistoryViews:"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 269,
+      "kind": "FunctionDef",
+      "source": "def channel_views(self, *, show_stopped: bool=True, show_archived: bool=False) -> tuple[ChannelView, ...]:"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 288,
+      "kind": "FunctionDef",
+      "source": "def thread_views(self, *, show_stopped: bool=True, show_archived: bool=False) -> tuple[ThreadView, ...]:"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 348,
+      "kind": "FunctionDef",
+      "source": "def viewer_snapshot(self, worktree: str, *, show_stopped: bool=True, show_archived: bool=False) -> CoordinationSnapshot:"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 276,
+      "kind": "Call",
+      "source": "ChannelView.roster(snapshot, channels, catalog.pinned_members(), catalog.list_order, self.agents.all_activity(), self.last_sent_timestamps(), ChannelActivity.for_views(channels, self.bus.channel_activity()), show_stopped=show_stopped, show_archived=show_archived)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 291,
+      "kind": "Call",
+      "source": "ThreadView.roster(self.registry.snapshot(), self.agents, GoalWaits(self.root / GoalWaits.filename), show_stopped=show_stopped, show_archived=show_archived)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 328,
+      "kind": "Call",
+      "source": "self.channel_views(show_stopped=show_stopped, show_archived=show_archived)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 507,
+      "kind": "Call",
+      "source": "self.agents.all_activity(snapshot=snapshot)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 281,
+      "kind": "Call",
+      "source": "self.agents.all_activity()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 310,
+      "kind": "Call",
+      "source": "self.agents.activity_of(thread.name, snapshot=snapshot)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 315,
+      "kind": "Call",
+      "source": "read.identity.thread.incarnation.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 367,
+      "kind": "Call",
+      "source": "ChannelView.roster(registry, declarations, pins, order, self.agents.all_activity(), sent, display_activity, show_stopped=show_stopped, show_archived=show_archived)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 378,
+      "kind": "Call",
+      "source": "ThreadView.roster(registry, self.agents, GoalWaits(self.root / GoalWaits.filename), show_stopped=show_stopped, show_archived=show_archived)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 338,
+      "kind": "Call",
+      "source": "self.thread_views(show_stopped=show_stopped, show_archived=show_archived)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 372,
+      "kind": "Call",
+      "source": "self.agents.all_activity()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 496,
+      "kind": "Call",
+      "source": "self.thread_views()"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 15,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 190,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 295,
+      "kind": "Call",
+      "source": "CodexItem.from_wire(payload)"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 262,
+      "kind": "Call",
+      "source": "CodexItem.from_wire(item)"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 324,
+      "kind": "Call",
+      "source": "OpenCodePart.from_wire(part)"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 502,
+      "kind": "Call",
+      "source": "CodexRecord.from_wire(record)"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 508,
+      "kind": "Call",
+      "source": "CodexRecord.from_wire(record)"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 517,
+      "kind": "Call",
+      "source": "CodexRecord.from_wire(record)"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 134,
+      "kind": "FunctionDef",
+      "source": "def current(values: dict[str, QueuedInput]) -> tuple[QueueItem, ...]:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 141,
+      "kind": "Call",
+      "source": "current(self.queued_inputs.get(session_id, {}))"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 142,
+      "kind": "Call",
+      "source": "current(self.restored_inputs.get(session_id, {}))"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 141,
+      "kind": "Call",
+      "source": "delivery.current(item, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 253,
+      "kind": "Call",
+      "source": "deliveries[actor].current(item, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/messages.py",
+      "line": 204,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/messages.py",
+      "line": 222,
+      "kind": "Call",
+      "source": "cls.from_wire(public)"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 220,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 221,
+      "kind": "Call",
+      "source": "self.revision.current(self.identity.session_file)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 82,
+      "kind": "Call",
+      "source": "cls.from_wire(json.loads(raw))"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 87,
+      "kind": "Call",
+      "source": "cls.from_wire(raw)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 577,
+      "kind": "Call",
+      "source": "NativeEntryCoordinates.from_wire(self.payload)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 587,
+      "kind": "Call",
+      "source": "cls.from_wire(value)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 95,
+      "kind": "Call",
+      "source": "PrivateNkLaunch.current()"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 451,
+      "kind": "Call",
+      "source": "PrivateNkLaunch.current()"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 92,
+      "kind": "FunctionDef",
+      "source": "def current(self, expected: OwnerGenerations) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 462,
+      "kind": "Call",
+      "source": "row.current(expected)"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 467,
+      "kind": "Call",
+      "source": "row.current(expected)"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 50,
+      "kind": "Call",
+      "source": "check.expected.incarnation.current(check.registry)"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 136,
+      "kind": "Call",
+      "source": "check.receipt.current(check.current, check.admission)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 216,
+      "kind": "Call",
+      "source": "self.runner.comms.views.thread_views()"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 150,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 89,
+      "kind": "FunctionDef",
+      "source": "def current(self, snapshot: RegistrySnapshot, expected: Thread, admission: int) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 410,
+      "kind": "Call",
+      "source": "receipt.current(snapshot, thread, admission_generation)"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 103,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 93,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 1036,
+      "kind": "Call",
+      "source": "cls.from_wire(raw)"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 49,
+      "kind": "Call",
+      "source": "PiEvent.from_wire(data)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "source": "from .activity import ActivityState, ObservedActivity"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 380,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 455,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 35,
+      "kind": "ImportFrom",
+      "source": "from .agent_activity import AgentActivity"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 388,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 493,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 101,
+      "kind": "ImportFrom",
+      "source": "from .agent_activity import AgentActivity"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 103,
+      "kind": "Call",
+      "source": "AgentActivity(root, registry)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 503,
+      "kind": "Call",
+      "source": "agents.all_activity(snapshot=snapshot)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 411,
+      "kind": "Call",
+      "source": "WireRecord.from_wire(json.loads(raw, object_pairs_hook=unique_wire_object), root_id)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 383,
+      "kind": "Call",
+      "source": "CommittedDelivery.from_wire(record, root_id)"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 65,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 96,
+      "kind": "Call",
+      "source": "PrivateNkLaunch.current()"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 543,
+      "kind": "Call",
+      "source": "CommittedDelivery.from_wire(row, metadata.root_id)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 475,
+      "kind": "Call",
+      "source": "CommittedDelivery.from_wire(row, metadata.root_id)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 178,
+      "kind": "FunctionDef",
+      "source": "def current(self, owner: Thread, admission: int) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 195,
+      "kind": "Call",
+      "source": "self.current(owner, admission)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 236,
+      "kind": "Call",
+      "source": "self.current(owner, admission)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 36,
+      "kind": "FunctionDef",
+      "source": "def current(self, snapshot: RegistryProvenance) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 46,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 37,
+      "kind": "Call",
+      "source": "participant.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 112,
+      "kind": "Call",
+      "source": "item.conversation.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 138,
+      "kind": "Call",
+      "source": "Conversation.from_wire(raw)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 139,
+      "kind": "Call",
+      "source": "conversation.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 71,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 420,
+      "kind": "Call",
+      "source": "owner.incarnation.current(self)"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 68,
+      "kind": "Call",
+      "source": "self.record_type.from_wire(data)"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 27,
+      "kind": "ImportFrom",
+      "source": "from .presentation import ThreadView"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 34,
+      "kind": "ImportFrom",
+      "source": "from .history_views import HistoryViews"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 559,
+      "kind": "Call",
+      "source": "self.views.thread_views(show_stopped=True, show_archived=True)"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 452,
+      "kind": "Call",
+      "source": "edge.peer_incarnation.current(registry)"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 43,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 150,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 208,
+      "kind": "FunctionDef",
+      "source": "def current(self, delivery: DeliveryMessage, snapshot: RegistrySnapshot) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 153,
+      "kind": "Call",
+      "source": "WireRecord.from_wire(record, root_id)"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 246,
+      "kind": "Call",
+      "source": "RuntimeRequest.from_wire(json.loads(await reader.readline()))"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 309,
+      "kind": "Call",
+      "source": "self._identity.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 43,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 92,
+      "kind": "FunctionDef",
+      "source": "def current(self, session_file: str | None) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 52,
+      "kind": "Call",
+      "source": "self.session_revision.current(session)"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 116,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 143,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 379,
+      "kind": "Call",
+      "source": "self.author.current(registry)"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 477,
+      "kind": "Call",
+      "source": "self.recipient.current(registry)"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 497,
+      "kind": "Call",
+      "source": "self.recipient.current(registry)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 45,
+      "kind": "FunctionDef",
+      "source": "def current(self, snapshot: RegistryProvenance) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 41,
+      "kind": "Call",
+      "source": "self.current(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 25,
+      "kind": "ImportFrom",
+      "source": "from .agent_activity import AgentActivity"
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "line": 45,
+      "kind": "Call",
+      "source": "agents.activity_of(thread.name, snapshot=snapshot)"
+    },
+    {
+      "path": "src/agent_comms/thread_status.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "source": "from .activity import ObservedActivity"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 201,
+      "kind": "Call",
+      "source": "turn.current(admission, self.turn_generation)"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 245,
+      "kind": "Call",
+      "source": "comms.views.channel_views()"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 342,
+      "kind": "Call",
+      "source": "comms.views.channel_views()"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 192,
+      "kind": "FunctionDef",
+      "source": "def current(self) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "source": "from .presentation import ThreadView"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 60,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 70,
+      "kind": "FunctionDef",
+      "source": "def current(self, wait: GoalWait | None) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 84,
+      "kind": "FunctionDef",
+      "source": "def current(self, wait: GoalWait | None) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 153,
+      "kind": "Call",
+      "source": "self.dependency.current(wait)"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "self.current(wait)"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 76,
+      "kind": "Call",
+      "source": "commands.PiCommand.from_wire(wire)"
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "line": 33,
+      "kind": "FunctionDef",
+      "source": "def current(self, admission_generation: int, turn_generation: int) -> bool:"
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "line": 42,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 305,
+      "kind": "Call",
+      "source": "self.comms.agents.all_activity()"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 232,
+      "kind": "Call",
+      "source": "WireRecord.from_wire(record, root_id)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 84,
+      "kind": "Call",
+      "source": "Platform.current()"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 307,
+      "kind": "Call",
+      "source": "WireRecord.from_wire(row, metadata.root_id)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 121,
+      "kind": "Call",
+      "source": "index.current()"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 32,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 49,
+      "kind": "Call",
+      "source": "Message.from_wire(value)"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 169,
+      "kind": "Call",
+      "source": "WireRecord.from_wire(value, self.metadata.root_id)"
+    }
+  ],
+  "limits": "Lexical evidence; generic receiver names may be unrelated. Owners/callers read semantically; no dynamic resolution claim."
+}

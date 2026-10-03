@@ -48,7 +48,7 @@ async def run(root, receiving_only=False, authored_operations_only=False):
 
 
 async def run_configured(options):
-    """One original configured-model input on an SDK-owned retained fork."""
+    """Original configured saved fork; context-only does not submit input."""
     import hashlib
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
@@ -60,10 +60,9 @@ async def run_configured(options):
     from agent_comms.threads import Thread
     from delivery_owner_fixture import canonical_agent
     from original_owner_capture import CurrentTypedCapture
-    from retained_input_origin_observer import actual_s2_ingress
 
     started = time.monotonic()
-    root = options.root
+    root = options.root.resolve()
     root.mkdir(mode=0o700)
     output = root / 'configured-context-journey'
     output.mkdir(mode=0o700)
@@ -73,11 +72,12 @@ async def run_configured(options):
     owner = None
     try:
         captured = CurrentTypedCapture(options.configured_source_root,
-            options.original_python).read('nra-architecture')
+            options.original_python).read(options.configured_source_name)
         source = captured.require_current()
         original_file = Path(source.require_saved_session())
         original_digest = hashlib.sha256(original_file.read_bytes()).hexdigest()
         receipt.update(model=source.model, thinking=source.thinking_level.declared_name,
+            original_name=source.name, original_worktree=source.worktree,
             source_file=str(original_file), source_bytes=original_file.stat().st_size,
             original_process=FieldCodec.encode(source.require_process()),
             original_sha256=original_digest)
@@ -120,7 +120,7 @@ async def run_configured(options):
         service.registry.declare(thread)
         await owner._runtime.start()
         await owner.load_session(str(project), thread.name)
-        await owner.turns.prepare_selected_session(thread.name, thread)
+        assert thread.name not in owner.turns.persistent_backends
 
         async def query(*arguments):
             child = await asyncio.create_subprocess_exec(sys.executable, '-m',
@@ -135,6 +135,26 @@ async def run_configured(options):
         preview = await query()
         (output / 'next-context.json').write_text(json.dumps(preview))
         assert selected.read_bytes() == before
+        if options.context_only:
+            persistent = owner.turns.persistent_backends[thread.name]
+            child = persistent.custody.idle().child
+            assert child.proc.alive()
+            repeated = await query()
+            assert repeated == preview
+            assert persistent.custody.idle().child is child
+            assert selected.read_bytes() == before
+            assert not InputDispositions(service.root / InputDispositions.filename).read().rows
+            assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
+            captured.require_current()
+            receipt.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
+                priming_calls=0, native_prompts=0, provider_requests=0,
+                private_root=str(service.root), fork_file=str(selected),
+                fork_sha256=hashlib.sha256(before).hexdigest(), source_unchanged=True,
+                query_preserved_journal=True, repeated_same_child=True,
+                native_process=FieldCodec.encode(child.proc.identity),
+                context_segments=len(preview['native_manifest']))
+            return
+        from retained_input_origin_observer import actual_s2_ingress
         baseline = service.bus.log.latest_sequence()
         receipt['state'] = 'ONE_CONFIGURED_INPUT_ABOUT_TO_BE_SUBMITTED_NO_RETRY'
         (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
@@ -173,6 +193,10 @@ async def run_configured(options):
             receipt['original_dispositions'] = FieldCodec.encode(
                 InputDispositions(owner._comms.root / InputDispositions.filename).read())
             await owner.shutdown()
+            if options.context_only and 'child' in locals():
+                receipt['native_child_retired'] = child.proc.retired
+                receipt['native_child_exited'] = not child.proc.alive()
+                assert child.proc.retired and not child.proc.alive()
         receipt['elapsed_seconds'] = time.monotonic() - started
         (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
         print(json.dumps(receipt), flush=True)
@@ -349,12 +373,16 @@ if __name__ == "__main__":
     parser.add_argument("--toad-driver-dir", type=Path, required=True)
     parser.add_argument('--configured-source-root', type=Path)
     parser.add_argument('--original-python', type=Path)
+    parser.add_argument('--configured-source-name', default='nra-architecture')
+    parser.add_argument('--context-only', action='store_true')
     parser.add_argument('--complete-goal-controls', action='store_true')
     parser.add_argument('--complete-history-controls', action='store_true')
     journey = parser.add_mutually_exclusive_group()
     journey.add_argument('--receiving-only', action='store_true')
     journey.add_argument('--authored-operations-only', action='store_true')
     options = parser.parse_args()
+    if options.context_only and not options.configured_source_root:
+        parser.error('Context-only requires the original configured saved source')
     if options.authored_operations_only and (options.configured_source_root or options.complete_goal_controls):
         parser.error('Authored operations use only the original private localhost fixture')
     if "site-packages" not in Path(agent_comms.__file__).parts:

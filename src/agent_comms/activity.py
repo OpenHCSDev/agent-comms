@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -212,30 +212,31 @@ class ActivityLog:
 
     def current(self, thread: str, *, active: bool = False) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
-        latest = self._latest_events().get(thread)
-        if latest is None:
-            return Activity(thread=thread, state=ActivityState.IDLE)
+        return self._observed(thread, self._latest_events(), active=active, now=time.time())
+
+    def _observed(self, thread: str, events: Mapping[str, Activity], *,
+                  active: bool, now: float) -> Activity:
+        if thread not in events:
+            # The existing decoder owns an unknown historical clock. Reading
+            # an absent event must never mint an actual-event timestamp.
+            return Activity.from_wire({"thread": thread, "state": ActivityState.IDLE.value})
+        latest = events[thread]
         if (
             latest.diagnostic is None
             and not active
-            and time.time() - latest.timestamp > self._stale_after
+            and now - latest.timestamp > self._stale_after
         ):
             return Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)
         return latest
 
-    def all_current(self, *, active: frozenset[str] = frozenset()) -> dict[str, Activity]:
+    def all_current(self, *, active: frozenset[str] = frozenset(),
+                    threads: Iterable[str] = ()) -> dict[str, Activity]:
         """Latest activity per thread (idle included for known threads)."""
         result = self._latest_events()
         now = time.time()
         return {
-            thread: (
-                activity
-                if activity.diagnostic is not None
-                or thread in active
-                or now - activity.timestamp <= self._stale_after
-                else Activity(thread=thread, state=ActivityState.IDLE, timestamp=activity.timestamp)
-            )
-            for thread, activity in result.items()
+            thread: self._observed(thread, result, active=thread in active, now=now)
+            for thread in dict.fromkeys((*result, *threads))
         }
 
     def _latest_events(self) -> Mapping[str, Activity]:

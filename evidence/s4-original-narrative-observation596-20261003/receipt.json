@@ -1,0 +1,64 @@
+{
+  "source_head": "c5528a09",
+  "scope": "private original summary assembly observation and original scorer/checkpoint consumer plumbing; no production change",
+  "actual_selected_rpc": {
+    "summary_generated": true,
+    "strict_original_response_decoder_accepted": true,
+    "source_request_equal": true,
+    "original_prepack_captured": true,
+    "packed_summary_kept_exact_envelope": true,
+    "source_session_unchanged": true,
+    "assembly_sha256": "c28f9eff53da37a2438d52a4f2ed8a9aad212ea7f6164c815f220ea64931c414",
+    "raw_test_result": "FAILED at final empty-stderr assertion after debugger disconnect wait; all summary/body assertions completed",
+    "raw_log": "selected-rpc04.log",
+    "whole_test_pass_claimed": false
+  },
+  "teardown_correction": {
+    "existing_inspector_released_before_native_eof_join": true,
+    "actual_no_generation_native_check": "PASS",
+    "provider_posts": 0,
+    "log": "final-sanity06.log"
+  },
+  "batched_sanity": {
+    "tests": 15,
+    "subtests": 19,
+    "elapsed_s": 5.55,
+    "result": "PASS",
+    "log": "final-sanity06.log"
+  },
+  "recorded_originals": {
+    "questions": 9,
+    "correct": 9,
+    "cuts": 3,
+    "unchanged_original_hashes": {
+      "continuation-2-receipt.json": "c5e9be6ee35edc66c8833f47f230e63b85d9d53a6319b4a59273690a901e5808",
+      "continued-run.private.json": "d6951db5ba27f522491e4fa0dc7fae0483f7256d1e5a790c17f36a873e0c8e89",
+      "original-measurements.private.json": "49ead4b4f790d8deba1b69a228458d76dd25419d0d678825cb3489c73264fe4f",
+      "cut-3-checkpoint.private.json": "682af599361a028ec1b9e03941940376cd07d26c032b38c8685a6d5eb0897ee7",
+      "cut-3-registry.private.json": "464a532f07003c4f69dfb65f3dfe605fdd6040baa5a56d5bbc50a34377c79ac7",
+      "cut-3-manifest.private.json": "bf56925cc401ac3c6c1df849c9f8ada2a018006803f4171eaa028031d84cb55b",
+      "cut-3-inputs.private.json": "dafdf25398fb8a2c0e3c4e01b33b34e4111e9101bd4ec4aae1f461ae158e8d69"
+    },
+    "missing_historical_narratives_unavailable": true,
+    "foreign_assembly_refused": true
+  },
+  "package": {
+    "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "89b56aea0bb128c4bf3e2c979de8a5afa79ac88b1f51a74c49cc1cab46da60d2",
+    "tree": "4b7f66f396a342e523d631c753686789b61313c34c30d894ddf24b5a861caa26",
+    "matching_inherited_native593": true,
+    "new_artifact_created": false,
+    "sampled_original_compact_sha256": "fe1d27fe3f641b2cc6f848b7a981186f29ba5f3daad7abb47b11a80548b1aa59"
+  },
+  "remaining": [
+    "Narrative-only source unavailable when original assembly inherited packed summary",
+    "Bounded context installation/submission not qualified",
+    "Whole original capture test not relabeled PASS",
+    "Actual configured comparative study not run",
+    "Full-history capacity/HTTP/returned-model/recall not newly qualified"
+  ],
+  "public_effects": false,
+  "configured_provider_calls": 0,
+  "uncertain_input_replays": 0,
+  "owned_processes_remaining": []
+}

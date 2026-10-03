@@ -1,0 +1,433 @@
+{
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 45,
+      "node": "alias",
+      "name": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 46,
+      "node": "alias",
+      "name": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 48,
+      "node": "alias",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 50,
+      "node": "alias",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 95,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 95,
+      "node": "Name",
+      "name": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 128,
+      "node": "Name",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 114,
+      "node": "Name",
+      "name": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 117,
+      "node": "Name",
+      "name": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 117,
+      "node": "Name",
+      "name": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 236,
+      "node": "Name",
+      "name": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 60,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 87,
+      "node": "ClassDef",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 123,
+      "node": "ClassDef",
+      "name": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 145,
+      "node": "ClassDef",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 168,
+      "node": "ClassDef",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 193,
+      "node": "ClassDef",
+      "name": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 221,
+      "node": "ClassDef",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 106,
+      "node": "AsyncFunctionDef",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 123,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 126,
+      "node": "AsyncFunctionDef",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 145,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 168,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 193,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 198,
+      "node": "AsyncFunctionDef",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 221,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 281,
+      "node": "AsyncFunctionDef",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 103,
+      "node": "Name",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 113,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 116,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 162,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 171,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 195,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 237,
+      "node": "Name",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 199,
+      "node": "alias",
+      "name": "AgentCommsInspectContext"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 282,
+      "node": "alias",
+      "name": "AgentCommsInspectContext"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 120,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 208,
+      "node": "Name",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 217,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 309,
+      "node": "Name",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 317,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 113,
+      "node": "Name",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 131,
+      "node": "Attribute",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 311,
+      "node": "Name",
+      "name": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 202,
+      "node": "Name",
+      "name": "AgentCommsInspectContext"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 285,
+      "node": "Name",
+      "name": "AgentCommsInspectContext"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 368,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 475,
+      "node": "ClassDef",
+      "name": "AgentCommsInspectContext"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 327,
+      "node": "ClassDef",
+      "name": "ContextRuntimeRequest"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 331,
+      "node": "Attribute",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 174,
+      "node": "AsyncFunctionDef",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 192,
+      "node": "AsyncFunctionDef",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 194,
+      "node": "Attribute",
+      "name": "inspect_context"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 17,
+      "node": "alias",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 125,
+      "node": "alias",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 36,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 146,
+      "node": "Name",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 28,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 246,
+      "node": "alias",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 274,
+      "node": "Name",
+      "name": "RetiringNative"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 145,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 554,
+      "node": "alias",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 655,
+      "node": "Name",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 191,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 144,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 203,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    }
+  ],
+  "dynamic_resolution": "AST does not certify runtime MRO/correlation; legal receiver capability verified in installed controls and original owner source."
+}

@@ -1,0 +1,111 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_original_summary_assembly_inspector ___________________
+
+tmp_path = PosixPath('/home/ts/wt/a59603/test_original_summary_assembly0')
+
+    async def test_original_summary_assembly_inspector(tmp_path):
+        """Actual selected RPC generation with a local provider, never a live input.
+    
+        This qualifies the observation source. No canonical commit, configured
+        provider study, submitted bounded control or recall credit is claimed.
+        """
+        from dataclasses import replace
+        from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+        from agent_comms.pi_summary_payloads import SummarySummarizedData
+        from agent_comms.turn_context import FileProvenance
+        from retained_native_fixture import RecordedNativeCheckpoint, RecordedSummaryAssembly
+        from summary_prefix_configured_installed_journey import observe_native_requests
+        import hashlib
+    
+        pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+        summaries = tmp_path / "summary-assemblies"
+        summaries.mkdir(mode=0o700)
+        observation = tmp_path / "original-observations.jsonl"
+        with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
+            async with native_summary_owner(tmp_path, 200, observe_launch=observe_launch) as fixture:
+                package, session, original, preparation, selected, settings, calls, _, launch = fixture
+                child, _, exchange, errors = await launch()
+                command = AgentCommsSummarizeCompaction(
+                    id="original-source-capture", version=1, operation_id=uuid4().hex,
+                    witness=preparation.witness, selected=selected, settings=settings,
+                    retained_text="Original exact injected task envelope.")
+                _, reply = await exchange(command.to_rpc())
+                assert reply["success"], reply
+>               result = FieldCodec.decode(SummarySummarizedData, reply["data"])
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_failure_native.py:307: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.pi_summary_payloads.SummarySummarizedData'>
+data = {'version': 1, 'status': 'summarized', 'operationId': 'c34669a8b8754aadb81626737ea20542', 'witness': {'sessionId': '9a... '/home/ts/wt/a59603/test_original_summary_assembly0/saved.jsonl', 'leafId': 'a9', 'firstKeptEntryId': 'u8', ...}, ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+>               raise ValueError(f"Expected a string family {tag}.")
+E               ValueError: Expected a string family kind.
+
+src/agent_comms/field_codec.py:493: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_failure_native.py::test_original_summary_assembly_inspector
+1 failed in 6.27s

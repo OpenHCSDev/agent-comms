@@ -1,0 +1,76 @@
+..........F..............................                                [100%]
+=================================== FAILURES ===================================
+_______ test_single_captured_basis_survives_mode_change_during_snapshot ________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/activity594-source-checks-20261003/tmp/test_single_captured_basis_sur0')
+
+    def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
+        comms = populated(tmp_path)
+        comms.messaging.send("alice", "bob", "member DM")
+        original = comms.bus.log._opened_wire_snapshot
+        started, finished = Event(), Event()
+    
+        def toggle():
+            started.set()
+            comms.channels.set_channel_any_mode("#api", True)
+            finished.set()
+    
+        @contextmanager
+        def toggle_after_boundary(*, need_sequence=True):
+            with original(need_sequence=need_sequence) as snapshot:
+                writer = WorkerThread(target=toggle, daemon=True)
+                writer.start()  # blocked on the short wire lock until the boundary opens
+                assert started.wait(timeout=3) and not finished.is_set()
+                try:
+                    yield snapshot
+                finally:
+                    writer.join(timeout=3)
+                    assert finished.is_set()
+    
+        with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=toggle_after_boundary):
+>           first = comms.views.viewer_snapshot(str(tmp_path))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_channel_display.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:383: in viewer_snapshot
+    sent = self.last_sent_timestamps()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/history_views.py:218: in last_sent_timestamps
+    for sender, timestamp in self.bus.last_sent_timestamps().items():
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:379: in last_sent_timestamps
+    _, sent = self._activity_clocks()
+              ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:102: in _activity_clocks
+    with self.log.projection_snapshot() as (_, revision, stream, _records):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:445: in projection_snapshot
+    with self._opened_wire_snapshot(need_sequence=False) as (
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+need_sequence = False
+
+    @contextmanager
+    def toggle_after_boundary(*, need_sequence=True):
+        with original(need_sequence=need_sequence) as snapshot:
+            writer = WorkerThread(target=toggle, daemon=True)
+            writer.start()  # blocked on the short wire lock until the boundary opens
+>           assert started.wait(timeout=3) and not finished.is_set()
+E           assert (True and not True)
+E            +  where True = wait(timeout=3)
+E            +    where wait = <threading.Event at 0x7f2d1a650180: set>.wait
+E            +  and   True = is_set()
+E            +    where is_set = <threading.Event at 0x7f2d1ab88ef0: set>.is_set
+
+tests/test_channel_display.py:107: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_channel_display.py::test_single_captured_basis_survives_mode_change_during_snapshot
+1 failed, 40 passed in 34.99s
