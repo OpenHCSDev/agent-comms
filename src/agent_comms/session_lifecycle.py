@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -29,12 +30,14 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
+from .coordinator import Coordination
 from .config_options import ConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
+from .registry_document import RegistrySnapshot
 from .transcript_updates import TranscriptReplay
 from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
 
@@ -114,10 +117,10 @@ class SessionLifecycle:
             raise RequestError.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return name
 
-    def require_owned_session(self, thread: Thread) -> str:
+    def require_owned_session(self, thread: Thread, snapshot: RegistrySnapshot) -> str:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, name in self.bindings.items():
-            if self.comms.registry.canonical_name(name) == thread.name:
+            if snapshot.canonical_name(name) == thread.name:
                 return session_id
         raise RequestError.invalid_params({
             "reason": f"Registered owner {thread.name!r} has no loaded ACP session. "
@@ -174,8 +177,8 @@ class SessionLifecycle:
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        self.effects._private_nk_marker()
-        thread = self.declare_thread(cwd, os.getpid())
+        await Coordination.run_worker(self.effects._private_nk_marker)
+        thread = await Coordination.run_worker(partial(self.declare_thread, cwd, os.getpid()))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
         options = await self.config.session_options(thread.name, thread.name)
@@ -189,17 +192,19 @@ class SessionLifecycle:
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        self.effects._private_nk_marker()
-        thread = self.validated_thread(cwd, session_id)
+        await Coordination.run_worker(self.effects._private_nk_marker)
+        thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
             self.bindings.get(session_id) == thread.name
             and thread.pid == os.getpid()
-            and self.comms.registry.status(thread.name).active
+            and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name))).active
         ):
-            thread = self.comms.owners.acquire_thread(thread.name, owner_pid=os.getpid())
+            thread = await Coordination.run_worker(partial(
+                self.comms.owners.acquire_thread, thread.name, owner_pid=os.getpid(),
+            ))
         if thread.pid != os.getpid():
             return await self.attach_owner(thread, session_id)
-        self.comms.threads.heartbeat(thread.name)
+        await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
         await self.transcript.replay(session_id, thread.name)
         await self.effects.inputs.replay_unknown_inputs(session_id)
@@ -213,10 +218,10 @@ class SessionLifecycle:
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-            snapshot = self.comms.registry.snapshot()
+            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
             binding = snapshot.owner_binding(thread.name)
             failed_command = FailedSessionLoadAdmission(binding)
-            proxy = self.effects._create_runtime_proxy(thread, session_id)
+            proxy = await Coordination.run_worker(partial(self.effects._create_runtime_proxy, thread, session_id))
             try:
                 snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
                 metadata = await proxy.subscribe()
@@ -236,12 +241,13 @@ class SessionLifecycle:
 
     async def sync_identity(self, session_id: str) -> str:
         cached_name = self.require(session_id)
-        thread = self.comms.registry.require(cached_name)
+        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+        thread = snapshot.require(cached_name)
         name = thread.name
         if (
             name != cached_name
             or thread.pid != os.getpid()
-            or not self.comms.registry.status(name).running
+            or not snapshot.status(name).running
         ):
             await self.effects.turns.close_idle_backend(session_id)
         self.bindings[session_id] = name
@@ -273,12 +279,16 @@ class SessionLifecycle:
         self, session_id: str, thread_name: str, event: events.AgentInfo
     ) -> None:
         """Initialize only unset configuration from its actual native producer."""
-        self.comms.threads.initialize_native_configuration(
-            thread_name, model=event.model, thinking_level=event.thinking_level
-        )
+        await Coordination.run_worker(partial(
+            self.comms.threads.initialize_native_configuration,
+            thread_name, model=event.model, thinking_level=event.thinking_level,
+        ))
         await self.config.publish_configuration(session_id, thread_name)
 
-    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
+    def configuration_updates(
+        self, thread_name: str,
+    ) -> tuple[CoordinationChangedUpdate, GoalChangedUpdate]:
+        """Capture original store projections before loop/client effects consume them."""
         thread = self.comms.registry.require(thread_name)
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
         info = self.comms.agents.agent_info_of(thread_name)
@@ -287,7 +297,7 @@ class SessionLifecycle:
             if info is not None and info.context_used is not None and info.context_size
             else None
         )
-        return encode_updates(
+        return (
             CoordinationChangedUpdate(
                 ThreadIncarnation(thread.name, thread.created_at),
                 str(self.comms.root.resolve()),
@@ -299,7 +309,15 @@ class SessionLifecycle:
                 usage,
             ),
             GoalChangedUpdate(goal, execution),
-            self.effects.inputs.queue_state(session_id or thread_name),
+        )
+
+    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
+        configuration = await Coordination.run_worker(partial(
+            self.configuration_updates, thread_name,
+        ))
+        return encode_updates(
+            *configuration,
+            await self.effects.inputs.queue_state(session_id or thread_name),
             *await self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
 
@@ -315,15 +333,16 @@ class SessionLifecycle:
             for session_id in tuple(self.proxies):
                 await self.retire_proxy(session_id)
 
+    def release_registered_owner(self, name: str) -> None:
+        snapshot = self.comms.registry.snapshot()
+        thread = snapshot.require(name)
+        if thread.pid == os.getpid() and snapshot.status(thread.name).running:
+            self.comms.owners.stop(thread.name)
+
     async def release_owned(self) -> None:
         for name in set(self.bindings.values()):
             try:
-                canonical = self.comms.registry.require(name).name
-                if (
-                    self.comms.registry.require(canonical).pid == os.getpid()
-                    and self.comms.registry.status(canonical).running
-                ):
-                    self.comms.owners.stop(canonical)
+                await Coordination.run_worker(partial(self.release_registered_owner, name))
             except Exception as error:
                 self.effects._debug_log(f"shutdown error: {error!r}")
         await self.runtime.close()
@@ -336,7 +355,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        thread = self.declare_thread(cwd, 0)
+        thread = await Coordination.run_worker(partial(self.declare_thread, cwd, 0))
         loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
         return NewSessionResponse(
             session_id=thread.name,
@@ -348,7 +367,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        thread = self.validated_thread(cwd, session_id)
+        thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         try:
             admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
             owner = await admission.resolve(self, thread)

@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling PASSED [ 50%]
+tests/test_runtime_goal_snapshot.py::test_goal_actions_check_revision_and_preserve_owner_pause PASSED [100%]
+
+============================== 2 passed in 1.54s ===============================

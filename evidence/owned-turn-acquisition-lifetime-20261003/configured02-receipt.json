@@ -1,0 +1,61 @@
+{
+  "state": "SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS",
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "core": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-configured02",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "original_name": "openhcs-audit-merged-runtime",
+  "original_worktree": "/home/ts/code/projects/openhcs",
+  "source_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl",
+  "source_bytes": 42395025,
+  "original_process": {
+    "pid": 2039348,
+    "start_time": 53654761
+  },
+  "original_sha256": "b733f5ddbd17d7524f18a872ecfd061fa31d790f2eee5a89eeb9cb41020457f4",
+  "acp_pid": 2088156,
+  "original_lease": {
+    "identity": {
+      "incarnation": {
+        "name": "configured-source",
+        "created_at": 1791061961.917617
+      },
+      "generation": 1
+    },
+    "turn_id": "4205e283d7b74a07bd237a460ef84ccb",
+    "admission_generation": 1
+  },
+  "terminal_state": {
+    "active": null,
+    "finished_turn_id": "4205e283d7b74a07bd237a460ef84ccb"
+  },
+  "original_waiter_goal": "3b14fd11c7034fc58dcb60f11a7dacd6",
+  "waiter_released": true,
+  "acp_response": {
+    "stopReason": "end_turn"
+  },
+  "native_process": {
+    "pid": 2088846,
+    "start_time": 53760485
+  },
+  "prompt_through_return_seconds": 13.295156165026128,
+  "acp_exited": true,
+  "original_native_user": "5240c1e8",
+  "original_native_reply": "5743bde6",
+  "source_unchanged": true,
+  "private_root": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-configured02/wire",
+  "fork_file": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-configured02/native-forks/2026-10-03T21-12-37-302Z_01a1039c-9ab6-7266-9cbc-7f1b3a19daa9.jsonl",
+  "native_child_retired": true,
+  "native_child_exited": true,
+  "elapsed_seconds": 25.395415066042915,
+  "public_inputs": 0,
+  "original_inputs_retried": 0,
+  "source_head": "1b09822cb7f6bac41150217f0ed552d585f697dc",
+  "original_input_key": "acp:891c95267a9a4fd2a126228291e3dd72",
+  "original_native_input_id": "6b413580e07b112352701fb6d1fc694b",
+  "raw_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-configured02/terminal-receipt.json",
+  "raw_receipt_sha256": "bb29e422eaec58d90820f6a7ef9b4108b12eab4de6315782b29be88677d6fbb4",
+  "actual_acp_native_pids_absent": true,
+  "scope": "one configured saved SDK fork/ACP answer/terminal publication and shutdown; no controlled historical speed claim"
+}

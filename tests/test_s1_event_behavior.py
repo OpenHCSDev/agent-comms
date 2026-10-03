@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import AsyncExitStack
 from abc import abstractmethod
 from pathlib import Path
 
@@ -130,12 +130,8 @@ async def owner_turn(comms, tmp_path):
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
     try:
         async with AsyncExitStack() as resources:
-            with ExitStack() as permits:
-                assert execution.admit(permits)
-                execution.begin(resources)
-                execution.prepare_prompt()
-                execution.open_stream(resources, permits)
-                resources.enter_context(permits.pop_all())
+            async with AsyncExitStack() as permits:
+                assert await execution.acquire(resources, permits)
                 yield execution, execution.progress
     finally:
         await owner.shutdown()

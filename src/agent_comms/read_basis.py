@@ -159,8 +159,8 @@ class DMDisplayBasis:
             raise ValueError("A DM page requires a registered peer.")
         with _store_lock(root / "wire", shared=True):
             snapshot = registry.snapshot()
-            viewer_name = snapshot.aliases.get(viewer, viewer)
-            peer_name = snapshot.aliases.get(peer, peer)
+            viewer_name = snapshot.canonical_name(viewer)
+            peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.threads[peer_name]
@@ -283,7 +283,7 @@ class DMDisplayBasis:
                 thread for thread in snapshot.threads.values() if not thread.role.executable
             )
             viewer = snapshot.threads[self.viewer]
-            target = snapshot.threads[snapshot.aliases.get(self.requested_peer, self.requested_peer)]
+            target = snapshot.threads[snapshot.canonical_name(self.requested_peer)]
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
         except (KeyError, StopIteration, ValueError) as error:
             raise ValueError("DM viewer/peer incarnation changed; refresh the page.") from error
@@ -319,7 +319,7 @@ class DMDisplayScope(MessageDisplayScope):
 
     @staticmethod
     def names_for(name: str, snapshot: RegistryProvenance) -> frozenset[str]:
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         return frozenset(
             {canonical, *(alias for alias, owner in snapshot.aliases.items() if owner == canonical)}
         )
@@ -331,8 +331,8 @@ class DMDisplayScope(MessageDisplayScope):
     @classmethod
     def capture_human(cls, viewer: str, peer: str, snapshot: RegistrySnapshot) -> DMDisplayScope:
         try:
-            first = snapshot.threads[snapshot.aliases.get(viewer, viewer)]
-            second = snapshot.threads[snapshot.aliases.get(peer, peer)]
+            first = snapshot.threads[snapshot.canonical_name(viewer)]
+            second = snapshot.threads[snapshot.canonical_name(peer)]
         except KeyError as error:
             raise ValueError("DM display identity changed; refresh the page.") from error
         if first.role.executable or first.incarnation == second.incarnation:

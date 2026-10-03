@@ -1,0 +1,5 @@
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:132: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+no tests ran in 582.74s (0:09:42)

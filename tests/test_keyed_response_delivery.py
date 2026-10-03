@@ -41,7 +41,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         )
         assert coverage.read().blocked_seq == response.seq
         cursor = await _accept_visible_deliveries(
-            case.bus, case.root_id, case.store, lookup, 0, owner_name="sender"
+            case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
         )
         assert cursor == response.seq
         assignments = sealed_cohort_assignments(case.store, lookup)
@@ -68,7 +68,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         # Repeating the publisher/recipient poll does not duplicate the row or K.
         publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         await _accept_visible_deliveries(
-            case.bus, case.root_id, case.store, lookup, 0, owner_name="sender"
+            case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
         )
         assert len(case.bus.log.full_history()) == 2
         assert sealed_cohort_assignments(case.store, lookup) == assignments

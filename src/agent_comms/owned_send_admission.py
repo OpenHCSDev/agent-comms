@@ -142,7 +142,7 @@ class OwnedSendAdmission:
         # No await/provider/ACK while held: the same lock spans final checks and write.
         with self.comms.owners.maintenance.admit_ingress():
             snapshot = self.comms.registry.snapshot()
-            canonical = snapshot.aliases.get(self.thread.name, self.thread.name)
+            canonical = snapshot.canonical_name(self.thread.name)
             current = snapshot.threads.get(canonical)
             wait = self.comms.goals.goal_wait(canonical) if current is not None else None
             source = self.source(public_id)

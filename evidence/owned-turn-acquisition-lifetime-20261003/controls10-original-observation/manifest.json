@@ -1,0 +1,22 @@
+[
+  {
+    "original": "/tmp/pytest-of-ts/pytest-1111/test_acquired_claim_and_lease_0/comms/activity.jsonl",
+    "persistent": "evidence/owned-turn-acquisition-lifetime-20261003/controls10-original-observation/test_acquired_claim_and_lease_0-activity.jsonl",
+    "sha256": "6eec28ac340952d7a1eca0841d5f0cc97ac0a6228726ed22fef0d875b18accb2"
+  },
+  {
+    "original": "/tmp/pytest-of-ts/pytest-1111/test_acquired_claim_and_lease_1/comms/activity.jsonl",
+    "persistent": "evidence/owned-turn-acquisition-lifetime-20261003/controls10-original-observation/test_acquired_claim_and_lease_1-activity.jsonl",
+    "sha256": "697a933c7bed530e300c3febc3fde0fa7177e6550bcfe78da5113c4ca3c1d22c"
+  },
+  {
+    "original": "/tmp/pytest-of-ts/pytest-1111/test_acquired_claim_and_lease_2/comms/activity.jsonl",
+    "persistent": "evidence/owned-turn-acquisition-lifetime-20261003/controls10-original-observation/test_acquired_claim_and_lease_2-activity.jsonl",
+    "sha256": "3598acc43bdd5ffaf8f6034722001a398b895d87caf2e8e53f2f32a91a24f264"
+  },
+  {
+    "original": "/tmp/pytest-of-ts/pytest-1111/test_acquired_claim_and_lease_3/comms/activity.jsonl",
+    "persistent": "evidence/owned-turn-acquisition-lifetime-20261003/controls10-original-observation/test_acquired_claim_and_lease_3-activity.jsonl",
+    "sha256": "f22b0e59f7dc9ff5e719ee93fa972913fd9c6733f55a2972346d772a6b9e009f"
+  }
+]

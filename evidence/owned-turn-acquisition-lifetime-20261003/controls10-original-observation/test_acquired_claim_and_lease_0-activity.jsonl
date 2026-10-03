@@ -1,0 +1,1 @@
+{"thread": "test_acquired_claim_and_lease_0", "state": "idle", "detail": "", "ts": 1791061265.0159655, "diagnostic": {"kind": "unavailable_drain", "owner": {"incarnation": {"name": "test_acquired_claim_and_lease_0", "created_at": 1791061264.9193108}, "generation": 1}, "error_type": "IdentityConflict", "reason": "participant aggregate is not registered"}}

@@ -177,7 +177,7 @@ class DisplaySelection:
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
         reads: ReadLedger, document: ReadDocument, viewer: str | None,
     ) -> DisplaySelection:
-        canonical = snapshot.aliases.get(viewer, viewer) if viewer is not None else None
+        canonical = snapshot.canonical_name(viewer) if viewer is not None else None
         seen = (
             reads.seen_sequences(viewer, snapshot, document=document)
             if viewer is not None else frozenset()

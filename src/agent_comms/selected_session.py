@@ -223,7 +223,7 @@ class SavedSelectedSession(SelectedSession):
             )
             owner = participant.owner.thread
             self.identity.require_session(owner.require_saved_session())
-            snapshot = participant.comms.registry.snapshot()
+            snapshot = await Coordination.run_worker(participant.comms.registry.snapshot)
             generation = snapshot.owner_generations[owner.name]
             async with OwnerCompactionCommit.open(
                 participant.comms.registry.store.path, turn.launch.package, self.session_file,

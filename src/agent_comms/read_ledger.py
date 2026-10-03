@@ -63,7 +63,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
         if builtin is not None or is_channel_target(message.target):
             return Conversation(target=builtin.value if builtin is not None else message.target)
         names = sorted(
-            {snapshot.aliases.get(name, name) for name in (message.sender, message.target)}
+            {snapshot.canonical_name(name) for name in (message.sender, message.target)}
         )
         return Conversation(
             participants=tuple(
@@ -87,7 +87,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
         *,
         conversation_snapshot: RegistryProvenance | None = None,
     ) -> DisplayBasis:
-        viewer = snapshot.aliases.get(viewer, viewer)
+        viewer = snapshot.canonical_name(viewer)
         grouped: dict[Conversation, list[int]] = {}
         for message in messages:
             conversation = self.conversation(message, conversation_snapshot or snapshot)
@@ -126,7 +126,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
     def seen_sequences(
         self, viewer: str, snapshot: RegistrySnapshot, *, document: ReadDocument | None = None
     ) -> frozenset[int]:
-        viewer = snapshot.aliases.get(viewer, viewer)
+        viewer = snapshot.canonical_name(viewer)
         thread = snapshot.threads[viewer]
         seen: set[int] = set()
         document = self.read() if document is None else document
@@ -134,7 +134,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
             return frozenset()
         for key, sequences in document.messages.items():
             name, created, raw = json.loads(key)
-            if snapshot.aliases.get(name, name) == viewer and created == thread.created_at:
+            if snapshot.canonical_name(name) == viewer and created == thread.created_at:
                 conversation = Conversation.from_wire(raw)
                 if conversation.current(snapshot):
                     seen.update(sequences)
