@@ -339,7 +339,9 @@ class RecallScenario:
                     },
                     revision_mass={identity: report["revision_mass"]
                                    for identity, report in checkpoints.items()},
-                    recall_scope="Original recorded answers only; authored answers are scorer controls")
+                    answer_support={identity: original["answer_support"]
+                                    for identity, original in evidence.items()},
+                    recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls")
 
 
 def coding_scenario() -> RecallScenario:

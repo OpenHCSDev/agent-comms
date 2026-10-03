@@ -92,3 +92,56 @@ OriginalTypedCapture.read. CurrentTypedCapture inherits that one algorithm. The
 root decoder remains selected explicitly; RetainedOwnerLaunch captures/fences the
 selected running owner's actual process, cmdline and environment independently.
 Kepler receives that unchanged helper directly for355.
+
+
+## Native completion preserved; ACP publication blocked
+
+Two genuine cuts committed in the same configured fork. Original selected
+retained envelopes corroborate six of six required facts at cut1 and nine of
+nine at cut2. Probe1 native answer is2b0d4e1b, probe2 successful final isb7807f3e
+after one bash call. These are native completions, not a completed three-cut
+ACP journey or qualified recall score.
+
+The still-live Python process1583616 (birth46995415) holds the original bus
+lock fd11 and waits for fd10 at final transcript publication. Native child
+1589954 (birth47015057) has already completed its answer. The original stack
+is retained privately in `s4-three-cuts-configured01/python-blocked-stack-sudo.txt`.
+Mendel owns the full resource/publication fix in563: a worker-held read lock
+must close before its result returns to the event loop. No signal, replay,
+timeout increase, public action or extra provider call was used here.
+
+Independent measurement changes stay in560. RecordedNativeProbe now owns
+successful answer selection through NativeEvidenceRead.branch and the nearest
+original input boundary. Both the configured driver and recorded-result control
+use that method; their direct-parent assumptions are deleted. Tool calls come
+from the original entry family and are reported separately. A tool-assisted
+answer is task quality, never unassisted recall.
+
+Original native context inclusion is not a frozen request selector: later
+requests legitimately include earlier inputs again. The measurement reader
+selects the original request generation from the captured NativeProvenance and
+asks NativeContextProof for that exact recorded generation. Captured external
+SDK objects decode through NativeContextData.from_wire once, while internal
+measurement records retain FieldCodec decoding.
+
+SDK object reserialization cannot stand in for original SDK serialized bytes.
+The retained object reproduces some segment hashes, but Python transcript JSON
+and captured tool-catalog objects do not reproduce all SDK byte hashes. The
+observer now captures `JSON.stringify(segment.value)` at the same original SDK
+manifest publication, alongside the existing object. The reader verifies these
+strings against the original manifest before granting byte-presence credit.
+No such strings exist for the two old captures; their presence is unavailable,
+not zero and not retroactively reconstructed.
+
+Read-only validation of the existing answers corroborates both retained
+checkpoints, classifies the second answer as bash-assisted, rejects a foreign
+input's terminal, and leaves native source/input-proof hashes unchanged. The
+original native prompts also contain assembled input context rather than the
+bare frozen questions. Existing strict scoring correctly refuses both; source
+binding to the original submitted InputDocument remains unfinished. No recall
+quality or full three-cut claim is made.
+
+`completed-probe-ancestry.json` and `sdk-json-serialization.json` retain sanitized
+results. The raw first failed receipt stays unchanged. Three-cut acceptance
+remains open on the blocked publication and the original submitted-input
+measurement relation; no comparative study is running.

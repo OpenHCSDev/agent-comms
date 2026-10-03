@@ -1,0 +1,37 @@
+{
+  "scope": "serialization comparison of immutable original SDK object; no prompt or provider reconstruction claim",
+  "segments": [
+    {
+      "kind": "system_layer",
+      "sdk_sha256": "ff5a7d890d59d9e9a89326c484615af4dbcd0cdc71c971b5777f05f4cf13465f",
+      "sdk_bytes": 20950,
+      "python_sha256": "ff5a7d890d59d9e9a89326c484615af4dbcd0cdc71c971b5777f05f4cf13465f",
+      "python_bytes": 20950,
+      "native_json_matches_sdk": true
+    },
+    {
+      "kind": "compaction_summary",
+      "sdk_sha256": "2b146027ce6a11ca600c11bceb1210c3a271cddf4a560aaab7e8764ded595240",
+      "sdk_bytes": 45080,
+      "python_sha256": "2b146027ce6a11ca600c11bceb1210c3a271cddf4a560aaab7e8764ded595240",
+      "python_bytes": 45080,
+      "native_json_matches_sdk": true
+    },
+    {
+      "kind": "transcript",
+      "sdk_sha256": "d36e6aab34735fced3ed3b21576883150f3859c6ea37d3c71d21b9ac246b2ee4",
+      "sdk_bytes": 109690,
+      "python_sha256": "ce2ce092593cd1019bc7154f7ed171c0a862c404d5bf704edd1c18bd6d3377a1",
+      "python_bytes": 109668,
+      "native_json_matches_sdk": true
+    },
+    {
+      "kind": "tool_catalog",
+      "sdk_sha256": "b7028753435029a968e43709da4486c3c11fe8a209c0f08b69afdab0fb7cc186",
+      "sdk_bytes": 28290,
+      "python_sha256": "e9dc856df212a5c45acd3c9eb85962ebfa6042e2fb39609ebe35b5e8e72f7c7c",
+      "python_bytes": 28845,
+      "native_json_matches_sdk": false
+    }
+  ]
+}

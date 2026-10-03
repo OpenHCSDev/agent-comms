@@ -75,14 +75,18 @@ if (output && packageRoot) {
                 // Read the original TurnContext object at its manifest publication.
                 // Do not ask for a later preview or reconstruct provider context.
                 const original = await post('Debugger.evaluateOnCallFrame', {
-                    callFrameId: frame.callFrameId, expression: 'this.full()', returnByValue: true,
+                    callFrameId: frame.callFrameId,
+                    expression: '({context:this.full(), serialized:this.segments.map(segment=>JSON.stringify(segment.value))})',
+                    returnByValue: true,
                 });
                 if (original.exceptionDetails) throw new Error('Original SDK capture unavailable');
-                const data = original.result.value;
+                const { context:data, serialized } = original.result.value;
                 const [provenance] = data.segments[0].provenance.filter(value => value.kind === 'native');
                 if (!provenance) throw new Error('SDK capture is a preview, not a committed request');
                 const path = `${contexts}/context-${provenance.context_digest}.json`;
                 source.writeFileSync(path, JSON.stringify(data), { mode: 0o600, flag: 'wx' });
+                source.writeFileSync(`${contexts}/segments-${provenance.context_digest}.json`,
+                    JSON.stringify(serialized), { mode:0o600, flag:'wx' });
                 appendFileSync(output, JSON.stringify({stage:'source-context', path,
                     request_generation:provenance.request_generation,
                     context_digest:provenance.context_digest}) + '\n', {mode:0o600});

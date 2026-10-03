@@ -18,7 +18,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_entries import NativeEntry, MessageEntry
+from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.message_reference import MessageReference
@@ -162,15 +162,16 @@ async def run(stage, package, original_python, *, continuation=None):
                 assert row.has_started
                 with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
                     context = NativeContextProof.read_evidence(Path(session.session_file), row.native_id, evidence=evidence)
-                    answer, = (entry for entry in evidence.entries if isinstance(entry, MessageEntry)
-                               and entry.parent_id == context.session_entry_id and entry.final_reply)
+                    answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
                 sdk = contexts / f'context-{context.llm_context_digest}.json'
                 provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
                 manifest, = (manifest for manifest in service.bus.log.context_manifests(owner.name, service.registry)
                              if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
                 probes[round_.identity] = RecordedNativeProbe(session, row.native_id, answer.id, checkpoint,
                     FileProvenance(str(sdk), digest(sdk)),
-                    record(stage / f'{round_.identity}-manifest.private.json', manifest))
+                    record(stage / f'{round_.identity}-manifest.private.json', manifest),
+                    FileProvenance(str(contexts / f'segments-{context.llm_context_digest}.json'),
+                                   digest(contexts / f'segments-{context.llm_context_digest}.json')))
                 record(stage / 'original-run.private.json', RecordedNativeProbes(dict(probes)))
                 receipt['completed_rounds'].append(round_.identity)
                 assert service.registry.require(owner.name).active_turn is None
