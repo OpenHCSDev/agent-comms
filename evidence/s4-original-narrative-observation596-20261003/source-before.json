@@ -1,0 +1,840 @@
+{
+  "revision": "a9dce390",
+  "tool": "audit.findings.Package",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "name": "SelectedSummaryAttempt",
+      "line": 225,
+      "bases": [
+        "UnresolvedJournalHistory",
+        "TypedTable"
+      ],
+      "members": [
+        "identity",
+        "require_session",
+        "require_transition",
+        "blocking_in",
+        "transition",
+        "original_has_started"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "name": "NativeIntent",
+      "line": 92,
+      "bases": [],
+      "members": [
+        "journal_json",
+        "read",
+        "identity",
+        "reconciliation"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "name": "AgentCommsSummarizeCompaction",
+      "line": 428,
+      "bases": [
+        "PiCommand"
+      ],
+      "members": []
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "RecordedNativeProbes",
+      "line": 38,
+      "bases": [],
+      "members": [
+        "resume_fork",
+        "observe",
+        "alignment",
+        "request_alignment",
+        "same_observations",
+        "completion_alignment"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeCheckpoint",
+      "line": 40,
+      "bases": [],
+      "members": [
+        "read_bytes",
+        "read_json",
+        "read_json_lines",
+        "read_record",
+        "summary_usage",
+        "capture",
+        "_report",
+        "observe",
+        "inspect",
+        "authored_scope",
+        "authored_lineages",
+        "revision_from",
+        "scoped_facts"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 279,
+      "bases": [],
+      "members": [
+        "submitted_prompt",
+        "answer_for_input",
+        "read_sdk_context",
+        "sdk_request",
+        "request_manifest",
+        "serialized_construction",
+        "prompt_presence",
+        "request_budget",
+        "request_completion",
+        "observe",
+        "construction",
+        "model_steps",
+        "tool_steps",
+        "read"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 744,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 87,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 103,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 29,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 51,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 32,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 77,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 78,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 264,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 276,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 150,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 207,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 269,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 179,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 49,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 88,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 108,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 115,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 136,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 176,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 134,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 141,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 146,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 153,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 179,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 207,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 326,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 136,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 150,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 167,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 172,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 229,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 237,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 265,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 305,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 193,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 212,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 123,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 125,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 122,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 286,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 319,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 281,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 345,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 371,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 30,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 34,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 58,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 51,
+      "name": "AgentCommsSummarizeCompaction"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 104,
+      "name": "AgentCommsSummarizeCompaction"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 39,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 40,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 609,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 655,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 669,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 847,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 852,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 862,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 858,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 865,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 215,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 217,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 221,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 223,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 225,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 259,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 82,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 287,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 114,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 148,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 306,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 355,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 423,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 90,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 339,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 378,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 125,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 60,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 69,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 213,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 220,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 212,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 213,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 286,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 937,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 187,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 54,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 70,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 129,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 193,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 194,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 201,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 341,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 378,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 412,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 423,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 454,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 478,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 112,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 198,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 267,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 275,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 280,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 305,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 312,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 318,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 449,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 523,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 291,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 293,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 325,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 455,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 271,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 272,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 289,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 294,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 322,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 218,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 72,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 62,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 64,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 196,
+      "name": "NativeIntent"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 339,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 427,
+      "name": "AgentCommsSummarizeCompaction"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 362,
+      "name": "AgentCommsSummarizeCompaction"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 110,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 145,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 144,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 147,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 155,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 182,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 168,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 178,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 114,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 173,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 298,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 312,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 107,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 280,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 307,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 292,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 515,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 525,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 547,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 454,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 52,
+      "name": "SelectedSummaryAttempt"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 100,
+      "name": "SelectedSummaryAttempt"
+    }
+  ],
+  "scope": "Lexical AST references; dynamic report readers and MRO resolution require semantic review"
+}

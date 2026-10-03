@@ -1,0 +1,61 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_original_summary_assembly_inspector ___________________
+
+tmp_path = PosixPath('/home/ts/wt/a59604/test_original_summary_assembly0')
+
+    async def test_original_summary_assembly_inspector(tmp_path):
+        """Actual selected RPC generation with a local provider, never a live input.
+    
+        This qualifies the observation source. No canonical commit, configured
+        provider study, submitted bounded control or recall credit is claimed.
+        """
+        from dataclasses import replace
+        from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+        from agent_comms.selected_pi_summary_rpc import _summary_response
+        from agent_comms.turn_context import FileProvenance
+        from retained_native_fixture import RecordedNativeCheckpoint, RecordedSummaryAssembly
+        from summary_prefix_configured_installed_journey import observe_native_requests
+        import hashlib
+    
+        pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+        summaries = tmp_path / "summary-assemblies"
+        summaries.mkdir(mode=0o700)
+        observation = tmp_path / "original-observations.jsonl"
+        with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
+            async with native_summary_owner(tmp_path, 200, observe_launch=observe_launch) as fixture:
+                package, session, original, preparation, selected, settings, calls, _, launch = fixture
+                child, _, exchange, errors = await launch()
+                command = AgentCommsSummarizeCompaction(
+                    id="original-source-capture", version=1, operation_id=uuid4().hex,
+                    witness=preparation.witness, selected=selected, settings=settings,
+                    retained_text="Original exact injected task envelope.")
+                raw, reply = await exchange(command.to_rpc())
+                assert reply["success"], reply
+                result = _summary_response(raw, command, preparation.tokens_before)
+                path = summaries / f"summary-{command.operation_id}.json"
+                capture = RecordedNativeCheckpoint.read_record(
+                    FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest()),
+                    RecordedSummaryAssembly)
+                assert capture.request == command
+                assert capture.generated_parts and capture.inherited_summary is None
+                assert capture.summary.startswith("Original generated narrative.")
+                assert result.result.summary.startswith(command.retained_text + "\n\n")
+                assert not capture.summary.startswith(command.retained_text)
+                assert capture.observe()["evaluated"]
+                assert not replace(capture, inherited_summary=result.result.summary).observe()["evaluated"]
+                assert not replace(capture, generated_parts=()).observe()["evaluated"]
+                assert session.read_bytes() == original
+                records = [json.loads(row) for row in observation.read_text().splitlines()]
+                assert not any(row.get("observerFailed") for row in records), records
+                assert len([row for row in records if row.get("stage") == "summary-assembly"]) == 1
+                assert calls and child.returncode is None
+                child.stdin.close()
+                await child.wait()
+>               assert not await errors
+E               AssertionError: assert not 'Debugger listening on ws://127.0.0.1:51335/54c372b5-06ab-4207-801c-396da7a1d32a\nFor help, see: https://nodejs.org/learn/getting-started/debugging\nDebugger attached.\nWaiting for the debugger to disconnect...'
+
+tests/test_selected_summary_failure_native.py:327: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_failure_native.py::test_original_summary_assembly_inspector
+1 failed in 103.43s (0:01:43)
