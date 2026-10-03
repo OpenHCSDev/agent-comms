@@ -1,0 +1,287 @@
+{
+  "parser": "Node bundled Acorn 8.18.0",
+  "nativeManifest": "044646789787e3d3bcc43391e62c214d94ddffeb528692235c9d35f0db7af968",
+  "declaredRuntimeRoot": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist",
+  "parsedRuntimeModules": 274,
+  "coreHelperBeforeAfter": 2,
+  "parseOmissions": [],
+  "references": [
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "kind": "call",
+      "method": "_setSessionFile"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "kind": "call",
+      "method": "_setSessionFile"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1547,
+      "kind": "call",
+      "method": "openSessionOrExit"
+    },
+    {
+      "path": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1547,
+      "kind": "call",
+      "method": "createSessionManager"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 55,
+      "kind": "class",
+      "name": "EntryStore",
+      "members": [
+        "availability",
+        "constructor",
+        "header",
+        "lastId",
+        "metadata",
+        "get",
+        "metadataEntries",
+        "branchMetadata",
+        "append",
+        "committedAppend",
+        "storedAt",
+        "close",
+        "assertCurrent",
+        "assertUsable",
+        "invalidate",
+        "has",
+        "validate",
+        "validateHeader",
+        "entries",
+        "fileEntries",
+        "branch",
+        "ancestors",
+        "branchContains",
+        "commonAncestor",
+        "latestMetadata",
+        "latest",
+        "contextSettings",
+        "contextMetadata",
+        "contextEntries",
+        "contextMessageCount",
+        "trackedMetadata",
+        "trackedInputMetadata",
+        "trackedInputs",
+        "trackedInput",
+        "commits",
+        "children",
+        "label"
+      ]
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 211,
+      "kind": "call",
+      "method": "validateHeader"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 232,
+      "kind": "construct",
+      "name": "DiskEntryStore"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 355,
+      "kind": "call",
+      "method": "validateHeader"
+    },
+    {
+      "path": "core/session-entry-store.js",
+      "line": 240,
+      "kind": "class",
+      "name": "DiskEntryStore",
+      "members": [
+        "fd",
+        "db",
+        "header",
+        "last",
+        "revision",
+        "extent",
+        "sequence",
+        "metadata",
+        "insert",
+        "constructor",
+        "header",
+        "lastId",
+        "revision",
+        "metadata",
+        "metadataEntries",
+        "branchMetadata",
+        "trackedMetadata",
+        "trackedInputMetadata",
+        "label",
+        "commits",
+        "children",
+        "assertCurrent",
+        "decode",
+        "get",
+        "index",
+        "refresh",
+        "append",
+        "committedAppend",
+        "storedAt",
+        "close"
+      ]
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 509,
+      "kind": "call",
+      "method": "_setSessionFile"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 525,
+      "kind": "call",
+      "method": "_setSessionFile"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 534,
+      "kind": "construct",
+      "name": "DiskEntryStore"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1204,
+      "kind": "construct",
+      "name": "DiskEntryStore"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1229,
+      "kind": "construct",
+      "name": "SessionManager"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1240,
+      "kind": "construct",
+      "name": "SessionManager"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1254,
+      "kind": "construct",
+      "name": "SessionManager"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1256,
+      "kind": "construct",
+      "name": "SessionManager"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1260,
+      "kind": "construct",
+      "name": "SessionManager"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 1271,
+      "kind": "construct",
+      "name": "DiskEntryStore"
+    },
+    {
+      "path": "core/session-manager.js",
+      "line": 474,
+      "kind": "class",
+      "name": "SessionManager",
+      "members": [
+        "acAssertUsable",
+        "acMutation",
+        "sessionId",
+        "sessionFile",
+        "sessionDir",
+        "cwd",
+        "persist",
+        "flushed",
+        "entryStore",
+        "leafId",
+        "_pr48LoadedRevision",
+        "constructor",
+        "_assertLoadedRevision",
+        "setSessionFile",
+        "_setSessionFile",
+        "newSession",
+        "isPersisted",
+        "getCwd",
+        "getSessionDir",
+        "usesDefaultSessionDir",
+        "getSessionId",
+        "getSessionFile",
+        "_persist",
+        "_appendEntry",
+        "assertNativeInputSafe",
+        "nativeInputProofAvailable",
+        "getTrackedInput",
+        "flushInputDurably",
+        "appendMessage",
+        "appendThinkingLevelChange",
+        "appendModelChange",
+        "reconcileCompactionCommit",
+        "captureCompactionWitness",
+        "appendCompactionIfCurrent",
+        "appendCompaction",
+        "appendCustomEntry",
+        "appendSessionInfo",
+        "getSessionName",
+        "appendCustomMessageEntry",
+        "getLeafId",
+        "getLeafEntry",
+        "getEntry",
+        "getChildren",
+        "getLabel",
+        "appendLabelChange",
+        "buildContextEntries",
+        "getHeader",
+        "getTree",
+        "branch",
+        "resetLeaf",
+        "branchWithSummary",
+        "createBranchedSession",
+        "create",
+        "open",
+        "continueRecent",
+        "inMemory",
+        "forkFrom",
+        "list",
+        "listAll"
+      ]
+    },
+    {
+      "path": "main.js",
+      "line": 307,
+      "kind": "call",
+      "method": "openSessionOrExit"
+    },
+    {
+      "path": "main.js",
+      "line": 535,
+      "kind": "call",
+      "method": "createSessionManager"
+    },
+    {
+      "path": "before/Core/_pi_helpers/reopen_session.mjs",
+      "line": 7,
+      "kind": "construct",
+      "name": "DiskEntryStore"
+    },
+    {
+      "path": "after/Core/_pi_helpers/session_identity.mjs",
+      "line": 12,
+      "kind": "call",
+      "method": "validateHeader"
+    }
+  ],
+  "limits": "Compiled JS/MJS runtime root only; TypeScript declarations and transitive node_modules implementations are not analyzed. Lexical AST does not prove dynamic import/MRO resolution; actual main/_setSessionFile/attestation behavior read separately."
+}

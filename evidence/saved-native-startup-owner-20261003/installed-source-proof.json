@@ -1,0 +1,16 @@
+{
+  "head": "fdd4927f276c71dde2d968ee224261165d20fc12",
+  "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms",
+  "source_files_equal": 339,
+  "wheel_members_equal": 342,
+  "wheel_sha256": "2c32929510d2f99b2beb33544478adcdc4ccfeaa082619c5c4070a15fc035d9c",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/saved-native-startup567-wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "native_unchanged": true,
+  "source_changes": [],
+  "wheel_changes": [],
+  "deleted_helper_absent_installed": true
+}
