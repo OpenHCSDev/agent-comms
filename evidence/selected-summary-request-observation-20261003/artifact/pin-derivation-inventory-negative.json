@@ -1,0 +1,12 @@
+{
+  "failure": "Expected changed-member list omitted two declared type files",
+  "members": [
+    "dist/core/agent-session.d.ts",
+    "node_modules/@earendil-works/pi-ai/dist/utils/retry.d.ts"
+  ],
+  "source_relation": "Observer-after-prefix order reorders existing AgentSession union members; reviewed patch adds onRequestProgress to existing RetryCallbacks. Both are owned frozen555 changes.",
+  "manifest_changed": false,
+  "artifact_published": false,
+  "old_manifest_prepare": "Returned existing protected960, not qualification of555",
+  "source_fix_required": false
+}
