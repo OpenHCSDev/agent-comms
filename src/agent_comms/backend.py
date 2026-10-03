@@ -22,7 +22,7 @@ import secrets
 import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, AsyncExitStack, aclosing, contextmanager, nullcontext
+from contextlib import AbstractContextManager, AsyncExitStack, aclosing, asynccontextmanager, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
@@ -143,10 +143,24 @@ class PersistentPiSession:
     def require_reopen(self, identity: NativeSessionIdentity) -> None:
         self.custody = self.custody.retire(self.custody.reopen(identity))
 
-    async def discard_for_external_write(self, identity: NativeSessionIdentity) -> None:
+    @asynccontextmanager
+    async def external_write(self, identity: NativeSessionIdentity):
+        """Own an idle child while its source is changed by the guarded writer.
+
+        Reopen custody refuses observations and new borrows of the old runtime.
+        This resource owns the actual child until its explicit reload succeeds;
+        any exceptional exit retires it without changing the writer's outcome.
+        """
         async with self.lock:
-            self.require_reopen(identity)
-            await self.close()
+            retained = self.custody.idle()
+            self.custody = retained.reopen(identity)
+            try:
+                yield retained
+                self.custody = retained.idle()
+            except BaseException:
+                self.custody = retained.retire(self.custody)
+                await self.close()
+                raise
 
 
 

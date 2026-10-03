@@ -64,7 +64,7 @@ async def test_actual_native_strict_reopen_refuses_changed_identity_without_inpu
     assert first[-1].ok, first[-1]
     original = owner.session.read_bytes()
     previous = owner.persistent.custody.child.proc
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     assert not previous.alive()
     rows = original.decode().splitlines()
     header = json.loads(rows[0])
@@ -75,7 +75,7 @@ async def test_actual_native_strict_reopen_refuses_changed_identity_without_inpu
     assert not refused[-1].ok and refused[-1].reason_code == "compaction_reopen_invalid"
     assert owner.session.read_bytes() == altered
     assert not owner.persistent.available
-    assert owner.persistent.custody.session_file == str(owner.session)
+    assert owner.persistent.custody.identity.session_file == str(owner.session)
     assert len(owner.starts) == owner.provider.posts == 1
     # Repair only this disposable fixture. Send a NEW explicit input, never the refused one.
     owner.session.write_bytes(original)
@@ -109,7 +109,7 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
         await close(child)
 
     monkeypatch.setattr(PiSessionChild, "close", held_close)
-    retire = asyncio.create_task(owner.persistent.discard_for_external_write(str(owner.session)))
+    retire = asyncio.create_task(owner.force_reopen())
     try:
         await asyncio.wait_for(entered.wait(), 5)
         retire.cancel()

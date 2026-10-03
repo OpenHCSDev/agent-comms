@@ -62,7 +62,7 @@ async def test_actual_saved_native_reopens_after_increasing_proof_history(native
     history = owner.session.read_bytes()
     receipts = []
     for target in (1024**2, 32 * 1024**2, 129 * 1024**2):
-        await owner.persistent.discard_for_external_write(str(owner.session))
+        await owner.force_reopen()
         generation, size = await asyncio.to_thread(grow_proof, owner.session, original, target)
         assert (
             NativeContextProof.read_evidence(owner.session, input_id, request_generation=1)
@@ -138,7 +138,7 @@ async def test_actual_native_killed_context_commit_keeps_unknown(
         original = NativeContextProof.read_evidence(
             owner.session, original_id, request_generation=1
         )
-        await owner.persistent.discard_for_external_write(str(owner.session))
+        await owner.force_reopen()
     receipt = owner.session.parent / "crash-boundary.txt"
     with monkeypatch.context() as crash:
         crash.setenv("LD_PRELOAD", str(crash_preload))
@@ -201,7 +201,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     assert (await owner.run(accepted_text))[-1].ok
     accepted_id = owner.starts[-1][1]
     accepted = NativeContextProof.read_evidence(owner.session, accepted_id)
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     receipt = owner.session.parent / "saved-recovery-crash.txt"
     with monkeypatch.context() as crash:
         crash.setenv("LD_PRELOAD", str(crash_preload))
@@ -233,7 +233,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         environment=dict(os.environ),
         session_file=str(owner.session),
     )
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     assert len(owner.saved_inputs()) == 2 and owner.provider.posts == 1
     before = owner.session.read_bytes()
     assert NativeContextProof.read_evidence(owner.session, accepted_id) == accepted
@@ -315,7 +315,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
 async def test_actual_native_bad_proof_refuses_before_any_input(native_backend, damage):
     owner = native_backend
     assert (await owner.run("Real seed before proof damage"))[-1].ok
-    await owner.persistent.discard_for_external_write(str(owner.session))
+    await owner.force_reopen()
     proof = Path(str(owner.session) + ".input-proof")
     complete, history = proof.read_bytes(), owner.session.read_bytes()
     if damage == "malformed":

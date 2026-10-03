@@ -104,8 +104,8 @@ async def compact_owner_once(
     """Exactly one native writer attempt, without input or summary replay.
 
     Pre-summary capture and final commit each recheck owner/ingress/native
-    source. The idle manager is irrevocably discarded BEFORE the native writer
-    can mutate the saved file. Its next prompt must pass strict fresh reopen.
+    source. Original custody makes the old manager unavailable during the write
+    and reloads the same child from its exact committed source before reuse.
     The caller may not hide a COMMIT UNKNOWN or trigger a second summary/write.
     """
     # The retained idle child owns both preparations. Each supplies its actual
@@ -172,45 +172,45 @@ async def _commit_native_summary(
 ) -> CompactionOperation:
     if not result.text:
         raise ValueError("Bounded owner summary required")
-    # No native write can begin until this returns; closing under the borrow
-    # lock makes an old RPC manager unusable even if commit is later refused.
-    await persistent.discard_for_external_write(prepared.witness)
-    # Do not use asyncio.to_thread in a named inner Task: all-tasks shutdown
-    # can cancel that Task and mark it done while its real OS worker still
-    # holds the native writer. Retain the concurrent.futures.Future itself,
-    # outside asyncio Task cancellation, until the exact operation settles.
-    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="owner-native-commit")
-    try:
-        committing = executor.submit(
-            bridge.commit,
-            owner,
-            owner_generation,
-            prepared.witness,
-            result.text,
-            prepared.tokens_before,
-            source=source,
-            details=result.details,
-            usage=result.usage,
-            **result.commit_options(),
-        )
-    finally:
-        # No queued follow-up or replay. The submitted worker remains owned
-        # by its Future; executor threads retire after this one operation.
-        executor.shutdown(wait=False)
-    try:
-        return await asyncio.shield(asyncio.wrap_future(committing))
-    except asyncio.CancelledError:
-        # The wrapper may itself become cancelled during loop shutdown, but
-        # the concurrent Future cannot report completion while its native
-        # worker is still mutating. Keep the caller's turn lock until that
-        # exact worker settles, even under repeated owner cancellation.
-        while not committing.done():
-            try:
-                await asyncio.sleep(0.01)
-            except asyncio.CancelledError:
-                continue
-        # Consume worker failure without treating cancellation as no-write.
-        # The journal's exact intent/outcome is still the recovery authority.
-        if not committing.cancelled():
-            committing.exception()
-        raise
+    async with persistent.external_write(prepared.witness) as retained:
+        # Do not use asyncio.to_thread in a named inner Task: all-tasks shutdown
+        # can cancel that Task and mark it done while its real OS worker still
+        # holds the native writer. Retain the concurrent.futures.Future itself,
+        # outside asyncio Task cancellation, until the exact operation settles.
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="owner-native-commit")
+        try:
+            committing = executor.submit(
+                bridge.commit,
+                owner,
+                owner_generation,
+                prepared.witness,
+                result.text,
+                prepared.tokens_before,
+                source=source,
+                details=result.details,
+                usage=result.usage,
+                **result.commit_options(),
+            )
+        finally:
+            # No queued follow-up or replay. The submitted worker remains owned
+            # by its Future; executor threads retire after this one operation.
+            executor.shutdown(wait=False)
+        try:
+            operation = await asyncio.shield(asyncio.wrap_future(committing))
+        except asyncio.CancelledError:
+            # The wrapper may itself become cancelled during loop shutdown, but
+            # the concurrent Future cannot report completion while its native
+            # worker is still mutating. Keep the caller's turn lock until that
+            # exact worker settles, even under repeated owner cancellation.
+            while not committing.done():
+                try:
+                    await asyncio.sleep(0.01)
+                except asyncio.CancelledError:
+                    continue
+            # Consume worker failure without treating cancellation as no-write.
+            # The journal's exact intent/outcome is still the recovery authority.
+            if not committing.cancelled():
+                committing.exception()
+            raise
+        await retained.reload(source.after_native_commit(operation.committed_outcome()).native)
+        return operation
