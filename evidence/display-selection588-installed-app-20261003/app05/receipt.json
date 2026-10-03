@@ -1,0 +1,159 @@
+{
+  "state": "PASS",
+  "scope": "Installed standalone saved-bus App/IRC/DM and canonical messaging/painted ACK; no native-tab/ACP navigation claim",
+  "publicEffects": 0,
+  "providerCalls": 0,
+  "mockProtocols": 0,
+  "continuationOf": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02/receipt.json",
+  "newMessages": 0,
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02/wire",
+  "rootId": "2f37416949fe4150a76a749f189f23c2",
+  "startedAt": 1791033703.5421295,
+  "frames": [
+    {
+      "label": "dm-painted",
+      "at": 1791033704.72386,
+      "selectedMode": "dm588",
+      "svgSha256": "697ef2a668a53643ccd914be62c435e2d56577990e2bf198ec5f644e58983ccd",
+      "rows": [
+        {
+          "id": "7e8a7f47219f",
+          "seq": 21,
+          "body": "588 DM actual painted reply"
+        }
+      ]
+    },
+    {
+      "label": "channel-saved",
+      "at": 1791033714.159863,
+      "selectedMode": "channel588",
+      "svgSha256": "25688233262ecc9fe428e338993bb31f9886fd915508a486a60ddc3888b7c7b9",
+      "rows": [
+        {
+          "id": "abca41b3da40",
+          "seq": 1,
+          "body": "588 channel 00"
+        },
+        {
+          "id": "ee407c4dfe84",
+          "seq": 2,
+          "body": "588 channel 01"
+        },
+        {
+          "id": "13535dd29daf",
+          "seq": 3,
+          "body": "588 channel 02"
+        },
+        {
+          "id": "df897f514a5c",
+          "seq": 4,
+          "body": "588 channel 03"
+        },
+        {
+          "id": "bcf1fa1a6c64",
+          "seq": 5,
+          "body": "588 channel 04"
+        },
+        {
+          "id": "2595313c5131",
+          "seq": 6,
+          "body": "588 channel 05"
+        },
+        {
+          "id": "c6ce174b2c4f",
+          "seq": 7,
+          "body": "588 channel 06"
+        },
+        {
+          "id": "fe52170add17",
+          "seq": 8,
+          "body": "588 channel 07"
+        },
+        {
+          "id": "8ec560e6a7c5",
+          "seq": 9,
+          "body": "588 channel 08"
+        },
+        {
+          "id": "1a9c9430c44e",
+          "seq": 10,
+          "body": "588 channel 09"
+        },
+        {
+          "id": "a25682cd73f6",
+          "seq": 11,
+          "body": "588 channel 10"
+        },
+        {
+          "id": "c2bdf226c425",
+          "seq": 12,
+          "body": "588 channel 11"
+        },
+        {
+          "id": "0d0b7d237c57",
+          "seq": 13,
+          "body": "588 channel 12"
+        },
+        {
+          "id": "427f7f9c14ce",
+          "seq": 14,
+          "body": "588 channel 13"
+        },
+        {
+          "id": "0c91aeb673c7",
+          "seq": 15,
+          "body": "588 channel 14"
+        },
+        {
+          "id": "01716a4d96ab",
+          "seq": 16,
+          "body": "588 channel 15"
+        },
+        {
+          "id": "ddc3c32ecaf7",
+          "seq": 17,
+          "body": "588 channel 16"
+        },
+        {
+          "id": "da48aa74f66e",
+          "seq": 18,
+          "body": "588 channel 17"
+        },
+        {
+          "id": "99007e99a62f",
+          "seq": 19,
+          "body": "588 channel 18"
+        },
+        {
+          "id": "034d5c360042",
+          "seq": 20,
+          "body": "588 channel 19"
+        }
+      ]
+    },
+    {
+      "label": "dm-return",
+      "at": 1791033722.5441031,
+      "selectedMode": "dm588",
+      "svgSha256": "e209b853fa47a5390981af7d512b8658c247870b6763f3136cc9a9ec82f22247",
+      "rows": [
+        {
+          "id": "7e8a7f47219f",
+          "seq": 21,
+          "body": "588 DM actual painted reply"
+        }
+      ]
+    }
+  ],
+  "dmPaintedId": "7e8a7f47219f",
+  "finishedAt": 1791033731.0832126,
+  "appException": null,
+  "channelViewerUnread": 0,
+  "dmViewerUnread": 0,
+  "executorChannelPending": 20,
+  "executorDmPending": 1,
+  "privateWorkerPids": [
+    4075916,
+    4075916
+  ]
+}

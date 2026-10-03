@@ -1,0 +1,200 @@
+{
+  "qualifiedSource": "5025c4ba84c5623f475706475fb7743ce0e8f156",
+  "scope": "Installed standalone App private saved-bus channel/DM reads, canonical messaging, painted acknowledgement, selected-view return. No provider/native-tab/ACP or readable physical PNG claim.",
+  "originalChannelPublication": "App02 twenty exact messages plus heartbeat while App open; painted human ACK0, executor obligations20 retained.",
+  "finalApp": "App05 exit0; same saved20+DM,0newmessages, DM ACK0, executor20channel+1DM pending.",
+  "negativeRuns": "App01 incorrect top-level multiprocessing setup; App02/03/04 queried first retained hidden view rather than selected workspace view. Raw FAILs preserved. Source diagnosis corrected earlier unsupported navigation attribution.",
+  "visual": "SVG text inspected during App05. Raster PNG black; preserved as export limitation, no readable visual qualification.",
+  "loan": "Original391 and588 all69 distribution metadata retained at qualified588-before-loan-release in persistent owned .artifacts; package code released to Einstein392 after owned processes exited.",
+  "files": [
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/source-proof.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/source-proof.json",
+      "sha256": "11908688323b7b2852337b5d7f2333542447c4cffa6634a81711272dde622591",
+      "bytes": 7680
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/verify.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/verify.log",
+      "sha256": "81499d2ab3ebab574ac45abdd91bb01625b07b6f7394a8f0152f774890369d8f",
+      "bytes": 791
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/dependency-check.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/dependency-check.log",
+      "sha256": "6c087e22f1ff2aa2e68fc3f2b37beb08c31005e6639f016f0be2d60b220b4e25",
+      "bytes": 203
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/install.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/install.log",
+      "sha256": "d3682899788a0eb6825a9a38c9a832b7b409458ac585b839d52297deb5f5632f",
+      "bytes": 929
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/ownership.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/ownership.json",
+      "sha256": "b30a75c6d8a9b0bbe09ffe01abfd8c1a8ebdb29fe7d7f0f6709940df4349560a",
+      "bytes": 752
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/native-artifact-receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/native-artifact-receipt.json",
+      "sha256": "ebe1c72bbbb18ca9ba29d348306f52428980a40cd912b3c760acba2e929c72ed",
+      "bytes": 2112
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/agent_comms-inventory.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/agent_comms-inventory.json",
+      "sha256": "59b86de0d8941cc317259466b901b432c5f91e0b30b003de92606e2b777cde94",
+      "bytes": 53228
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/toad-inventory.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/toad-inventory.json",
+      "sha256": "90e3944913e26f96f4c90aae189b2558aec519789843e330afb31fa1bb575682",
+      "bytes": 48125
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/textual-inventory.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/textual-inventory.json",
+      "sha256": "7588fc7b8255fa2f9908c7ba6e865cd7cdf6331e232266a286af3d5038e00b27",
+      "bytes": 39856
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/textual_diff_view-inventory.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/textual_diff_view-inventory.json",
+      "sha256": "ec4c5f0a4025898ce5d6dd8233c3c7786f860bced717e16d59516d40b8269396",
+      "bytes": 460
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/cleanup-and-assessment.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/cleanup-and-assessment.json",
+      "sha256": "2389fd8a854ecfee80702dce059aa09dc6d17046bb5cf6a67e7384f8da023070",
+      "bytes": 1089
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app_irc_dm.py",
+      "archive": "evidence/display-selection588-installed-app-20261003/app_irc_dm.py",
+      "sha256": "4cdc9bae47a2df11292e8273e64d375fd401cf9fedfc53cd803116444a7dd8e3",
+      "bytes": 6328
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app01.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/app01.log",
+      "sha256": "5635262c1b1dfb97d1f824bb70600b0992f08f72f967babddbe1fd703113f159",
+      "bytes": 41128
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app01/receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/app01/receipt.json",
+      "sha256": "3a62ab38edf079c70cb58745eba505ac58382f6dd0944c90462bb6595fc6f92f",
+      "bytes": 579
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/app02.log",
+      "sha256": "55cfed2b81bf97f5359501b217d9c81ce474c83630b717e359370e85cd2d3016",
+      "bytes": 4745
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02/receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/app02/receipt.json",
+      "sha256": "a4274d44c83437591b2f232b47576c15dfea07ab8fea55fc17516cbf7ab7bc8b",
+      "bytes": 3816
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app03.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/app03.log",
+      "sha256": "4e66e4101624f5affb95049f8379f222ca5429e8e0265f7ed1be428fa75a64a6",
+      "bytes": 4928
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app03/receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/app03/receipt.json",
+      "sha256": "1e005cb6cfbf8dfbd9e3d2ca16d32713cd9008b235af308e827b19d962039af1",
+      "bytes": 4016
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app04.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/app04.log",
+      "sha256": "8a4393c3591d1c83d276e694c54d22a75770d378a5280fd09c5ddb9f689abe9c",
+      "bytes": 3839
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app04/receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/app04/receipt.json",
+      "sha256": "21de5577fbbaf495269b1cfaccd554c85e77a2e14a6a9333d9d091d5c707aae4",
+      "bytes": 1114
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05.log",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05.log",
+      "sha256": "75c4eee975d421c133adb7484ed2ee2dca711fef376294b952702005c6a724d2",
+      "bytes": 3147
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/receipt.json",
+      "sha256": "99f8feee874fdad90426d7fc3656e5f925bb4b2942ef7d6585f117ae0e312b5b",
+      "bytes": 3945
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/channel-saved.svg",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/channel-saved.svg",
+      "sha256": "25688233262ecc9fe428e338993bb31f9886fd915508a486a60ddc3888b7c7b9",
+      "bytes": 94148
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/dm-painted.svg",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/dm-painted.svg",
+      "sha256": "697ef2a668a53643ccd914be62c435e2d56577990e2bf198ec5f644e58983ccd",
+      "bytes": 70157
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/dm-return.svg",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/dm-return.svg",
+      "sha256": "e209b853fa47a5390981af7d512b8658c247870b6763f3136cc9a9ec82f22247",
+      "bytes": 72281
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/channel-saved.png",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/channel-saved.png",
+      "sha256": "96b8a4eef880232127764baf6e4cda855353c82e5c555ee1a7794d443984a0f2",
+      "bytes": 17295
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/dm-painted.png",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/dm-painted.png",
+      "sha256": "b901cae1173ad4c791e4c7027bddc2cf9ea0c2807737b1be5b9e12306703d46a",
+      "bytes": 15569
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app05/dm-return.png",
+      "archive": "evidence/display-selection588-installed-app-20261003/app05/dm-return.png",
+      "sha256": "b901cae1173ad4c791e4c7027bddc2cf9ea0c2807737b1be5b9e12306703d46a",
+      "bytes": 15569
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02/channel-live.svg",
+      "archive": "evidence/display-selection588-installed-app-20261003/app02/channel-live.svg",
+      "sha256": "11ab9c46ac6aa5948690fcd3f6d30ed5539cae5cfbe896e8ad06b0c41af87c6d",
+      "bytes": 93953
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/activation.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/qualified588-before-loan-release/activation.json",
+      "sha256": "4b6d7b85e376719999d7f09c7861a63b5dba8c57020e4937d887f00a9459a329",
+      "bytes": 2321
+    },
+    {
+      "original": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/archive-receipt.json",
+      "archive": "evidence/display-selection588-installed-app-20261003/qualified588-before-loan-release/archive-receipt.json",
+      "sha256": "86409f146890045ac8fb23fc922db9f68c1d11ca7cddd00fcf40f1b765cdde46",
+      "bytes": 64886
+    }
+  ],
+  "archiveBytes": 678989,
+  "newProviderCalls": 0,
+  "publicEffects": 0
+}
