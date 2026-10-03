@@ -8,10 +8,11 @@ consume that same assembly; frontend renders its values and sources. Native base
 preview remains distinct from Core contributors and from a recorded request.
 
 Actual SDK request values belong to AgentSession.onContextReady after
-_commitNativeContext. Its existing TurnContextObserved/ContextManifest publication
-currently loses values. Extend that original projection, preserving verified
-native/input/journal/file references and capturing genuinely nonrecoverable
-contributions. Do not repeat the complete native transcript in the wire.
+_commitNativeContext. Its existing TurnContextObserved/ContextManifest publication now captures
+nonrecoverable public values and preserves verified native/input/journal/file
+references. Recoverable native history is not copied wholesale into the wire.
+The matching SDK capture/read is qualified; actual model onContextReady
+execution remains unqualified.
 
 An original reference may supply text only when the original bytes can be
 verified. Current files/previews cannot replace historical missing values.
@@ -57,7 +58,8 @@ adapter behavior changes. Mendel599 has the shared inspection-method contract.
 The native producer/typed receiver change requires one matching compiled package
 and paired owners/clients. Sch owns that build after source freeze. Original
 native89, receiving404, all602 captures, and UNKNOWN inputs are untouched. This
-is a working source checkpoint; installed qualification remains pending.
+was the original source checkpoint. Matching d5 authored SDK capture and
+installed root/mixed/child reads are now qualified; see the final receipt below.
 
 
 ## Published source and qualification
@@ -94,10 +96,11 @@ observation indexing without changing public message sequence. Initial external
 decoder negatives are recorded in SOURCE-CHECKPOINT.json. No provider, native
 launch, public mutation or original input replay was used for these controls.
 
-This is a published source checkpoint, not full Ready. Parent406 owns the
-current-instruction physical gate with its granted style22 holder/native89.
-Sch owns the matching artifact and original producer/recorded-read qualification.
-No result from the immutable native89 current gate proves the new native command.
+The original b0 source checkpoint preceded qualification. #603 is now Ready
+for SDK-authored capture and installed authenticated reader scope. Parent406
+current-instruction physical gates retain native89 scope; they do not qualify
+the new command. Sch supplied matching d5; the installed reader receipt below
+qualifies that artifact without claiming model onContextReady execution.
 
 ## Owner and consumer closure
 
@@ -160,17 +163,17 @@ messages, no reader for complete captures, mixed original values, strict missing
 bytes/foreign values, annotation incompleteness, child selection and typed query
 roundtrip. No provider or public mutation occurred. Installed SDK root/mixed
 controls are added to the existing native_turn_context_contract driver; they
-remain pending the matching artifact. Sch'sf3/39 compiled package is preserved
+passed with matching d5 in the installed journey below. Sch'sf3/39 compiled package is preserved
 but does not qualify the newly required query.parts payload. No native89 claim.
 Pre-existing capture provenance.some(JSON.stringify) work is a separate source
 relationship; this follow-up does not claim to remove or time it.
 
 Mendel606 owns RetainedNative.inspect/inspect_acquired and EmptyNative.inspect:
 required original preparation and stats publication, then one acquired query.
-BorrowedNative retains its active receiver. Those methods are unchanged here;
-normal whole-head integration will receive606 rather than duplicate its methods.
+BorrowedNative retains its active receiver. Whole606 was normally integrated
+at bf294eab; its required preparation/stats methods were not duplicated.
 
-## Prepared installed reader qualification
+## Installed reader construction
 
 The existing `native_turn_context_contract.mjs --recorded-readers` creates two
 original SDK message parts and checks one projection for root, mixed resolution,
@@ -193,22 +196,23 @@ onContextReady model request occurred. Current preview/authenticated file gates
 40603/05 retain their demonstrated native89 scope; they do not qualify future
 recorded request capture. The original f3/39 witness is also unchanged.
 
-After direct lease of the matching installed holder, run the one existing case:
+The granted thin540 keeps its existing runtime dependencies; no pytest was
+installed. The original fixture acquisition and reader now live in shared
+modules. Both pytest and the standalone installed runner call those owners.
+The final reader uses the same completed SDK capture:
 
 ```sh
-PI_COMPACTION_TEST_PACKAGE=/matching/native/package \
-  /leased/holder/bin/python -m pytest -o addopts='' \
-  --basetemp=/owned/bounded/receipt-root \
-  tests/test_native_context_inspection.py::test_original_context_query_preserves_native_journal_and_dispatches_no_prompt \
-  -q -s
+PI_COMPACTION_TEST_PACKAGE=/matching/d5/native/package \
+  /leased/thin540/bin/python tests/native_context_reader_journey.py \
+  /owned/capture02 --sdk-source /owned/capture/original-recorded-sdk-source.json
 ```
 
-Paths above are placeholders for the actual lease, not permission to substitute
-or overlay a package. No installed qualification has run at this driver
-checkpoint. Source syntax checks passed. No source model/provider rerun is needed
-for these preparation changes; compiled production remains exactly4ab53277.
+The exact package paths, wheel/source hashes, original refusal, and corrected
+6.1119-second terminal are retained in
+`evidence/context-source603-installed-root-20261003/`. No rerun is requested.
+Compiled production remains the accepted4ab source with d5 pin.
 
-The prepared mixed-reader case now comes from an actual second SDK capture with
+The qualified mixed-reader case comes from an actual second SDK capture with
 one authored transformed message, rather than a fabricated root digest. The
 original publisher captures that nonrecoverable part, retains the other part's
 journal reference, and the same installed indexed RPC must recover the complete

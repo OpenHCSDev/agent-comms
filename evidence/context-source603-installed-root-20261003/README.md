@@ -1,6 +1,7 @@
 # Installed original context readers
 
-Source90a34762, required-parts compiled d5 artifact, reused thin540.
+Ready: source90a34762, required-parts compiled d5 artifact, reused thin540.
+Actual model onContextReady publication remains unqualified.
 
 The SDK contract authored one original capture and one transformed-message
 capture. Installed original RuntimeConnection resolved the root, its distinct
