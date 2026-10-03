@@ -74,6 +74,7 @@ async def request_construction(stage, package, original_python):
     original = captured.require_current()
     source = Path(original.require_saved_session())
     contexts = stage / 'sdk-contexts'
+    summaries = stage / 'summary-assemblies'
     receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
                'paid_comparison': False, 'acceptance_scope': 'original configured request construction observations'}
     chunks = []
@@ -87,10 +88,12 @@ async def request_construction(stage, package, original_python):
     def capture_source():
         return captured.require_current(), captured.retained
 
-    with observe_native_requests(package, stage / 'request-observation.jsonl', contexts=contexts) as observe_launch:
+    with observe_native_requests(package, stage / 'request-observation.jsonl',
+                                 contexts=contexts, summaries=summaries) as observe_launch:
         async with configured_saved_agent(stage, package, source, Receiver(), receipt,
                 capture_source=capture_source, observe_launch=observe_launch) as (agent, owner, fork):
             contexts.mkdir(mode=0o700)
+            summaries.mkdir(mode=0o700)
             marker = f'REQUEST_CONSTRUCTION_{stage.name.upper().replace("-", "_")}'
             result = await build_agent_router(agent)('session/prompt', {
                 'sessionId': owner.name, 'prompt': [{'type': 'text',
@@ -142,7 +145,8 @@ def committed_checkpoint(stage):
     assert isinstance(attempt.state, ManualCommittedSummary)
     scope = stage / 'cut-1-registry.private.json'
     checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity, attempt.state.commit_id,
-                                         FileProvenance(str(scope), digest(scope)), service.root / 'bus.jsonl')
+                                         FileProvenance(str(scope), digest(scope)), service.root / 'bus.jsonl'
+                                         ).capture_summary_observation(stage / 'summary-assemblies')
     checkpoint.inspect()
     return RecordedNativeProbes({}, {'cut-1': checkpoint})
 
@@ -207,11 +211,14 @@ async def run(stage, package, original_python, *, continuation=None):
 
     observation = stage / 'request-observation.jsonl'
     contexts = stage / 'sdk-contexts'
-    with observe_native_requests(package, observation, contexts=contexts) as observe_launch:
+    summaries = stage / 'summary-assemblies'
+    with observe_native_requests(package, observation, contexts=contexts,
+                                 summaries=summaries) as observe_launch:
         async with configured_saved_agent(stage, package, source_file, Receiver(), receipt,
                 capture_source=capture_source, observe_launch=observe_launch,
                 continuation=continuation) as (agent, owner, creation):
             contexts.mkdir(mode=0o700, exist_ok=continuation is not None)
+            summaries.mkdir(mode=0o700, exist_ok=continuation is not None)
             session = NativeSessionIdentity(creation.session_id, creation.session_file)
             service = agent._comms
             router = build_agent_router(agent)
@@ -243,7 +250,7 @@ async def run(stage, package, original_python, *, continuation=None):
                 # current body/time lookup cannot select the dropped subject.
                 checkpoint = probes[scenario.rounds[len(probes)-1].identity].checkpoint
                 with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
-                    attempt, _, _ = checkpoint.capture(session, evidence)
+                    attempt, _, _, _ = checkpoint.capture(session, evidence)
                 snapshot = checkpoint.read_record(checkpoint.registry_scope, RegistryDocument).snapshot()
                 captured_owner = snapshot.require_active(attempt.request.source.incarnation.name)
                 _, archive = next((root, current) for root, current in
@@ -278,7 +285,8 @@ async def run(stage, package, original_python, *, continuation=None):
                     operation = journal.operations.get(attempt.state.commit_id)
                     operation.committed_outcome()
                     checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity,
-                        operation.commit_id, scope, service.root / 'bus.jsonl')
+                        operation.commit_id, scope, service.root / 'bus.jsonl'
+                        ).capture_summary_observation(summaries)
                 # Persist the committed cut before admitting the new, distinct probe.
                 record(stage / f'{round_.identity}-checkpoint.private.json', checkpoint)
                 print(f'{round_.identity}: distinct held-out probe', flush=True)

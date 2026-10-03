@@ -71,7 +71,7 @@ class RecordedNativeProbes:
             _, entries = evidence.observe()
             terminals = []
             for cut in selected.values():
-                _, entry, _ = cut.capture(session, evidence)
+                _, entry, _, _ = cut.capture(session, evidence)
                 terminals.append(entry)
             for probe in self.rounds.values():
                 session.require_same_session(probe.session)
@@ -115,8 +115,8 @@ class RecordedNativeProbes:
             session = NativeSessionIdentity(header.id, str(path))
             previous = None
             for identity, checkpoint in cuts:
-                attempt, entry, covered = checkpoint.capture(session, evidence)
-                report = checkpoint._report(attempt, entry, covered)
+                attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
+                report = checkpoint._report(attempt, entry, covered, assembly)
                 if previous is not None:
                     old, prior_attempt, prior_entry = previous
                     if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
