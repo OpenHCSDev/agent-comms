@@ -1,0 +1,34 @@
+{
+  "state": "PASS",
+  "source_python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+  "target_python": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001/bin/python",
+  "old_schema_refusal": "Private bus checkpoint schema is unavailable.",
+  "source_identity": {
+    "pid": 1252473,
+    "start_time": 46433201
+  },
+  "target_identity": {
+    "pid": 1252695,
+    "start_time": 46434061
+  },
+  "source_retired": true,
+  "target_ready": true,
+  "target_entrypoint": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001/bin/pi-comms-native",
+  "target_runtime_and_private_pair_correct": true,
+  "original_settings_and_arguments_retained": true,
+  "original_wire_bytes_unchanged": true,
+  "new_provider_calls": 0,
+  "input_replays": 0,
+  "elapsed_seconds": 7.364594510989264,
+  "core_source": "325e9f355cf29be3f54594bb2672f7c9aa42c553",
+  "toad_source": "89fbca2203ccbabcc8adcb857023645215f6b821",
+  "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+  "retained_original_sequence": 1,
+  "production_delta": {
+    "files": 4,
+    "added": 20,
+    "deleted": 6
+  },
+  "deleted_decisions": 5,
+  "acceptance_scope": "Installed original553 checkpoint -> target556 rebuild under inherited original writer descriptor -> actual retained owner ready; no provider/UI requalification. First assertion used wrong environment spelling; second setup refused self-message before owner launch; both raw negatives retained."
+}

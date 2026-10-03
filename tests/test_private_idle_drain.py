@@ -1,6 +1,8 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
 import asyncio
+import os
+import threading
 from dataclasses import replace
 
 import pytest
@@ -8,17 +10,96 @@ import pytest
 from agent_comms import acp, cohort_foreground, coordinated_runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_cohort import next_sealed_assignment
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.threads import Thread
 from agent_comms.store_files import file_revision
-from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
-from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
+from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+
+
+@pytest.mark.asyncio
+async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path):
+    comms, agent, root_id = _session(tmp_path)
+    log = comms.bus.log
+    # A busy original source is pending, not an unavailable inbox. Cancelling
+    # one waiter must leave the holder and the other observations intact.
+    with _store_lock(log.path):
+        tasks = [asyncio.create_task(agent.inputs._observe_private_revision("beta", root_id))
+                 for _ in range(3)]
+        await asyncio.sleep(0.08)
+        assert not any(task.done() for task in tasks)
+        tasks[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tasks[0]
+        assert not any(task.done() for task in tasks[1:])
+    observed = await asyncio.wait_for(asyncio.gather(*tasks[1:]), 5)
+    assert observed[0] == observed[1]
+
+    # Once acquired, cancellation must join the original callback before its
+    # descriptor closes. The worker consumes the certificate off the loop.
+    entered, finish = threading.Event(), threading.Event()
+    loop_thread = threading.get_ident()
+
+    def consume(source):
+        assert threading.get_ident() != loop_thread
+        source.require_current()
+        entered.set()
+        assert finish.wait(5)
+        return source.committed_sequence()
+
+    task = asyncio.create_task(log.read_certified_async(consume))
+    try:
+        while not entered.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.sleep(0.04)
+        assert not task.done()
+        with pytest.raises(BlockingIOError):
+            with _store_lock(log.path, blocking=False):
+                pass
+    finally:
+        finish.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    with log.certified_read(blocking=False) as source:
+        source.require_current()
+
+    # Callback refusal remains the original error and releases its resource.
+    failure = ValueError("original consumer refusal")
+
+    def refuse(source):
+        source.require_current()
+        raise failure
+
+    with pytest.raises(ValueError) as raised:
+        await log.read_certified_async(refuse)
+    assert raised.value is failure
+    with log.certified_read(blocking=False) as source:
+        source.require_current()
+
+
+def _covered_session(tmp_path):
+    comms, agent, root_id = _session(tmp_path)
+    other = Thread("alpha", frozenset(), str(tmp_path),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.declare(other)
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        store.participants.register(
+            stable_thread_lookup(other.created_at), other.name, other.name, committed=True,
+        )
+    comms.messaging.send_initial_cohort("sender", other.name, "another recipient's original source")
+    return comms, agent, root_id
 
 
 @pytest.mark.asyncio
 async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
     tmp_path, monkeypatch
 ):
-    comms, agent, _root_id = _session(tmp_path)
+    comms, agent, _root_id = _covered_session(tmp_path)
+    # An empty cursor still requires recovery. A genuine absent-audience
+    # initial supplies a coverage-only cursor without a native input.
     counts = {"accept": 0, "cursor": 0}
     accept, cursor = acp._accept_visible_deliveries, acp.NativeSourceCursor.advance
 
@@ -38,15 +119,25 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
     monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", no_package)
     assert await agent.inputs.drain_inbox("beta") == 0
+    # Advancing the durable cursor changes the first before/after observation.
+    assert await agent.inputs.drain_inbox("beta") == 0
     initial = counts.copy()
     for _ in range(20):
         assert await agent.inputs.drain_inbox("beta") == 0
-    assert counts == initial == {"accept": 1, "cursor": 1}
+    assert counts == initial == {"accept": 2, "cursor": 2}
+    # The shared files also carry other owners. Their declarations and SQL
+    # registrations cannot invalidate beta's quiescent work observation.
+    other = comms.registry.require("sender")
+    comms.registry.register(replace(other, task="other owner changed"))
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        store.participants.register("unrelated", "unrelated", "unrelated", committed=True)
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert counts == initial
     # A real owner revision is still observed; it grants no native execution.
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, task="changed task"))
     assert await agent.inputs.drain_inbox("beta") == 0
-    assert counts == {"accept": 2, "cursor": 2}
+    assert counts == {"accept": 3, "cursor": 3}
 
 
 @pytest.mark.asyncio
@@ -90,7 +181,7 @@ def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path)
 
 @pytest.mark.asyncio
 async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_path, monkeypatch):
-    comms, agent, _root_id = _session(tmp_path)
+    comms, agent, _root_id = _covered_session(tmp_path)
     calls = []
     original = agent._drain_private_nk
 
@@ -99,26 +190,47 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
         return await original(*args)
 
     monkeypatch.setattr(agent, "_drain_private_nk", observed)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
-    fake, native_calls = _fake_model()
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     assert await agent.inputs.drain_inbox("beta") == 0
     assert await agent.inputs.drain_inbox("beta") == 0
-    assert len(calls) == 1
+    assert len(calls) == 2
     with Coordination(comms.root / "coordination.sqlite3") as store:
-        # A coordinator-only change (e.g. recovery) has no watched file event.
-        # The unchanged periodic fallback must nevertheless notice its revision.
+        # Another participant's SQL work is unrelated to this recipient.
         store.participants.register("new", "new", "new", committed=True)
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 2
-    first = comms.messaging.send_initial_cohort("sender", "beta", "first new input")
-    second = comms.messaging.send_initial_cohort("sender", "beta", "second new input")
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        # Actual recovery/reassignment of beta must still invalidate the
+        # observation without a wire append or a provider request.
+        beta = comms.registry.require("beta")
+        person = store.participants.get(stable_thread_lookup(beta.created_at))
+        store.participants.advance_generation(
+            person.lookup, beta.name, expected_generation=person.participant_generation,
+        )
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert len(calls) == 3
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert len(calls) == 4
+    # A new original message cut must invalidate even when beta has no work.
+    first = comms.messaging.send_initial_cohort("sender", "alpha", "new absent-audience source")
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert len(calls) == 5
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert len(calls) == 6
+    before = agent.inputs._idle_private_revisions["beta"]
+    second = comms.messaging.send_initial_cohort("sender", "beta", "new pending input")
     assert first.seq < second.seq
-    assert await agent.inputs.drain_inbox("beta") == 1
-    assert await agent.inputs.drain_inbox("beta") == 1
-    assert len(native_calls) == 2
-    assert native_calls[0][0] != native_calls[1][0]
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        await cohort_foreground._accept_visible_deliveries(
+            comms.bus, _root_id, store, stable_thread_lookup(beta.created_at), 0,
+            owner_name=beta.name,
+        )
+        pending = next_sealed_assignment(
+            store, stable_thread_lookup(beta.created_at), beta.name,
+        )
+        assert pending.wire_seq == second.seq
+    assert await agent.inputs._observe_private_revision("beta", _root_id) != before
+    # This control observes actual delivery/recovery facts. It neither mocks
+    # native execution nor grants a provider call to the pending input.
 
 
 @pytest.mark.asyncio

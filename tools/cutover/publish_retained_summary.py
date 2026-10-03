@@ -346,8 +346,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         return restored
 
     def complete(self, stopped):
-        self.after_stopped(stopped.lifecycle)
-        results = stopped.launch()
+        results = super().complete(stopped)
         snapshot = stopped.lifecycle.registry.snapshot()
         for original, result in zip(self.originals, results, strict=True):
             current = snapshot.threads[result.thread]
@@ -357,6 +356,10 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         self.note('retained-batch-launched-configurations-verified-public-ui-pending',
                   results=FieldCodec.encode(results), finished=time.time())
         return results
+
+    def bind_target_launch(self, lifecycle):
+        lifecycle.pin_private_nk_launch(ROOT, self.cohort.original_route.wire_root_id,
+                                       self.cohort.native)
 
 
 def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInstallation,
@@ -396,7 +399,6 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
             opened.flush()
             os.fsync(opened.fileno())
         fsync_directory(receipt.parent)
-        service.owners.pin_private_nk_launch(ROOT, cohort.original_route.wire_root_id, cohort.native)
         runtime = RestartEnvironment(path=str(cohort.target / 'bin')+':'+os.environ['PATH'],
                                      virtual_env=str(cohort.target))
         return service.owners.restart_owners(runtime=runtime,

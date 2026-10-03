@@ -1,0 +1,5187 @@
+{
+  "head": "3ae83ce3c3069c59caf4dfbe79ccad4433beda76",
+  "parser": "existing refactor-audit Package.load Python3.14",
+  "modules": 724,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 553,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(event: Any) -> None:\n    agent._debug_log(f'{event.direction.value}: {json.dumps(event.message)[:200]}' if hasattr(event, 'message') else f'{event.direction.value}')"
+    },
+    {
+      "path": "src/agent_comms/bus_activity_index.py",
+      "line": 96,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, message: Message) -> ChannelActivity:\n    return ChannelActivity(max(self.last_message, message.timestamp), max(self.last_user_input, message.timestamp) if not message.sender_role.executable else self.last_user_input)"
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "line": 36,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, message: Message, metrics: DisplayMetrics) -> None:\n    clocks, unread = metrics\n    for scope in self.activity_scopes:\n        if scope.includes(message):\n            last_message, last_user = clocks[scope.channel]\n            clocks[scope.channel] = (max(last_message, message.timestamp), max(last_user, message.timestamp) if ReadLedger.human(message.sender_role) else last_user)\n    if message.sender not in self.viewer_names:\n        for scope in self.scopes:\n            if scope.unread(message):\n                unread[scope.channel] += 1"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 167,
+      "name": "try_store_lock",
+      "bases": [],
+      "annotations": [],
+      "source": "@abstractmethod\ndef try_store_lock(self, descriptor: int, *, shared: bool) -> None:\n    \"\"\"One nonblocking native attempt; busy is BlockingIOError.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 222,
+      "name": "try_store_lock",
+      "bases": [],
+      "annotations": [],
+      "source": "def try_store_lock(self, descriptor: int, *, shared: bool) -> None:\n    import fcntl\n    mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX\n    fcntl.flock(descriptor, mode | fcntl.LOCK_NB)"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 385,
+      "name": "try_store_lock",
+      "bases": [],
+      "annotations": [],
+      "source": "def try_store_lock(self, descriptor: int, *, shared: bool) -> None:\n    import errno\n    import msvcrt\n    os.lseek(descriptor, 0, os.SEEK_SET)\n    try:\n        msvcrt.locking(descriptor, msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK, 1)\n    except OSError as error:\n        if error.errno not in {errno.EACCES, errno.EDEADLK}:\n            raise\n        raise BlockingIOError(error.errno, error.strerror) from error"
+    },
+    {
+      "path": "src/agent_comms/compaction_publications.py",
+      "line": 33,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, commit_id: str, metadata_json: str) -> None:\n    \"\"\"ACK only the exact metadata seen by the local ACP projection.\n\n        Delivery must return before this call. A failure before marking leaves\n        the row pending. A post-COMMIT fsync error may leave it *observed* even\n        though this call raises UNKNOWN; reconcile the exact row, never infer\n        native retry authority. Reprojection may repeat a pending commit ID, so\n        consumers must deduplicate by ID, never by summary text.\n        \"\"\"\n    with self.journal.transaction() as db:\n        row = CompactionPublication.one(db, commit_id=commit_id)\n        if row is None:\n            raise CompactionJournalError('Unknown or changed publication metadata')\n        row.require_metadata(metadata_json)\n        if row.state.may_become(ObservedPublication()):\n            CompactionPublication.update(db, where='commit_id=?', parameters=(commit_id,), state=ObservedPublication())"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 34,
+      "name": "CoordinationStore",
+      "bases": [],
+      "annotations": [],
+      "source": null
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 23,
+      "name": "Coordination",
+      "bases": [],
+      "annotations": [],
+      "source": null
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 36,
+      "name": "run_async",
+      "bases": [],
+      "annotations": [],
+      "source": "@classmethod\nasync def run_async(cls, path: str | Path, operation: Callable[[Self], Result], *, clock_ms: Callable[[], int] | None=None, lock_timeout: float=5.0) -> Result:\n    \"\"\"Own a complete operation's connection in its resource worker.\n\n        Only the result crosses back to the event loop. The callback must not\n        export this connection or any resource borrowed from it. Cancellation\n        joins the acquired operation through connection close; it cannot leave\n        a later projection write after the caller releases its custody.\n        \"\"\"\n    return await cls.run_worker(partial(cls._run_owned, path, operation, clock_ms, lock_timeout))"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 83,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(self, thread_name: str, session_id: str, *, defer_busy: bool=False, read_cursor: Callable[..., Awaitable[CurrentNativeCursor | None]]=NativeSourceCursor.read_async) -> CursorEnvelope:\n    if self.root_id is None:\n        raise ValueError('Native cursor requires the configured root')\n    revision = self.delivery(session_id).next_revision()\n    scope = self.scope(thread_name, session_id)\n    unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())\n    if scope is None:\n        return unavailable\n    try:\n        bus = MessageBus(self.comms.root / 'bus.jsonl', self.comms.registry, private_response_writes=True)\n        cursor = await read_cursor(bus, wire_root_id=self.root_id, owner_name=thread_name)\n    except BlockingIOError:\n        current = self.scope(thread_name, session_id)\n        if defer_busy and current == scope:\n            raise\n        return CursorEnvelope(current, revision, UnavailableCursorObservation())\n    except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):\n        current = self.scope(thread_name, session_id)\n        return CursorEnvelope(current, revision, UnavailableCursorObservation())\n    current = self.scope(thread_name, session_id)\n    if current != scope:\n        return CursorEnvelope(current, revision, UnavailableCursorObservation())\n    return CursorEnvelope(scope, revision, EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor))"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 25,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, text: str | None, session: TurnSession) -> McpLiveReceipt | None:\n    if self.receipt is not None or not session.permits_live_receipt():\n        return None\n    self.receipt = McpLiveReceipt.from_status(text, session.original_input_id)\n    return self.receipt"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 197,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, owner_created_at: float, current: Goal | None) -> None:\n    \"\"\"Reconcile uncertain writes and label unjournaled changes truthfully.\"\"\"\n    for row in self._rows(owner_created_at):\n        if row.state != 'pending':\n            continue\n        if current == row.after:\n            self._sync_visible_registry()\n            self._set_state(row.sequence, 'committed')\n        elif current == row.before:\n            self._set_state(row.sequence, 'aborted')\n        else:\n            self._set_state(row.sequence, 'uncertain')\n    committed = [row for row in self._rows(owner_created_at) if row.state == 'committed']\n    if not committed:\n        if current is not None:\n            self._insert(owner_created_at, 'baseline', 'committed', None, current)\n        return\n    last = committed[-1].after\n    if last != current:\n        self._insert(owner_created_at, 'observed_gap', 'committed', last, current)"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 63,
+      "name": "InputDrain",
+      "bases": [
+        "FutureInputQueue"
+      ],
+      "annotations": [],
+      "source": null
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 231,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(self, session_id: str) -> None:\n    next_goal_wait_check = 0.0\n    async with aclosing(WireWatch.observations(self.comms.root)) as observations:\n        async for _ in observations:\n            thread = self.sessions.require(session_id)\n            owner = self.comms.registry.snapshot().owner_identity(thread)\n            try:\n                await self.drain_inbox(session_id)\n                await self.sessions.config.sync_thread(session_id)\n                if time.monotonic() >= next_goal_wait_check:\n                    self.comms.goals.recover_closed_goal_wait(session_id)\n                    next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL\n                self.effects.turns.goals.schedule_goal(session_id)\n                await self.sessions.config.refresh_auth_models()\n            except asyncio.CancelledError:\n                raise\n            except (OSError, ValueError, sqlite3.Error, CoordinationError, RequestError) as error:\n                self.comms.agents.set_drain_diagnostic(thread, owner, UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)))\n            except Exception as error:\n                self.comms.agents.set_drain_diagnostic(thread, owner, StoppedDrainDiagnostic(owner, type(error).__name__, str(error)))\n                raise\n            else:\n                if not self.comms.registry.require(thread).executing and session_id not in self.effects.turns.turn_tasks and (session_id not in self.backend_inboxes):\n                    self.comms.agents.set_drain_diagnostic(thread, owner, None)"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 279,
+      "name": "_private_observation_revision",
+      "bases": [],
+      "annotations": [],
+      "source": "def _private_observation_revision(self, session_id: str, root_id: str, store: Coordination) -> tuple:\n    \"\"\"Original owner/work observations, never delivery or replay authority.\n\n        Other owners' registry phases and SQL writes cannot change this owner's\n        observation. Committed wire messages, own pending/recovered work and\n        physical replacement still can. Silent context records consume bytes,\n        not the message cut used to select delivery.\n        \"\"\"\n    with self.comms.bus.log.certified_read(blocking=False) as source:\n        if source.marker.root_id != root_id:\n            raise IdentityConflict('private drain original root changed')\n        wire = (source.witness.source_identity, source.committed_sequence(), source.marker.admission_after_seq)\n    registry = self.comms.registry.snapshot()\n    thread = registry.require(self.sessions.require(session_id))\n    owner = RegistryOwner(thread=thread, admission_generation=registry.admission_generations[thread.name])\n    with store.session.read():\n        participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))\n        pending = next_sealed_assignment(store, participant.lookup, owner.thread.name, after_seq=wire[-1])\n        cursor = CursorOwner(thread=owner.thread, admission_generation=owner.admission_generation, wire_root_id=root_id, generation=participant.participant_generation).cursor(store.session._connection)\n        original = store.session.path.stat()\n    return (root_id, self.effects._private_nk_native_package, self.auto_wake, self.sessions.runtime_enabled, self.sessions.bindings.get(session_id), session_id in self.backend_inboxes, self.effects.turns.turn_state(session_id).busy, session_id in self.effects.turns.turn_tasks, wire, owner, registry.statuses[thread.name], participant, pending, cursor, (original.st_dev, original.st_ino))"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 330,
+      "name": "_drain_private_if_changed",
+      "bases": [],
+      "annotations": [],
+      "source": "async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:\n    observe = partial(self._private_observation_revision, session_id, root_id)\n    path = self.comms.root / 'coordination.sqlite3'\n    before = await Coordination.run_async(path, observe, lock_timeout=0)\n    if self._idle_private_revisions.get(session_id) == before:\n        await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))\n        return 0\n    self._idle_private_revisions.pop(session_id, None)\n    result = await self.effects._drain_private_nk(session_id, root_id)\n    if result == 0 and before == await Coordination.run_async(path, observe, lock_timeout=0):\n        self._idle_private_revisions[session_id] = before\n    return result"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 347,
+      "name": "drain_owned_inbox",
+      "bases": [],
+      "annotations": [],
+      "source": "async def drain_owned_inbox(self, session_id: str) -> int:\n    private_root = self.effects._private_nk_marker()\n    pushed = await self._drain_private_if_changed(session_id, private_root)\n    WakeScheduleCheck(session_id=session_id, inputs=self).schedule()\n    return pushed"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 58,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, data: StateData) -> NativeAttestation:\n    return self"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 113,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, data):\n    return ObservedAttestation(data)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 254,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self):\n    from .native_pi import NativePiUnavailable, _private_session_dir\n    try:\n        _private_session_dir(self.source.path.parent)\n        appended = tuple(self.decode_rows(self.source.rows()))\n        entries = self.entries + appended\n        if not entries or not isinstance(entries[0], SessionEntry):\n            raise ValueError('Native Pi session header is invalid')\n        entries[0].require_header()\n        _private_session_dir(self.source.path.parent)\n    except NativePiUnavailable:\n        self.close()\n        raise\n    except (ValueError, TypeError, KeyError) as error:\n        self.close()\n        raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error\n    self.entries = entries\n    return (entries[0], entries)"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 70,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "@classmethod\ndef observe(cls, session_file: str | None) -> SessionObservation:\n    if not isinstance(session_file, str) or not session_file:\n        return UnavailableSessionObservation(ValueError('No selected native session'))\n    try:\n        native = FileRevision.from_stat(Path(session_file).stat())\n        try:\n            proof = PresentInputProofRevision(FileRevision.from_stat(Path(session_file + '.input-proof').stat()))\n        except FileNotFoundError:\n            proof = MissingInputProofRevision()\n        return cls(native, proof)\n    except OSError as error:\n        return UnavailableSessionObservation(error)"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 27,
+      "name": "StoreLockContention",
+      "bases": [],
+      "annotations": [
+        "remaining: float"
+      ],
+      "source": null
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 64,
+      "name": "StoreLock",
+      "bases": [],
+      "annotations": [
+        "descriptor: int",
+        "source: CertifiedSourceRead | None"
+      ],
+      "source": null
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 105,
+      "name": "_store_lock",
+      "bases": [],
+      "annotations": [],
+      "source": "@contextmanager\ndef _store_lock(store_path: Path, *, blocking: bool=True, max_bus_bytes: int | None=None, shared: bool=False, contention: StoreLockContention | None=None) -> Iterator[StoreLock]:\n    \"\"\"Canonical synchronous acquisition; inherited POSIX custody ends at last close.\"\"\"\n    from .child_process import Platform\n    platform = Platform.current()\n    with _store_lock_file(store_path) as lock_file:\n        if contention is None:\n            platform.acquire_store_lock(lock_file.fileno(), shared=shared, blocking=blocking)\n        else:\n            contention.acquire(lock_file.fileno(), platform, shared=shared)\n        with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:\n            yield lock"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 127,
+      "name": "_async_store_lock",
+      "bases": [],
+      "annotations": [],
+      "source": "@asynccontextmanager\nasync def _async_store_lock(store_path: Path, *, blocking: bool=True, max_bus_bytes: int | None=None, shared: bool=False, contention: StoreLockContention | None=None):\n    \"\"\"Borrow the same physical resource without blocking its owner event loop.\n\n    Cancellation during acquisition closes only the unacquired descriptor. The\n    original durability guard runs only after custody is acquired; no SQLite\n    connection or consumer is transferred to another thread.\n    \"\"\"\n    from .child_process import Platform\n    platform = Platform.current()\n    wait = contention if contention is not None else StoreLockContention(math.inf if blocking else 0)\n    with _store_lock_file(store_path) as lock_file:\n        await wait.acquire_async(lock_file.fileno(), platform, shared=shared)\n        with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:\n            yield lock"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 58,
+      "name": "acquire_async",
+      "bases": [],
+      "annotations": [],
+      "source": "async def acquire_async(self, descriptor: int, platform: Platform, *, shared: bool) -> None:\n    for delay in self.waits(descriptor, platform, shared=shared):\n        await asyncio.sleep(delay)"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 70,
+      "name": "certified_read",
+      "bases": [],
+      "annotations": [],
+      "source": "def certified_read(self) -> CertifiedSourceRead:\n    if self.source is None:\n        raise RelationViolationError('Store has no certified original wire source.')\n    return self.source"
+    },
+    {
+      "path": "src/agent_comms/turn_usage.py",
+      "line": 32,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, tokens: int) -> None:\n    self.used = tokens\n    self.provisional = True"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 70,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(self, event: PiEvent, session: TurnSession) -> AsyncIterator[events.AgentEvent]:\n    self.tick()\n    if self.retry_recovery_pending and event.retry_progress:\n        self.retry_recovery_pending = False\n        yield self.state('recovered', self.retry_recovery_reason, 0, phase=phases.ModelWaitPhase())\n    if event.accepts_prompt:\n        self.prompt_accepted = True\n        if event.invalidates_stop:\n            session.output.final_assistant_stop = False\n        self.progress()\n        if not session.active_tools:\n            self.phase = self.phase.model_progress()"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 53,
+      "name": "WireLog",
+      "bases": [],
+      "annotations": [],
+      "source": null
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 67,
+      "name": "certified_read",
+      "bases": [],
+      "annotations": [],
+      "source": "@contextmanager\ndef certified_read(self, *, blocking: bool=True, contention: StoreLockContention | None=None):\n    \"\"\"Borrow the original source verified by this canonical lock barrier.\"\"\"\n    with _store_lock(self.path, blocking=blocking, contention=contention) as lock:\n        marker = self._private_marker_unlocked()\n        source = lock.certified_read()\n        source.require_marker(marker)\n        yield source\n        source.require_current()"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 38,
+      "name": "WireWatch",
+      "bases": [
+        "ABC"
+      ],
+      "annotations": [],
+      "source": null
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 95,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):\n    return self._report(*self.capture(session, evidence))"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 133,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self):\n    with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:\n        context = NativeContextProof.read_evidence(Path(self.session.session_file), self.input_id, evidence=evidence)\n        self.session.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))\n        _, entries = evidence.observe()\n        user, = (row for row in entries if row.id == context.session_entry_id)\n        answer, = (row for row in entries if row.id == self.answer_entry_id)\n        if not isinstance(answer, MessageEntry) or not answer.final_reply:\n            raise ValueError('Recorded recall answer is not a successful native terminal')\n        if answer.parent_id != user.id:\n            raise ValueError('Recall requires a direct tool-free answer to its original probe')\n        if self.checkpoint is not None:\n            checkpoint = self.checkpoint.observe(self.session, evidence)\n            if user.parent_id != checkpoint['native_entry_id']:\n                raise ValueError('Recorded probe must immediately follow its original checkpoint')\n        else:\n            checkpoint = {'applicable': False, 'reason': 'No compaction checkpoint declared for this control', 'canonical_availability': {'evaluated': False, 'reason': 'Full-context control has no committed retained envelope'}}\n        return {'context': FieldCodec.encode({item.metadata.get('wire_name', item.name): getattr(context, item.name) for item in fields(NativeContextRecord)}), 'session': FieldCodec.encode(self.session), 'prompt': user.message.text, 'answer': FieldCodec.encode(answer), 'answer_text': answer.message.authoritative_text, 'checkpoint': checkpoint, 'canonical_availability': checkpoint['canonical_availability'], 'prompt_scope': 'original native user and assembled-context proof, not final provider payload'}"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 608,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(original):\n    with Coordination(str(service.root / 'coordination.sqlite3')) as store:\n        with store.session.read():\n            db = store.session._connection\n            claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))\n            ids = {claim.assignment_id for claim in claims}\n            inputs = tuple((row for row in NativeRuntimeInput.select(db) if ids.intersection(row.execution.source_assignment_ids(db, row.input_id))))\n            execution_ids = {link.execution_id for claim in claims for link in ExecutionAssignmentLink.select(db, where='assignment_id=?', parameters=(claim.assignment_id,))}\n            receipts = tuple((receipt for execution_id in sorted(execution_ids) for receipt in PublicationReceipts.select(db, where='execution_id=?', parameters=(execution_id,))))\n            return (claims, inputs, receipts)"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 132,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(session_id, event, client=None, **kwargs):\n    await original_emit(session_id, event, client, **kwargs)\n    if isinstance(event, ae.InputStarted) and event.id is None:\n        started.set()"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 58,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, hint, **kwargs):\n    result = original(self, hint, **kwargs)\n    if result.caught_up:\n        indexed.set()\n    return result"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 87,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(bus, seq):\n\n    def probe():\n        with _store_lock(comms._wire_lock_path, blocking=False), _store_lock(bus.log.path, blocking=False):\n            witnessed.append(True)\n    thread = threading.Thread(target=probe)\n    thread.start()\n    thread.join(timeout=2)\n    assert not thread.is_alive() and witnessed == [True]\n    raise OSError('synthetic derived projection failure')"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 42,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(original):\n    journal, session, incarnation, registry, _ = original\n    return CompactionJournal.snapshot(journal.path, str(session), incarnation, registry)"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 185,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(fd: int) -> None:\n    metadata = os.fstat(fd)\n    if stat.S_ISDIR(metadata.st_mode) and metadata.st_ino == tmp_path.stat().st_ino:\n        parent_fd_seen.append(fd)\n    original(fd)"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 576,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(session_id, event, client=None, **kwargs):\n    if isinstance(event, ae.InputStarted):\n        observed.append('started')\n        comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))\n    if isinstance(event, ae.StreamSettled):\n        observed.append('native-settled')\n        assert comms.registry.require(child).active_turn is not None\n        assert comms.registry.require('owner').goal.state.active\n        assert comms.goals.goal_wait('owner') is not None\n    await real_emit(session_id, event, client, **kwargs)"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 30,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(*args, **kwargs):\n    child = await start(*args, **kwargs)\n    children.append(child)\n    return child"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 218,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(store):\n    assert store.session._connection is not original_connection\n    assert store.session.now() == original.session.now()\n    worker_connections.append(store.session._connection)\n    with store.session.read():\n        assert store.participants.get('original').owner_thread == 'owner'\n        NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)\n        entered.set()\n        assert release.wait(2), 'bounded fixture release missing'\n        assert not evidence.source.stream.closed\n        NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1178,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(event):\n    await durable_attempt.dispatch(event)\n    attempt = durable_attempt.attempts.snapshots.get('e').attempt\n    durable_phases.append(attempt.lifecycle.declared_name)\n    assert not attempt.lifecycle.backend_done and (not attempt.lifecycle.process_dead)"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 171,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(session, event, **kwargs):\n    observed.append(type(event))\n    await emit(session, event, **kwargs)"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 390,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(session_id, event, **kwargs):\n    await emit(session_id, event, **kwargs)\n    observed.append(type(event))\n    if isinstance(event, StartedTranscriptUpdate):\n        comms.registry.declare(Thread('waiting', frozenset(), str(native.project), process_identity=ProcessIdentity.capture(os.getpid())))\n        goal = comms.goals.update_goal('waiting', SetGoalAction(text='Wait for maintenance'))\n        comms.goals.update_goal('waiting', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)))\n    if isinstance(event, ae.ManualCompactionEnd):\n        assert comms.goals.goal_wait('waiting') is not None"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 32,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(expected_package=package):\n    return await observe_selected_compaction_decision(native.persistent, session_file=str(native.session), expected_package=expected_package, selected=SelectedModel(model.provider, model.id, model.context_window))"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 249,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(event):\n    observed.append(event)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 302,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(raw, **options):\n    event = decode(raw, **options)\n    if isinstance(event, AgentCommsCompactionProgress) and (not progress.done()):\n        progress.set_result((raw, event))\n    return event"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 151,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe(event):\n    observed.append(event)"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 187,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "async def observe():\n    async with aclosing(wire_watch.WireWatch.observations(tmp_path)) as changes:\n        async for _ in changes:\n            observed.set()"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 46,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "@classmethod\ndef observe(cls):\n    from agent_comms.coordinated_runtime_schema import _schema, _digest\n    from agent_comms.native_runtime_input import NativeRuntimeSchemaMeta\n    from agent_comms.native_prompt_binding import PromptBinding\n    from agent_comms.private_sidecar import _schema as binding_schema, _digest as binding_digest\n    from typing import get_args, get_type_hints\n    from agent_comms.coordination_schema import coordinator_schema, CoordinatorTable\n    from agent_comms.coordination_tables.metadata import SchemaMeta\n    from agent_comms.coordination_response import ResponseTable, ResponseSchemaMeta, _response_schema, _response_digest\n    from agent_comms.native_runtime_input import NativeRuntimeTable\n    from agent_comms.typed_table import TypedTable\n    from agent_comms.compaction_records import JournalTable\n    goal = cls.observe_goal()\n    coordination_meta = SchemaMeta.current()\n    response_version = get_args(get_type_hints(ResponseSchemaMeta)['version'])[0]\n    native_version = get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0]\n    runtime = _schema()\n    native_meta = NativeRuntimeSchemaMeta(singleton=1, version=native_version, ddl_digest=_digest(runtime))\n    response = _response_schema()\n    with closing(sqlite3.connect(':memory:')) as shape:\n        shape.executescript(coordinator_schema())\n        coordination_meta.insert(shape)\n        for sql in response.values():\n            shape.execute(sql)\n        ResponseSchemaMeta(1, response_version, _response_digest(response)).insert(shape)\n        coordination = objects(shape)\n        metadata = {name: tuple(rows(shape, name)) for name in (SchemaMeta.declared_name, ResponseSchemaMeta.declared_name)}\n    metadata[NativeRuntimeSchemaMeta.declared_name] = (tuple((getattr(native_meta, name) for name in native_meta.columns())),)\n    writable = {table.declared_name: tuple((item.name for item in table._fields() if item.column.generated is None)) for family in (CoordinatorTable, ResponseTable, NativeRuntimeTable) for table in TypedTable.members_with(family)}\n    journals = tuple(TypedTable.members_with(JournalTable))\n    with closing(sqlite3.connect(':memory:')) as shape:\n        for table in journals:\n            table.create(shape)\n        compaction = objects(shape)\n    return cls(native_version, runtime, _digest(runtime), binding_schema(PromptBinding), binding_digest(PromptBinding), coordination_meta.schema_version, coordination_meta.snapshot_version, response_version, coordination, goal, writable, metadata, compaction, {table.declared_name: table.columns() for table in journals})"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 37,
+      "name": "observe",
+      "bases": [],
+      "annotations": [],
+      "source": "def observe(self, name: str, expected: OwnerRestartSelection | None=None) -> OriginalOwnerRead:\n    environment = dict(os.environ)\n    environment.pop('PYTHONPATH', None)\n    packet = subprocess.run([str(self.original_python), str(Path(__file__).with_name('read_original_owner.py')), str(self.root), name, self.projection.declared_name], input=json.dumps(FieldCodec.encode(expected)) if expected is not None else '', env=environment, capture_output=True, text=True, check=True)\n    return FieldCodec.decode(OriginalOwnerRead, json.loads(packet.stdout))"
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 142,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 390,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 562,
+      "source": "observe"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 515,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 117,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 210,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 242,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 303,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 313,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 108,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 153,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 169,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 181,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 185,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 190,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 208,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 229,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 44,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 52,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 108,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 151,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 158,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 203,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 239,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 348,
+      "source": "self.watchdog.observe"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 123,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "line": 34,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 92,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 76,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 130,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 125,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 125,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 61,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 72,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 104,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 112,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 116,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 122,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 128,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 134,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 139,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 146,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 176,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 74,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 100,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 121,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 174,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 41,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 70,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 121,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 168,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 232,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 338,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 44,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 50,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 124,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 132,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 134,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 350,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 366,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 368,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 396,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 75,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 88,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 120,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 171,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 90,
+      "source": "bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 120,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 177,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 186,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 223,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 531,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 533,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/collaboration_ledger.py",
+      "line": 17,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 104,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 105,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 179,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 61,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 75,
+      "source": "observe"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 72,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 60,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 138,
+      "source": "journal.publications.observe"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 91,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 105,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 35,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 39,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 111,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 90,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 50,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 52,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 234,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 313,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 328,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 344,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 368,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 242,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 52,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 189,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 191,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 292,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 306,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 366,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 380,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 466,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 491,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 577,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 591,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 210,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 265,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 293,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 259,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 221,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 226,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 259,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/coordination_session.py",
+      "line": 16,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "line": 49,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 122,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 132,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 47,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 47,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 223,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 221,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 230,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 45,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 64,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 81,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 90,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 159,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 173,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 224,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 313,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 339,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 365,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 379,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 403,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 348,
+      "source": "self.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 59,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 103,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 64,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 97,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 303,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 333,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 397,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 133,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 451,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 257,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 333,
+      "source": "observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 280,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 333,
+      "source": "self._private_observation_revision"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 101,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 229,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 289,
+      "source": "self.comms.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 335,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 335,
+      "source": "observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 349,
+      "source": "self._drain_private_if_changed"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 377,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 459,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 543,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 574,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 277,
+      "source": "self.drain_owned_inbox"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 335,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 233,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 343,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 343,
+      "source": "observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 343,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 91,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 71,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 172,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 185,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 195,
+      "source": "_async_store_lock"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 49,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 67,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 102,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 115,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 148,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 154,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 162,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 182,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 215,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 219,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 106,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 287,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 114,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 152,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 832,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 328,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 44,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 46,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 110,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 115,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 121,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 196,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 214,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 223,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 226,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 160,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 33,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 34,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 40,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 55,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 70,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 83,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 111,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 40,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 55,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 70,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 106,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 27,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 111,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 100,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 512,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 447,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 520,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 47,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 353,
+      "source": "self.runner.inputs.drain_owned_inbox"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 64,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 167,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 470,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 478,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 75,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 223,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 191,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 216,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 260,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 76,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 178,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 193,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 208,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 271,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 283,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 416,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 430,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 342,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 132,
+      "source": "StoreLock"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 150,
+      "source": "StoreLock"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 229,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 203,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 215,
+      "source": "session.native.attestation.observe"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 406,
+      "source": "session.extension_ui.observe"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 66,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 131,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 306,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 359,
+      "source": "semantics.observe"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 242,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 509,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 596,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 750,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 767,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 820,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 827,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 870,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 169,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 520,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 123,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 192,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 154,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 209,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 58,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 61,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 71,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 95,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 118,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 148,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 185,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 199,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 257,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 281,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 299,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 334,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 348,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 362,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 89,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 90,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 92,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 172,
+      "source": "self.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 64,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 186,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 197,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 308,
+      "source": "StoreLock"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 483,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 90,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 174,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 213,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 150,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 162,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 186,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 253,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 253,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 129,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 348,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 56,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 70,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 346,
+      "source": "observe"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 113,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 396,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 429,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 440,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 487,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 509,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 550,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 525,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 164,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 203,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 212,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 176,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 226,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 277,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 340,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 322,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 38,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 69,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 104,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 145,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 106,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 216,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 65,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 106,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 114,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 133,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 219,
+      "source": "bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 117,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 133,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 134,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 141,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 137,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 136,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 167,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 211,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 211,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 218,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 224,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 93,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 101,
+      "source": "self.observe"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 67,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 255,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 283,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 324,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 286,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 194,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 206,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "line": 19,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 112,
+      "source": "StoreLock"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 111,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 133,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 144,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 146,
+      "source": "wait.acquire_async"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 41,
+      "source": "platform.try_store_lock"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 99,
+      "source": "StoreLock"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 98,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 138,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 184,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 213,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 233,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 252,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 278,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 300,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 432,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 440,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 449,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 460,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 481,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 501,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 512,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 186,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 342,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 189,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 410,
+      "source": "self.evidence.observe"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 451,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 222,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 157,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 192,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 232,
+      "source": "log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 257,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 286,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 435,
+      "source": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 110,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 82,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 111,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 48,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 143,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 92,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 240,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 252,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 138,
+      "source": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 155,
+      "source": "Coordination"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 510,
+      "source": "StoreLock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 60,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 62,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 67,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 69,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 71,
+      "source": "lock.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 78,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 82,
+      "source": "lock.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 98,
+      "source": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 134,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 344,
+      "source": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 381,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 491,
+      "source": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 501,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 574,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 618,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 106,
+      "source": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 135,
+      "source": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 171,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 401,
+      "source": "_store_lock"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 518,
+      "source": "lock.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 62,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 70,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 118,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 45,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 66,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "line": 81,
+      "source": "WireWatch"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 55,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 213,
+      "source": "probe.observe"
+    },
+    {
+      "path": "tests/guards/test_coordination_ownership.py",
+      "line": 43,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/guards/test_coordination_ownership.py",
+      "line": 47,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/guards/test_mutation_ownership.py",
+      "line": 64,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/guards/test_mutation_ownership.py",
+      "line": 66,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/guards/test_mutation_ownership.py",
+      "line": 56,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "source": "InputDrain"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 100,
+      "source": "InputDrain"
+    },
+    {
+      "path": "tests/maintenance_control_fixture.py",
+      "line": 47,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/maintenance_control_fixture.py",
+      "line": 47,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/maintenance_control_fixture.py",
+      "line": 62,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/maintenance_control_fixture.py",
+      "line": 62,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 141,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 89,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 99,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 171,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 129,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 40,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 84,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 37,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 105,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 141,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 149,
+      "source": "self.checkpoint.observe"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 29,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 92,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 90,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 100,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 73,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 151,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 30,
+      "source": "InputDrain"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 452,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 483,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 639,
+      "source": "observe"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 654,
+      "source": "observe"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 699,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 202,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 563,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 601,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 609,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 627,
+      "source": "observe"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 644,
+      "source": "observe"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 776,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 780,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 866,
+      "source": "service.bus.log.certified_read"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 874,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 946,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 390,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 430,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1194,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1202,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 228,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 527,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 726,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1140,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1328,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 733,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 271,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 44,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 90,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 145,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 137,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 66,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 131,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 150,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 159,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 220,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 245,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 253,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 278,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 294,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 369,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 487,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 520,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 524,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 541,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 599,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 619,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 643,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 670,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 720,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 745,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 783,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 817,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 185,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 707,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 90,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 133,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 276,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 128,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 318,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 353,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 372,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 64,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 102,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 90,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 91,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 26,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_channel_participant_registration.py",
+      "line": 25,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_checkpoint_seals.py",
+      "line": 97,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_checkpoint_seals.py",
+      "line": 129,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_checkpoint_seals.py",
+      "line": 115,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_claim_admission_baseline.py",
+      "line": 51,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 70,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 260,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 140,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 188,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 455,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 482,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 493,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 528,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 784,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 379,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 739,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 22,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 138,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 144,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 157,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 169,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 182,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 191,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 200,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 238,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 277,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 328,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 404,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 425,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 452,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 475,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cohort_schema.py",
+      "line": 480,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 224,
+      "source": "reopened.publications.observe"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 225,
+      "source": "reopened.publications.observe"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 222,
+      "source": "reopened.publications.observe"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 276,
+      "source": "journal.publications.observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 50,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 53,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 80,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 88,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 115,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 126,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 152,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 71,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 119,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 65,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 229,
+      "source": "bad_answer.observe"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 216,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 252,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 319,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 379,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 145,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 143,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 336,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 371,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 413,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 424,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 440,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 467,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 692,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 733,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 749,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 847,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 867,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 892,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 976,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1095,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1110,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1128,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1175,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1336,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1404,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1455,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1493,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1559,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1608,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1651,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1753,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1787,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1828,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1841,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1860,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1890,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1944,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1982,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1999,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1292,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 476,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 489,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 612,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 631,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 648,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 676,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 696,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 740,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 772,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 821,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 843,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 926,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 969,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 997,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1070,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1116,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1129,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1230,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1268,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1319,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1350,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1372,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1399,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1438,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1512,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1533,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1566,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1624,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1662,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1693,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1777,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1889,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1947,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 1963,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2009,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2029,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2074,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2121,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2158,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2201,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2206,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 2210,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 557,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 511,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination.py",
+      "line": 582,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 62,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 46,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 148,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 162,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 435,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 172,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 118,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 286,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 344,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 59,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 92,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 258,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 277,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 356,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 436,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 424,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 82,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 88,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1391,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 83,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 118,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 135,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 159,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 187,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1381,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1382,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1525,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1520,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 112,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 169,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 174,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 198,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 244,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 109,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 27,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 72,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 79,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 86,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 35,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 191,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 45,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 248,
+      "source": "store_files._store_lock"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 615,
+      "source": "store_files._store_lock"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 621,
+      "source": "store_files._store_lock"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 51,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 590,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 37,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 47,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 74,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 91,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 135,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 173,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 232,
+      "source": "case.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 120,
+      "source": "case.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 42,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 37,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 57,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 218,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 234,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 340,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 84,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 60,
+      "source": "InputDrain"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 63,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 111,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 131,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 69,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 44,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 35,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 396,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 286,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 75,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 138,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 320,
+      "source": "reader.observe"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 264,
+      "source": "reader.observe"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 28,
+      "source": "evidence.observe"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 196,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 183,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 189,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 197,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 199,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 211,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 185,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 230,
+      "source": "Coordination.run_async"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 230,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 230,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 185,
+      "source": "StoreLockContention"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 76,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 117,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 145,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 186,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 239,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 205,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 77,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 961,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1185,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 82,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 249,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 288,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 296,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 307,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 329,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 337,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 372,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 377,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 385,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 415,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 436,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 441,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 466,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 515,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 536,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 543,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 549,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 574,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 605,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 651,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 695,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 720,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 799,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 817,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 760,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 484,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 605,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 42,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 368,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 63,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 79,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 105,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 134,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 159,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 185,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 69,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 84,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 117,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 132,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 159,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 167,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 186,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 194,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 197,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 207,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 226,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 262,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 271,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 299,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 55,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 123,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 58,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 109,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 137,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 147,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 162,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 171,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 206,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 215,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 281,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 296,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 321,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 110,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 344,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 170,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 242,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 59,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 36,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 65,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 91,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 453,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_ordinary_admission_rules.py",
+      "line": 93,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_ordinary_admission_rules.py",
+      "line": 90,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 66,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 106,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 75,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 75,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 106,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 337,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 345,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 380,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 388,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 37,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 157,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 165,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 271,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 433,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 81,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 87,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 575,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 587,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 52,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 369,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 132,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 70,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 98,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 105,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 128,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 136,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 168,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 179,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 187,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 42,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 34,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 210,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 217,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 25,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 69,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 108,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 111,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 115,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 133,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 138,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 159,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 218,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 168,
+      "source": "agent.inputs._private_observation_revision"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 556,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 576,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 568,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_runtime_bootstrap.py",
+      "line": 24,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_private_runtime_bootstrap_native.py",
+      "line": 122,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 32,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_recovery_gateway_client.py",
+      "line": 35,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 51,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 379,
+      "source": "CoordinationStore"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 104,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 102,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 90,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 64,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 38,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 46,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 52,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 193,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 115,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 162,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 173,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 108,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 108,
+      "source": "NativeEvidenceRead.observe"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 113,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 118,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 156,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 50,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 46,
+      "source": "WireLog"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 78,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 59,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 175,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 410,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 54,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 228,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 187,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 73,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 78,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 245,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 40,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 64,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 46,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 90,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 296,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 976,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 978,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 393,
+      "source": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 460,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 262,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 36,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 77,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 175,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 308,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 517,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 80,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 189,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 165,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 133,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 198,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 191,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 142,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 168,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 86,
+      "source": "SessionRevision.observe"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 189,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 185,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 132,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_wake_candidate_index.py",
+      "line": 110,
+      "source": "Coordination"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 192,
+      "source": "observe"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 188,
+      "source": "wire_watch.WireWatch"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 150,
+      "source": "reader.observe"
+    },
+    {
+      "path": "tools/cutover/install_retained_index.py",
+      "line": 22,
+      "source": "WireLog"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 445,
+      "source": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 636,
+      "source": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 676,
+      "source": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 761,
+      "source": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 77,
+      "source": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 48,
+      "source": "self.observe"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 73,
+      "source": "self.reader.observe"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 224,
+      "source": "WireLog"
+    },
+    {
+      "path": "tools/cutover/read_original_task_preimage.py",
+      "line": 22,
+      "source": "WireLog"
+    },
+    {
+      "path": "tools/cutover/read_original_task_preimage.py",
+      "line": 23,
+      "source": "bus.certified_read"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 22,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 23,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 63,
+      "source": "service.bus.log.certified_read"
+    },
+    {
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 16,
+      "source": "WireLog"
+    },
+    {
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 20,
+      "source": "custody.certified_read"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 20,
+      "source": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 41,
+      "source": "Coordination"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 65,
+      "source": "Coordination"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 60,
+      "source": "_store_lock"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 61,
+      "source": "WireLog"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 142,
+      "source": "Coordination"
+    }
+  ],
+  "ambiguity": "AST attribute/callback candidates require source interpretation. OS advisory custody and failed historic acquisition cannot be reconstructed from AST. Toad public APIs unchanged."
+}
