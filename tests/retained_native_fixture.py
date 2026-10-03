@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Annotated
@@ -214,15 +215,38 @@ class RecordedNativeCheckpoint:
     def observe(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):
         return self._report(*self.capture(session, evidence))
 
+    @contextmanager
+    def original_source(self):
+        """Borrow the unchanged native owner for standalone recorded inspection."""
+        with NativeEntry.open_evidence(Path(self.reference.session_file)) as evidence:
+            header, _ = evidence.observe()
+            yield NativeSessionIdentity(header.id, str(evidence.source.path)), evidence
+
+    def condition_source(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):
+        """Private construction input from a corroborated original checkpoint.
+
+        This exports original narrative bytes only when that original capture
+        exists and is eligible. It is not an input grant or a submitted control.
+        SDK construction owns the current kept range and native conversion.
+        """
+        _, entry, _, assembly = self.capture(session, evidence)
+        if assembly is None:
+            return {"evaluated": False,
+                    "reason": "Original pre-pack summary assembly not captured"}
+        observed = assembly.observe()
+        if not observed["evaluated"]:
+            return observed
+        return {**observed, "session": FieldCodec.encode(session),
+                "native_entry_id": entry.id, "summary": assembly.summary,
+                "source": FieldCodec.encode(self.summary_assembly)}
+
     def inspect(self, previous: RecordedNativeCheckpoint | None = None):
         """Read a checkpoint or adjacent-cut difference without a new model input.
 
         The optional previous reference is external evaluation input. It neither
         selects a live source nor carries native lifecycle/admission state.
         """
-        with NativeEntry.open_evidence(Path(self.reference.session_file)) as evidence:
-            header, _ = evidence.observe()
-            session = NativeSessionIdentity(header.id, str(evidence.source.path))
+        with self.original_source() as (session, evidence):
             current_attempt, current_entry, covered, assembly = self.capture(session, evidence)
             report = self._report(current_attempt, current_entry, covered, assembly)
             if previous is not None:
