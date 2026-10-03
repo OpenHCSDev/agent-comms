@@ -1,0 +1,41 @@
+{
+  "state": "existing-cohort-artifact-boundary-passed",
+  "checks": [
+    "original four-source proof matches three activation pins plus declared Diff scalar",
+    "missing-diff refused",
+    "changed-diff refused",
+    "duplicate-module refused",
+    "source-overlay refused",
+    "wrong-native refused",
+    "original local wheel accepts empty, legacy, modern and consistent combined archive_info",
+    "missing-wheel-witness refused",
+    "duplicate-wheel-witness refused",
+    "changed-wheel-hash refused",
+    "different-archive-hash refused",
+    "conflicting-archive-hashes refused",
+    "malformed-legacy-hash refused",
+    "ambiguous/unknown origin fields refused by original FieldCodec",
+    "ambiguous/unknown origin fields refused by original FieldCodec",
+    "original local wheel accepts empty, legacy, modern and consistent combined archive_info",
+    "missing-wheel-witness refused",
+    "duplicate-wheel-witness refused",
+    "changed-wheel-hash refused",
+    "different-archive-hash refused",
+    "conflicting-archive-hashes refused",
+    "malformed-legacy-hash refused",
+    "ambiguous/unknown origin fields refused by original FieldCodec",
+    "ambiguous/unknown origin fields refused by original FieldCodec",
+    "wrong VCS source head refused by origin owner"
+  ],
+  "activation_sha256": "2af5875096efffc5340e00e0f50253fe9c30d3b9625adfc299d41372cac16c90",
+  "source_proof_sha256": "8164f979815bc6b5c8b9c41d2f1751fb8f9d22b60ac8efd5fd4e62e89ac45176",
+  "source_heads": {
+    "agent_comms": "3e5c97f9a38d10e65c3a5d06919d85d8e38b98ab",
+    "toad": "d70643053f13f4a5b73296839ac07f469acede3d",
+    "textual": "688d06b12dc893b290422fa5d6924529e7689ac9",
+    "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+  },
+  "public_actions": 0,
+  "providers": 0,
+  "strength": "original immutable package relationship; not admission or actual future gate"
+}

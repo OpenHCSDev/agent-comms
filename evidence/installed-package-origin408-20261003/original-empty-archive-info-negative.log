@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/headless-response403-frame405-receiving-20261003/verify.py", line 30, in <module>
+    source.require_original()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/headless-response403-frame405-receiving-20261003/new-publication40340546/operator-freeze/publish_retained_summary.py", line 142, in require_original
+    self.direct_url.require_original(self.head)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/headless-response403-frame405-receiving-20261003/new-publication40340546/operator-freeze/publish_retained_summary.py", line 125, in require_original
+    self.archive_info.require_original(Path(unquote(origin.path)))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/headless-response403-frame405-receiving-20261003/new-publication40340546/operator-freeze/publish_retained_summary.py", line 113, in require_original
+    raise RuntimeError('Installed archive has no consistent SHA256 provenance')
+RuntimeError: Installed archive has no consistent SHA256 provenance

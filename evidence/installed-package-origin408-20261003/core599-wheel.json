@@ -1,0 +1,12 @@
+{
+  "source_head": "3e5c97f9a38d10e65c3a5d06919d85d8e38b98ab",
+  "checkout_build_head": "c5ed38fdb4607aeacce2910a4c933a1df77f1f74",
+  "wheel": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/installed-package-origin408-20261003/core599-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "290833385771c0798e20ac56116f91f920728a6cb53e29c3b856e11141c70e3d",
+  "wheel_bytes": 865107,
+  "normal_local_uv_build": true,
+  "source_head_byte_equality": "git diff --exit-code 3e5c97f9 HEAD -- src pyproject.toml uv.lock stack; zero differences",
+  "native_build": false,
+  "new_checkout_or_environment": false,
+  "tools_only604_excluded_from_package_payload": true
+}

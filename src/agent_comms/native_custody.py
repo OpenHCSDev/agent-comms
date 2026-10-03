@@ -128,7 +128,7 @@ class EmptyNative(NativeCustody):
         # real saved launch/idle attestation/retention, never a priming prompt.
         await prepare()
         acquired = persistent.custody.idle()
-        return await acquired.inspect(persistent, prepare, request)
+        return await acquired.inspect_acquired(persistent, request)
 
 
 class NativeCleanupFailed(RuntimeError):
@@ -278,6 +278,13 @@ class RetainedNative(NativeCustody):
                 self.child.attestation = observed
 
     async def inspect(self, persistent, prepare, request):
+        # Reobserve this retained child through the same preparation/AgentInfo
+        # owner. An acquired child alone does not publish native usage.
+        await prepare()
+        acquired = persistent.custody.idle()
+        return await acquired.inspect_acquired(persistent, request)
+
+    async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
             current = persistent.custody.idle()
             response = await request.exchange(
