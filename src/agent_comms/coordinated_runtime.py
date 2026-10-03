@@ -42,7 +42,9 @@ class SelectedExecution:
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
-    _native_launch: NativePiRpcLaunch | None = field(init=False, default=None, repr=False)
+    _native_launch: NativePiRpcLaunch | None = field(
+        init=False, default=None, repr=False, compare=False,
+    )
 
     def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
         """Lend the actual acquired artifact across this execution's stages.
