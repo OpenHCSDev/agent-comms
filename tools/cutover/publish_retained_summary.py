@@ -163,7 +163,8 @@ class ReviewedRetainedSummaryCohort:
         proof = FieldCodec.decode(InstalledSourceProof, json.loads(self.source_proof.path.read_text()))
         proof.require_activation(activation)
         gates = {gate.path for gate in self.actual_gates}
-        if len(gates) < 2 or gates.intersection((self.activation.path, self.source_proof.path)):
+        if not gates or len(gates) != len(self.actual_gates) or gates.intersection(
+                (self.activation.path, self.source_proof.path)):
             raise RuntimeError('Distinct reviewed actual installed journey gates are required')
         for gate in self.actual_gates:
             gate.require_original()
@@ -364,7 +365,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
 
 def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInstallation,
             runtime_installation: RuntimeInstallation, receipt: Path):
-    """Parent-only EXECUTION entry, once both reviewed gates/carry are supplied.
+    """Parent-only EXECUTION entry, with the reviewed affected journey gates and carry.
 
     A retry never happens here. Any existing receipt/preimage refuses before
     admission, and the only stop/fence/launch implementation is the original one.
