@@ -77,8 +77,10 @@ class RecallMeasurementTests(unittest.TestCase):
     def test_round_and_scenario_totals_derive_from_their_outcomes(self):
         score = self.scenario.score(Condition.BOUNDED, RecordedAnswers(self.exact))
         first = score.rounds[0]
-        shortened = replace(first, answers=first.answers[:1])
-        changed = replace(score, rounds=(shortened,) + score.rounds[1:])
+        source = replace(first.source, questions=first.source.questions[:1])
+        shortened = source.score({"symbol": first.answer_values["symbol"]})
+        changed_source = replace(score.source, rounds=(source,) + score.source.rounds[1:])
+        changed = replace(score, source=changed_source, rounds=(shortened,) + score.rounds[1:])
         self.assertEqual((shortened.questions, shortened.correct), (1, 1))
         self.assertEqual((changed.questions, changed.correct), (15, 15))
         self.assertEqual((score.questions, score.correct), (21, 21))

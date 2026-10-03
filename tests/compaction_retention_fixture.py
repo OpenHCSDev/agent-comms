@@ -23,6 +23,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.message_reference import MessageReference
+from agent_comms.turn_context import ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
 
@@ -127,6 +129,50 @@ class RecordedNativeProbes:
                 observations[identity] = probe.read(evidence)
         return reports, observations
 
+    def alignment(self, other, observations, baseline, rounds):
+        """Compare acquired original facts, never regenerate a control history."""
+        pairs = {}
+        for round_ in rounds:
+            identity = round_.identity
+            if identity not in observations or identity not in baseline:
+                pairs[identity] = {"evaluated": False, "reason": "One original probe is missing"}
+                continue
+            original, control = observations[identity], baseline[identity]
+            if (self.rounds[identity].session.same_session(other.rounds[identity].session)
+                    or self.rounds[identity].input_id == other.rounds[identity].input_id):
+                raise ValueError("A matched control cannot reuse the candidate's original session/input")
+            a, b = original["construction"], control["construction"]
+            if a["fork"] is None or b["fork"] is None:
+                pairs[identity] = {"evaluated": False, "reason": "Original SDK fork records unavailable"}
+                continue
+            if (a["fork"]["source"] != b["fork"]["source"]
+                    or a["fork"]["sourceRevision"] != b["fork"]["sourceRevision"]):
+                raise ValueError("Matched probes have different original source histories")
+            settings = original["scoped_facts"]["configured_settings"], control["scoped_facts"]["configured_settings"]
+            if not all(item["evaluated"] for item in settings):
+                pairs[identity] = {"evaluated": False, "reason": "Original configured model/effort unavailable"}
+                continue
+            for name in ("model", "thinking"):
+                if settings[0][name] != settings[1][name]:
+                    raise ValueError("Matched probes have different configured model/effort")
+            if a["sdk_manifest"] is None or b["sdk_manifest"] is None:
+                pairs[identity] = {"evaluated": False, "reason": "Original request manifests unavailable"}
+                continue
+            if a["sdk_manifest"]["counter"] != b["sdk_manifest"]["counter"]:
+                raise ValueError("Matched probes use different native measurement counters")
+            catalogs = tuple(tuple(segment for segment in item["sdk_manifest"]["segments"]
+                                   if segment["kind"] == ToolCatalogSegment.declared_name)
+                             for item in (a, b))
+            if not all(catalogs):
+                pairs[identity] = {"evaluated": False, "reason": "Original tool catalogs unavailable"}
+                continue
+            if tuple((item["sha256"], item["utf8_bytes"]) for item in catalogs[0]) != tuple(
+                    (item["sha256"], item["utf8_bytes"]) for item in catalogs[1]):
+                raise ValueError("Matched probes have different native tool catalogs")
+            pairs[identity] = {"evaluated": True,
+                              "scope": "Common original SDK fork source, configured selection, tool catalog and frozen probe; not complete intervention/construction proof"}
+        return pairs
+
 
 class Condition(str, Enum):
     """Value-only experimental labels."""
@@ -205,7 +251,12 @@ class ScoreView(ABC):
 @dataclass(frozen=True)
 class ScoredRound(ScoreView):
     source: RecallRound
-    answers: tuple[tuple[Question, AnswerScore], ...]
+    answer_values: dict[str, str]
+
+    def __post_init__(self):
+        unexpected = self.answer_values.keys() - {question.identity for question in self.source.questions}
+        if unexpected:
+            raise ValueError(f"Unknown questions in {self.identity}: {sorted(unexpected)}")
 
     @property
     def identity(self) -> str:
@@ -213,14 +264,15 @@ class ScoredRound(ScoreView):
 
     @property
     def scored_answers(self) -> Iterator[tuple[Question, AnswerScore]]:
-        return iter(self.answers)
+        return ((question, question.score(self.answer_values.get(question.identity)))
+                for question in self.source.questions)
 
     def public(self) -> dict:
         return {
             "round": self.identity,
             **self.public_totals(),
             "measurements": self.measurement_totals(),
-            "answers": {question.identity: asdict(outcome) for question, outcome in self.answers},
+            "answers": {question.identity: asdict(outcome) for question, outcome in self.scored_answers},
         }
 
 
@@ -229,6 +281,10 @@ class ScoredScenario(ScoreView):
     source: RecallScenario
     condition: Condition
     rounds: tuple[ScoredRound, ...]
+
+    def __post_init__(self):
+        if tuple(round_.source for round_ in self.rounds) != self.source.rounds:
+            raise ValueError("Scored rounds must preserve the complete frozen scenario order")
 
     @property
     def identity(self) -> str:
@@ -242,11 +298,79 @@ class ScoredScenario(ScoreView):
         return {
             "scenario": self.identity,
             "condition": self.condition.value,
-            "synthetic": True,
+            "oracle_origin": "authored-frozen",
+            "answer_origin": "authored-control",
             "rounds": [item.public() for item in self.rounds],
             **self.public_totals(),
             "measurements": self.measurement_totals(),
         }
+
+    def support_groups(self, *evidence):
+        """One classification serves individual and paired denominators."""
+        grouped = {"unassisted_recall": [], "tool_assisted_task_quality": [], "unobserved": []}
+        for round_ in self.rounds:
+            if any(round_.identity not in originals for originals in evidence):
+                group = "unobserved"
+            else:
+                group = ("unassisted_recall" if all(originals[round_.identity]["answer_support"]["unassisted_recall"]
+                                                   for originals in evidence)
+                         else "tool_assisted_task_quality")
+            grouped[group].append(round_)
+        return grouped
+
+    def support_totals(self, evidence):
+        """Keep frozen denominators when native evidence is missing or assisted."""
+        return {name: self.totals(chain.from_iterable(round_.outcomes for round_ in rounds))
+                for name, rounds in self.support_groups(evidence).items()}
+
+    def proposed_actions(self, evidence):
+        return {round_.identity: {question.identity: question.proposed_action(
+                    round_.answer_values.get(question.identity), evidence.get(round_.identity))
+                    for question, _ in round_.scored_answers if question.measurement is Measurement.ACTION}
+                for round_ in self.rounds}
+
+    def public_native(self, checkpoints, evidence) -> dict:
+        result = self.public()
+        return FieldCodec.encode(dict(result, native_probes=evidence,
+                    answer_origin="recorded-native",
+                    quality_denominators=self.support_totals(evidence),
+                    proposed_actions=self.proposed_actions(evidence),
+                    scope="recorded original native probes; condition label is not construction proof",
+                    checkpoints=checkpoints,
+                    original_checkpoint_count=len(checkpoints),
+                    three_original_cuts_observed=len(checkpoints) >= 3,
+                    canonical_availability={
+                        item.identity: checkpoints[item.identity]["canonical_availability"]
+                        if item.identity in checkpoints else {
+                            "evaluated": False, "reason": "No original committed checkpoint supplied"
+                        } for item in self.source.rounds
+                    },
+                    provider_prompt_presence={
+                        item.identity: evidence[item.identity]["provider_prompt_presence"]
+                        if item.identity in evidence else {
+                            "evaluated": False, "reason": "No original native probe supplied"
+                        } for item in self.source.rounds
+                    },
+                    revision_mass={identity: report["revision_mass"]
+                                   for identity, report in checkpoints.items()},
+                    answer_support={identity: original["answer_support"]
+                                    for identity, original in evidence.items()},
+                    recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
+
+    def paired_quality(self, baseline, evidence, baseline_evidence):
+        """Separate assistance while keeping every frozen question in the sample."""
+        if self.source != baseline.source:
+            raise ValueError("Matched quality requires the same complete frozen oracle")
+        controls = {round_.identity: round_ for round_ in baseline.rounds}
+        measured = {}
+        for name, rounds in self.support_groups(evidence, baseline_evidence).items():
+            candidate = self.totals(chain.from_iterable(round_.outcomes for round_ in rounds))
+            control = self.totals(chain.from_iterable(controls[round_.identity].outcomes for round_ in rounds))
+            measured[name] = {"candidate": candidate, "baseline": control,
+                              "evaluated": name != "unobserved",
+                              "correct_difference": candidate["correct"] - control["correct"]
+                                                    if name != "unobserved" else None}
+        return measured
 
 
 @dataclass(frozen=True)
@@ -257,12 +381,17 @@ class Question:
     evidence_ref: str
     obsolete: tuple[str, ...] = ()
     measurement: Measurement = Measurement.RECALL
+    # Optional original source coordinate in external evaluation input. The
+    # authored evidence_ref label cannot authenticate a runtime Decision.
+    decision_source: MessageReference | None = None
 
     def __post_init__(self) -> None:
         if not self.identity or not self.prompt or not self.evidence_ref:
             raise ValueError("A frozen question requires identity, prompt and original evidence")
         if self.expected in self.obsolete:
             raise ValueError("A current expected answer cannot also be obsolete")
+        if self.decision_source is not None and self.measurement is not Measurement.ACTION:
+            raise ValueError("A Decision proposal source belongs on an action question")
 
     def score(self, answer: str | None) -> AnswerScore:
         return AnswerScore(
@@ -273,6 +402,33 @@ class Question:
 
     def public(self) -> dict:
         return {"id": self.identity, "prompt": self.prompt}
+
+    def proposed_action(self, answer, original):
+        """A declared valid alternative is distinct from valid execution."""
+        result = {"execution": {"evaluated": False, "reason": "No executed-action evidence supplied"},
+                  "constraint_validity": {"evaluated": False,
+                                          "reason": "Decision membership does not evaluate every constraint"}}
+        if self.decision_source is None or original is None:
+            return dict(result, declared_alternative={"evaluated": False,
+                "reason": "No original Decision reference and recorded probe supplied"})
+        observed = original["scoped_facts"]
+        if not observed["evaluated"]:
+            return dict(result, declared_alternative=observed)
+        selected = tuple(item for item in observed["decisions"]
+                         if item["lineage"] == self.decision_source)
+        if not selected:
+            return dict(result, declared_alternative={"evaluated": False,
+                "reason": "Referenced Decision is not current in the original captured scope"})
+        item, = selected
+        decision = item["declaration"]
+        if self.expected not in (decision.chosen, *decision.rejected):
+            raise ValueError("Frozen action oracle contradicts its original Decision alternatives")
+        return dict(result, declared_alternative={
+            "evaluated": True, "missing": answer is None,
+            "valid": answer in (decision.chosen, *decision.rejected),
+            "chosen": answer == decision.chosen, "source": FieldCodec.encode(item["current"]),
+            "scope": observed["scope"],
+        })
 
 
 @dataclass(frozen=True)
@@ -317,16 +473,7 @@ class RecallRound:
         return self.score(answers.rounds[self.identity]), original
 
     def score(self, answers: dict[str, str]) -> ScoredRound:
-        unexpected = answers.keys() - {question.identity for question in self.questions}
-        if unexpected:
-            raise ValueError(f"Unknown questions in {self.identity}: {sorted(unexpected)}")
-        return ScoredRound(
-            self,
-            tuple(
-                (question, question.score(answers.get(question.identity)))
-                for question in self.questions
-            ),
-        )
+        return ScoredRound(self, dict(answers))
 
 
 @dataclass(frozen=True)
@@ -359,7 +506,7 @@ class RecallScenario:
             tuple(item.score(answers.rounds.get(item.identity, {})) for item in self.rounds),
         )
 
-    def score_native(self, condition: Condition, probes: RecordedNativeProbes) -> dict:
+    def observe_native(self, condition: Condition, probes: RecordedNativeProbes):
         unexpected = probes.rounds.keys() - {item.identity for item in self.rounds}
         if unexpected:
             raise ValueError(f"Unknown native rounds: {sorted(unexpected)}")
@@ -371,29 +518,28 @@ class RecallScenario:
             else:
                 score = item.score({})
             scored.append(score)
-        result = ScoredScenario(self, condition, tuple(scored)).public()
-        return dict(result, native_probes=evidence,
-                    scope="recorded original native probes; condition label is not construction proof",
-                    checkpoints=checkpoints,
-                    original_checkpoint_count=len(checkpoints),
-                    three_original_cuts_observed=len(checkpoints) >= 3,
-                    canonical_availability={
-                        item.identity: checkpoints[item.identity]["canonical_availability"]
-                        if item.identity in checkpoints else {
-                            "evaluated": False, "reason": "No original committed checkpoint supplied"
-                        } for item in self.rounds
-                    },
-                    provider_prompt_presence={
-                        item.identity: evidence[item.identity]["provider_prompt_presence"]
-                        if item.identity in evidence else {
-                            "evaluated": False, "reason": "No original native probe supplied"
-                        } for item in self.rounds
-                    },
-                    revision_mass={identity: report["revision_mass"]
-                                   for identity, report in checkpoints.items()},
-                    answer_support={identity: original["answer_support"]
-                                    for identity, original in evidence.items()},
-                    recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls")
+        return ScoredScenario(self, condition, tuple(scored)), checkpoints, evidence
+
+    def score_native(self, condition: Condition, probes: RecordedNativeProbes) -> dict:
+        score, checkpoints, evidence = self.observe_native(condition, probes)
+        return score.public_native(checkpoints, evidence)
+
+    def compare_native(self, condition, probes, baseline_condition, baseline):
+        """The same frozen oracle scores both arms; original records own alignment."""
+        if condition == baseline_condition:
+            raise ValueError("A comparison requires distinct declared conditions")
+        score, cuts, original = self.observe_native(condition, probes)
+        control, baseline_cuts, baseline_original = self.observe_native(baseline_condition, baseline)
+        alignment = probes.alignment(baseline, original, baseline_original, self.rounds)
+        return {"candidate": score.public_native(cuts, original),
+                "baseline": control.public_native(baseline_cuts, baseline_original),
+                "alignment": alignment,
+                "paired_quality": score.paired_quality(control, original, baseline_original),
+                "condition_construction": {"evaluated": False,
+                    "reason": "Condition-specific construction/complete-history eligibility is not supplied by labels"},
+                "study_acceptance": {"evaluated": False,
+                    "reason": "One recorded sample is not a registered comparative study or margin result"}}
+
 
 
 def coding_scenario() -> RecallScenario:
@@ -528,6 +674,10 @@ def main() -> None:
     recorded.add_argument("--native-probes", type=Path)
     recorded.add_argument("--recorded-run", type=Path,
                           help="RecordedNativeProbes with ordered checkpoint and original evidence references")
+    parser.add_argument("--compare-recorded-run", type=Path,
+                        help="Independent original control; requires --recorded-run")
+    parser.add_argument("--baseline-condition", type=Condition, choices=tuple(Condition),
+                        default=Condition.BOUNDED)
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
     parser.add_argument("--previous-checkpoint", type=Path,
@@ -539,6 +689,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.previous_checkpoint is not None and args.native_checkpoint is None:
         parser.error("--previous-checkpoint requires --native-checkpoint")
+    if args.compare_recorded_run is not None and args.recorded_run is None:
+        parser.error("--compare-recorded-run requires --recorded-run")
     scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
     result = scenario.public()
     if args.probe_prompts:
@@ -554,7 +706,12 @@ def main() -> None:
         probes = FieldCodec.decode(RecordedNativeProbes, json.loads(
             args.recorded_run.read_text(), object_pairs_hook=unique_fields
         ))
-        result = scenario.score_native(args.condition, probes)
+        if args.compare_recorded_run is None:
+            result = scenario.score_native(args.condition, probes)
+        else:
+            baseline = FieldCodec.decode(RecordedNativeProbes, json.loads(
+                args.compare_recorded_run.read_text(), object_pairs_hook=unique_fields))
+            result = scenario.compare_native(args.condition, probes, args.baseline_condition, baseline)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.native_checkpoint.read_text(), object_pairs_hook=unique_fields

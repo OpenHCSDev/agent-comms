@@ -1,0 +1,1209 @@
+{
+  "tool": "Existing audit.findings.Package",
+  "roots": [
+    "src",
+    "tests",
+    "tools"
+  ],
+  "before": {
+    "revision": "bb21bf946dc3e50198a7e62272922880eed10b43",
+    "tool": "audit.findings.Package",
+    "parse_omissions": [],
+    "declarations": [
+      {
+        "path": "src/agent_comms/compaction_records.py",
+        "name": "NativeForkCreation",
+        "line": 375,
+        "bases": [
+          "NativeSessionIdentity",
+          "SessionJournalHistory",
+          "TypedTable"
+        ],
+        "members": [
+          "__post_init__",
+          "covered_prefix",
+          "recorded_prefix"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "name": "NativeContextData",
+        "line": 33,
+        "bases": [
+          "PiResponseData"
+        ],
+        "members": [
+          "for_turn",
+          "require_session_file"
+        ]
+      },
+      {
+        "path": "src/agent_comms/task_sources.py",
+        "name": "Decision",
+        "line": 565,
+        "bases": [
+          "ModelTaskDeclaration"
+        ],
+        "members": [
+          "require_decision",
+          "require_previous",
+          "retained_task_facts",
+          "__post_init__",
+          "text"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "RecordedNativeProbes",
+        "line": 35,
+        "bases": [],
+        "members": [
+          "resume_fork",
+          "observe"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "ScoreView",
+        "line": 156,
+        "bases": [
+          "ABC"
+        ],
+        "members": [
+          "scored_answers",
+          "outcomes",
+          "questions",
+          "correct",
+          "stale",
+          "missing",
+          "public_totals",
+          "totals",
+          "measurement_totals"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "ScoredRound",
+        "line": 206,
+        "bases": [
+          "ScoreView"
+        ],
+        "members": [
+          "identity",
+          "scored_answers",
+          "public"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "ScoredScenario",
+        "line": 228,
+        "bases": [
+          "ScoreView"
+        ],
+        "members": [
+          "identity",
+          "scored_answers",
+          "public"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "Question",
+        "line": 253,
+        "bases": [],
+        "members": [
+          "__post_init__",
+          "score",
+          "public"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "RecallRound",
+        "line": 279,
+        "bases": [],
+        "members": [
+          "__post_init__",
+          "public",
+          "probe_text",
+          "score_native",
+          "score_recorded",
+          "score"
+        ]
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "name": "RecordedNativeCheckpoint",
+        "line": 37,
+        "bases": [],
+        "members": [
+          "read_json",
+          "read_record",
+          "summary_usage",
+          "capture",
+          "_report",
+          "observe",
+          "inspect",
+          "revision_from"
+        ]
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "name": "RecordedNativeProbe",
+        "line": 231,
+        "bases": [],
+        "members": [
+          "submitted_prompt",
+          "answer_for_input",
+          "read_sdk_context",
+          "sdk_request",
+          "prompt_presence",
+          "observe",
+          "model_steps",
+          "read"
+        ]
+      }
+    ],
+    "consumers": [
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 793,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "src/agent_comms/messages.py",
+        "line": 107,
+        "name": "Decision"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 355,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 24,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 18,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "src/agent_comms/pi_commands.py",
+        "line": 450,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "src/agent_comms/task_sources.py",
+        "line": 190,
+        "name": "Decision"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 699,
+        "name": "Decision"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 206,
+        "name": "ScoreView"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 228,
+        "name": "ScoreView"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 207,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 319,
+        "name": "ScoredRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 352,
+        "name": "ScoredScenario"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 36,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 37,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 231,
+        "name": "ScoredRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 282,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 307,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 323,
+        "name": "ScoredRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 335,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 356,
+        "name": "ScoredScenario"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 362,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 549,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 554,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 559,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 161,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 215,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 238,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 422,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 425,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 432,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 439,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 442,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 445,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 451,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 464,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 478,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 492,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 562,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 59,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 208,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 374,
+        "name": "ScoredScenario"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 79,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 239,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 136,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 254,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 283,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 300,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 283,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 312,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 211,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 218,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 68,
+        "name": "Question"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 210,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 211,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_continued_private_session.py",
+        "line": 357,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "tests/test_native_context_inspection.py",
+        "line": 59,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/test_native_context_inspection.py",
+        "line": 60,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 46,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 85,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 105,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 109,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 68,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 80,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 86,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_task_decisions.py",
+        "line": 327,
+        "name": "Decision"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 72,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 75,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 83,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 110,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 51,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 96,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 106,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 101,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 225,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 237,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 52,
+        "name": "Question"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 55,
+        "name": "Question"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 57,
+        "name": "Question"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 208,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 232,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 220,
+        "name": "RecordedNativeProbe"
+      }
+    ],
+    "scope": "Lexical AST references; dynamic report readers and MRO resolution require semantic review"
+  },
+  "after": {
+    "revision": "221627d5d3403cf7d192a2340ac53148e5299533",
+    "tool": "audit.findings.Package",
+    "parse_omissions": [],
+    "declarations": [
+      {
+        "path": "src/agent_comms/compaction_records.py",
+        "name": "NativeForkCreation",
+        "line": 375,
+        "bases": [
+          "NativeSessionIdentity",
+          "SessionJournalHistory",
+          "TypedTable"
+        ],
+        "members": [
+          "__post_init__",
+          "covered_prefix",
+          "recorded_prefix"
+        ]
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "name": "NativeContextData",
+        "line": 33,
+        "bases": [
+          "PiResponseData"
+        ],
+        "members": [
+          "for_turn",
+          "require_session_file"
+        ]
+      },
+      {
+        "path": "src/agent_comms/task_sources.py",
+        "name": "Decision",
+        "line": 565,
+        "bases": [
+          "ModelTaskDeclaration"
+        ],
+        "members": [
+          "require_decision",
+          "require_previous",
+          "retained_task_facts",
+          "__post_init__",
+          "text"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "RecordedNativeProbes",
+        "line": 37,
+        "bases": [],
+        "members": [
+          "resume_fork",
+          "observe",
+          "alignment"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "ScoreView",
+        "line": 202,
+        "bases": [
+          "ABC"
+        ],
+        "members": [
+          "scored_answers",
+          "outcomes",
+          "questions",
+          "correct",
+          "stale",
+          "missing",
+          "public_totals",
+          "totals",
+          "measurement_totals"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "ScoredRound",
+        "line": 252,
+        "bases": [
+          "ScoreView"
+        ],
+        "members": [
+          "__post_init__",
+          "identity",
+          "scored_answers",
+          "public"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "ScoredScenario",
+        "line": 280,
+        "bases": [
+          "ScoreView"
+        ],
+        "members": [
+          "__post_init__",
+          "identity",
+          "scored_answers",
+          "public",
+          "support_groups",
+          "support_totals",
+          "proposed_actions",
+          "public_native",
+          "paired_quality"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "Question",
+        "line": 377,
+        "bases": [],
+        "members": [
+          "__post_init__",
+          "score",
+          "public",
+          "proposed_action"
+        ]
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "name": "RecallRound",
+        "line": 435,
+        "bases": [],
+        "members": [
+          "__post_init__",
+          "public",
+          "probe_text",
+          "score_native",
+          "score_recorded",
+          "score"
+        ]
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "name": "RecordedNativeCheckpoint",
+        "line": 37,
+        "bases": [],
+        "members": [
+          "read_json",
+          "read_record",
+          "summary_usage",
+          "capture",
+          "_report",
+          "observe",
+          "inspect",
+          "revision_from",
+          "scoped_facts"
+        ]
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "name": "RecordedNativeProbe",
+        "line": 262,
+        "bases": [],
+        "members": [
+          "submitted_prompt",
+          "answer_for_input",
+          "read_sdk_context",
+          "sdk_request",
+          "request_manifest",
+          "prompt_presence",
+          "observe",
+          "construction",
+          "model_steps",
+          "read"
+        ]
+      }
+    ],
+    "consumers": [
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 793,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "src/agent_comms/messages.py",
+        "line": 107,
+        "name": "Decision"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 355,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 24,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 18,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "src/agent_comms/pi_commands.py",
+        "line": 450,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "src/agent_comms/task_sources.py",
+        "line": 190,
+        "name": "Decision"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 699,
+        "name": "Decision"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 252,
+        "name": "ScoreView"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 280,
+        "name": "ScoreView"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 253,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 475,
+        "name": "ScoredRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 499,
+        "name": "ScoredScenario"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 38,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 39,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 283,
+        "name": "ScoredRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 438,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 463,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 476,
+        "name": "ScoredRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 482,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 503,
+        "name": "ScoredScenario"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 509,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 523,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 701,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 706,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 716,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 207,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 266,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 294,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 521,
+        "name": "ScoredScenario"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 568,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 571,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 578,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 585,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 588,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 591,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 597,
+        "name": "Question"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 610,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 624,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 638,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 712,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 719,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 61,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 81,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 270,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 136,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 287,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 316,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 332,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 316,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 351,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 383,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 213,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 220,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 68,
+        "name": "Question"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 212,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 213,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_continued_private_session.py",
+        "line": 357,
+        "name": "NativeForkCreation"
+      },
+      {
+        "path": "tests/test_native_context_inspection.py",
+        "line": 59,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/test_native_context_inspection.py",
+        "line": 60,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 47,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 101,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 102,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 109,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 131,
+        "name": "Decision"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 141,
+        "name": "Question"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 162,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 182,
+        "name": "NativeContextData"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 186,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 69,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 106,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 157,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 163,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_task_decisions.py",
+        "line": 327,
+        "name": "Decision"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 72,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 75,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 83,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 110,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 51,
+        "name": "RecallRound"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 96,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 106,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 101,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 225,
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 237,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 52,
+        "name": "Question"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 55,
+        "name": "Question"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 57,
+        "name": "Question"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 208,
+        "name": "RecordedNativeCheckpoint"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 232,
+        "name": "RecordedNativeProbes"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 220,
+        "name": "RecordedNativeProbe"
+      }
+    ],
+    "scope": "Lexical AST references; dynamic report readers and MRO resolution require semantic review"
+  },
+  "limits": "Lexical class declarations/member references; exported JSON readers and dynamic MRO resolution require semantic review. No parse omissions."
+}

@@ -24,15 +24,16 @@ from agent_comms.native_turn_context import NativeContextData
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiUsage, UserMessage
 from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
-from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
+from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDrop
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, NativeProvenance, RecordedContextTurn, SystemLayerSegment,
 )
-from compaction_retention_fixture import Condition, RecordedNativeProbes, coding_scenario
+from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
+from test_task_decisions import admit
 
 
 class RecordedMeasurementTests(unittest.TestCase):
@@ -75,6 +76,82 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(steps[2]['usage']['value']['totalTokens'], 0)
         self.assertNotIn('cacheRead', steps[2]['usage']['value'])
 
+    def test_quality_denominators_keep_assistance_and_unobserved_rounds_separate(self):
+        # Prevent assisted answers or absent records from inflating recall or
+        # disappearing from the frozen sample denominator.
+        scenario = coding_scenario()
+        answers = RecordedAnswers({r.identity: {q.identity: q.expected for q in r.questions}
+                                   for r in scenario.rounds})
+        score = scenario.score(Condition.TASK_MEMORY, answers)
+        evidence = {'r1': {'answer_support': {'unassisted_recall': True}},
+                    'r2': {'answer_support': {'unassisted_recall': False}}}
+        totals = score.support_totals(evidence)
+        self.assertEqual(tuple(totals[name]['questions'] for name in totals), (7, 7, 7))
+        paired = score.paired_quality(score, evidence, {'r1': evidence['r2']})
+        self.assertEqual(paired['tool_assisted_task_quality']['candidate']['questions'], 7)
+        self.assertEqual(paired['unobserved']['candidate']['questions'], 14)
+        self.assertFalse(paired['unobserved']['evaluated'])
+        self.assertIsNone(paired['unobserved']['correct_difference'])
+        with self.assertRaisesRegex(ValueError, 'complete frozen scenario'):
+            replace(score, rounds=score.rounds[:1])
+
+    def test_alignment_requires_distinct_originals_and_keeps_missing_rounds(self):
+        # Prevent changing an experimental label from manufacturing a control.
+        scenario = coding_scenario()
+        original = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        candidate = RecordedNativeProbes({'r1': original})
+        evidence = {'r1': {}}
+        with self.assertRaisesRegex(ValueError, 'reuse'):
+            candidate.alignment(candidate, evidence, evidence, scenario.rounds)
+        missing = candidate.alignment(RecordedNativeProbes({}), evidence, {}, scenario.rounds)
+        self.assertEqual(tuple(missing), ('r1', 'r2', 'r3'))
+        self.assertTrue(all(not row['evaluated'] for row in missing.values()))
+        different = RecordedNativeProbes({'r1': replace(original,
+            session=NativeSessionIdentity('other', str(self.root / 'other.jsonl')), input_id='b' * 32)})
+        def observation(source, model=('provider', 'model')):
+            return {'construction': {'fork': {'source': source, 'sourceRevision': 'original'},
+                'sdk_manifest': {'counter': 'native', 'segments': [
+                    {'kind': 'tool_catalog', 'sha256': 'c' * 64, 'utf8_bytes': 10}]}},
+                'scoped_facts': {'configured_settings': {'evaluated': True, 'model': model, 'thinking': 'high'}}}
+        a = {'r1': observation('parent')}
+        with self.assertRaisesRegex(ValueError, 'source histories'):
+            candidate.alignment(different, a, {'r1': observation('other-parent')}, scenario.rounds)
+        with self.assertRaisesRegex(ValueError, 'model/effort'):
+            candidate.alignment(different, a, {'r1': observation('parent', ('other', 'model'))}, scenario.rounds)
+        observed = candidate.alignment(different, a, a, scenario.rounds)
+        self.assertTrue(observed['r1']['evaluated'])
+        self.assertFalse(observed['r2']['evaluated'])
+
+    def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
+        # Prevent exact-answer success from becoming an execution or authority
+        # claim. Original scoped publications supply allowed alternatives.
+        comms = Comms(self.root / 'actions')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = admit(comms, 'agent')
+        declaration = Decision(chosen='inspect-source', rejected=('open-ticket',),
+            scope=owner.task_scope, source_turn=owner.turn_identity,
+            source_turn_id=TurnId(owner.active_turn.id))
+        message = comms.messaging.send_message(owner.name, '#team', declaration.text, task=declaration)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        cut = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('action-scope.json', comms.registry.store.read()))
+        request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=retained)
+        attempt = SelectedSummaryAttempt('operation', str(self.session), request.journal_json(), request, ReservedSummary())
+        original = {'scoped_facts': cut.scoped_facts(attempt)}
+        question = Question('action', 'What action?', 'open-ticket', 'authored-label',
+                            measurement=Measurement.ACTION, decision_source=message.reference)
+        report = question.proposed_action('open-ticket', original)
+        self.assertTrue(report['declared_alternative']['valid'])
+        self.assertFalse(report['declared_alternative']['chosen'])
+        self.assertFalse(report['execution']['evaluated'])
+        self.assertFalse(report['constraint_validity']['evaluated'])
+        self.assertFalse(question.proposed_action('replay-unknown', original)['declared_alternative']['valid'])
+        self.assertTrue(question.proposed_action(None, original)['declared_alternative']['missing'])
+        self.assertFalse(replace(question, decision_source=None).proposed_action('open-ticket', original)
+                         ['declared_alternative']['evaluated'])
+        with self.assertRaisesRegex(ValueError, 'contradicts'):
+            replace(question, expected='replay-unknown').proposed_action('replay-unknown', original)
+
     def test_absent_evidence_is_not_zero_or_three_cuts(self):
         scenario = coding_scenario()
         result = scenario.score_native(Condition.BOUNDED, RecordedNativeProbes({}))
@@ -111,11 +188,12 @@ class RecordedMeasurementTests(unittest.TestCase):
             context_manifest=self.artifact('manifest.json', manifest),
             sdk_segment_bytes=self.artifact('segments.json', tuple(s.text() for s in data.segments)))
         original = probe.read_sdk_context()
-        report = probe.prompt_presence(context, retained, original)
+        manifest = probe.request_manifest(context, original)
+        report = probe.prompt_presence(retained, original, manifest)
         self.assertTrue(report['exact_envelope_present'])
         self.assertFalse(report['final_transport_evaluated'])
         with self.assertRaisesRegex(ValueError, 'original probe request'):
-            probe.prompt_presence(replace(context, request_generation=2), retained, original)
+            probe.request_manifest(replace(context, request_generation=2), original)
         Path(probe.sdk_context.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
