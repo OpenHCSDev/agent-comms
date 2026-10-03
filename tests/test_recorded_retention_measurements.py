@@ -17,10 +17,12 @@ from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.native_compaction_request import NativeSummaryPayload
+from agent_comms.native_entries import MessageEntry
 from agent_comms.native_pi import NativeContextRecord
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
+from agent_comms.pi_payloads import AssistantMessage, PiUsage, UserMessage
 from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
 from agent_comms.thread_identity import TurnId, TurnIdentity
@@ -50,6 +52,28 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
+        # Prevent final-answer-only accounting from hiding earlier tool-step
+        # cost; unavailable native counters must never become measured zeros.
+        branch = (
+            MessageEntry(id='user', message=UserMessage(content='original input')),
+            MessageEntry(id='tool-step', timestamp='2026-10-03T01:00:00Z',
+                message=AssistantMessage(stop_reason='toolUse',
+                    usage=PiUsage(input=12, output=4, total_tokens=16))),
+            MessageEntry(id='missing', message=AssistantMessage(usage=None)),
+            MessageEntry(id='answer', message=AssistantMessage(stop_reason='stop',
+                usage=PiUsage(input=0, output=0, total_tokens=0))),
+        )
+        steps = RecordedNativeProbe.model_steps(branch)
+        self.assertEqual(tuple(step['entry_id'] for step in steps),
+                         ('tool-step', 'missing', 'answer'))
+        self.assertEqual(steps[0]['usage']['value']['totalTokens'], 16)
+        self.assertEqual(steps[0]['timestamp'], branch[1].timestamp)
+        self.assertEqual(steps[1]['usage'], {'evaluated': False, 'value': None})
+        self.assertTrue(steps[2]['usage']['evaluated'])
+        self.assertEqual(steps[2]['usage']['value']['totalTokens'], 0)
+        self.assertNotIn('cacheRead', steps[2]['usage']['value'])
 
     def test_absent_evidence_is_not_zero_or_three_cuts(self):
         scenario = coding_scenario()

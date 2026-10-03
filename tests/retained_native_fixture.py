@@ -335,6 +335,24 @@ class RecordedNativeProbe:
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
 
+    @staticmethod
+    def model_steps(branch):
+        """Export every original assistant completion, including tool steps.
+
+        PiUsage owns the external optional counters. Keep their original nulls
+        and zeros; a missing usage record is unavailable. NativeEntry owns which
+        branch members are assistant messages. This is not a count of transport
+        attempts or retries that never produced a journaled assistant record.
+        """
+        return tuple({
+            "entry_id": entry.id,
+            "timestamp": entry.timestamp,
+            "usage": {
+                "evaluated": entry.message.usage is not None,
+                "value": FieldCodec.encode(entry.message.usage),
+            },
+        } for entry in branch if entry.assistant_message)
+
     def read(self, evidence: NativeEvidenceRead):
         """Borrow the run owner's original source for every measurement."""
         evidence.require_path(Path(self.session.session_file))
@@ -382,8 +400,7 @@ class RecordedNativeProbe:
             "submitted_source": submitted,
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
-            "answer_usage": {"evaluated": answer.message.usage is not None,
-                             "usage": FieldCodec.encode(answer.message.usage)},
+            "model_steps": self.model_steps(branch),
             "answer_support": {
                 "tool_calls": len(calls), "tools": tuple(call.name for call in calls),
                 "unassisted_recall": not calls,
