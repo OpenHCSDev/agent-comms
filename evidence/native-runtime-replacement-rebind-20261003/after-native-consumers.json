@@ -1,0 +1,541 @@
+{
+  "sourceRoot": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist",
+  "projectedRPC": ".artifacts/native-runtime-rebind-source-proof/dist/modes/rpc/rpc-mode.js",
+  "parsed": 268,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "rebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1344,
+      "name": "setRebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1344,
+      "name": "rebindCurrentSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1352,
+      "name": "rebindCurrentSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "name": "bindExtensions",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1452,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "name": "setRebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "name": "bindExtensions",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1456,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "setRebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "bindExtensions",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 123,
+      "name": "rebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 145,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 159,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 172,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 206,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 214,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 232,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 238,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 249,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 294,
+      "name": "finishSessionReplacement",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 512,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 543,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 316,
+      "name": "setRebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 317,
+      "name": "rebindCurrentSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 712,
+      "name": "rebindCurrentSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1402,
+      "name": "bindExtensions",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1413,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1421,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4319,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4344,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4504,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4521,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 5393,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 48,
+      "name": "setRebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 49,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 53,
+      "name": "bindExtensions",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 57,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 59,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 72,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 103,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 637,
+      "name": "setRebindSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 638,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 642,
+      "name": "bindExtensions",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 647,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 649,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 662,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 701,
+      "name": "rebindSession",
+      "callee": "Identifier"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 766,
+      "name": "newSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 952,
+      "name": "switchSession",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 956,
+      "name": "fork",
+      "callee": "MemberExpression"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 964,
+      "name": "fork",
+      "callee": "MemberExpression"
+    }
+  ],
+  "rpcDirectRebindCalls": [
+    638,
+    701
+  ],
+  "scope": "All original268 native SDK dist JS modules parsed; only RPC source projection substituted. Two remaining direct calls belong initial startup and original runtime-hook consumption. Original finishSessionReplacement and InteractiveMode host hook remain. AST omits JavaScript held inside string literals and cannot prove dynamic dispatch or external extension behavior. No installed/native artifact qualification claim."
+}
