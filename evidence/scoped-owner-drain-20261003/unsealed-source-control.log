@@ -1,0 +1,59 @@
+...F...                                                                  [100%]
+=================================== FAILURES ===================================
+______ test_new_inputs_and_recovery_revision_invalidate_idle_observation _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-5tue2sgn')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f6057355550>
+
+    @pytest.mark.asyncio
+    async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_path, monkeypatch):
+        comms, agent, _root_id = _covered_session(tmp_path)
+        calls = []
+        original = agent._drain_private_nk
+    
+        async def observed(*args):
+            calls.append(args)
+            return await original(*args)
+    
+        monkeypatch.setattr(agent, "_drain_private_nk", observed)
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 2
+        with Coordination(comms.root / "coordination.sqlite3") as store:
+            # Another participant's SQL work is unrelated to this recipient.
+            store.participants.register("new", "new", "new", committed=True)
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 2
+        with Coordination(comms.root / "coordination.sqlite3") as store:
+            # Actual recovery/reassignment of beta must still invalidate the
+            # observation without a wire append or a provider request.
+            beta = comms.registry.require("beta")
+            person = store.participants.get(stable_thread_lookup(beta.created_at))
+            store.participants.advance_generation(
+                person.lookup, beta.name, expected_generation=person.participant_generation,
+            )
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 3
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 4
+        # A new original message cut must invalidate even when beta has no work.
+        first = comms.messaging.send_initial_cohort("sender", "alpha", "new absent-audience source")
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 5
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert len(calls) == 6
+        before = agent.inputs._idle_private_revisions["beta"]
+        second = comms.messaging.send_initial_cohort("sender", "beta", "new pending input")
+        assert first.seq < second.seq
+        with Coordination(comms.root / "coordination.sqlite3") as store:
+            pending = next_sealed_assignment(
+                store, stable_thread_lookup(beta.created_at), beta.name,
+            )
+>           assert pending.wire_seq == second.seq
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'NoneType' object has no attribute 'wire_seq'
+
+tests/test_private_idle_drain.py:163: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_private_idle_drain.py::test_new_inputs_and_recovery_revision_invalidate_idle_observation
+1 failed, 6 passed in 3.24s

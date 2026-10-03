@@ -301,6 +301,137 @@
         "close"
       ],
       "annotations": []
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 43,
+      "name": "AssignmentState",
+      "bases": [
+        "DeclaredFamily",
+        "LifecycleState"
+      ],
+      "members": [
+        "rejected_triage_history",
+        "wake_frame",
+        "requires_selected_triage",
+        "require_engagement",
+        "require_completion",
+        "notification",
+        "mode_expression",
+        "verdict_expression",
+        "binding_expression",
+        "permits_engagement_change",
+        "successors",
+        "mode",
+        "verdict",
+        "execution_id",
+        "exact_target",
+        "build",
+        "load",
+        "build_preengagement",
+        "preengagement"
+      ],
+      "annotations": [
+        "notification_state: ClassVar[str] = 'Pending'",
+        "notification_detail: ClassVar[str] = 'Awaiting a recorded notification outcome.'",
+        "notification_priority: ClassVar[int] = 3",
+        "notification_busy: ClassVar[bool] = False",
+        "terminal: ClassVar[bool] = False",
+        "engaged: ClassVar[bool] = False",
+        "deferred: ClassVar[bool] = False",
+        "triage_pending: ClassVar[bool] = False",
+        "full_pending: ClassVar[bool] = False",
+        "preengagement_target: ClassVar[bool] = False",
+        "engageable: ClassVar[bool] = False",
+        "failed: ClassVar[bool] = False",
+        "completed: ClassVar[bool] = False"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 178,
+      "name": "PendingNotification",
+      "bases": [],
+      "members": [
+        "notification"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 187,
+      "name": "TriagePendingAssignment",
+      "bases": [
+        "PendingNotification",
+        "AssignmentState"
+      ],
+      "members": [
+        "wake_frame",
+        "mode",
+        "successors"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 209,
+      "name": "FullPendingAssignment",
+      "bases": [
+        "PendingNotification",
+        "AssignmentState"
+      ],
+      "members": [
+        "mode",
+        "successors"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_tables/assignments.py",
+      "line": 38,
+      "name": "WakeAssignment",
+      "bases": [
+        "CoordinatorTable",
+        "TypedTable"
+      ],
+      "members": [
+        "recipient_identity",
+        "require_selected_source",
+        "require_committed_source",
+        "require_initial_decision",
+        "require_same_acceptance",
+        "source",
+        "require_engaged_binding",
+        "snapshot_disposition",
+        "snapshot_wake_mode",
+        "snapshot_triage_verdict",
+        "snapshot_execution_id",
+        "snapshot_exact_target",
+        "__post_init__",
+        "durable_key",
+        "references",
+        "triggers"
+      ],
+      "annotations": [
+        "assignment_id: str = dataclass_field(metadata={'wire_name': 'claim_id', 'sql': Column(primary_key=True, check='length(assignment_id) BETWEEN 1 AND 256')})",
+        "recipient: str = dataclass_field(metadata={'sql': Column(check='length(recipient) BETWEEN 1 AND 256')})",
+        "recipient_lookup: str",
+        "wire_seq: int = dataclass_field(metadata={'sql': Column(check='wire_seq > 0')})",
+        "message_id: str = dataclass_field(metadata={'sql': Column(check='length(message_id) BETWEEN 1 AND 256')})",
+        "audience: MessageAudience",
+        "lifecycle: AssignmentState = dataclass_field(metadata={'snapshot_exclude': True})",
+        "accepted_at_ms: int = dataclass_field(metadata={'sql': Column(check='accepted_at_ms >= 0')})",
+        "updated_at_ms: int = dataclass_field(metadata={'sql': Column(check='updated_at_ms >= accepted_at_ms')})",
+        "revision: int = dataclass_field(default=1, metadata={'sql': Column(check='revision > 0')})",
+        "resolver_version: str = dataclass_field(default=RESOLVER_VERSION, metadata={'sql': Column(check='length(resolver_version) BETWEEN 1 AND 256')})",
+        "policy_version: str = dataclass_field(default=POLICY_VERSION, metadata={'sql': Column(check='length(policy_version) BETWEEN 1 AND 256')})",
+        "exact_target: str | None = dataclass_field(init=False, compare=False, repr=False, default=None, metadata={'snapshot_exclude': True, 'sql': Column(generated=\"json_extract(lifecycle, '$.decision.exact_target')\", check='exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256')})",
+        "wake_mode: str = dataclass_field(init=False, compare=False, repr=False, default=None, metadata={'snapshot_exclude': True, 'sql': Column(generated='({assignment_mode})', check='wake_mode IN ({wake_names})')})",
+        "triage_verdict: str | None = dataclass_field(init=False, compare=False, repr=False, default=None, metadata={'snapshot_exclude': True, 'sql': Column(generated='({assignment_verdict})', check=\"triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')\")})",
+        "disposition: str = dataclass_field(init=False, compare=False, repr=False, default=None, metadata={'snapshot_exclude': True, 'sql': Column(generated=\"json_extract(lifecycle, '$.kind')\", check='disposition IN ({assignment_names})')})",
+        "execution_id: str | None = dataclass_field(init=False, compare=False, repr=False, default=None, metadata={'snapshot_exclude': True, 'sql': Column(generated=\"json_extract(lifecycle, '$.decision.execution_id')\")})",
+        "claim_status_kind: str | None = dataclass_field(init=False, default=None, compare=False, metadata={'snapshot_exclude': True, 'sql': Column(generated='CASE WHEN execution_id IS NOT NULL THEN disposition END')})"
+      ]
     }
   ],
   "references": [
@@ -3230,6 +3361,738 @@
       "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/widgets/worker_static.py",
       "line": 151,
       "source": "self.refresh",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 163,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 187,
+      "source": "PendingNotification",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 187,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 209,
+      "source": "PendingNotification",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 209,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 226,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 293,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 379,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 149,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 154,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 51,
+      "source": "self.triage_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 427,
+      "source": "TriagePendingAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 427,
+      "source": "FullPendingAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 117,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 154,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 431,
+      "source": "after.triage_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_states.py",
+      "line": 431,
+      "source": "after.full_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 21,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 55,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 28,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 29,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 29,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 22,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 52,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 32,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/assignment_store.py",
+      "line": 67,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/attempt_store.py",
+      "line": 106,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/cohort_schema.py",
+      "line": 232,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/cohort_schema.py",
+      "line": 312,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/cohort_schema.py",
+      "line": 409,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 331,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 59,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 58,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 88,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 88,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 166,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 343,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 367,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 48,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 68,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 168,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 196,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 254,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 178,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 380,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 359,
+      "source": "assignment.lifecycle.triage_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_cohort.py",
+      "line": 359,
+      "source": "assignment.lifecycle.full_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_response.py",
+      "line": 138,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 59,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 65,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 118,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 100,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 110,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 118,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 100,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_schema.py",
+      "line": 110,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_snapshot.py",
+      "line": 31,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_snapshot.py",
+      "line": 261,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_snapshot.py",
+      "line": 305,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_tables/assignments.py",
+      "line": 130,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_tables/assignments.py",
+      "line": 88,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordination_tables/assignments.py",
+      "line": 364,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_states.py",
+      "line": 47,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_states.py",
+      "line": 84,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_states.py",
+      "line": 138,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_states.py",
+      "line": 159,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_states.py",
+      "line": 187,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_states.py",
+      "line": 215,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_store.py",
+      "line": 78,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_store.py",
+      "line": 154,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/execution_store.py",
+      "line": 235,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/native_admission_rules.py",
+      "line": 204,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/native_admission_rules.py",
+      "line": 205,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/native_input_record.py",
+      "line": 97,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/native_input_record.py",
+      "line": 96,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/native_input_record.py",
+      "line": 98,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/native_prompt_binding.py",
+      "line": 196,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/notification_assignment.py",
+      "line": 54,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/notification_assignment.py",
+      "line": 29,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/notification_assignment.py",
+      "line": 106,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/notification_assignment.py",
+      "line": 105,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/notification_assignment.py",
+      "line": 113,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 107,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 113,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 184,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 347,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 387,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 410,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 537,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 572,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/optional_awareness_projection.py",
+      "line": 663,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 43,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 58,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 227,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 287,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 299,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 362,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 260,
+      "source": "current.lifecycle.triage_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 268,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/private_send_stage.py",
+      "line": 235,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_actions.py",
+      "line": 130,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_actions.py",
+      "line": 42,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_actions.py",
+      "line": 58,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_participant.py",
+      "line": 147,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_result.py",
+      "line": 23,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_result.py",
+      "line": 31,
+      "source": "AssignmentState",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_source_batch.py",
+      "line": 34,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_source_batch.py",
+      "line": 64,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_triage.py",
+      "line": 44,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_triage.py",
+      "line": 120,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_triage.py",
+      "line": 60,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_triage.py",
+      "line": 68,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_triage.py",
+      "line": 64,
+      "source": "TriagePendingAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_write_authority.py",
+      "line": 22,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_write_authority.py",
+      "line": 34,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_write_authority.py",
+      "line": 38,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_write_plan.py",
+      "line": 252,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_write_plan.py",
+      "line": 268,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/selected_write_plan.py",
+      "line": 213,
+      "source": "assignment.lifecycle.full_pending",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/wake_injection.py",
+      "line": 32,
+      "source": "WakeAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/wake_policy.py",
+      "line": 102,
+      "source": "TriagePendingAssignment",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/wake_policy.py",
+      "line": 110,
+      "source": "FullPendingAssignment",
       "context": "Load"
     }
   ],
@@ -8883,6 +9746,7 @@
   ],
   "ambiguity": "Method and attribute terminal-name references are candidates, not proven dynamic/MRO resolution. Semantics read separately; native producer boundary unchanged.",
   "boundary_notes": [
-    "Initial frontend root toad had no modules; corrected to actual src and required nonempty Package before editing. All declared roots now parsed; native JS producer unchanged."
+    "Initial frontend root toad had no modules; corrected to actual src and required nonempty Package before editing. All declared roots now parsed; native JS producer unchanged.",
+    "Selection capability family additionally enumerated from exact pre-edit a0a0a7c2 as scope expanded; not inferred from post-edit source."
   ]
 }
