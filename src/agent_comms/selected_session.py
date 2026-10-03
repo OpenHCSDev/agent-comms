@@ -16,7 +16,7 @@ from .errors import RelationViolationError
 from .diagnostics import PublicationMeasurements
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
-from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
+from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .owner_launch import RestartEnvironment
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
@@ -106,7 +106,7 @@ class SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
-            identity=validate_native_reopen(package, str(path)))
+            identity=NativeSessionIdentity.read(package, str(path)))
 
     @classmethod
     async def prepare(

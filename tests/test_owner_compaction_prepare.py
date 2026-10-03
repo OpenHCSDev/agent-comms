@@ -545,16 +545,14 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             assert operation.state.committed
             assert not bridge.journal.operations.unresolved(str(session))
             receipt["phases"].append("commit")
-            from agent_comms.native_session_reopen import validate_native_reopen
+            from agent_comms.native_session_reopen import NativeSessionIdentity
 
-            monkeypatch.setenv("AC_CAPACITY_PHASE", "strict-reopen")
+            monkeypatch.setenv("AC_CAPACITY_PHASE", "identity-read")
             assert (
-                validate_native_reopen(
-                    package, str(session), expected_session_id=fixture["session_id"]
-                )
-                == fixture["session_id"]
+                NativeSessionIdentity.read(package, str(session))
+                == NativeSessionIdentity(fixture["session_id"], str(session))
             )
-            receipt["phases"].append("strict-reopen")
+            receipt["phases"].append("identity-read")
             monkeypatch.setenv("AC_CAPACITY_PHASE", "cli-reopen")
             asyncio.run(
                 capacity_native_cli(
