@@ -1,0 +1,15 @@
+{
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "core": "5025c4ba84c5623f475706475fb7743ce0e8f156",
+  "toad": "38ede873b675756d995e0da5e7c4d89bf9e36819",
+  "textual": "0ab687e007fca311ce9f786634d8f5fc991ff808",
+  "diff": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+  "sdk": "0.12.1",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent",
+  "purpose": "Only Core588 normalVCSwheel +native2b selection for private AppIRC; originalToAd/Text untouched",
+  "package_writer": "Sch",
+  "gate_owner": "Parent588",
+  "new_environment": false,
+  "new_native_build": false,
+  "public_effects": 0
+}

@@ -1,0 +1,746 @@
+{
+  "files": [
+    {
+      "source": ".artifacts/display-selection588-private-candidate-20261003/source-proof.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/source-proof.json",
+      "sha256": "11908688323b7b2852337b5d7f2333542447c4cffa6634a81711272dde622591"
+    },
+    {
+      "source": ".artifacts/display-selection588-private-candidate-20261003/verify.log",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/verify.log",
+      "sha256": "81499d2ab3ebab574ac45abdd91bb01625b07b6f7394a8f0152f774890369d8f"
+    },
+    {
+      "source": ".artifacts/display-selection588-private-candidate-20261003/dependency-check.log",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/dependency-check.log",
+      "sha256": "6c087e22f1ff2aa2e68fc3f2b37beb08c31005e6639f016f0be2d60b220b4e25"
+    },
+    {
+      "source": ".artifacts/display-selection588-private-candidate-20261003/ownership.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/ownership.json",
+      "sha256": "b30a75c6d8a9b0bbe09ffe01abfd8c1a8ebdb29fe7d7f0f6709940df4349560a"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/activation.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/activation.json",
+      "sha256": "4b6d7b85e376719999d7f09c7861a63b5dba8c57020e4937d887f00a9459a329"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pygments-2.21.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pygments-2.21.0.dist-info/METADATA",
+      "sha256": "1dde075570136774c706bf0009183a793fe0ee262e4a5590cc6eff8453eedd43"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pygments-2.21.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pygments-2.21.0.dist-info/RECORD",
+      "sha256": "547cae0fd89ed39333c5945121d659280af49b5abf67cb8b40abf29f03f25a9d"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pydantic_core-2.46.5.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pydantic_core-2.46.5.dist-info/METADATA",
+      "sha256": "29768c038c0bb3564c0a87ef50ef78d18a2372474bdef0ba356a8c0fd4bd6028"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pydantic_core-2.46.5.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pydantic_core-2.46.5.dist-info/RECORD",
+      "sha256": "0e5d117f4de8587c94355e080f601b0202de905eea42bd1f08a81e4ef7a5a984"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/typing_inspection-0.4.4.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/typing_inspection-0.4.4.dist-info/METADATA",
+      "sha256": "bad3d9e6342ef6750cf5128ec942327b8bebdce0b6e4d6f67cb15b27ae5118da"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/typing_inspection-0.4.4.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/typing_inspection-0.4.4.dist-info/RECORD",
+      "sha256": "83fc23669db31500d06056b13ecebe4f088f56a81c1ea86e3b68f1de3b8c7d95"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/loguru-0.6.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/loguru-0.6.0.dist-info/METADATA",
+      "sha256": "20df51907e2edcea15d0c702614c50191f506859d45af0c21eaabdf882a545d2"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/loguru-0.6.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/loguru-0.6.0.dist-info/RECORD",
+      "sha256": "98e597a034c2e18b87e09fccc210d63ac2d8d4cc6c0d48022ff7b8f9f6adf429"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_go-0.25.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_go-0.25.0.dist-info/METADATA",
+      "sha256": "b7af980e98f06a6c74d93e4099ace3603ae8481eb68f033298c8ef8ff7889c5d"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_go-0.25.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_go-0.25.0.dist-info/RECORD",
+      "sha256": "37160342ff4dee23c5d1efc95ed140b62a0802ef6a64ec31acda8fc8ada44e95"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiohttp-3.14.3.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiohttp-3.14.3.dist-info/METADATA",
+      "sha256": "287d4346fb85cdf58dae89ac33639bef485653990a19af9bcd7d39e47e54ea1b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiohttp-3.14.3.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiohttp-3.14.3.dist-info/RECORD",
+      "sha256": "1787c182f3e1c68caddd37cc722bf62d279f85655ce5dffffdb3853a985d1bfd"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/propcache-0.5.4.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/propcache-0.5.4.dist-info/METADATA",
+      "sha256": "6ed3bac0ad43050ceaf8bd09878ba3d673c94c4da0d4498f903f86c36cc6fb57"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/propcache-0.5.4.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/propcache-0.5.4.dist-info/RECORD",
+      "sha256": "6f7d6dc79677725899d325b9c044a19b787490086e76ac25344401ab62793e76"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/yarl-1.25.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/yarl-1.25.1.dist-info/METADATA",
+      "sha256": "fd6baa258a11c4d7e7008272a69180d4d34aa04a6a5afda36ac5e55aa0aa4f41"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/yarl-1.25.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/yarl-1.25.1.dist-info/RECORD",
+      "sha256": "9b2dae95095bc6cbd28663a8fd909e5bac873daae0e7f1ee710a5a6c2dbf7dfd"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_yaml-0.7.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_yaml-0.7.2.dist-info/METADATA",
+      "sha256": "716d1d594a839a17395462df1deb0e30d3d3a918751ea362624da1fe29975e67"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_yaml-0.7.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_yaml-0.7.2.dist-info/RECORD",
+      "sha256": "b7e9daae86e3eef8759afe2e32d1fe078cea1606aef6755986b5cd8b1774a62e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/format_currency-0.0.10.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/format_currency-0.0.10.dist-info/METADATA",
+      "sha256": "8a18f131dfef28b4a379e0182571a5d1a7f04a5f8d4f3821b4103121ff22d87a"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/format_currency-0.0.10.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/format_currency-0.0.10.dist-info/RECORD",
+      "sha256": "5e1c0e8365d6365de350926dbc94e150b536f5e8c918c1c11f44e9e7ab5b6b0b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_rust-0.24.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_rust-0.24.2.dist-info/METADATA",
+      "sha256": "218755ae51a30173dd771ef9caa5ead8b51f6883add5c777433128f9b406bf9d"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_rust-0.24.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_rust-0.24.2.dist-info/RECORD",
+      "sha256": "d1b10157a9b56fabb36295a4639d03d9eaa5f2098a8aa34b3818a336c5851faa"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/xdg_base_dirs-6.0.3.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/xdg_base_dirs-6.0.3.dist-info/METADATA",
+      "sha256": "667774aa3afe1f27930ceae9249a4258fafa3fd67b670a222c970e0b6f635974"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/xdg_base_dirs-6.0.3.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/xdg_base_dirs-6.0.3.dist-info/RECORD",
+      "sha256": "8e1ec6906dbcca3d17adc4545ac74745dbf4554de4a91af0adf6bb508e24a971"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/certifi-2026.7.22.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/certifi-2026.7.22.dist-info/METADATA",
+      "sha256": "ef5af1638fbb23676ac3c5777dfcfc2cd9c348fe4172ed5ba3d277655b248090"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/certifi-2026.7.22.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/certifi-2026.7.22.dist-info/RECORD",
+      "sha256": "cff9d243744c96445494c29abee3d592d0a6955d5504f4fbe034dce7aaf38490"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/frozenlist-1.8.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/frozenlist-1.8.0.dist-info/METADATA",
+      "sha256": "946c22dc9f7e2c76f2d698f00a4306dbe49a820e2b3f1a0e22fe5286cbec35f1"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/frozenlist-1.8.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/frozenlist-1.8.0.dist-info/RECORD",
+      "sha256": "fc076d25db70ab874f85c767256863fd044b85de191d7b95a270342e2366ef55"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiosignal-1.4.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiosignal-1.4.0.dist-info/METADATA",
+      "sha256": "09247ef1da8bc696728d47130e702e4307f6f7d101d6c485bff9f3a71ce7008d"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiosignal-1.4.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiosignal-1.4.0.dist-info/RECORD",
+      "sha256": "b9a6cd07dac78298d856613e8140b7da26b20506ed07747802bd513bf9b3ea35"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/platformdirs-4.9.6.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/platformdirs-4.9.6.dist-info/METADATA",
+      "sha256": "7dc437d6904fab5d1b6527ac1bdfe03044e9ad53649dadc143471a6f2472927c"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/platformdirs-4.9.6.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/platformdirs-4.9.6.dist-info/RECORD",
+      "sha256": "2066c8e57815d4124568be7af2b199cae5e2b31694e15cf925cf7017c598368a"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/metaclass_registry-0.2.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/metaclass_registry-0.2.1.dist-info/METADATA",
+      "sha256": "dd8cf8a4884481b04d83d163329f61afb5529aaf2b9ad68764d3c072c1ab8488"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/metaclass_registry-0.2.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/metaclass_registry-0.2.1.dist-info/RECORD",
+      "sha256": "59dacb27e41b0b0031422c3cadf4a69f23c8622d4acb7e953f1d7312778939e8"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/idna-3.20.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/idna-3.20.dist-info/METADATA",
+      "sha256": "dbd8c14c1e4ca1e0c9824a6dbc7cbbf78884f38eb52d91148cd3025f671e4b85"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/idna-3.20.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/idna-3.20.dist-info/RECORD",
+      "sha256": "87e953e6cb5f996a2d6b097cdb690403ced75ed372c2d0ce0b708b879fe81f75"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_bash-0.25.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_bash-0.25.1.dist-info/METADATA",
+      "sha256": "fadc68881f56a3489897b0ff5bc5fb5461c67e651cf911d04c59ae38026f80df"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_bash-0.25.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_bash-0.25.1.dist-info/RECORD",
+      "sha256": "20a4e70c95521cb20ec6194dfcde2bf19a7dac0b132a8b8545b6e32be6e3239a"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiohappyeyeballs-2.7.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiohappyeyeballs-2.7.1.dist-info/METADATA",
+      "sha256": "e68d1bf48aec9dcc2767343dedec25e12860085cba180e10bc3d3bdd031602ba"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiohappyeyeballs-2.7.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiohappyeyeballs-2.7.1.dist-info/RECORD",
+      "sha256": "14263431f101aad85e690b74756640a356c3f311654f0db92305c7fd5fcfa75c"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pyperclip-1.11.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pyperclip-1.11.0.dist-info/METADATA",
+      "sha256": "2493839e0751761f27d39aa6d5c5dfd1df839c45da8f328aba4ae4102868b825"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pyperclip-1.11.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pyperclip-1.11.0.dist-info/RECORD",
+      "sha256": "7b0a2d465f402fd6aa0faec55ac0491fac4bd5cec4e978e8335364f0fa783c66"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/jinja2-3.1.6.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/jinja2-3.1.6.dist-info/METADATA",
+      "sha256": "68c5548fb67c4132a13898d9b31ec50c6bea2abdd915d921f214355c3a6499c8"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/jinja2-3.1.6.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/jinja2-3.1.6.dist-info/RECORD",
+      "sha256": "4551b3fb657b85a9f01e961c0f8a235da65d758149b619400211964b3ac02bdc"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/rich-15.0.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/rich-15.0.0.dist-info/METADATA",
+      "sha256": "fad34fc603fac4481bf81f8dd629492fc302c0ec31909c86644751512afb2e3b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/rich-15.0.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/rich-15.0.0.dist-info/RECORD",
+      "sha256": "1b725253b1bd316b53169a3a0b35d03d6c81bad9009ddae73d8645fb3cd3f292"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/bashlex-0.18.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/bashlex-0.18.dist-info/METADATA",
+      "sha256": "4dcd5c1c94128782751381a792f16065e748f8985b3f42d39faa8b3f4029fb50"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/bashlex-0.18.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/bashlex-0.18.dist-info/RECORD",
+      "sha256": "ceeb7bb23912e9490ea64d2e73fe780bdc755784e494b0a338040d3dbfa9f8ee"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/annotated_types-0.8.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/annotated_types-0.8.0.dist-info/METADATA",
+      "sha256": "614985b278f601b8ef863f82783b991cc3ada4b89f592eb71c7c48c5f2ef2298"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/annotated_types-0.8.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/annotated_types-0.8.0.dist-info/RECORD",
+      "sha256": "8191d3aa1ac93480688819b4db2385606219a3f7a453b85e086646134ded4f96"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual-8.2.8.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual-8.2.8.dist-info/METADATA",
+      "sha256": "5b9bc0d0516d05f028e21044bcae5ae2b907e0f22c73e74b54fc73aad5ad0f2b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual-8.2.8.dist-info/direct_url.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual-8.2.8.dist-info/direct_url.json",
+      "sha256": "dd2d2c7ea72fd2f0ad8fe1b5d80d4db37d5f675ab038450175aa2b2f57773608"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual-8.2.8.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual-8.2.8.dist-info/RECORD",
+      "sha256": "508ae4aaa884ba6c6f0e7c6e08f19dd4cfef749f0eb64937f5d6e2b29f445a48"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiohttp_jinja2-1.6.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiohttp_jinja2-1.6.dist-info/METADATA",
+      "sha256": "b67151894b8e18789491b9b3bb9f3820f4ca5a106b8834250bd3ead8b4adc9df"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiohttp_jinja2-1.6.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiohttp_jinja2-1.6.dist-info/RECORD",
+      "sha256": "9258df2651899e5c9816b1011f0a1ceda939fd6c6ff4cf4d9fc7a650af81b796"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/httpx-0.28.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/httpx-0.28.1.dist-info/METADATA",
+      "sha256": "febb9b0f8f3e80d57c8199c304f35c4336e8581d1d18d7983c92766b82793b25"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/httpx-0.28.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/httpx-0.28.1.dist-info/RECORD",
+      "sha256": "8cf3bf3c2558dce8d94af09028d4c78f8a44e0b2d163fa0005b649311fdd5e6c"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/anyio-4.14.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/anyio-4.14.2.dist-info/METADATA",
+      "sha256": "c5e6fc4dfd833319913b287be7a30d9935e9208c7ef917630621855aaac4d419"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/anyio-4.14.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/anyio-4.14.2.dist-info/RECORD",
+      "sha256": "722d3bb1432c0f34f49dca8ac66fa132db1e4a2151f7104ee66a8cd44222c0b6"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/batrachian_toad-0.6.20.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/batrachian_toad-0.6.20.dist-info/METADATA",
+      "sha256": "3fde2bfef1346f91a2bad2c6dfbca28a40710dc38ca987f66266a6064c3c43ee"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/batrachian_toad-0.6.20.dist-info/direct_url.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/batrachian_toad-0.6.20.dist-info/direct_url.json",
+      "sha256": "ef5c3ec3e17b21b282af8c5346ed5df35856dbaee810bfa19ed1c8be5abbf13e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/batrachian_toad-0.6.20.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/batrachian_toad-0.6.20.dist-info/RECORD",
+      "sha256": "283d40463ab7ed9451c43dc1ed2184464a8b6cfa63a0c746546175b8251ce14d"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/linkify_it_py-2.2.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/linkify_it_py-2.2.0.dist-info/METADATA",
+      "sha256": "5bc112f7a322ec1d8b3a71c3357daf6340353f773ad386fa9784c22de8339eb9"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/linkify_it_py-2.2.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/linkify_it_py-2.2.0.dist-info/RECORD",
+      "sha256": "b2ebfc103e10af5baf5e45e53a6281330a6d8a12fef73ae19d7c10ef63983ad6"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/click-8.4.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/click-8.4.0.dist-info/METADATA",
+      "sha256": "c6393d65643f8492f5054fd0c73cff08c7e3a57b4d3d1b532fa687b16087162e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/click-8.4.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/click-8.4.0.dist-info/RECORD",
+      "sha256": "8fe7baf908e6108d84367c324b8fc4118e80e5932e8a065de9c2ac4bad935618"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_json-0.24.8.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_json-0.24.8.dist-info/METADATA",
+      "sha256": "e77a77174887a9e762ec589c9f27e465efd9189ab295f1502d8243aabd2f4192"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_json-0.24.8.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_json-0.24.8.dist-info/RECORD",
+      "sha256": "44403b644a655d45870ef51417371fabdcda6c13a48ba0ee2cc798fa3e9f28cf"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/notify_py-0.3.43.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/notify_py-0.3.43.dist-info/METADATA",
+      "sha256": "972efd549ed93d09ed0d0a1bb4000032c15adb97d79eeaabd1afbb1fdf1927d0"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/notify_py-0.3.43.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/notify_py-0.3.43.dist-info/RECORD",
+      "sha256": "3c0a7fab085e811561b639b9a8065787394a0b9ed3652042129f4d50e3e82be6"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_javascript-0.25.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_javascript-0.25.0.dist-info/METADATA",
+      "sha256": "2dbd765f4db4fa74c6305744a8c16b6ff610aabd387c90bce0bbf5eddbb1b13e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_javascript-0.25.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_javascript-0.25.0.dist-info/RECORD",
+      "sha256": "5c1cd59a5c98bb67aba887a36e5b7f04ee267606e638ffc67365a56cf2b6ede3"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/typing_extensions-4.15.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/typing_extensions-4.15.0.dist-info/METADATA",
+      "sha256": "c138378fe8f18934ac99de060535c53ec6c13aeed65e94c32641da7ee3192a72"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/typing_extensions-4.15.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/typing_extensions-4.15.0.dist-info/RECORD",
+      "sha256": "c42db5851c3a20efb41dbe1a0d03c18db577a5449c7e685f6b139df34b98e62f"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_diff_view-0.1.5.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_diff_view-0.1.5.dist-info/METADATA",
+      "sha256": "60a3889bd480e8c0480bf35422065fb0f6914b74bc27c854162788222facbf63"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_diff_view-0.1.5.dist-info/direct_url.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_diff_view-0.1.5.dist-info/direct_url.json",
+      "sha256": "139867be8bb8ebe40c9e40237647c1d62b21a76f6cc3ecc7747502c86aeaa134"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_diff_view-0.1.5.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_diff_view-0.1.5.dist-info/RECORD",
+      "sha256": "b11c6ee03b80cbed65e338526aa20b549a6aa30ebe0905b331dcce9e41538030"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/markdown_it_py-4.2.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/markdown_it_py-4.2.0.dist-info/METADATA",
+      "sha256": "72c36ff516755443b1ecb61e17b2567a990230b49a504b0eb0c42d5f82448a9c"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/markdown_it_py-4.2.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/markdown_it_py-4.2.0.dist-info/RECORD",
+      "sha256": "88ce788554fe919444f40a3b115f98a9f695057bbe89533e762869ee2d821266"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/setproctitle-1.3.7.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/setproctitle-1.3.7.dist-info/METADATA",
+      "sha256": "f3aae6f59f0e0c2ae3378189d4399d7a4a25de58c774cdb423fbfa02a534d0aa"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/setproctitle-1.3.7.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/setproctitle-1.3.7.dist-info/RECORD",
+      "sha256": "2a490aa4f137255f2f9080251331524122881209ebce3c987d37155ccf302dce"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/markupsafe-3.0.3.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/markupsafe-3.0.3.dist-info/METADATA",
+      "sha256": "12b4cc61a7fa288cf7667ee3f213786d9619db57fb33ff6f934afbcb5c12ec81"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/markupsafe-3.0.3.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/markupsafe-3.0.3.dist-info/RECORD",
+      "sha256": "f826a09f6c546af8199b76062de7bb48316fab71b42781712e27b4c9c9a58547"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_html-0.23.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_html-0.23.2.dist-info/METADATA",
+      "sha256": "638dec992060f3fa59b6de6d54950b252693411cec1d23fe196195232b42f474"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_html-0.23.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_html-0.23.2.dist-info/RECORD",
+      "sha256": "c8af1373bc3ca22ebc54577047adccec7c20e0cae95c9271dc7db49786688d1f"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_serve-1.1.3.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_serve-1.1.3.dist-info/METADATA",
+      "sha256": "e734c92536cb0b1c552f2e89e1d69a13b75ae3c09a06bdc0057cc56ad12cd4cf"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_serve-1.1.3.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_serve-1.1.3.dist-info/RECORD",
+      "sha256": "94f10a5ac3508eb6dda7f573bbb5ab0248686803d094bbe040d0670a7b5fcf23"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter-0.26.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter-0.26.0.dist-info/METADATA",
+      "sha256": "40c7146e3b9830f27317e68803d3ea0ecec75af69c957044a976b143a4f94ba4"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter-0.26.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter-0.26.0.dist-info/RECORD",
+      "sha256": "02fb20f24634ada8a19b1a3263efce597a692e4be5b7cd8b7a143306cad584a0"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/attrs-26.1.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/attrs-26.1.0.dist-info/METADATA",
+      "sha256": "4cd40e690f23bf37cbcad34efd6758e062df1df07c86833f7e3ce95bf1fa38cc"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/attrs-26.1.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/attrs-26.1.0.dist-info/RECORD",
+      "sha256": "6b0b326d4b4ee0fac27909ac7cbb066fc4bdf8e93d87031e27e770db059e5a04"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_xml-0.7.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_xml-0.7.0.dist-info/METADATA",
+      "sha256": "a97506d30cf8a8699ab2ae17e6890508872659423152981703ed357b44c225fd"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_xml-0.7.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_xml-0.7.0.dist-info/RECORD",
+      "sha256": "860848c4d7b1ce5e4bd0fc3526a2eaef69247124d970a45212a81c3cdadd9e73"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/watchdog-6.0.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/watchdog-6.0.0.dist-info/METADATA",
+      "sha256": "ecfde023047e7761dce06d4488abcede89e398399961a052f2fccb39b001e279"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/watchdog-6.0.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/watchdog-6.0.0.dist-info/RECORD",
+      "sha256": "5e1d1ac9962a9bcb0091c4136551f1a346168cd31b0249283a3675429b4352dd"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pydantic-2.13.5.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pydantic-2.13.5.dist-info/METADATA",
+      "sha256": "0685830d13647bd6f3f05526043d32a8b2a221d86b53773053d6c52bb17a9c07"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pydantic-2.13.5.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pydantic-2.13.5.dist-info/RECORD",
+      "sha256": "93253f807bd8a0440d58d159ffeef610528e8a687b948095955114275c16881f"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pathspec-1.1.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pathspec-1.1.1.dist-info/METADATA",
+      "sha256": "68de3f158b6592f086e78754c962092f32a761944ab66a660c0d62ad79c4b69b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/pathspec-1.1.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/pathspec-1.1.1.dist-info/RECORD",
+      "sha256": "f9531bc29d0c741f02f975537a1bcc4c0aa091c2b1a7d2cbf4bcb31a6316eaf4"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/jeepney-0.9.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/jeepney-0.9.0.dist-info/METADATA",
+      "sha256": "b8e6c353e9aaed0ed0144029556417fda23b64f344e718331907054ba05b8c62"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/jeepney-0.9.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/jeepney-0.9.0.dist-info/RECORD",
+      "sha256": "b56c732991e86baf13cc5d082fdfc3ac5c74c2665a2d75fb0666908cc2ea2a63"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/mdurl-0.1.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/mdurl-0.1.2.dist-info/METADATA",
+      "sha256": "b53b29d48f499367053fda3c81e7ce27d2558380ebbf83e66023b02eb7ddd25d"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/mdurl-0.1.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/mdurl-0.1.2.dist-info/RECORD",
+      "sha256": "9a1b05128e711beabd7684e116fcf408ce8cff7ef10e7e8b359b248924fe529c"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/packaging-26.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/packaging-26.2.dist-info/METADATA",
+      "sha256": "4f9cbcd7933415a4793f7767c98a2b6a512c823fc81c87337815705f230ecabf"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/packaging-26.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/packaging-26.2.dist-info/RECORD",
+      "sha256": "34a791dcc687723f1d7601aa68319f6d51aa00e44d85818995dd33a1b7c5a49c"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_markdown-0.5.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_markdown-0.5.1.dist-info/METADATA",
+      "sha256": "ee29ee6f4d61c4b2eae4445ea26ce7ca090a212d3d0a6f53871e8f228af2a07f"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_markdown-0.5.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_markdown-0.5.1.dist-info/RECORD",
+      "sha256": "67f3db6e51916bddb7ad3381e2b0e07c2e027a911e15614400e886bc719d8071"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms-0.1.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/agent_comms-0.1.0.dist-info/METADATA",
+      "sha256": "6de8c261a0fc800be3daf456efc62ab70fd861a1fc381e324ccdb38da98999c0"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms-0.1.0.dist-info/direct_url.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/agent_comms-0.1.0.dist-info/direct_url.json",
+      "sha256": "6dadc544d8e9dfc9e026fda462cc764f3cd02139e1a3f457c58f8418775978fd"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms-0.1.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/agent_comms-0.1.0.dist-info/RECORD",
+      "sha256": "3e6778aa8928627104ba9272a20d1e3a7dc533a49b1ed2772b6910566c24cf69"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiosqlite-0.22.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiosqlite-0.22.1.dist-info/METADATA",
+      "sha256": "cf3c8cc7397687f74602557a3e4f5ce1806591a62c82fe94c9b396fd80d1b39a"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/aiosqlite-0.22.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/aiosqlite-0.22.1.dist-info/RECORD",
+      "sha256": "3cfec6119ae7c92e553e6ebef7559c8f57d12d6f2673bee22c2f9b08dd571d59"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_css-0.25.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_css-0.25.0.dist-info/METADATA",
+      "sha256": "542283f575be528e24db7d2e92ca94e5785a1a9098220bf62b6d51e7fbbf0302"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_css-0.25.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_css-0.25.0.dist-info/RECORD",
+      "sha256": "31e27240003d4dd8bd67b96df55ef124c13709110541510a2d92423d14ba521e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_java-0.23.5.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_java-0.23.5.dist-info/METADATA",
+      "sha256": "d74c7602596322bc89f607b69b0e18dd1240d911dcf3340536dea3fb1b950f0a"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_java-0.23.5.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_java-0.23.5.dist-info/RECORD",
+      "sha256": "f7977aa6d2ea6b115c0cadd6c5c8edbc15c5f659b05a2b4f284ce3061c112060"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/psutil-7.2.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/psutil-7.2.2.dist-info/METADATA",
+      "sha256": "525f8ba78523cf7bc3759d62a105e7c57fd679ea702402b9449fb0746aa0217f"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/psutil-7.2.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/psutil-7.2.2.dist-info/RECORD",
+      "sha256": "2af7e87b12ad6542c1eaaf20a299c109fa09b9dc5d69faf745219bd61e8cfca6"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/typeguard-4.5.2.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/typeguard-4.5.2.dist-info/METADATA",
+      "sha256": "f86506b5e4fb1cef8a5d48d6366a118bdae0b0544c5374eb1a68aa41cb7ebf0b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/typeguard-4.5.2.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/typeguard-4.5.2.dist-info/RECORD",
+      "sha256": "a62d62626d71ac2f074442d28f09bfdffdd247718a3a91ee56902402e6c6f0d4"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/httpcore-1.0.9.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/httpcore-1.0.9.dist-info/METADATA",
+      "sha256": "fe2d4fda6199128978779e0cf27f3c045c531863fcdd987eacc74f3a18d41c21"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/httpcore-1.0.9.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/httpcore-1.0.9.dist-info/RECORD",
+      "sha256": "67cb4644d84fef1df8c5a0862c57c3380eff058a153bac7a4ba2722779982554"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_sql-0.3.11.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_sql-0.3.11.dist-info/METADATA",
+      "sha256": "b902a314f003fa2695c948e60b8b178183f32fe51b68adbbaabca91ef0114a71"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_sql-0.3.11.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_sql-0.3.11.dist-info/RECORD",
+      "sha256": "14ab6e474c0515f636cc31f7b7a2b5ce698d9d982ff9d80dad074c6f092f7419"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/mdit_py_plugins-0.6.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/mdit_py_plugins-0.6.1.dist-info/METADATA",
+      "sha256": "cd9486029c276a4bf819a85ca25f32f3bcff07a7e1c577dd45be523c7f0c472e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/mdit_py_plugins-0.6.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/mdit_py_plugins-0.6.1.dist-info/RECORD",
+      "sha256": "9a46201a1b9e3cbbb689317654398a84166cc72851e038c59d8aebc28683cd25"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_python-0.25.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_python-0.25.0.dist-info/METADATA",
+      "sha256": "cb8c4940e598c665118896cae65c3bc63b0f5a62ab82f5287b7887eabf66de92"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_python-0.25.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_python-0.25.0.dist-info/RECORD",
+      "sha256": "05828a37c05c6e21c31f6f7da06cdf144b9c61982909fe68ec45825133d2d5f0"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/nominal_refactor_audit-0.1.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/nominal_refactor_audit-0.1.0.dist-info/METADATA",
+      "sha256": "d7e1f1fe09d295e2e23d5017805e8ec426e0d65c819779b62070a585bc5687bd"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/nominal_refactor_audit-0.1.0.dist-info/direct_url.json",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/nominal_refactor_audit-0.1.0.dist-info/direct_url.json",
+      "sha256": "7aa19cc910d99b66ca3aab46c29c05112f17936b095dc5b1df8b91331f6b0e79"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/nominal_refactor_audit-0.1.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/nominal_refactor_audit-0.1.0.dist-info/RECORD",
+      "sha256": "4dc2bdff9e46e7f28d8fdb81083f6f88a7437542689478a69eca2de80848ee3f"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/h11-0.16.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/h11-0.16.0.dist-info/METADATA",
+      "sha256": "28f326098ac09fcba79b8f180f96087c841fe2456215cb7b872a9c7d5cd19d64"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/h11-0.16.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/h11-0.16.0.dist-info/RECORD",
+      "sha256": "3779e13c17d8e21c769ed9ee8780af123cc3f8656185f5f8d3af258ff5639b3e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_client_protocol-0.12.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/agent_client_protocol-0.12.1.dist-info/METADATA",
+      "sha256": "899b3856e8da1590c04f21d0761d8acdeb9382acff7e8e95894b94b74d1a5c3b"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_client_protocol-0.12.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/agent_client_protocol-0.12.1.dist-info/RECORD",
+      "sha256": "85fed9126e85b75b19bf9b487f850f312491b935192d751e9302e93c8fc40e8e"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_toml-0.7.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_toml-0.7.0.dist-info/METADATA",
+      "sha256": "e6cadb775be7fa1bb2e21463d329d4cbeabee6c498989208482545a817cc63b9"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_toml-0.7.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_toml-0.7.0.dist-info/RECORD",
+      "sha256": "837265d9443a480d426a502d58f0f9a0d1e4cc95c9b2cbf519e1c05a75f74ddc"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/multidict-6.9.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/multidict-6.9.1.dist-info/METADATA",
+      "sha256": "b52756a8e05f6cf5e429cb0133ea395f252aee4a30b748506dd354a5ad2d4af2"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/multidict-6.9.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/multidict-6.9.1.dist-info/RECORD",
+      "sha256": "67368207029bff3a89871b6a047f689c80df979847a9a7e16ac42cfe94ea18d2"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_regex-0.25.0.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_regex-0.25.0.dist-info/METADATA",
+      "sha256": "ea39183352ed36ec13bfeafa7c5ff6f65ceaae3acc573231b90e0a35f3fed8f4"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/tree_sitter_regex-0.25.0.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/tree_sitter_regex-0.25.0.dist-info/RECORD",
+      "sha256": "cc08c64fad0d65e42c8907686e99d0b1ed26722ce926df52abc88e77949485ed"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_speedups-0.2.1.dist-info/METADATA",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_speedups-0.2.1.dist-info/METADATA",
+      "sha256": "4707a2e16ef3ccdaa6466b32c6b5429fc98d45222b25ec21e24590184e5bbbce"
+    },
+    {
+      "source": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_speedups-0.2.1.dist-info/RECORD",
+      "archive": ".artifacts/display-selection588-private-candidate-20261003/qualified588-before-loan-release/metadata/textual_speedups-0.2.1.dist-info/RECORD",
+      "sha256": "1acf5505b3d7cdfbcf0eaad8c4e54f2e45daf98b92d651e383d1c9811ad53964"
+    }
+  ],
+  "sourceDistCount": 69,
+  "packageCopied": false
+}
