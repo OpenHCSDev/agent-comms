@@ -19,6 +19,7 @@ from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_source import SessionRevision
@@ -69,20 +70,18 @@ async def retained_summary(native_backend):
             model=model.display_name,
         )
     )
-    lease = comms.agents.begin_turn("owner", "native-summary-negative").turn_lease
-    owner = comms.registry.require("owner")
-    envelope = dict(
-        source=FieldCodec.encode(
-            ManualSource(
-                owner=owner.require_process(),
-                incarnation=owner.incarnation,
-                turn=TurnId(lease.turn_id),
-                reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
-            )
+    admitted = comms.agents.begin_turn("owner", "native-summary-negative")
+    lease, owner = admitted.turn_lease, admitted.thread
+    envelope = SelectedSummarySource(
+        source=ManualSource(
+            owner=owner.require_process(),
+            incarnation=owner.incarnation,
+            turn=TurnId(lease.turn_id),
+            reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
         ),
-        selected=SelectedModel(model.provider, model.id, model.context_window).to_wire(),
-        settings=FieldCodec.encode(settings),
-        retained=FieldCodec.encode(RetainedTaskFacts(())),
+        selected=SelectedModel(model.provider, model.id, model.context_window),
+        settings=settings,
+        retained=RetainedTaskFacts(()),
     )
     journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
     slot = SelectedSummarySlot("owner", preparation.witness.session_id)
@@ -93,6 +92,7 @@ async def retained_summary(native_backend):
             journal,
             preparation.witness,
             source,
+            owner=owner,
             expected_package=expected_package,
             tokens_before=preparation.tokens_before,
             **options,
@@ -145,13 +145,13 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
         native.saved_inputs(),
         native.provider.posts,
     )
-    source = FieldCodec.decode(SelectedSummarySource, envelope)
+    source = envelope
     source = (
         replace(source, selected=replace(source.selected, model_id="unselected-model"))
         if changed == "model"
         else replace(source, settings=replace(source.settings, reserve_tokens=2049))
     )
-    result = await run(source=FieldCodec.encode(source))
+    result = await run(source=source)
     assert isinstance(result, SummaryDeclinedData)
     assert result.reason == changed + "_mismatch"
     attempt = journal.summaries.get(result.operation_id)
@@ -163,7 +163,7 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
     assert native.session.read_bytes() == original
     assert native.saved_inputs() == inputs
     with pytest.raises(CompactionJournalError, match="never replay"):
-        await run(source=FieldCodec.encode(source))
+        await run(source=source)
     assert native.provider.posts == calls
     journal.summaries.refuse(result.operation_id, result.reason)
     assert journal.summaries.get(result.operation_id) == attempt
@@ -508,8 +508,8 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
             model=model.display_name,
         )
     )
-    lease = comms.agents.begin_turn("summary-owner", "native-summary-exchange").turn_lease
-    owner = comms.registry.require("summary-owner")
+    admitted = comms.agents.begin_turn("summary-owner", "native-summary-exchange")
+    lease, owner = admitted.turn_lease, admitted.thread
     source = ManualSource(
         owner=owner.require_process(),
         incarnation=owner.incarnation,
@@ -518,11 +518,11 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
     )
     journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
     slot = SelectedSummarySlot(owner.name, preparation.witness.session_id)
-    envelope = dict(
-        source=FieldCodec.encode(source),
-        selected=selected_model.to_wire(),
-        settings=FieldCodec.encode(settings),
-        retained=FieldCodec.encode(RetainedTaskFacts(())),
+    envelope = SelectedSummarySource(
+        source=source,
+        selected=selected_model,
+        settings=settings,
+        retained=RetainedTaskFacts(()),
     )
     events = []
 
@@ -536,6 +536,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
                 journal,
                 preparation.witness,
                 envelope,
+                owner=owner,
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
                 custom_instructions="Preserve the two original retained questions",
@@ -563,6 +564,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
                 journal,
                 preparation.witness,
                 envelope,
+                owner=owner,
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
             )

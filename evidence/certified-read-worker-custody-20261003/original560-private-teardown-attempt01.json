@@ -1,0 +1,14 @@
+{
+  "operation": "Authorized original private fixture resource teardown; ACP return abandoned unconfirmed",
+  "authority": "Existing ObservedProcess/ChildProcess original identity and group guard",
+  "private_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/wire",
+  "outcomes": [],
+  "outcome_resolved": false,
+  "lease_cursor_receipt_writes": 0,
+  "provider_calls": 0,
+  "replayed_inputs": 0,
+  "error": {
+    "type": "AssertionError",
+    "detail": "Foreign or unproved group member"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "source": "working change after d01d40de",
+  "parsed": 1,
+  "omitted": [],
+  "sites": [
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 198,
+      "kind": "FunctionDeclaration",
+      "name": "acExecuteSummary"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 346,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 337,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 327,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 212,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 150,
+      "kind": "FunctionDeclaration",
+      "name": "acAdmitSummary"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 194,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 182,
+      "kind": "CallExpression",
+      "name": "prepareCompaction"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 180,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 103,
+      "kind": "FunctionDeclaration",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 109,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 90,
+      "kind": "FunctionDeclaration",
+      "name": "acSummaryCompatible"
+    }
+  ],
+  "scope": "Changed summary module; full source/dependency roots are in before-native-ast.json and unchanged outside this module."
+}

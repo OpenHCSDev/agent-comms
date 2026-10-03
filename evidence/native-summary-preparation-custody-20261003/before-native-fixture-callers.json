@@ -1,0 +1,38 @@
+{
+  "head": "dcfe21c1803dbd3bf81de8b246bec1d9b60843e3",
+  "parser": "existing NRA Package.load",
+  "modules": 672,
+  "omissions": [],
+  "calls": [
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 86,
+      "source": "SelectedSummarySlot(owner.name, prepared.witness.session_id, request_observer=partial(record_request_progress, self.journal.path.parent, owner.require_turn_lease())).run_selected_summary(persistent, self.journal, prepared.witness, SelectedSummarySource(source=source, selected=selected, settings=settings.summary_settings(), retained=captured.retained), owner=owner, expected_package=package, tokens_before=prepared.tokens_before, custom_instructions=instructions, future_queue=self.boundary.future_queue, on_event=on_event, reason=reason)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 91,
+      "source": "slot.run_selected_summary(native.persistent, journal, preparation.witness, source, expected_package=expected_package, tokens_before=preparation.tokens_before, **options)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 534,
+      "source": "slot.run_selected_summary(native.persistent, journal, preparation.witness, envelope, expected_package=package, tokens_before=preparation.tokens_before, custom_instructions='Preserve the two original retained questions', idle_timeout_seconds=15, on_event=observed)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 561,
+      "source": "slot.run_selected_summary(native.persistent, journal, preparation.witness, envelope, expected_package=package, tokens_before=preparation.tokens_before)"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 319,
+      "source": "slot.run_selected_summary(persistent, journal, preparation.witness, dict(source=manual_source(session), selected=selected.to_wire(), settings=dict(reserveTokens=2048, keepRecentTokens=1024), retained=FieldCodec.encode(RetainedTaskFacts(()))), expected_package=package, tokens_before=preparation.tokens_before, idle_timeout_seconds=20)"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 273,
+      "source": "slot.run_selected_summary(persistent, journal, preparation.witness, dict(source=manual_source(session), selected=selected.to_wire(), settings=dict(reserveTokens=2048, keepRecentTokens=1024), retained=FieldCodec.encode(RetainedTaskFacts(()))), expected_package=package, tokens_before=preparation.tokens_before, idle_timeout_seconds=20)"
+    }
+  ]
+}
