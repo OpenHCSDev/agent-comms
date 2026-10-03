@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .messages import Message
     from .read_ledger import ReadLedger
+    from .read_ledger import ReadDocument
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .wire_log import WireLog
@@ -173,12 +174,15 @@ class DisplaySelection:
 
     @classmethod
     def capture(
-        cls, registry: Registration, catalog: ChannelCatalog, reads: ReadLedger, viewer: str | None
+        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+        reads: ReadLedger, document: ReadDocument, viewer: str | None,
     ) -> DisplaySelection:
-        snapshot = registry.snapshot()
         canonical = snapshot.aliases.get(viewer, viewer) if viewer is not None else None
-        seen = reads.seen_sequences(viewer, snapshot) if viewer is not None else frozenset()
-        return cls(snapshot, catalog.read(), canonical, seen, reads.read().notice)
+        seen = (
+            reads.seen_sequences(viewer, snapshot, document=document)
+            if viewer is not None else frozenset()
+        )
+        return cls(snapshot, catalog, canonical, seen, document.notice)
 
     @property
     def channels(self) -> Mapping[str, Channel]:
@@ -215,54 +219,37 @@ class BusPresentation:
         self._wire_lock_path = bus.log.path.parent / "wire"
         self._display_metrics: dict[str, DisplayCheckpoint] = {}
 
-    def revision(self) -> tuple:
-        """Revisions of every store used to define one display predicate and marker."""
-        return tuple(
-            file_revision(path)
-            for path in (
-                self.registry.store.path,
-                self.catalog.path,
-                self.bus.reads.path,
-            )
-        )
-
     @contextmanager
     def snapshot(
         self, viewer: str | None = None, target: str | None = None
     ) -> Iterator[tuple[DisplaySelection, Iterator[tuple[Message, int]], tuple | None]]:
-        """Open one bus boundary atomically with a validated display basis.
+        """Capture display inputs once through their original document resources.
 
-        Direct registry/catalog writers need not hold the Comms wire lock; the
-        revision checks detect their changes before the opened bus boundary.
-        The raw scan happens after releasing that lock. A later append is not
-        retried: the opened inode and byte limit already define a valid point.
+        Open the bus before acquiring document resources: publication's lock
+        order is bus then registry. Cross-store writers share wire; direct
+        document writers cannot change the captured selection. Raw iteration
+        holds none of these locks. Later appends are outside the opened cut;
+        heartbeat changes cannot invalidate it.
         """
-        for _ in range(3):
-            with ExitStack() as stack:
-                with _store_lock(self._wire_lock_path, shared=True):
-                    revision = self.revision()
+        with ExitStack() as stack:
+            with _store_lock(self._wire_lock_path, shared=True):
+                bus_revision = file_revision(self.bus.log.path)
+                _, records = stack.enter_context(
+                    self.bus.log._record_snapshot(need_sequence=False)
+                )
+                with (
+                    self.registry.store.reading() as registry,
+                    self.catalog.reading() as catalog,
+                    self.bus.reads.reading() as reads,
+                ):
                     basis = DisplaySelection.capture(
-                        self.registry, self.catalog, self.bus.reads, viewer
+                        registry.snapshot(), catalog, self.bus.reads, reads, viewer
                     )
-                    if self.revision() != revision:
-                        continue
-                    bus_revision = file_revision(self.bus.log.path)
-                    _, records = stack.enter_context(
-                        self.bus.log._record_snapshot(need_sequence=False)
-                    )
-                    if self.revision() != revision:
-                        continue
-                    if file_revision(self.bus.log.path) != bus_revision:
-                        bus_revision = None
-                if target is not None and target not in basis.channels:
-                    # A newly-created channel must not be rejected from an
-                    # earlier basis without checking its current revision.
-                    if self.revision() != revision:
-                        continue
-                    raise ValueError(f"Unknown channel: {target!r}")
-                yield basis, records, bus_revision
-                return
-        raise RuntimeError("Display scope changed during snapshot; retry the request.")
+                    if target is not None:
+                        basis.scope(target)
+                if file_revision(self.bus.log.path) != bus_revision:
+                    bus_revision = None
+            yield basis, records, bus_revision
 
     def channel_page(
         self,
@@ -303,29 +290,38 @@ class BusPresentation:
         through: int | None = None,
         expected_scope: ChannelDisplayScope | None = None,
     ) -> None:
-        with _store_lock(self._wire_lock_path, shared=True):
-            revision = self.revision()
-            basis = DisplaySelection.capture(self.registry, self.catalog, self.bus.reads, viewer)
-            current = basis.scope(target)
+        with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
             if through is None:
-                # Explicit Mark Read selects the entire current view, unlike painted-page ACK.
-                messages = (
-                    message for message in self.bus.log.full_history() if current.includes(message)
+                # Acquire the bus cut before the registry, as publication does.
+                records = stack.enter_context(self.bus.log.verified_snapshot())
+            with (
+                self.registry.store.reading() as registry,
+                self.catalog.reading() as catalog,
+            ):
+                basis = DisplaySelection.capture(
+                    registry.snapshot(), catalog, self.bus.reads, self.bus.reads.read(), viewer
                 )
-                displayed = self.bus.reads.capture(
-                    viewer, messages, basis.registry, self.bus.log.path
-                )
-                through = self.bus.log.latest_sequence()
-            else:
-                if expected_scope is None:
-                    raise ValueError("Channel display scope missing; refresh the displayed page.")
-                displayed = expected_scope.require_displayed()
-                if not current.same_projection(expected_scope) or self.revision() != revision:
-                    raise ValueError("Channel display changed; refresh the displayed page.")
-                displayed.validate(
-                    viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
-                )
-            self.bus.reads.mark_displayed(viewer, displayed.through(through))
+                current = basis.scope(target)
+                if through is None:
+                    # Explicit Mark Read selects this entire opened source cut.
+                    messages = (
+                        message for record in records for message in record.messages()
+                        if current.includes(message)
+                    )
+                    displayed = self.bus.reads.capture(
+                        viewer, messages, basis.registry, self.bus.log.path
+                    )
+                else:
+                    if expected_scope is None:
+                        raise ValueError("Channel display scope missing; refresh the displayed page.")
+                    displayed = expected_scope.require_displayed()
+                    if not current.same_projection(expected_scope):
+                        raise ValueError("Channel display changed; refresh the displayed page.")
+                    displayed.validate(
+                        viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
+                    )
+                    displayed = displayed.through(through)
+                self.bus.reads.mark_displayed(viewer, displayed)
 
     def display_view_metrics(
         self,
