@@ -304,3 +304,136 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
         print("actual_native_replacement", driver, observed() if driver == "sdk_callbacks" else current.session_id, flush=True)
     assert child.returncode is not None and not child.alive()
     assert await errors == ""
+
+
+async def test_actual_compaction_writer_borrows_acquired_native_launch(native_backend, monkeypatch):
+    """Original SDK fork/get_state/writer resources; no input or provider call."""
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms import native_compaction_writer as writer
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+
+    native = native_backend
+    source_name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+    source = Path(source_name).resolve(strict=True)
+    original = hashlib.sha256(source.read_bytes()).hexdigest()
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        directory=str(native.project / "writer-sessions"),
+    ), cwd=native.project)
+    launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+        "pi", ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+               "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+               "--no-prompt-templates", "--no-tools"),
+        worktree=native.project, session_file=created.session_file,
+    ))
+    child = await PiSessionChild.start(
+        (launch, launch.configuration.auth_revision()), launch.session.attestation(),
+    )
+    calls = []
+    verify = writer.verify_native_package
+
+    def observe(package):
+        calls.append(package)
+        return verify(package)
+
+    monkeypatch.setattr(writer, "verify_native_package", observe)
+    try:
+        async with asyncio.timeout(30):
+            pending = child.attestation
+            response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+            child.attestation = pending.accept(response)
+            child.attestation.require_identity().require_same_session(created)
+            async with OwnerCompactionCommit.open(
+                native.root / "registry.json", launch.package, created.session_file,
+                native_launch=launch,
+            ) as bridge:
+                assert bridge.native.package_dir == launch.package
+                bridge.boundary.native_reader.require_path(created.path)
+                assert calls == []
+            # An unrelated path cannot borrow this acquired artifact; the check
+            # occurs before helper access or journal creation.
+            with pytest.raises(ValueError, match="differs from its acquired"):
+                OwnerCompactionCommit(native.project / "registry.json", native.project,
+                                      native_launch=launch)
+            assert not (native.project / "compaction-commits.sqlite3").exists()
+            await Coordination.run_worker(partial(writer.NativeCompactionWriter, launch.package))
+            assert calls == [launch.package]
+            response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
+            assert pending.accept(response).require_identity() == child.attestation.require_identity()
+            assert native.provider.posts == 0 and native.saved_inputs() == []
+            assert hashlib.sha256(source.read_bytes()).hexdigest() == original
+    finally:
+        await child.close()
+    assert not child.proc.alive() and child.proc.retired
+    assert await child.stderr_task == ""
+    print("actual_compaction_launch_borrow", json.dumps({
+        "source_bytes": source.stat().st_size, "source_sha256": original,
+        "fork": created.session_file, "pid": child.proc.pid,
+        "child_retired": child.proc.retired, "borrowed_tree_verifications": 0,
+        "fresh_tree_verifications": len(calls), "provider_requests": native.provider.posts,
+    }), flush=True)
+
+
+async def test_actual_saved_source_reservation_borrows_native_coverage(native_backend, monkeypatch):
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_entries import NativeEvidenceRead
+    from agent_comms.native_fork import ForkSessionRequest
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from selected_summary_cases import manual_summary_record
+
+    native = native_backend
+    name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not name:
+        pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+    donor = Path(name).resolve(strict=True)
+    before = hashlib.sha256(donor.read_bytes()).hexdigest()
+    journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
+    created = await journal.private_inputs.fork(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor), str(native.project),
+        directory=str(native.root / "native-sessions"),
+    ), cwd=native.project)
+    source = manual_summary_record(created.path,
+        selected=SelectedModel("response-local", "fixture", 2000000),
+        settings=PiCompactionSettings(2048, 1))
+    # The actual SDK creation is published in the journal, so continued-source
+    # coverage must verify its original prefix; no invented enrollment/marker.
+    with NativeEvidenceRead.open(created.path) as reader:
+        reader.observe()
+        decoded = []
+        decode = reader.decode_rows
+
+        def observe(rows):
+            rows = tuple(rows)
+            decoded.extend(rows)
+            return decode(rows)
+
+        monkeypatch.setattr(reader, "decode_rows", observe)
+        operation = await Coordination.run_worker(partial(
+            journal.summaries.reserve, created.session_file, source, native_reader=reader,
+        ))
+        assert decoded == [] and reader.entries
+    assert journal.summaries.get(operation).request == source
+    assert journal.summaries.blocking(created.session_file)
+    assert native.provider.posts == 0 and native.saved_inputs() == []
+    assert hashlib.sha256(donor.read_bytes()).hexdigest() == before
+    print("actual_saved_prefix_reservation", json.dumps({
+        "operation": operation, "source_bytes": donor.stat().st_size,
+        "source_sha256": before, "redecoded_rows": len(decoded), "provider_requests": 0,
+        "scope": "returned SDK fork/coverage reservation; no provider/commit/input authority",
+    }), flush=True)

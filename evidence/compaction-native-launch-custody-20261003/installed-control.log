@@ -1,0 +1,3 @@
+actual_compaction_launch_borrow {"source_bytes": 42117880, "source_sha256": "d1aed407f22d861c66b340b293bf00f47ebff51bc03c3a331650e3ba6de742ed", "fork": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/compaction-native-launch586-controls02/test_actual_compaction_writer_0/project/writer-sessions/2026-10-03T11-51-43-182Z_01a1019b-154e-774f-a635-21db2016d76b.jsonl", "pid": 3706490, "child_retired": true, "borrowed_tree_verifications": 0, "fresh_tree_verifications": 1, "provider_requests": 0}
+.
+1 passed in 7.10s

@@ -254,6 +254,80 @@ async def test_actual_joined_provider_failure_preserves_source_without_replay(re
     assert native.saved_inputs() == inputs
 
 
+async def test_actual_reservation_cancellation_joins_before_releasing_native_custody(
+    retained_summary, monkeypatch,
+):
+    import threading
+    from agent_comms.store_files import _store_lock
+
+    native, _, _, journal, run = retained_summary
+    original, calls = native.session.read_bytes(), native.provider.posts
+    entered = threading.Event()
+    reserve = journal.summaries.reserve
+
+    def observe(*args, **kwargs):
+        assert threading.current_thread() is not threading.main_thread()
+        entered.set()
+        return reserve(*args, **kwargs)
+
+    monkeypatch.setattr(journal.summaries, "reserve", observe)
+    with _store_lock(native.root / "wire"):
+        task = asyncio.create_task(run())
+        assert await asyncio.to_thread(entered.wait, 10)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done(), "original reservation worker must join before custody exits"
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    attempts = journal.summaries.history(str(native.session))
+    assert len(attempts) == 1 and attempts[0].state.declared_name == "reserved"
+    assert journal.summaries.blocking(str(native.session))
+    assert native.provider.posts == calls and native.session.read_bytes() == original
+    assert native.persistent.custody.idle().current
+    print("actual_reservation_cancel_joined_no_summary_send", attempts[0].operation_id)
+
+
+async def test_actual_failure_settlement_cancel_preserves_known_native_result(
+    retained_summary, monkeypatch,
+):
+    import threading
+
+    native, preparation, _, journal, run = retained_summary
+    original, calls = native.session.read_bytes(), native.provider.posts
+    entered, release = threading.Event(), threading.Event()
+    fail = journal.summaries.fail
+
+    def observe(*args):
+        assert threading.current_thread() is not threading.main_thread()
+        entered.set()
+        assert release.wait(10)
+        return fail(*args)
+
+    monkeypatch.setattr(journal.summaries, "fail", observe)
+    native.provider.status = 400
+    task = asyncio.create_task(run())
+    try:
+        assert await asyncio.to_thread(entered.wait, 15)
+        task.cancel()
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    attempts = journal.summaries.history(str(native.session))
+    assert len(attempts) == 1 and attempts[0].state.declared_name == "failed"
+    assert attempts[0].state.terminal and attempts[0].state.settled_without_original
+    assert not attempts[0].state.original_eligible
+    # This actual SDK cut splits the second native turn. The original compact
+    # owner concurrently requests history and turn-prefix summaries; they are
+    # distinct sources, not a replay of one provider request.
+    assert preparation.is_split_turn
+    requests = native.provider.requests[calls:]
+    assert len(requests) == 2 and requests[0]["messages"] != requests[1]["messages"]
+    assert native.provider.posts == calls + 2 and native.session.read_bytes() == original
+    assert native.persistent.custody.idle().current
+    print("actual_known_failure_settled_despite_cancel", attempts[0].operation_id)
+
+
 async def test_actual_native_progress_extends_idle_deadline_without_total_cap(retained_summary):
     native, _, _, journal, run = retained_summary
     original, inputs = native.session.read_bytes(), native.saved_inputs()
