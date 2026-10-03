@@ -177,8 +177,11 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.CommittedProgress)
     async def committed_progress(self, event: events.CommittedProgress) -> None:
+        await Coordination.run_worker(partial(self.publish_progress, event.text))
+
+    def publish_progress(self, progress: str) -> None:
+        """Join the committed notice and consume its streamed text together."""
         if self.reply_targets:
-            progress = event.text
             if progress and "".join(self.reply_parts) == progress:
                 # Pi committed this assistant message before tool work.
                 # Publish it once as visible, non-waking progress; the
@@ -293,7 +296,8 @@ class TurnProgress(events.AgentEventConsumer):
                     )
                     published.append(message.reference)
 
-    async def publish_result(self):
+    def publish_checkpoint(self):
+        """Close terminal publication and its original read before ACP delivery."""
         if self.result is not None and self.result.ok:
             self.publish_success()
         else:
@@ -329,15 +333,19 @@ class TurnProgress(events.AgentEventConsumer):
                     MessageType.ALERT,
                     notice=True,
                 )
+        return self.comms.transcripts.transcript_checkpoint(self.thread_name)
+
+    async def publish_result(self):
+        # Cancellation must join original sends, their annotation and the
+        # checkpoint before OwnedTurn can settle or release its lease.
+        checkpoint = await Coordination.run_worker(self.publish_checkpoint)
         await self.runtime.session_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TranscriptChangedUpdate(
-                        self.comms.transcripts.transcript_checkpoint(self.thread_name)
-                    )
+                    TranscriptChangedUpdate(checkpoint)
                 ),
             ),
         )

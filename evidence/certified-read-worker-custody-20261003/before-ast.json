@@ -1,0 +1,296 @@
+{
+  "head": "53f40132878af43e20b7b67ec7a9d3cbce89315c",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omitted": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 814,
+          "declaration": "join_retirement",
+          "body": "async def join_retirement(task: asyncio.Future):\n    \"\"\"Join owned cleanup through repeated cancellation, then propagate it.\"\"\"\n    interrupted = None\n    while not task.done():\n        try:\n            await asyncio.shield(task)\n        except asyncio.CancelledError as error:\n            interrupted = error\n    result = task.result()\n    if interrupted is not None:\n        raise interrupted\n    return result"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 176,
+          "declaration": "release_store_lock",
+          "body": "def release_store_lock(self, descriptor: int) -> None:\n        \"\"\"POSIX custody ends at last close, including inherited descriptors.\"\"\""
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 397,
+          "declaration": "release_store_lock",
+          "body": "def release_store_lock(self, descriptor: int) -> None:\n        import msvcrt\n\n        os.lseek(descriptor, 0, os.SEEK_SET)\n        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 887,
+          "call": "join_retirement"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 899,
+          "call": "join_retirement"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1204,
+          "call": "join_retirement"
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 25,
+          "declaration": "run_worker",
+          "body": "async def run_worker(operation: Callable[[], Result]) -> Result:\n        \"\"\"Join an owned blocking operation before its enclosing custody exits.\n\n        The callback owns and closes every borrowed resource it opens. This\n        scheduling seam also supports registry-only acquisition/retirement;\n        those operations must not depend on opening a coordinator connection.\n        \"\"\"\n        pending = asyncio.get_running_loop().run_in_executor(None, operation)\n        return await join_retirement(pending)"
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 33,
+          "call": "join_retirement"
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 47,
+          "call": "cls.run_worker"
+        },
+        {
+          "path": "src/agent_comms/history_views.py",
+          "line": 453,
+          "call": "self.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "src/agent_comms/input_drain.py",
+          "line": 333,
+          "call": "self.comms.bus.log.read_certified_async"
+        },
+        {
+          "path": "src/agent_comms/native_turn_context.py",
+          "line": 27,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 155,
+          "call": "self.runner.comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 64,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 464,
+          "call": "self.progress.publish_result"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 65,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 97,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 114,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 117,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 134,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 141,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 167,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 218,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 77,
+          "declaration": "_store_lock_file",
+          "body": "def _store_lock_file(store_path: Path):\n    \"\"\"Own the original lock inode's descriptor before any acquisition.\"\"\"\n    store_path.parent.mkdir(parents=True, exist_ok=True)\n    lock_path = store_path.with_name(f\".{store_path.name}.lock\")\n    with open(lock_path, \"a+b\") as lock_file:\n        yield lock_file"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 86,
+          "declaration": "_held_store_source",
+          "body": "def _held_store_source(store_path, lock_file, platform, max_bus_bytes):\n    \"\"\"One durability guard after physical custody, with exact release on refusal.\"\"\"\n    try:\n        if max_bus_bytes is not None:\n            if type(max_bus_bytes) is not int or max_bus_bytes < 0:\n                raise ValueError(\"bus read cap must be a nonnegative integer\")\n            if store_path.exists():\n                bus_info = store_path.lstat()\n                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:\n                    raise RelationViolationError(\"Bus exceeds bounded read budget.\")\n        from .wire_log import WireLog\n\n        with WireLog(store_path).verify_before_read_unlocked() as source:\n            yield StoreLock(lock_file.fileno(), source)\n    finally:\n        platform.release_store_lock(lock_file.fileno())"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 101,
+          "call": "platform.release_store_lock"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 117,
+          "call": "_store_lock_file"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 145,
+          "call": "_store_lock_file"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 122,
+          "call": "_held_store_source"
+        },
+        {
+          "path": "src/agent_comms/store_files.py",
+          "line": 147,
+          "call": "_held_store_source"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 452,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/transcripts.py",
+          "line": 477,
+          "declaration": "transcript_checkpoint",
+          "body": "def transcript_checkpoint(self, name: str) -> TranscriptCursor:\n        from .transcript_receipts import AssignedTranscriptSource\n\n        registry = self.registry.snapshot()\n        thread = registry.require(name)\n        session_file = thread.session_file or \"\"\n        path = Path(session_file)\n        _outcomes, outcome_frontier = CompactionOutcomeCursor.capture(\n            self.root, thread, session_file, registry,\n        )\n        return TranscriptCursor(\n            session_file,\n            path.stat().st_size if session_file and path.is_file() else 0,\n            AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,\n            outcome_frontier,\n        )"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 296,
+          "declaration": "publish_result",
+          "body": "async def publish_result(self):\n        if self.result is not None and self.result.ok:\n            self.publish_success()\n        else:\n            # Streamed chunks were provisional. A failed or missing terminal\n            # result cannot turn them into a completed wire reply. Keep the\n            # failure notice non-waking, including for human reply targets.\n            # Backend text may include stderr, secrets, or content from an\n            # unrelated session. Persist only structural facts for headless owners.\n            diagnostic_path = record_terminal_failure(\n                self.comms.root,\n                turn_id=self.turn_lease.turn_id,\n                thread=self.thread_name,\n                event=asdict(self.result) if self.result is not None else {},\n                sequences=tuple(origin.seq for origin in self.origins),\n            )\n            notice_targets = tuple(\n                dict.fromkeys(\n                    (*self.reply_targets,)\n                    + tuple(\n                        origin.target if is_channel_target(origin.target) else origin.sender\n                        for origin in self.origins\n                        if origin.sender != self.thread_name\n                    )\n                )\n            )\n            for target in notice_targets:\n                prefix = \"Request failed\" if target in self.reply_targets else \"Delivery failed\"\n                self.comms.messaging.send(\n                    self.thread_name,\n                    target,\n                    f\"{prefix}: backend turn did not complete. \"\n                    f\"[Open diagnostic]({diagnostic_path.as_uri()})\",\n                    MessageType.ALERT,\n                    notice=True,\n                )\n        await self.runtime.session_update(\n            session_id=self.session_id,\n            update=AgentMessageChunk(\n                session_update=\"agent_message_chunk\",\n                content=TextContentBlock(type=\"text\", text=\"\"),\n                field_meta=encode_updates(\n                    TranscriptChangedUpdate(\n                        self.comms.transcripts.transcript_checkpoint(self.thread_name)\n                    )\n                ),\n            ),\n        )"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 240,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 252,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 339,
+          "call": "self.comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 155,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/wire_log.py",
+          "line": 77,
+          "declaration": "read_certified_async",
+          "body": "async def read_certified_async(self, read: Callable):\n        \"\"\"Acquire cancellably, then consume the whole source in its worker.\n\n        Return detached observations only. Verification and the callback share\n        one resource thread; no SQLite connection crosses to the event loop.\n        Cancellation joins acquired work before the original descriptor closes.\n        \"\"\"\n        from .child_process import Platform\n        from .coordinator import Coordination\n\n        platform = Platform.current()\n        with _store_lock_file(self.path) as lock_file:\n            await StoreLockContention(math.inf).acquire_async(\n                lock_file.fileno(), platform, shared=False,\n            )\n            return await Coordination.run_worker(\n                partial(self._read_certified, lock_file, platform, read),\n            )"
+        },
+        {
+          "path": "src/agent_comms/wire_log.py",
+          "line": 96,
+          "declaration": "_read_certified",
+          "body": "def _read_certified(self, lock_file, platform, read):\n        with _held_store_source(self.path, lock_file, platform, None) as lock:\n            with self._certified_source(lock) as source:\n                return read(source)"
+        },
+        {
+          "path": "src/agent_comms/wire_log.py",
+          "line": 88,
+          "call": "_store_lock_file"
+        },
+        {
+          "path": "src/agent_comms/wire_log.py",
+          "line": 97,
+          "call": "_held_store_source"
+        },
+        {
+          "path": "src/agent_comms/wire_log.py",
+          "line": 92,
+          "call": "Coordination.run_worker"
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "parsed": 361,
+      "omitted": [],
+      "sites": [
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 52,
+          "call": "log.read_certified_async"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 77,
+          "call": "log.read_certified_async"
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "line": 210,
+          "call": "progress.publish_result"
+        },
+        {
+          "path": "tests/test_s4_read_characterization.py",
+          "line": 50,
+          "call": "comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "tests/test_thread_unread.py",
+          "line": 40,
+          "call": "comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "tests/test_thread_unread.py",
+          "line": 156,
+          "call": "second.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "tests/test_thread_unread.py",
+          "line": 197,
+          "call": "comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "tests/test_thread_unread.py",
+          "line": 165,
+          "call": "comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "tests/test_thread_unread.py",
+          "line": 183,
+          "call": "comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "tests/test_turn_context_wire.py",
+          "line": 76,
+          "call": "comms.transcripts.transcript_checkpoint"
+        }
+      ]
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omitted": [],
+      "sites": []
+    }
+  ],
+  "dynamic_resolution": "Attribute calls are possible consumers; source semantics distinguish unrelated platform/result publication methods. No claim of dynamic zero-by-name."
+}

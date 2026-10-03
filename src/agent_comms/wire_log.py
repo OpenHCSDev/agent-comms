@@ -79,6 +79,8 @@ class WireLog:
 
         Return detached observations only. Verification and the callback share
         one resource thread; no SQLite connection crosses to the event loop.
+        The worker closes physical custody before returning its result; result
+        delivery must not keep a POSIX lock until the event loop resumes.
         Cancellation joins acquired work before the original descriptor closes.
         """
         from .child_process import Platform
@@ -94,7 +96,7 @@ class WireLog:
             )
 
     def _read_certified(self, lock_file, platform, read):
-        with _held_store_source(self.path, lock_file, platform, None) as lock:
+        with lock_file, _held_store_source(self.path, lock_file, platform, None) as lock:
             with self._certified_source(lock) as source:
                 return read(source)
 
