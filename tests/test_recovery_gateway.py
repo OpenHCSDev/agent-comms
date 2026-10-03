@@ -369,9 +369,15 @@ async def test_unsafe_directory_root_permissions_db_and_wal_fail_closed(private_
     copied = too_long / "coordination.sqlite3"
     shutil.copyfile(db, copied)
     os.chmod(copied, 0o600)
-    with pytest.raises(GatewayUnavailableError):
-        await RecoveryGateway(too_long).start()
-    assert not (too_long / ".recovery-viewer").exists()
+    gateway = RecoveryGateway(too_long)
+    await gateway.start()
+    try:
+        from agent_comms.recovery_gateway_client import read_gateway_projection
+        assert (await read_gateway_projection(gateway.path, "Alice"))["availability"] == "available"
+        assert gateway.path.is_socket()
+    finally:
+        await gateway.close()
+    assert not gateway.path.exists()
     link = private_root.parent / f"{private_root.name}-link"
     link.symlink_to(private_root, target_is_directory=True)
     try:

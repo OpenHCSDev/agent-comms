@@ -7,14 +7,12 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import secrets
 import socket
-import tempfile
 from collections.abc import Coroutine
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, cast
@@ -27,15 +25,11 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .thread_identity import OwnerIdentity
 from .errors import RelationViolationError
+from .private_path import PrivateSocketRole
 
 
 def socket_path(root: Path, pid: int) -> Path:
-    path = root / "runtime" / f"{pid}.sock"
-    if len(os.fsencode(path)) < 100:
-        return path
-    # Darwin's temporary paths routinely exceed sockaddr_un.sun_path.
-    digest = hashlib.sha256(os.fsencode(root.resolve())).hexdigest()[:24]
-    return Path(tempfile.gettempdir()) / f"ac-{digest}-{pid}.sock"
+    return root / "runtime" / f"{pid}.sock"
 
 
 UNBOUND_CONTROLLER = object()
@@ -157,6 +151,7 @@ class RuntimeServer:
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
         self.path = socket_path(agent._comms.root, os.getpid())
+        self._resources = ExitStack()
 
     def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
         """Launch owner work without inheriting an attached human controller."""
@@ -170,9 +165,14 @@ class RuntimeServer:
         if self.server is not None or os.name == "nt":
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.server = await asyncio.start_unix_server(
-            self.handle, path=self.path, limit=8 * 1024 * 1024
-        )
+        try:
+            address = self._resources.enter_context(PrivateSocketRole.address(self.path))
+            self.server = await asyncio.start_unix_server(
+                self.handle, path=address, limit=8 * 1024 * 1024
+            )
+        except BaseException:
+            self._resources.close()
+            raise
 
     async def session_update(
         self,
@@ -268,6 +268,7 @@ class RuntimeServer:
             self.server.close()
             await self.server.wait_closed()
             self.path.unlink(missing_ok=True)
+        self._resources.close()
 
 
 def present_session(metadata: dict[str, Any], session_id: str) -> dict[str, Any]:
@@ -334,7 +335,8 @@ class RuntimeConnection:
         while True:
             self._require_connect_owner(owner, process)
             try:
-                reader, writer = await asyncio.open_unix_connection(path, limit=8 * 1024 * 1024)
+                with PrivateSocketRole.address(path) as address:
+                    reader, writer = await asyncio.open_unix_connection(address, limit=8 * 1024 * 1024)
             except (FileNotFoundError, ConnectionRefusedError):
                 await asyncio.sleep(0.05)
                 continue

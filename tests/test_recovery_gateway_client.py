@@ -24,10 +24,13 @@ pytestmark = pytest.mark.skipif(
 def root():
     private = Path(tempfile.mkdtemp(prefix="rg-client-", dir="/var/tmp"))
     private.chmod(0o700)
+    outer = private
+    private = private / ("retained-source-" * 8)
+    private.mkdir(mode=0o700)
     try:
         yield private
     finally:
-        shutil.rmtree(private)
+        shutil.rmtree(outer)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="gateway requires Linux SO_PEERCRED")
