@@ -18,7 +18,6 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
-from uuid import uuid4
 
 from . import pi_events as pi
 from .native_arguments import NativeArguments
@@ -37,12 +36,6 @@ if TYPE_CHECKING:
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-# Every tracked launch must remove Pi session retry, provider transport retry,
-# and overflow compaction-retry before an input can reach any provider.
-_NATIVE_SETTINGS = (
-    b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
-    b'"compaction":{"enabled":false}}\n'
-)
 
 
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
@@ -558,11 +551,11 @@ class NativePiRpcLaunch:
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
     ) -> NativePiRpcLaunch:
-        """Verify compiled Pi bytes and commit private no-retry policy before spawning.
+        """Verify compiled Pi bytes and acquire private writable resources before spawning.
 
         A backend must explicitly consume this launch, not guess Pi from a basename
         or trust an RPC capability response from an arbitrary executable. This
-        only establishes the executable and its settings; native input, context,
+        only establishes the executable and its resources; native input, context,
         and model-delivery proofs remain separate per-attempt observations.
         """
         session_dir, session_file = session.directory, session.path
@@ -583,7 +576,10 @@ class NativePiRpcLaunch:
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         session.require_launch_header()
-        agent_dir = _private_agent_dir(session_dir)
+        # Native SettingsManager and AgentSession own tracked retry/compaction
+        # policy. This directory isolates writable resources, not policy copies.
+        agent_dir = session_dir / ".native-pi-agent"
+        _durable_private_session_dir(agent_dir)
         tool_arguments = (
             selected_tool_mode.launch_arguments(package)
             if selected_tool_mode is not None
@@ -816,36 +812,6 @@ def _durable_private_session_dir(directory: Path) -> None:
             parent = parent.parent
     except OSError as error:
         raise NativePiUnavailable("Native Pi session directory could not be committed") from error
-
-
-def _private_agent_dir(session_dir: Path) -> Path:
-    """Durably isolate Pi settings from user/global and project retry policy.
-
-    Refresh and fsync the exact policy for *every* attempt; a previously visible
-    settings file or directory is not evidence that an earlier fsync succeeded.
-    No credentials are copied into this directory (provider auth uses the env).
-    """
-    agent_dir = session_dir / ".native-pi-agent"
-    try:
-        agent_dir.mkdir(mode=0o700, exist_ok=True)
-        _private_session_dir(agent_dir)
-        _fsync_directory(session_dir)
-        temporary = agent_dir / f".settings-{uuid4().hex}.tmp"
-        try:
-            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as output:
-                output.write(_NATIVE_SETTINGS)
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(temporary, agent_dir / "settings.json")
-            _fsync_directory(agent_dir)
-        finally:
-            temporary.unlink(missing_ok=True)
-    except OSError as error:
-        raise NativePiUnavailable(
-            "Native Pi private retry policy could not be committed"
-        ) from error
-    return agent_dir
 
 
 def _session_location(directory: Path, candidate: str) -> Path:
