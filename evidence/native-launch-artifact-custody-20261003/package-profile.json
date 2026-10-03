@@ -1,0 +1,30 @@
+{
+  "scope": "bounded profiling of original package/header functions, not provider or complete latency attribution",
+  "clock": "same process monotonic_ns including worker threads",
+  "events": [
+    {
+      "operation": "verify_native_package",
+      "event": "call",
+      "monotonic_ns": 486290582839990,
+      "thread": 139889790154432
+    },
+    {
+      "operation": "verify_native_package",
+      "event": "return",
+      "monotonic_ns": 486294521137294,
+      "thread": 139889790154432
+    },
+    {
+      "operation": "SessionIdentityHelper.locate",
+      "event": "call",
+      "monotonic_ns": 486294556858804,
+      "thread": 139889790154432
+    },
+    {
+      "operation": "SessionIdentityHelper.locate",
+      "event": "return",
+      "monotonic_ns": 486295322384266,
+      "thread": 139889790154432
+    }
+  ]
+}

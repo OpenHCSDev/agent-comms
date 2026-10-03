@@ -49,6 +49,23 @@ class NativeSessionIdentity:
 
     @staticmethod
     def locate(package: Path, session_file: str) -> NativeSessionIdentity:
+        """Acquire a verified package before a standalone saved-header lookup."""
+        try:
+            verify_native_package(package)
+            return SessionIdentityHelper.locate(package, session_file)
+        except (OSError, ValueError) as error:
+            if isinstance(error, NativeReopenError):
+                raise
+            raise NativeReopenError("Saved native session identity cannot be read") from error
+
+
+class SessionIdentityHelper(PiHelper):
+    script = Path(__file__).with_name("_pi_helpers") / "session_identity.mjs"
+    request = SessionHelperRequest
+    result = NativeSessionIdentity
+
+    @classmethod
+    def locate(cls, package: Path, session_file: str) -> NativeSessionIdentity:
         """Locate the original header without constructing another history index.
 
         A located identity is not history readiness. The actual native loader
@@ -56,7 +73,6 @@ class NativeSessionIdentity:
         attestation with this identity before any input can be granted.
         """
         try:
-            verify_native_package(package)
             file = Path(session_file).absolute()
             if file != file.resolve(strict=True):
                 raise NativeReopenError("Saved native session path is not canonical")
@@ -69,7 +85,7 @@ class NativeSessionIdentity:
             ):
                 raise NativeReopenError("Saved native session is not a regular file")
             identity = asyncio.run(
-                SessionIdentityHelper.run(
+                cls.run(
                     SessionHelperRequest(str(package), str(file)), cwd=file.parent
                 )
             )
@@ -81,9 +97,3 @@ class NativeSessionIdentity:
             if isinstance(error, NativeReopenError):
                 raise
             raise NativeReopenError("Saved native session identity cannot be read") from error
-
-
-class SessionIdentityHelper(PiHelper):
-    script = Path(__file__).with_name("_pi_helpers") / "session_identity.mjs"
-    request = SessionHelperRequest
-    result = NativeSessionIdentity
