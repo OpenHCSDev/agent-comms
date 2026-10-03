@@ -439,11 +439,32 @@ class RecordedNativeProbe:
                 "scope": "Original ContextBudget admission after payload hooks; not provider token counts or HTTP bytes",
                 "reason": "Original admitted request calculations" if admitted else "No original budget admission observation"}
 
+    @staticmethod
+    def request_completion(budget, answer):
+        """Join this manifest's admitted model to its original SDK terminal.
+
+        The returned provider model is a separate observation. Registry settings
+        or a preceding summary cannot supply absent request/terminal metadata.
+        """
+        if not budget["evaluated"]:
+            return {"evaluated": False, "reason": "Original request admission unavailable"}
+        message = answer.message
+        if message.provider is None or message.model is None:
+            return {"evaluated": False, "reason": "Original SDK terminal selection unavailable"}
+        for point in budget["observations"]:
+            if point.model is None or point.model.display_name is None:
+                return {"evaluated": False, "reason": "Original admitted request model unavailable"}
+            if not point.model.matches_identity((message.provider, message.model)):
+                return {"evaluated": False,
+                        "reason": "Original admitted model does not corroborate this SDK terminal"}
+        return {"evaluated": True, "terminal_entry": answer.id,
+                "scope": "Correlated ContextBudget model equals this input's final SDK-selected model; not returned-model or HTTP proof"}
+
     def observe(self):
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
 
-    def construction(self, evidence, branch, manifest, checkpoint, serialized):
+    def construction(self, evidence, branch, manifest, checkpoint, serialized, answer):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -494,6 +515,7 @@ class RecordedNativeProbe:
                 identity = checkpoint["native_entry_id"]
                 coverage["managed_checkpoint"] = {"entry_id": identity,
                     "referenced_in_sdk_sources": identity in included}
+        budget = self.request_budget(manifest)
         return {
             "fork": fork,
             "journal_settings": {
@@ -505,7 +527,8 @@ class RecordedNativeProbe:
             },
             "sdk_manifest": manifest,
             "serialized_sdk_source": serialized,
-            "request_budget": self.request_budget(manifest),
+            "request_budget": budget,
+            "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
             "condition_evaluated": False,
             "reason": "SDK assembly is recorded; a label does not prove full-history or truncation policy",
@@ -626,7 +649,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source_branch, manifest, checkpoint, serialized),
+            "construction": self.construction(evidence, source_branch, manifest, checkpoint, serialized, answer),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"]["name"] for step in tools),

@@ -149,12 +149,9 @@ class RecordedNativeProbes:
             if a["fork"].source_revision != b["fork"].source_revision:
                 raise ValueError("Matched probes have different original source revisions")
             settings = original["scoped_facts"]["configured_settings"], control["scoped_facts"]["configured_settings"]
-            if not all(item["evaluated"] for item in settings):
-                pairs[identity] = {"evaluated": False, "reason": "Original configured model/effort unavailable"}
-                continue
-            for name in ("model", "thinking"):
-                if settings[0][name] != settings[1][name]:
-                    raise ValueError("Matched probes have different configured model/effort")
+            configured = {name: self.same_observations(f"captured model/effort ({name})", tuple(
+                (item[name],) if item["evaluated"] else (None,) for item in settings))
+                for name in ("model", "thinking")}
             if a["sdk_manifest"] is None or b["sdk_manifest"] is None:
                 pairs[identity] = {"evaluated": False, "reason": "Original request manifests unavailable"}
                 continue
@@ -169,23 +166,27 @@ class RecordedNativeProbes:
             if tuple((item.sha256, item.utf8_bytes) for item in catalogs[0]) != tuple(
                     (item.sha256, item.utf8_bytes) for item in catalogs[1]):
                 raise ValueError("Matched probes have different native tool catalogs")
-            request = self.request_alignment(original, control, settings[0]["model"])
+            request = self.request_alignment(original, control)
             completion = self.completion_alignment(original, control)
+            terminals = a["request_completion"], b["request_completion"]
+            unavailable = tuple(item["reason"] for item in (request, completion, *terminals)
+                                if not item["evaluated"])
             pairs[identity] = {
-                "evaluated": request["evaluated"] and completion["evaluated"],
-                "scope": "Common original SDK fork source, configured selection, admitted request model, journaled completion selections, tool catalog and frozen probe; not complete intervention/construction proof",
+                "evaluated": not unavailable,
+                "scope": "Common original SDK fork source, admitted request models joined to original SDK terminals, tool catalog and frozen probe; captured settings are independent, not complete intervention/construction proof",
+                "captured_settings": configured,
                 "request_selection": request,
                 "completion_selection": completion,
+                "request_completion": terminals,
                 "sdk_manifest_changes": a["sdk_manifest"].changed_since(b["sdk_manifest"]),
-                "reason": request["reason"] if not request["evaluated"] else (
-                    "Original completion selections unavailable" if not completion["evaluated"]
-                    else "Original request and completion selections corroborate the source match"),
+                "reason": "; ".join(unavailable) if unavailable else
+                          "Original request and completion selections corroborate the source match",
             }
         return pairs
 
     @staticmethod
-    def request_alignment(original, control, selection):
-        """Consume the probe's exact admitted request, never infer it from config.
+    def request_alignment(original, control):
+        """Compare the probes' exact admitted models, never infer from config.
 
         ContextBudget owns every estimate/allowance. Its recorded model owns
         selection; this comparison does not recalculate capacity or turn an
@@ -199,12 +200,14 @@ class RecordedNativeProbes:
         points = tuple(group["observations"] for group in groups)
         if not all(points):
             raise ValueError("An evaluated request admission requires its original observations")
+        observed = tuple(point.model for group in points for point in group)
+        if any(model is None or model.display_name is None for model in observed):
+            return {"evaluated": False, "reason": "Original admitted request model unavailable"}
+        selection = points[1][0].model.display_name
         models = []
         for group in points:
             selected = []
             for point in group:
-                if point.model is None or point.model.display_name is None:
-                    return {"evaluated": False, "reason": "Original admitted request model unavailable"}
                 selected.append(point.model.require_selection(selection))
             models.append(tuple(selected))
         capacity = {
@@ -221,7 +224,7 @@ class RecordedNativeProbes:
             "minimum_output_tokens": RecordedNativeProbes.same_observations("request minimum output", tuple(
                 (group[0].minimum_output_tokens,) for group in points)),
         }
-        return {"evaluated": True, "reason": "Original admitted request models match the captured selection",
+        return {"evaluated": True, "reason": "Original admitted request models match each other",
                 "model_capacity": capacity, "request_contract": contract,
                 "candidate": groups[0], "baseline": groups[1],
                 "scope": "Original native admission observations; not full-history capacity, HTTP bytes or returned model/effort"}

@@ -22,3 +22,14 @@ absent. Neither gap can be repaired with condition labels, provenance counts,
 authored answers or a new measurement store. Original missing facts and Started
 inputs remain intact. No new provider experiment, capture, native lifecycle edit
 or 30-pair study. Source migration first; one final affected scorer batch.
+
+The whole comparison trace also found two distinct selections being conflated:
+configuration captured at a summary and the model admitted for the probe's final
+request. A no-summary control has no summary configuration capture. Matching now
+uses original request models, with captured settings reported independently.
+RecordedNativeProbe binds its original manifest-correlated request model to the
+original terminal SDK model through PiModel.matches_identity. The selected model
+is not the separately reported provider response model. A missing or uncorroborated
+request-to-terminal relation cannot grant a paired difference. All request matching
+and construction callers are migrated, including the CLI and recorded controls.
+This does not grant complete intervention, requested effort or HTTP equivalence.
