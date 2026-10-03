@@ -84,10 +84,12 @@ def option(
     wire_name: str | None = None,
     parser_default: Any = MISSING,
     parser_default_factory: Any = MISSING,
+    multiline: bool = False,
     **parser_options: Any,
 ) -> Any:
     """One field owns both its CLI projection and JSON boundary conversion."""
     metadata = {
+        "multiline": multiline,
         "flags": flags,
         "parser_options": parser_options,
         "group": group,
@@ -122,7 +124,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return cls.thread_bindings(comms, thread, snapshot.statuses[thread.name], channel)
 
     @classmethod
-    def target_catalog(cls, comms: Comms, target: str, channel: str | None = None) -> list[dict[str, object]]:
+    def target_catalog(cls, comms: Comms, target: str, channel: str | None = None, *, project: str) -> list[dict[str, object]]:
         from .channel_targets import is_channel_target
         if is_channel_target(target):
             view = comms.channels.catalog.read().resolve(target)
@@ -134,19 +136,20 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             bindings = ((member, member.thread_bindings(comms, thread,
                         snapshot.statuses[thread.name], channel))
                         for member in cls.members_with(cls))
-        return [member.describe(bound, comms, target)
+        return [member.describe(bound, comms, target, project)
                 for member, available in bindings for bound in available]
 
     @classmethod
-    def describe(cls, bound: dict[str, object], comms: Comms, target: str) -> dict[str, object]:
+    def describe(cls, bound: dict[str, object], comms: Comms, target: str, project: str) -> dict[str, object]:
         schema = FieldCodec.record_schema(cls)
         schema['properties'] = {key: value for key, value in schema['properties'].items()
                                 if key not in bound and key != cls.family_discriminator}
         schema['required'] = [key for key in schema['required'] if key in schema['properties']]
-        defaults = cls.editor_defaults(comms, target)
+        defaults = cls.editor_defaults(comms, target, project)
         for declared in fields(cls):
             key = declared.metadata.get('wire_name', declared.name)
             if key in schema['properties']:
+                schema['properties'][key]['multiline'] = declared.metadata['multiline']
                 schema['properties'][key]['editor_default'] = defaults.get(key, '')
                 schema['properties'][key]['description'] = declared.metadata['parser_options'].get(
                     'help', key.replace('_', ' ').capitalize())
@@ -158,7 +161,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def editor_defaults(cls, comms, target) -> dict[str, str]:
+    def editor_defaults(cls, comms, target, project) -> dict[str, str]:
         result = {}
         for declared in fields(cls):
             default = (declared.default if declared.default is not MISSING else
@@ -793,11 +796,11 @@ class ForkCliCommand(CliCommand):
     help = "Fork a child pi thread"
     name: str = option("--name")
     parent: str = option("--parent")
-    task: str = option("--task", default="")
+    task: str = option("--task", default="", multiline=True)
     tags: frozenset[str] | None = option(
         "--tags", default=None, normalize=lambda value: _tags(value) if value is not None else None
     )
-    prompt: str | None = option("--prompt", default=None)
+    prompt: str | None = option("--prompt", default=None, multiline=True)
     pi_bin: str = option(
         "--pi-bin", default_factory=lambda: os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
     )
@@ -808,8 +811,8 @@ class ForkCliCommand(CliCommand):
         return ({'parent': thread.name},) if CommsForkTool.available_for_thread(thread, status) else ()
 
     @classmethod
-    def editor_defaults(cls, comms, target):
-        result = super().editor_defaults(comms, target)
+    def editor_defaults(cls, comms, target, project):
+        result = super().editor_defaults(comms, target, project)
         result['tags'] = ', '.join(sorted(comms.registry.require(target).tags))
         return result
 
@@ -939,12 +942,13 @@ class ContextCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
+    project: str = option('--project', default_factory=os.getcwd)
     channel: str | None = option('--channel', default=None)
     help = 'List applicable operations and their declared parameters'
     target: str = option('--target')
 
     def apply(self, ctx: Comms) -> Any:
-        return {'actions': CliCommand.target_catalog(ctx, self.target, self.channel)}
+        return {'actions': CliCommand.target_catalog(ctx, self.target, self.channel, project=self.project)}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -992,7 +996,7 @@ class ThreadTagsCliCommand(CliCommand, declared_name='thread-tags'):
         return ({'name': thread.name},)
 
     @classmethod
-    def editor_defaults(cls, comms, target):
+    def editor_defaults(cls, comms, target, project):
         return {'tags': ', '.join(sorted(comms.registry.require(target).tags))}
 
     def apply(self, ctx: Comms) -> Any:
@@ -1102,6 +1106,10 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
     @classmethod
     def channel_bindings(cls, comms, channel):
         return ({'target': channel.name},)
+
+    @classmethod
+    def editor_defaults(cls, comms, target, project):
+        return {'worktree': project}
 
     def apply(self, ctx: Comms) -> Any:
         ctx.views.mark_user_view_read(self.target, worktree=self.worktree)
