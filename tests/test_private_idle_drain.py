@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import threading
 from dataclasses import replace
 
 import pytest
@@ -13,8 +14,70 @@ from agent_comms.coordination_cohort import next_sealed_assignment
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.store_files import file_revision
+from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+
+
+@pytest.mark.asyncio
+async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path):
+    comms, agent, root_id = _session(tmp_path)
+    log = comms.bus.log
+    # A busy original source is pending, not an unavailable inbox. Cancelling
+    # one waiter must leave the holder and the other observations intact.
+    with _store_lock(log.path):
+        tasks = [asyncio.create_task(agent.inputs._observe_private_revision("beta", root_id))
+                 for _ in range(3)]
+        await asyncio.sleep(0.08)
+        assert not any(task.done() for task in tasks)
+        tasks[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tasks[0]
+        assert not any(task.done() for task in tasks[1:])
+    observed = await asyncio.wait_for(asyncio.gather(*tasks[1:]), 5)
+    assert observed[0] == observed[1]
+
+    # Once acquired, cancellation must join the original callback before its
+    # descriptor closes. The worker consumes the certificate off the loop.
+    entered, finish = threading.Event(), threading.Event()
+    loop_thread = threading.get_ident()
+
+    def consume(source):
+        assert threading.get_ident() != loop_thread
+        source.require_current()
+        entered.set()
+        assert finish.wait(5)
+        return source.committed_sequence()
+
+    task = asyncio.create_task(log.read_certified_async(consume))
+    try:
+        while not entered.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.sleep(0.04)
+        assert not task.done()
+        with pytest.raises(BlockingIOError):
+            with _store_lock(log.path, blocking=False):
+                pass
+    finally:
+        finish.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    with log.certified_read(blocking=False) as source:
+        source.require_current()
+
+    # Callback refusal remains the original error and releases its resource.
+    failure = ValueError("original consumer refusal")
+
+    def refuse(source):
+        source.require_current()
+        raise failure
+
+    with pytest.raises(ValueError) as raised:
+        await log.read_certified_async(refuse)
+    assert raised.value is failure
+    with log.certified_read(blocking=False) as source:
+        source.require_current()
 
 
 def _covered_session(tmp_path):
@@ -165,7 +228,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
             store, stable_thread_lookup(beta.created_at), beta.name,
         )
         assert pending.wire_seq == second.seq
-        assert agent.inputs._private_observation_revision("beta", _root_id, store) != before
+    assert await agent.inputs._observe_private_revision("beta", _root_id) != before
     # This control observes actual delivery/recovery facts. It neither mocks
     # native execution nor grants a provider call to the pending input.
 
