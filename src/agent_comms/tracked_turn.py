@@ -297,7 +297,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             )
             custody.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
-            self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.path)
+            self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.address)
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
 
     @property

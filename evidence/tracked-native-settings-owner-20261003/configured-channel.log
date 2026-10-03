@@ -1,0 +1,21 @@
+FORK openhcs-helper openai-codex/gpt-6.1-sol off
+FORK openhcs-helper2 openai-codex/gpt-6.1-sol high
+FORK openhcs-pr159-viewer-bind-owner openai-codex/gpt-6.1-sol high
+ONE_CHANNEL_INPUT 1 457bbe7c3fe9
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/tracked-native-settings-owner-20261003/configured-channel.py", line 175, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/tracked-native-settings-owner-20261003/configured-channel.py", line 147, in main
+    assert not errors, 'Original diagnostic exists; preserve rather than retry'
+           ^^^^^^^^^^
+AssertionError: Original diagnostic exists; preserve rather than retry

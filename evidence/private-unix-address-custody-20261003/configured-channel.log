@@ -1,0 +1,5 @@
+FORK openhcs-helper openai-codex/gpt-6.1-sol off
+FORK openhcs-helper2 openai-codex/gpt-6.1-sol high
+FORK openhcs-pr159-viewer-bind-owner openai-codex/gpt-6.1-sol high
+ONE_CHANNEL_INPUT 1 c8b364a4d67a
+ALL_ORIGINAL_REPLIES_AND_PEER_CLAIMS_SETTLED {'openhcs-helper2': 19.17158603668213, 'openhcs-pr159-viewer-bind-owner': 24.00718355178833}
