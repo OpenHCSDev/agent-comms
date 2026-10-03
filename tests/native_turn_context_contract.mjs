@@ -81,6 +81,7 @@ try {
     assert(system.provenance.some(s=>s.path===join(cwd,'.pi','APPEND_SYSTEM.md')));
     assert(!JSON.stringify(captured.manifest()).includes('Original source summary'));
     assert.deepEqual((await TurnContext.next(session)).render(),provider);
+    let mixedCapture;
     if (process.argv.includes('--recorded-readers')) {
         // Recorded roots and mixed original parts borrow one real SDK projection.
         // Counters observe this acquisition; all data comes from the original store.
@@ -109,8 +110,20 @@ try {
             await assert.rejects(TurnContext.recordedSegment(session,full.identity,childEntries,recorded,
                 recorded.contributors),/projected bytes differ/);
             projections=0;
-            const mixed={...recorded,sha256:'c'.repeat(64)};
-            const parts=recorded.contributors;
+            let transformed=0;
+            const mixedProvider={...provider,messages:provider.messages.map(message=>{
+                if (message.role!=='user' || message.content!=='Distinct recorded child.') return message;
+                transformed++;
+                return {...message,content:'Authored transformed SDK part.'};
+            })};
+            assert.equal(transformed,1);
+            mixedCapture=await TurnContext.capture(session,mixedProvider);
+            const mixed=mixedCapture.manifest().segments.find(segment=>
+                segment.kind==='transcript' && segment.contributors.length>1);
+            const originalDigests=new Set(recorded.contributors.map(part=>part.sha256));
+            const parts=mixed.contributors.filter(part=>originalDigests.has(part.sha256));
+            assert.equal(parts.length,1);
+            assert.notEqual(mixed.sha256,recorded.sha256);
             const resolved=await TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,parts);
             assert.equal(projections,1);
             assert.deepEqual(resolved.full().segments.map(segment=>segment.sha256),parts.map(part=>part.sha256));
@@ -203,6 +216,8 @@ try {
         kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions,
         ...(process.argv.includes('--recorded-readers') ? {
             recorded_observation:captured.observation('authored-sdk-source-request'),
+            mixed_observation:mixedCapture.observation('authored-sdk-mixed-request'),
+            mixed_full:mixedCapture.full(),
             recorded_reader_scope:'Authored SDK capture and root/child resolution; no onContextReady model request',
             root_single_projection:true,child_uses_original_coordinates:true,
             mixed_single_projection:true,missing_or_other_session_refused:true} : {}),

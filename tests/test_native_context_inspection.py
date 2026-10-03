@@ -88,14 +88,17 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
                 from agent_comms.turn_context import ContextSourceText
 
                 observed = NativeContextManifestData.from_wire(sdk_source['recorded_observation'])
+                mixed_observed = NativeContextManifestData.from_wire(sdk_source['mixed_observation'])
                 # This is the SDK contract's original authored observation, not
                 # a claim that a model request/onContextReady event happened.
                 leased = owner._comms.agents.begin_turn(thread.name, 'authored-sdk-context-read')
                 try:
                     await observed.record(owner._comms.bus.log, leased.thread, leased.turn_lease)
+                    await mixed_observed.record(owner._comms.bus.log, leased.thread, leased.turn_lease)
                 finally:
                     owner._comms.agents.finish_turn(leased.turn_lease)
-                original, = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
+                original, mixed_original = owner._comms.bus.log.context_manifests(
+                    thread.name, owner._comms.registry)
                 assert original.require_request_id() == 'authored-sdk-source-request'
                 position = next(i for i, segment in enumerate(original.segments)
                                 if segment.kind == 'transcript' and len(segment.contributors) > 1)
@@ -115,6 +118,19 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
                 assert root_text.text == expected_group.public_text()
                 assert child_text.text == PiMessage.from_wire(expected_group.messages[0]).text
                 assert child_text.text != root_text.text
+                mixed_source = NativeContextData.from_wire(sdk_source['mixed_full'])
+                mixed_position = next(i for i, segment in enumerate(mixed_original.segments)
+                                      if segment.kind == 'transcript' and len(segment.contributors) > 1)
+                mixed_group = mixed_original.selected_segment(mixed_position)
+                assert len(mixed_group.requested_parts()) == 1
+                assert any(part.public_text_recorded for part in mixed_group.recorded_parts())
+                mixed_text = FieldCodec.decode(ContextSourceText,
+                    await connection.request('context_recorded_segment',
+                        turn=FieldCodec.encode(mixed_original.turn),
+                        request_id=mixed_original.require_request_id(), segment=mixed_position))
+                assert mixed_text.text == mixed_source.segments[mixed_position].public_text()
+                assert 'Authored transformed SDK part.' in mixed_text.text
+                assert mixed_text.text != root_text.text
                 assert fixture.session.read_bytes() == selected_before
                 assert owner._comms.bus.log.latest_sequence() == 0
                 receipt = {'scope':'Installed authenticated reads of an original authored SDK capture',
@@ -122,6 +138,7 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
                     'new_native_inputs':0, 'original_user_rows':len(original_inputs),
                     'original_request':original.require_request_id(),
                     'root_text':root_text.text, 'child_text':child_text.text,
+                    'mixed_text':mixed_text.text, 'mixed_request':mixed_original.require_request_id(),
                     'root_and_child_differ':True, 'original_native_bytes_unchanged':True}
                 (fixture.root.parent / 'recorded-reader-receipt.json').write_text(json.dumps(receipt, indent=2))
         finally:

@@ -207,3 +207,10 @@ Paths above are placeholders for the actual lease, not permission to substitute
 or overlay a package. No installed qualification has run at this driver
 checkpoint. Source syntax checks passed. No source model/provider rerun is needed
 for these preparation changes; compiled production remains exactly4ab53277.
+
+The prepared mixed-reader case now comes from an actual second SDK capture with
+one authored transformed message, rather than a fabricated root digest. The
+original publisher captures that nonrecoverable part, retains the other part's
+journal reference, and the same installed indexed RPC must recover the complete
+mixed public text. This remains an authored SDK construction, not observed model
+recall or onContextReady provider admission. Production still equals4ab53277.
