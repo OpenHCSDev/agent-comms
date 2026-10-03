@@ -1,0 +1,262 @@
+{
+  "parser": "Existing NRA SourceModule.parse",
+  "roots": [
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/src",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/tests",
+    "/home/ts/wt/toad-prompt-action-owner-20261002/src"
+  ],
+  "modules": 1015,
+  "parse_omissions": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/src/agent_comms/tracked_turn.py",
+      "error": "invalid syntax (tracked_turn.py, line 54)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/__init__.py",
+      "error": "invalid syntax (__init__.py, line 7)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/acp/agent_configuration.py",
+      "error": "expected '(' (agent_configuration.py, line 120)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/agent_schema.py",
+      "error": "invalid syntax (agent_schema.py, line 8)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/ansi/_ansi.py",
+      "error": "invalid syntax (_ansi.py, line 252)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/ansi/_stream_parser.py",
+      "error": "invalid syntax (_stream_parser.py, line 10)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/channel_preparation.py",
+      "error": "expected '(' (channel_preparation.py, line 179)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/clipboard.py",
+      "error": "multiple exception types must be parenthesized (clipboard.py, line 50)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/comms_root.py",
+      "error": "multiple exception types must be parenthesized (comms_root.py, line 181)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/danger.py",
+      "error": "multiple exception types must be parenthesized (danger.py, line 297)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/db.py",
+      "error": "expected '(' (db.py, line 81)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/goal_interaction.py",
+      "error": "multiple exception types must be parenthesized (goal_interaction.py, line 216)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/input_history.py",
+      "error": "expected '(' (input_history.py, line 91)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/jsonrpc.py",
+      "error": "invalid syntax (jsonrpc.py, line 20)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/mcp_decision.py",
+      "error": "multiple exception types must be parenthesized (mcp_decision.py, line 118)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/mcp_inventory.py",
+      "error": "multiple exception types must be parenthesized (mcp_inventory.py, line 106)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/settings.py",
+      "error": "invalid syntax (settings.py, line 83)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/shell.py",
+      "error": "multiple exception types must be parenthesized (shell.py, line 61)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/sidebar_layout.py",
+      "error": "invalid syntax (sidebar_layout.py, line 11)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/sidebar_preparation.py",
+      "error": "expected '(' (sidebar_preparation.py, line 103)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/tab_order.py",
+      "error": "expected '(' (tab_order.py, line 36)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/web_server.py",
+      "error": "invalid syntax (web_server.py, line 16)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/widgets/conversation.py",
+      "error": "expected '(' (conversation.py, line 1876)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/widgets/goal_bar.py",
+      "error": "multiple exception types must be parenthesized (goal_bar.py, line 57)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/widgets/question.py",
+      "error": "invalid syntax (question.py, line 22)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/widgets/session_sort.py",
+      "error": "invalid syntax (session_sort.py, line 16)"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/src/toad/widgets/session_thread_panels.py",
+      "error": "invalid syntax (session_thread_panels.py, line 20)"
+    }
+  ],
+  "sites": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/publish_retained_summary.py",
+      "references": [
+        {
+          "line": 71,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageVcsInfo",
+            "bases": [],
+            "annotations": [
+              "vcs: str",
+              "commit_id: str",
+              "requested_revision: str"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 78,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageDirectUrl",
+            "bases": [],
+            "annotations": [
+              "url: str",
+              "vcs_info: PackageVcsInfo"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 84,
+          "node": "ClassDef",
+          "source": {
+            "class": "InstalledSource",
+            "bases": [],
+            "annotations": [
+              "module: str",
+              "head: str",
+              "location: str",
+              "files: int",
+              "python_files: int",
+              "byte_equal: bool",
+              "direct_url: PackageDirectUrl",
+              "inventory_sha256: str"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 96,
+          "node": "ClassDef",
+          "source": {
+            "class": "InstalledSourceProof",
+            "bases": [],
+            "annotations": [
+              "state: str",
+              "prefix: Annotated[Path, PathText]",
+              "sources: tuple[InstalledSource, ...]",
+              "native_package: Annotated[Path, PathText]",
+              "native_cli: str",
+              "native_manifest: str",
+              "native_tree: str",
+              "native_full_trust: bool",
+              "sdk: str",
+              "package_count: int",
+              "packages: tuple[tuple[str, str], ...]",
+              "requirements_sha256: str",
+              "protected_old_prefix_files: int",
+              "protected_old_prefix_files_unchanged: bool",
+              "public_install_changed: bool",
+              "new_native_build: bool",
+              "source_overlay: bool",
+              "dependency_bypass: bool",
+              "journey_owners: tuple[str, ...]",
+              "journey_assessment: str"
+            ],
+            "methods": [
+              "require_activation"
+            ]
+          }
+        },
+        {
+          "line": 80,
+          "node": "Name",
+          "source": "vcs_info"
+        },
+        {
+          "line": 80,
+          "node": "Name",
+          "source": "PackageVcsInfo"
+        },
+        {
+          "line": 91,
+          "node": "Name",
+          "source": "direct_url"
+        },
+        {
+          "line": 91,
+          "node": "Name",
+          "source": "PackageDirectUrl"
+        },
+        {
+          "line": 99,
+          "node": "Name",
+          "source": "InstalledSource"
+        },
+        {
+          "line": 163,
+          "node": "Name",
+          "source": "InstalledSourceProof"
+        },
+        {
+          "line": 128,
+          "node": "Attribute",
+          "source": "source.direct_url.vcs_info"
+        },
+        {
+          "line": 128,
+          "node": "Attribute",
+          "source": "source.direct_url"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/retained_summary_stage_controls.py",
+      "references": [
+        {
+          "line": 7,
+          "node": "ImportFrom",
+          "source": "from publish_retained_summary import CohortActivation, InstalledSourceProof"
+        },
+        {
+          "line": 17,
+          "node": "Name",
+          "source": "InstalledSourceProof"
+        }
+      ]
+    }
+  ],
+  "limits": "Static named/dotted references and nominal declarations; no claim to resolve dynamic imports/reflection. Frozen historical operator copies are retained originals, not active production consumers."
+}

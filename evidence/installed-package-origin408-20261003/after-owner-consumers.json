@@ -1,0 +1,281 @@
+{
+  "parser": "Existing NRA SourceModule.parse on actualPython3.14",
+  "roots": [
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/src",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/tests",
+    "/home/ts/wt/toad-prompt-action-owner-20261002/src"
+  ],
+  "modules": 1015,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/publish_retained_summary.py",
+      "references": [
+        {
+          "line": 73,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageVcsInfo",
+            "bases": [],
+            "annotations": [
+              "vcs: str",
+              "commit_id: str",
+              "requested_revision: str"
+            ],
+            "methods": []
+          }
+        },
+        {
+          "line": 80,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageDirectUrl",
+            "bases": [
+              "ABC"
+            ],
+            "annotations": [
+              "url: str"
+            ],
+            "methods": [
+              "require_original"
+            ]
+          }
+        },
+        {
+          "line": 89,
+          "node": "ClassDef",
+          "source": {
+            "class": "VcsPackageDirectUrl",
+            "bases": [
+              "PackageDirectUrl"
+            ],
+            "annotations": [
+              "vcs_info: PackageVcsInfo"
+            ],
+            "methods": [
+              "require_original"
+            ]
+          }
+        },
+        {
+          "line": 98,
+          "node": "ClassDef",
+          "source": {
+            "class": "PackageArchiveInfo",
+            "bases": [],
+            "annotations": [
+              "hashes: dict[str, str] = field(default_factory=dict, metadata={'wire_omit_default': True})",
+              "hash: str | None = field(default=None, metadata={'wire_omit_default': True})"
+            ],
+            "methods": [
+              "require_original"
+            ]
+          }
+        },
+        {
+          "line": 118,
+          "node": "ClassDef",
+          "source": {
+            "class": "ArchivePackageDirectUrl",
+            "bases": [
+              "PackageDirectUrl"
+            ],
+            "annotations": [
+              "archive_info: PackageArchiveInfo"
+            ],
+            "methods": [
+              "require_original"
+            ]
+          }
+        },
+        {
+          "line": 133,
+          "node": "ClassDef",
+          "source": {
+            "class": "InstalledSource",
+            "bases": [],
+            "annotations": [
+              "module: str",
+              "head: str",
+              "location: str",
+              "files: int",
+              "python_files: int",
+              "byte_equal: bool",
+              "direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl",
+              "inventory_sha256: str"
+            ],
+            "methods": [
+              "require_original"
+            ]
+          }
+        },
+        {
+          "line": 150,
+          "node": "ClassDef",
+          "source": {
+            "class": "InstalledSourceProof",
+            "bases": [],
+            "annotations": [
+              "state: str",
+              "prefix: Annotated[Path, PathText]",
+              "sources: tuple[InstalledSource, ...]",
+              "native_package: Annotated[Path, PathText]",
+              "native_cli: str",
+              "native_manifest: str",
+              "native_tree: str",
+              "native_full_trust: bool",
+              "sdk: str",
+              "package_count: int",
+              "packages: tuple[tuple[str, str], ...]",
+              "requirements_sha256: str",
+              "protected_old_prefix_files: int",
+              "protected_old_prefix_files_unchanged: bool",
+              "public_install_changed: bool",
+              "new_native_build: bool",
+              "source_overlay: bool",
+              "dependency_bypass: bool",
+              "journey_owners: tuple[str, ...]",
+              "journey_assessment: str",
+              "archive_artifacts: tuple[ReviewedArtifact, ...] = field(default=(), metadata={'wire_omit_default': True})"
+            ],
+            "methods": [
+              "require_activation"
+            ]
+          }
+        },
+        {
+          "line": 89,
+          "node": "Name",
+          "source": "PackageDirectUrl"
+        },
+        {
+          "line": 118,
+          "node": "Name",
+          "source": "PackageDirectUrl"
+        },
+        {
+          "line": 90,
+          "node": "Name",
+          "source": "vcs_info"
+        },
+        {
+          "line": 90,
+          "node": "Name",
+          "source": "PackageVcsInfo"
+        },
+        {
+          "line": 119,
+          "node": "Name",
+          "source": "archive_info"
+        },
+        {
+          "line": 119,
+          "node": "Name",
+          "source": "PackageArchiveInfo"
+        },
+        {
+          "line": 140,
+          "node": "Name",
+          "source": "direct_url"
+        },
+        {
+          "line": 171,
+          "node": "Name",
+          "source": "archive_artifacts"
+        },
+        {
+          "line": 140,
+          "node": "Name",
+          "source": "VcsPackageDirectUrl"
+        },
+        {
+          "line": 140,
+          "node": "Name",
+          "source": "ArchivePackageDirectUrl"
+        },
+        {
+          "line": 153,
+          "node": "Name",
+          "source": "InstalledSource"
+        },
+        {
+          "line": 218,
+          "node": "Name",
+          "source": "InstalledSourceProof"
+        },
+        {
+          "line": 93,
+          "node": "Attribute",
+          "source": "self.vcs_info"
+        },
+        {
+          "line": 129,
+          "node": "Attribute",
+          "source": "self.archive_info"
+        },
+        {
+          "line": 146,
+          "node": "Attribute",
+          "source": "self.direct_url"
+        },
+        {
+          "line": 184,
+          "node": "Attribute",
+          "source": "self.archive_artifacts"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/retained_summary_stage_controls.py",
+      "references": [
+        {
+          "line": 7,
+          "node": "ImportFrom",
+          "source": "from publish_retained_summary import CohortActivation, InstalledSourceProof, ArchivePackageDirectUrl, VcsPackageDirectUrl, PackageVcsInfo"
+        },
+        {
+          "line": 33,
+          "node": "Attribute",
+          "source": "p.archive_artifacts"
+        },
+        {
+          "line": 20,
+          "node": "Name",
+          "source": "InstalledSourceProof"
+        },
+        {
+          "line": 60,
+          "node": "Name",
+          "source": "VcsPackageDirectUrl"
+        },
+        {
+          "line": 60,
+          "node": "Name",
+          "source": "PackageVcsInfo"
+        },
+        {
+          "line": 38,
+          "node": "Name",
+          "source": "ArchivePackageDirectUrl"
+        },
+        {
+          "line": 49,
+          "node": "Name",
+          "source": "ArchivePackageDirectUrl"
+        },
+        {
+          "line": 57,
+          "node": "Name",
+          "source": "VcsPackageDirectUrl"
+        },
+        {
+          "line": 57,
+          "node": "Name",
+          "source": "ArchivePackageDirectUrl"
+        }
+      ]
+    }
+  ],
+  "limits": "Static declarations/names/attributes; no dynamic resolution claim. Old frozen operators remain originalhistorical artifacts."
+}
