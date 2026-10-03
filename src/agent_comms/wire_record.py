@@ -54,10 +54,6 @@ class WireRecord(ABC):
     def context_manifests(self):
         return ()
 
-    def compaction_messages_for(self, recipient_lookup):
-        """Unaddressed records grant no applicability to a retained source."""
-        return ()
-
     @abstractmethod
     def sequence_after(self, previous: int) -> int: ...
 
