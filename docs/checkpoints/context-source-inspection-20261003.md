@@ -214,3 +214,37 @@ original publisher captures that nonrecoverable part, retains the other part's
 journal reference, and the same installed indexed RPC must recover the complete
 mixed public text. This remains an authored SDK construction, not observed model
 recall or onContextReady provider admission. Production still equals4ab53277.
+
+
+## Installed root/mixed/child reader, reused thin540
+
+The explicit package-only lease allowed a normal Core filewheel in the existing
+thin540. Its ten dependencies remain unchanged; it has no pytest dependency.
+`NativeBackendFixture` and the original context reader now live in shared fixture
+modules, with pytest delegating to them. No setup/cleanup or read algorithm is
+copied into a second runner. Simulated-model helpers load their pytest imports
+only when their own simulated consumer requests them.
+
+The first installed RPC correctly refused the authored SDK observation because
+`PreviewProvenance` did not expose its observed session identity to the shared
+read relation. The existing provenance member now supplies that identity for
+read corroboration. It does not acquire request generation, native input proof
+or admission authority. Original manifest membership, identity, journal entry
+coordinates, kind, SHA and byte checks remain in the existing owners. The raw
+4.11-second refusal is preserved.
+
+The corrected run borrows the SAME completed SDK capture, without recreating it:
+
+```sh
+PI_COMPACTION_TEST_PACKAGE=/matching/d5/native/package \
+  /leased/thin540/bin/python tests/native_context_reader_journey.py \
+  /owned/capture02 --sdk-source /owned/capture/original-recorded-sdk-source.json
+```
+
+Installed RPC acceptance passed in 6.1119 seconds: exact root, distinct original
+child, and mixed captured/transformed plus journal-backed text. Three original
+SDK user rows and native bytes were preserved, provider posts/new inputs zero,
+child exited. This is authored SDK capture and installed authenticated read
+acceptance; no model onContextReady request, HTTP body, recall or physical UI
+claim. Native d5 compiled source is unchanged. Evidence includes the original
+negative and corrected terminal/read receipts.

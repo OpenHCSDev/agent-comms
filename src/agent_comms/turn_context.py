@@ -126,6 +126,10 @@ class PreviewProvenance(Provenance):
     def preview_observations(self) -> tuple[PreviewProvenance, ...]:
         return (self,)
 
+    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
+        """Original SDK identity for read corroboration, never input admission."""
+        return (self.identity,)
+
 
 @dataclass(frozen=True)
 class ResourceProvenance(Provenance):

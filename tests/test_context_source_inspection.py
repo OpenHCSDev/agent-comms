@@ -227,3 +227,15 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     from agent_comms.cli_commands import ContextCliCommand
 
     assert ContextCliCommand(thread=owner.name, turn=2).apply(comms)["text_recorded"] is True
+
+
+def test_authored_sdk_observation_retains_read_identity_without_minting_native_proof(tmp_path):
+    native = identity(tmp_path)
+    preview = PreviewProvenance(native, "a" * 64)
+    original = system((preview, JournalProvenance(native.session_file, ("entry",)))).measured_manifest()
+    assert original.native_identity() == native
+    assert original.journal_entries() == ("entry",)
+    assert not any(isinstance(source, NativeProvenance) for source in original.provenance)
+    with pytest.raises(ValueError, match="unambiguous"):
+        replace(original, provenance=(*original.provenance,
+            PreviewProvenance(replace(native, session_id="other"), "b" * 64))).native_identity()
