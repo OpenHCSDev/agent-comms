@@ -1,0 +1,27 @@
+{
+  "source_checkpoint": "aa8bee420ece30d9a241f22b316692cb664fd394",
+  "builder_source": "581bf3cb9fbcd5711addb6ef398732018bb8d06f",
+  "files": {
+    "stack/native-session-entry-store.mjs": "d1595267809937b4dc7b6aaf43b420805c6702732620d7faddd26cf0ebb876c4",
+    "stack/native-session-context.mjs": "b644b4283b4059587a9883602910b4868adde69907dd740e1a636062ffcdf5fd",
+    "stack/native-turn-context.mjs": "11bcccebf0234a0ca5e2eeb9293637eb481ba8a73304e9ec14c7f3e4294443e4"
+  },
+  "expected_compiled_changes": [
+    {
+      "path": "dist/core/session-entry-store.js"
+    },
+    {
+      "path": "dist/core/session-context.js"
+    },
+    {
+      "path": "dist/core/turn-context.js"
+    }
+  ],
+  "original_native": "2bfb6ba8fd3b3b3bc03dd122e0a67cb69fdc7cef86704a706396024b1561c292",
+  "normal_builder_unchanged": true,
+  "provider_calls": 0,
+  "public_changes": false,
+  "new_environment": false,
+  "new_worktree": false,
+  "parent_source_review": "approved prior to compile"
+}

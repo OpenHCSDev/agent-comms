@@ -1,0 +1,88 @@
+{
+  "state": "MATCHING_NATIVE_SDK_SOURCE_CONSTRUCTIONS_PASS",
+  "core_source": "aa8bee420ece30d9a241f22b316692cb664fd394",
+  "native_manifest": "7c2a2e644420c349dfdbadf0e1fa555d783697298bb984f1459e3326015b1dcf",
+  "native_tree": "29fb1f9c57a829511f6a03acc15dc5d84e8652c57d1e95ee03fb37d4d02a3d91",
+  "exit_code": 0,
+  "provider_calls": 0,
+  "journal_bytes_unchanged": true,
+  "preview_not_recorded": true,
+  "raw_private_output_sha256": "894c60fa7daaebdeaffecd69628580ba54f235cadb6b5a26e3e1a551190d9588",
+  "constructions": {
+    "full-context": {
+      "sdk_messages": 4,
+      "context_sha256": "bf4f4e6499764912dd569eb2dfd49c02e34460d84478530a0de54adb15d819f6",
+      "segments": [
+        "system_layer",
+        "transcript",
+        "injection_message",
+        "tool_catalog"
+      ],
+      "budget": {
+        "evaluated": true,
+        "admitted": true,
+        "estimated_input_tokens": 1216,
+        "available_tokens": 260928,
+        "model": {
+          "provider": "openrouter",
+          "id": "moonshotai/kimi-k2.6",
+          "name": "MoonshotAI: Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 235929
+        }
+      }
+    },
+    "recent-only": {
+      "sdk_messages": 2,
+      "context_sha256": "7bb84a4507ff70af6fd99b3f1937bf5699b56e6ad6dcc11bee0eb0aca48fe4eb",
+      "segments": [
+        "system_layer",
+        "transcript",
+        "injection_message",
+        "tool_catalog"
+      ],
+      "budget": {
+        "evaluated": true,
+        "admitted": true,
+        "estimated_input_tokens": 3966,
+        "available_tokens": 258178,
+        "model": {
+          "provider": "openrouter",
+          "id": "moonshotai/kimi-k2.6",
+          "name": "MoonshotAI: Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 235929
+        }
+      }
+    },
+    "task-memory": {
+      "sdk_messages": 3,
+      "context_sha256": "21773bf3d675d63c0e7230083a8f8e9bc6f09feb94305a480da9350a4e330ee8",
+      "segments": [
+        "system_layer",
+        "compaction_summary",
+        "transcript",
+        "injection_message",
+        "tool_catalog"
+      ],
+      "budget": {
+        "evaluated": true,
+        "admitted": true,
+        "estimated_input_tokens": 3999,
+        "available_tokens": 258145,
+        "model": {
+          "provider": "openrouter",
+          "id": "moonshotai/kimi-k2.6",
+          "name": "MoonshotAI: Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 235929
+        }
+      }
+    }
+  },
+  "bounded": {
+    "evaluated": false,
+    "reason": "Original uncombined narrative-only summary required"
+  },
+  "scope": "Actual compiled SDK source views/provenance and ContextBudget estimates on original authored SDK fixture. No representative full-history capacity, submitted input, HTTP, intervention or recall claim."
+}
