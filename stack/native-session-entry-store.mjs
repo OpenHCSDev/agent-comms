@@ -133,11 +133,25 @@ export class EntryStore {
             const compaction = this.latestMetadata(leafId, 'compaction');
             if (!compaction) { yield* this.branchMetadata(leafId); return; }
             yield compaction;
-            let keeping = false;
+            yield* this.keptMetadata(leafId, compaction);
+        } finally { this.assertCurrent(); }
+    }
+    *keptMetadata(leafId = this.lastId, compaction = this.latestMetadata(leafId, 'compaction')) {
+        // The same original floor owns both canonical and recent-only views.
+        if (!compaction) throw new Error('Kept-source view requires an original compaction floor');
+        let keeping = false;
+        for (const meta of this.branchMetadata(leafId)) {
+            if (meta.id === compaction.firstKeptEntryId) keeping = true;
+            if (meta.id === compaction.id) { keeping = true; continue; }
+            if (keeping) yield meta;
+        }
+    }
+    *uncompactedMetadata(leafId = this.lastId) {
+        this.assertCurrent();
+        try {
             for (const meta of this.branchMetadata(leafId)) {
-                if (meta.id === compaction.firstKeptEntryId) keeping = true;
-                if (meta.id === compaction.id) { keeping = true; continue; }
-                if (keeping) yield meta;
+                // A stored summary replaces source; it is not raw ancestry.
+                if (meta.type !== 'compaction') yield meta;
             }
         } finally { this.assertCurrent(); }
     }

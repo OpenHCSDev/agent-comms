@@ -20,7 +20,10 @@ export class SessionContext {
         return session.storedContext;
     }
     static sourceMessages(manager) {
-        return manager.buildContextEntries().flatMap(sessionEntryToContextMessages);
+        return this.entryMessages(manager.buildContextEntries());
+    }
+    static entryMessages(entries) {
+        return entries.flatMap(sessionEntryToContextMessages);
     }
     static sourceBudget(session, messages) {
         return new ContextBudget(session.model, this.sourceContext(session, convertToLlm(messages)));
@@ -36,6 +39,9 @@ export class SessionContext {
         // Use the original SDK converter (including configured image exclusion),
         // not a Python narrative or an independently captured prompt body.
         return this.sourceContext(session, await session.agent.convertToLlm(Array.from(messages)));
+    }
+    static async entryContext(session, entries) {
+        return this.prefixContext(session, this.entryMessages(entries));
     }
     compactionRequired(session, settings) {
         return SessionContext.sourceBudget(session, SessionContext.sourceMessages(this.manager).toArray())
