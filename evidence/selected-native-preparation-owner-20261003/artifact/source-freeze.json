@@ -1,0 +1,14 @@
+{
+  "frozen_native_source": "9d42ff50ef28ba9b655f807bcc4342148345c206",
+  "builder_head": "0f2df062ccae91d40e359193f75a61a5e2b9f390",
+  "native_source_hashes": {
+    "native-compaction-selected-summary.mjs": "68bd7a08440fd0b800a56a083e90a7ff32be49dd8bf3baf5b70fc546a730b7e8",
+    "patch-native-selected-compaction-summary.py": "d882a778be676ff1a29037a978c91dfac49e6275a01dc6610f23f8c64d385bf5"
+  },
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "protected_original_native": "044646789787e3d3",
+  "provider_calls": 0,
+  "public_changes": false,
+  "new_environment": false,
+  "stock_recipe_source": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-summary-preparation562-native-20261003/capture-stock-recipe.sh"
+}
