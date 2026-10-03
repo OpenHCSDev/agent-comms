@@ -101,8 +101,8 @@ class NativeCustody(ABC):
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
-    async def inspect_context(self, persistent):
-        """Observe acquired custody; browsing cannot acquire a native writer."""
+    async def inspect_context(self, persistent, prepare):
+        """Inspect through this custody's legal acquisition/receiver capability."""
         raise NativePiUnavailable("Native context requires an acquired native child")
 
     async def expected(self, launch, require_input_id) -> NativeAttestation:
@@ -120,6 +120,13 @@ class NativeCustody(ABC):
 
 class EmptyNative(NativeCustody):
     available = False
+
+    async def inspect_context(self, persistent, prepare):
+        # The runtime owner supplies its existing selected-session preparation:
+        # real saved launch/idle attestation/retention, never a priming prompt.
+        await prepare()
+        acquired = persistent.custody.idle()
+        return await acquired.inspect_context(persistent, prepare)
 
 
 class NativeCleanupFailed(RuntimeError):
@@ -186,7 +193,7 @@ class BorrowedNative(NativeCustody):
     successor: NativeCustody
     available = True
 
-    async def inspect_context(self, persistent):
+    async def inspect_context(self, persistent, prepare):
         from .pi_commands import AgentCommsInspectContext
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
@@ -263,7 +270,7 @@ class RetainedNative(NativeCustody):
                 self.revision = SessionRevision.observe(self.identity.session_file).require_available()
                 self.child.attestation = observed
 
-    async def inspect_context(self, persistent):
+    async def inspect_context(self, persistent, prepare):
         from .pi_commands import AgentCommsInspectContext
         async with persistent.lock:
             current = persistent.custody.idle()
