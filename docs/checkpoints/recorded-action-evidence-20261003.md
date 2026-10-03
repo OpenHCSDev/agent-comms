@@ -42,3 +42,52 @@ the affected controls and consume the existing installed original records.
 The configured three-cut run is reused; no new input is required. Existing
 samples have no predeclared action question, so they cannot earn execution or
 constraint-validity credit.
+
+## Final qualification
+
+Functional source `fd4e1c8c` was installed as a normal wheel in the small existing
+private package target, using the existing Core563 interpreter. All339 tracked
+package files match. The installed scorer read the same three completed cuts
+and exited0:9/9, stale0, missing0;3/3 unassisted and6/6 assisted. It observed
+zero tools in cut1 and one successful original SDK result in each of cuts2/3.
+The frozen scenario has zero action questions. These results add no executed
+Decision or all-constraint validity claim.
+
+Twenty-four synchronous scorer/action controls and19 subtests passed. The
+existing actual SDK file-mutation/retained-branch control also passed. Its
+obsolete encoded revision constructor and nullable pending-input argument were
+migrated to the current `FileRevision` and empty tuple contracts; no product
+guard was changed. The initial broad selection could not run its unrelated
+async native fixture without a pytest plugin; it is not reported as passed.
+The installed original-record consumer provides this checkpoint's affected
+path acceptance. No new native model operation or provider input occurred.
+
+Seven original capture hashes and both prior Started/ACP_UNCONFIRMED rows remain
+unchanged. Parent publication, settings, goals and sessions are untouched.
+
+The AST receipt includes both original12c1758e and finalfd4e1c8c across the
+same production/test/tool roots: eight relevant existing declarations,
+24 consumer files and zero parse omissions. It does not claim dynamic MRO or
+external decoding from lexical names alone. The production delta removes two
+old lines and adds six; no native manifest, storage format or runtime ABI changes.
+
+Evidence:
+
+- [Installed actions](../../evidence/recorded-action-evidence-20261003/installed-actions.json)
+- [Owner and consumer source](../../evidence/recorded-action-evidence-20261003/source-consumers.json)
+
+## Remaining original facts
+
+The original observer only records route/prefix hashes and captures SDK
+segments. Sch confirmed `native-turn-context.mjs` and
+`native-request-observation.mjs` do not retain dispatch capacity/model budget.
+`ContextBudget` owns actual generation admission; `NativeContextData` owns
+captured SDK input, and `AssistantMessage` owns reported completion selection.
+Their different observations cannot be substituted for one another. Historical
+full-context eligibility, final HTTP bytes and returned model/effort remain
+unavailable. Labels do not establish full-context, bounded, task-memory or
+recent-only interventions. An SDK receipt still does not prove a proposed
+Decision was executed or that every constraint held.
+
+The registered comparative study remains unapproved. This source checkpoint
+does not start it, enable optional policy or report its margins.
