@@ -1,0 +1,188 @@
+{
+  "source_head": "6e7ce1351fe24d922978fafb2ea7a1675f5fc782",
+  "parsed": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 166,
+      "kind": "declaration",
+      "name": "DisplaySelection"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 213,
+      "kind": "declaration",
+      "name": "BusPresentation"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 176,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 223,
+      "kind": "declaration",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 459,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 100,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 210,
+      "kind": "call",
+      "source": "ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 348,
+      "kind": "call",
+      "source": "BusDisplayIndex(self._path, viewer).snapshot(bus_revision, semantics, initial, lambda record, metrics: semantics.observe_wire(record, metrics))"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 267,
+      "kind": "call",
+      "source": "self.snapshot(viewer=viewer, target=target)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 194,
+      "kind": "call",
+      "source": "ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 301,
+      "kind": "call",
+      "source": "DisplaySelection.capture(registry.snapshot(), catalog, self.bus.reads, self.bus.reads.read(), viewer)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 492,
+      "kind": "call",
+      "source": "cls.capture(thread, snapshot, activities[name], runtime.get(name), waits)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 245,
+      "kind": "call",
+      "source": "DisplaySelection.capture(registry.snapshot(), catalog, self.bus.reads, reads, viewer)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 269,
+      "kind": "call",
+      "source": "MessagePageRequest.capture(scope, before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 302,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 311,
+      "kind": "call",
+      "source": "self.bus.reads.capture(viewer, messages, basis.registry, self.bus.log.path)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 246,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 279,
+      "kind": "call",
+      "source": "self.bus.reads.capture(viewer, page.messages, basis.registry, self.bus.log.path)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 118,
+      "kind": "declaration",
+      "name": "DMDisplayBasis"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 274,
+      "kind": "declaration",
+      "name": "validate_identity"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 328,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 370,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 272,
+      "kind": "call",
+      "source": "self.validate_identity(snapshot, bus_identity)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 340,
+      "kind": "call",
+      "source": "cls.capture(first.name, second.name, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 161,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 198,
+      "kind": "call",
+      "source": "basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 236,
+      "kind": "call",
+      "source": "registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 198,
+      "kind": "call",
+      "source": "document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 196,
+      "kind": "call",
+      "source": "bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path)"
+    }
+  ],
+  "deleted_production_facts": [
+    "BusPresentation whole-store revision method",
+    "three-attempt display snapshot loop and terminal scope error",
+    "DMDisplayBasis.marker_revision field and consumers",
+    "DM page whole-registry file revision validity"
+  ],
+  "limits": "Syntactic evidence; dynamic aliases and MRO calls require semantic reading. Installed App verification remains outstanding."
+}
