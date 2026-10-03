@@ -1,0 +1,731 @@
+{
+  "parser": "Node26 existing bundled Acorn8.18.0",
+  "roots": [
+    "stack",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist"
+  ],
+  "files": 402,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "file": "stack/native-compaction-selected-summary.mjs",
+      "line": 197,
+      "name": "acExecuteSummary"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 4,
+      "name": "observeRequest"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 9,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 65,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1796,
+      "name": "_runDefaultCompaction"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 334,
+      "name": "createSummarizationOptions"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 348,
+      "name": "completeSummarization"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "line": 184,
+      "name": "streamAssistantResponse"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 4,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 9,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 65,
+      "name": "observeStream"
+    }
+  ],
+  "consumers": [
+    {
+      "file": "stack/native-compaction-selected-summary.mjs",
+      "line": 197,
+      "name": "acExecuteSummary"
+    },
+    {
+      "file": "stack/native-compaction-selected-summary.mjs",
+      "line": 208,
+      "name": "selectedStream"
+    },
+    {
+      "file": "stack/native-compaction-selected-summary.mjs",
+      "line": 317,
+      "name": "selectedStream"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 4,
+      "name": "observeRequest"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 6,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 9,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 11,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 31,
+      "name": "observeRequest"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 31,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 50,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 65,
+      "name": "observeStream"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 71,
+      "name": "observeRequest"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 77,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 170,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1796,
+      "name": "_runDefaultCompaction"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1877,
+      "name": "_runDefaultCompaction"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 2153,
+      "name": "_runDefaultCompaction"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js",
+      "line": 10,
+      "name": "completeSummarization"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js",
+      "line": 10,
+      "name": "completeSummarization"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js",
+      "line": 201,
+      "name": "completeSummarization"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 334,
+      "name": "createSummarizationOptions"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 348,
+      "name": "completeSummarization"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 470,
+      "name": "createSummarizationOptions"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 477,
+      "name": "completeSummarization"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "line": 1,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "line": 1,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "line": 123,
+      "name": "streamAssistantResponse"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "line": 184,
+      "name": "streamAssistantResponse"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "line": 185,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "line": 99,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "line": 127,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "line": 127,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "line": 302,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "line": 302,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 397,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 404,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 404,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 406,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+      "line": 411,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 91,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 98,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 98,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 100,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+      "line": 104,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 131,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 161,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 172,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+      "line": 384,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "line": 52,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+      "line": 60,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-shared.js",
+      "line": 398,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-shared.js",
+      "line": 398,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "line": 62,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+      "line": 70,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 171,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 179,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+      "line": 189,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 281,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 299,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 496,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1174,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1207,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1209,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "line": 1212,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 221,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 229,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 229,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 231,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "line": 384,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 129,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 136,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 136,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 138,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "line": 142,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 1,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 275,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 288,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+      "line": 298,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js",
+      "line": 23,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js",
+      "line": 23,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 4,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 6,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 9,
+      "name": "NativeRequestObservation"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 11,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 31,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 31,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 50,
+      "name": "onRequestProgress"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 65,
+      "name": "observeStream"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 71,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "line": 77,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js",
+      "line": 1,
+      "name": "observeRequest"
+    },
+    {
+      "file": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js",
+      "line": 92,
+      "name": "observeRequest"
+    }
+  ],
+  "ambiguity": "Identifier references do not resolve dynamic callbacks; native patch strings are Python AST plus exact generated-source semantic reads. TypeScript declaration files are separately read, not parsed as JavaScript."
+}

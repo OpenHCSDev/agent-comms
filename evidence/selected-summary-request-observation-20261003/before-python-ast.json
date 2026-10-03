@@ -1,0 +1,2247 @@
+{
+  "head": "43e7b227d6aae2957eb13922da100c9c423a888c",
+  "parser": "refactor-audit Package.load Python3.14",
+  "modules": 724,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 268,
+      "name": "TurnSession",
+      "source": {
+        "bases": [],
+        "members": [
+          "__init__",
+          "has_start_listener",
+          "notify_input_started",
+          "native_phase_changes",
+          "started_input",
+          "awaiting_native_attestation",
+          "consume_native_event",
+          "record_request_progress",
+          "apply_native_event",
+          "accepts_output",
+          "matches_original_input",
+          "committable_message",
+          "ensure_input_forwarding",
+          "observe_input_during_abort",
+          "admit_user_message",
+          "permits_live_receipt",
+          "stop_forwarding",
+          "abort_stalled_rpc",
+          "context_info",
+          "open_transport",
+          "native_acquisition",
+          "acquire_native",
+          "open_native",
+          "resume_prepared",
+          "run",
+          "receive_record",
+          "grant_prompt",
+          "input_ready",
+          "invalidate_identity",
+          "prepare_launch",
+          "initialize_rpc",
+          "retain_or_close",
+          "finish_diagnostics",
+          "finish_result"
+        ],
+        "annotations": [
+          "active: ClassVar[dict[asyncio.Task[Any], TurnSession]] = {}"
+        ]
+      }
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 356,
+      "name": "record_request_progress",
+      "source": "def record_request_progress(self, progress: RequestProgress) -> None:\n    \"\"\"Record the original sample without borrowing global publication locks.\n\n        The acquired native process supplies custody identity; the configured\n        observer binds the original public turn lease. No phase owns a copy of\n        the transport clock or request lifecycle.\n        \"\"\"\n    if self.request_observer is not None:\n        self.request_observer(progress, self.native.proc.identity)"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 22,
+      "name": "SummaryOperationIdentity",
+      "source": {
+        "bases": [],
+        "members": [],
+        "annotations": [
+          "session_file: str",
+          "operation_id: str"
+        ]
+      }
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 64,
+      "name": "PublicationMeasurements",
+      "source": {
+        "bases": [],
+        "members": [
+          "operation",
+          "measuring"
+        ],
+        "annotations": [
+          "count: int = 0",
+          "total_ns: int = 0",
+          "maximum_ns: int = 0",
+          "maximum_started_ns: int = 0",
+          "maximum_finished_ns: int = 0",
+          "operations: dict[str, PublicationMeasurements] = field(default_factory=dict)"
+        ]
+      }
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 96,
+      "name": "record_request_progress",
+      "source": "def record_request_progress(root, lease, progress, native_process, *, publication=None):\n    \"\"\"Append original measurements with the exact existing turn/owner fence.\n\n    This private diagnostic does not contain prompt bodies, headers or credentials,\n    grant retry or participate in lifecycle decisions. Native clocks remain native;\n    receipt and publication spans use the local monotonic clock independently.\n    \"\"\"\n    now = time.monotonic_ns()\n    record = {'turn': FieldCodec.encode(lease), 'native': FieldCodec.encode(progress), 'native_process': FieldCodec.encode(native_process), 'recorded_monotonic_ns': now}\n    if publication is not None:\n        record['publication_completed_cumulative'] = FieldCodec.encode(publication)\n    _record_request_observation(root, lease, record)"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 112,
+      "name": "record_acquisition_progress",
+      "source": "def record_acquisition_progress(root, lease, input_id, measurements):\n    \"\"\"Publish the original parent acquisition spans after its custody closes.\n\n    The same diagnostic stream retains native and parent clocks with distinct\n    keys. There is no additional phase, readiness ledger or observation store.\n    \"\"\"\n    _record_request_observation(root, lease, {'turn': FieldCodec.encode(lease), 'input_id': input_id, 'acquisition': FieldCodec.encode(measurements), 'recorded_monotonic_ns': time.monotonic_ns()})"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 125,
+      "name": "_record_request_observation",
+      "source": "def _record_request_observation(root, lease, record):\n    try:\n        directory = root / 'diagnostics'\n        directory.mkdir(mode=448, exist_ok=True)\n        path = directory / f'{lease.turn_id}.requests.jsonl'\n        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 384)\n        with os.fdopen(descriptor, 'w') as output:\n            output.write(json.dumps(record) + '\\n')\n    except OSError:\n        _LOG.warning('Native request timing diagnostic unavailable', exc_info=True)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 38,
+      "name": "OwnerCompactionCommit",
+      "source": {
+        "bases": [],
+        "members": [
+          "__init__",
+          "compact_selected",
+          "capture_source",
+          "prepare_source",
+          "require_source_current",
+          "reconcile_interrupted_summaries",
+          "settle_selected_refusal",
+          "commit",
+          "admit_selected_decline",
+          "admit_selected_original",
+          "reconcile"
+        ],
+        "annotations": []
+      }
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 37,
+      "name": "PiEvent",
+      "source": {
+        "bases": [
+          "PiPayload",
+          "DeclaredFamily"
+        ],
+        "members": [
+          "normalize_field",
+          "wire_member",
+          "wire_case",
+          "consume",
+          "apply",
+          "invalidates_stop",
+          "retry_progress",
+          "observe_abort",
+          "observed_phase",
+          "observe_request",
+          "require_request"
+        ],
+        "annotations": []
+      }
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 146,
+      "name": "ModelRequestProgress",
+      "source": {
+        "bases": [
+          "PiEvent"
+        ],
+        "members": [
+          "observe_request"
+        ],
+        "annotations": [
+          "progress: 'RequestProgress'"
+        ]
+      }
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 87,
+      "name": "observe_request",
+      "source": "def observe_request(self, session: TurnSession) -> None:\n    \"\"\"A transport measurement is independent of turn-phase publication.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 149,
+      "name": "observe_request",
+      "source": "def observe_request(self, session: TurnSession) -> None:\n    session.record_request_progress(self.progress)"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 135,
+      "name": "prepare_context",
+      "source": "async def prepare_context(self, turn: TrackedTurnSession) -> None:\n    \"\"\"Use this original request's selected source and acquired native custody.\"\"\"\n    await self.session.prepare_context(self.selected, turn)"
+    },
+    {
+      "path": "src/agent_comms/request_progress.py",
+      "line": 8,
+      "name": "RequestProgress",
+      "source": {
+        "bases": [
+          "PiPayload"
+        ],
+        "members": [
+          "__post_init__",
+          "label"
+        ],
+        "annotations": [
+          "request_id: str = field(metadata={'wire_name': 'requestId'})",
+          "session_id: str = field(metadata={'wire_name': 'sessionId'})",
+          "input_id: str = field(metadata={'wire_name': 'inputId'})",
+          "started_at_ms: int = field(metadata={'wire_name': 'startedAtMs'})",
+          "observed_at_ms: int = field(metadata={'wire_name': 'observedAtMs'})",
+          "monotonic_ns: str = field(metadata={'wire_name': 'monotonicNs'})",
+          "elapsed_ms: float = field(metadata={'wire_name': 'elapsedMs'})",
+          "callback_ms: float = field(metadata={'wire_name': 'callbackMs'})",
+          "callback_count: int = field(metadata={'wire_name': 'callbackCount'})",
+          "callback_max_ms: float = field(metadata={'wire_name': 'callbackMaxMs'})",
+          "stage: str",
+          "detail: str = ''",
+          "transport: str = ''",
+          "attempt: int = 0",
+          "status: int | None = None",
+          "response_id: str | None = field(default=None, metadata={'wire_name': 'responseId'})",
+          "callback: str = ''"
+        ]
+      }
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 60,
+      "name": "SelectedSummarySlot",
+      "source": {
+        "bases": [],
+        "members": [
+          "run_selected_summary"
+        ],
+        "annotations": [
+          "owner: str",
+          "session: str",
+          "lock: asyncio.Lock = field(default_factory=asyncio.Lock)"
+        ]
+      }
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 65,
+      "name": "run_selected_summary",
+      "source": "async def run_selected_summary(self, persistent: PersistentPiSession, journal: CompactionJournal, witness: NativeWitness, source: SelectedSummarySource, *, owner: Thread, expected_package: Path, tokens_before: int, custom_instructions: str | None=None, fresh_session: FreshPrivateSession | None=None, admission_generation: int | None=None, future_queue: FutureInputQueue | None=None, idle_timeout_seconds: float=MODEL_WAIT_TIMEOUT_SECONDS, on_event: Callable[[AgentEvent], Awaitable[None]] | None=None, reason: str='adaptive') -> SelectedSummaryData:\n    \"\"\"Reserve durably, exchange once, and leave settlement to the owner.\n\n        Caller holds owner/turn exclusion and supplies its captured source.\n        Native v1 owns selected model/settings/route validation. A successful\n        response is summary data, never commit or original-input authority.\n        Every reservation stays blocking until the existing commit/recovery\n        protocol settles it. Failure never authorizes another attempt.\n        \"\"\"\n    envelope = source\n    request = AgentCommsSummarizeCompaction(id=secrets.token_hex(16), version=1, operation_id='', witness=witness, selected=envelope.selected, settings=envelope.settings, retained_text=envelope.retained.text, custom_instructions=source.summary_instructions(owner, custom_instructions))\n    if witness.session_id != self.session or envelope.source.incarnation.name != self.owner or type(tokens_before) is not int or (not 0 <= tokens_before <= 2 ** 53 - 1) or (not 0 < idle_timeout_seconds < float('inf')):\n        raise ValueError('Exact selected owner, session and bounded deadline required')\n    async with self.lock, persistent.lock:\n        session_file = witness.session_file\n        try:\n            retained = persistent.custody.idle().selected(witness, expected_package)\n        except NativePiUnavailable as error:\n            raise SelectedChildUnknown(str(error)) from error\n        if witness.revision != retained.revision.native:\n            raise SelectedChildUnknown('Selected source witness is stale')\n        proc, reader = (retained.child.proc, retained.child.reader)\n        operation = journal.summaries.reserve(session_file, source, fresh_session=fresh_session, admission_generation=admission_generation, future_queue=future_queue)\n        request = replace(request, operation_id=operation)\n        try:\n            proc.stdin.write(PiRpcChannel.command_bytes(request))\n            loop = asyncio.get_running_loop()\n            deadline = loop.time() + idle_timeout_seconds\n            sequence = 0\n            async with asyncio.timeout_at(deadline):\n                await proc.stdin.drain()\n            while True:\n                async with asyncio.timeout_at(deadline):\n                    raw = await reader.readline()\n                event = PiRpcChannel.decode_record(raw, strict=True)\n                if not isinstance(event, AgentCommsCompactionProgress):\n                    break\n                if event.id != request.id or event.operation_id != operation:\n                    raise SelectedChildUnknown('Foreign selected compaction progress')\n                if event.sequence > sequence:\n                    sequence = event.sequence\n                    deadline = loop.time() + idle_timeout_seconds\n                    if on_event is not None and (event.text or event.source is not None):\n                        await on_event(CompactionSummaryProgress(reason=reason, operation_id=operation, text=event.text, source=event.source))\n            result = _summary_response(raw, request, tokens_before)\n            if not retained.current:\n                raise SelectedChildUnknown('Selected source changed during summary')\n            result.settle(journal)\n        except BaseException as error:\n            persistent.require_reopen(witness)\n            try:\n                journal.summaries.mark_unknown(operation)\n            finally:\n                with suppress(asyncio.CancelledError):\n                    await persistent.close()\n            if isinstance(error, (asyncio.CancelledError, SelectedChildUnknown)):\n                raise\n            if isinstance(error, TimeoutError):\n                raise SelectedChildUnknown(f'Selected summary made no progress for {idle_timeout_seconds:g} seconds; outcome uncertain, input not retried') from error\n            raise SelectedChildUnknown(f'Selected summary transport uncertain: {type(error).__name__}: {str(error)[:1024]}') from error\n        return result.require_result()"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "name": "prepare_context",
+      "source": "async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:\n    \"\"\"A new unbound native source has no saved context to compact.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "name": "prepare_context",
+      "source": "async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:\n    \"\"\"Prepare through the original acquired child before its raw prompt writer.\"\"\"\n    from .owner_compaction_commit import OwnerCompactionCommit\n    from .selected_pi_route import read_selected_compaction_decision\n    from .selected_source import ManualSource, SessionRevision\n    from .thread_identity import TurnId\n    persistent = turn.native_session\n    observed = turn.native.attestation\n    self.identity.require_same_session(observed.require_identity())\n    selected = observed.state.model.for_compaction(f'{participant.provider}/{participant.model}')\n    if not persistent.retain(turn.native, self.identity):\n        raise NativePiUnavailable('Selected context preparation lost its native child')\n    settings = await read_selected_compaction_decision(persistent, session_file=self.session_file, expected_package=turn.launch.package, selected=selected, registry=participant.comms.registry, thread_name=participant.owner.thread.name)\n    if settings.trigger:\n        await Coordination.run_async(participant.store.session.path, participant.require_current)\n        owner = participant.owner.thread\n        self.identity.require_session(owner.require_saved_session())\n        snapshot = participant.comms.registry.snapshot()\n        generation = snapshot.owner_generations[owner.name]\n        bridge = await Coordination.run_worker(partial(OwnerCompactionCommit, participant.comms.registry.store.path, turn.launch.package))\n        source = ManualSource(incarnation=owner.incarnation, owner=owner.process_identity, turn=TurnId(participant.owner.require_active_turn().id), reserved_revision=SessionRevision.observe(self.session_file).require_available())\n        result = await bridge.compact_selected(owner, generation, persistent, source, selected, settings, on_event=participant.dispatch)\n        settings.require_prepared(result)\n        await turn.resume_prepared(turn.custody)\n    else:\n        persistent.custody.idle()"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 258,
+      "name": "prepare_context",
+      "source": "async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:\n    self.creation.verify_selected_startup()"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 141,
+      "name": "TrackedTurnSession",
+      "source": {
+        "bases": [
+          "TurnSession",
+          "MroDispatch"
+        ],
+        "members": [
+          "__init__",
+          "execute",
+          "complete",
+          "resume_prepared",
+          "open_transport",
+          "started_input",
+          "active_tools",
+          "apply_native_event",
+          "next_event",
+          "send",
+          "attest",
+          "write",
+          "prompt_boundary",
+          "admit_prompt",
+          "response",
+          "committed_input",
+          "committed_context",
+          "message_update",
+          "text_delta",
+          "message_end",
+          "accept_tool_round",
+          "accept_final_message",
+          "fail_terminal",
+          "context_proof",
+          "tool_started",
+          "tool_finished",
+          "settled",
+          "result"
+        ],
+        "annotations": []
+      }
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 257,
+      "name": "record_request_progress",
+      "source": "def record_request_progress(self, progress, native_process) -> None:\n    record_request_progress(self.comms.root, self.turn_lease, progress, native_process=native_process, publication=self.publication_measurements)"
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 346,
+      "source": "event.observe_request"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 356,
+      "source": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 153,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 271,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 157,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 205,
+      "source": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 294,
+      "source": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 237,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 58,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 59,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 36,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 199,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 208,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 252,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 253,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 211,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 218,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 109,
+      "source": "_record_request_observation"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 118,
+      "source": "_record_request_observation"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 71,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 79,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 25,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 32,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 45,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 50,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 26,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 32,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 85,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_send.py",
+      "line": 43,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_send.py",
+      "line": 81,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_send.py",
+      "line": 125,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 25,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 61,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 67,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 72,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 130,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 435,
+      "source": "self.progress.record_request_progress"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 72,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 84,
+      "source": "SelectedSummarySlot(owner.name, prepared.witness.session_id).run_selected_summary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 84,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 64,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 42,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 87,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 155,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 38,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 75,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 53,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 64,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 67,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 87,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 90,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 124,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 141,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 183,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 211,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 236,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 337,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 342,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 359,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 95,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 103,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 112,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 137,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 146,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 154,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 170,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 210,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 271,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 311,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 322,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 359,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 538,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 545,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 560,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 582,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 615,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 668,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 675,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 687,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 704,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 731,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 753,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 772,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 62,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 67,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 81,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 87,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 113,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 149,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 150,
+      "source": "session.record_request_progress"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 157,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 185,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 188,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 203,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 232,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 279,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 302,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 325,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 548,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 563,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 577,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 589,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 630,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 662,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 669,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 676,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 691,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 712,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 738,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 762,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 39,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 51,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 47,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 58,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 58,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 135,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 137,
+      "source": "self.session.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 187,
+      "source": "record_acquisition_progress"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 156,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 174,
+      "source": "record_request_progress"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 146,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 258,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 57,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 267,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 219,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 141,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 308,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 197,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 198,
+      "source": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 196,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 257,
+      "source": "self.prompt_send_boundary.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/transcript_events.py",
+      "line": 141,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "line": 39,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "line": 42,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 70,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 84,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 97,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 119,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 63,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 87,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 122,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 167,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "line": 70,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "line": 92,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "line": 101,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 70,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 79,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 83,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 86,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 102,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 192,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 197,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 200,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 226,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 230,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 239,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 243,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 271,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 275,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 280,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 284,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 75,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 258,
+      "source": "record_request_progress"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 53,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 82,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 71,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 71,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 87,
+      "source": "PiEvent"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 90,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 125,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 166,
+      "source": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 187,
+      "source": "TurnSession"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 158,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 30,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 143,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 28,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 82,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 126,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 169,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 34,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 37,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 41,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 128,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 168,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 192,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 211,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 272,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 404,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 452,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 503,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 583,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 626,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 661,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 698,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 740,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 770,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 793,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 208,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 347,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 378,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 941,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1090,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1197,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2030,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2187,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 369,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2079,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 371,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1169,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1073,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 213,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 226,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 253,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 275,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 267,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 30,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 68,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 30,
+      "source": "TurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 165,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 209,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 376,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 416,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 768,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 138,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 147,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 32,
+      "source": "SummaryOperationIdentity"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 486,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 547,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 604,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 634,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 682,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 708,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 804,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 840,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1388,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1420,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1514,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1543,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1578,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1621,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1678,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1780,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1921,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1937,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1970,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2001,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2026,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2060,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2105,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 781,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1710,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 298,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 307,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 200,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 225,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 70,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 90,
+      "source": "SelectedSummarySlot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 90,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 133,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 166,
+      "source": "backend.TurnSession"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 65,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 150,
+      "source": "commit.OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 166,
+      "source": "commit.OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "source": "TurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 604,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 526,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 200,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 268,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 304,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 353,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 357,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 436,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 440,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 466,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 490,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 681,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 709,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 837,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 896,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1341,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1195,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1241,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1300,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1219,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1260,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 105,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 133,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 284,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 323,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 331,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 364,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 409,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 431,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 457,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 510,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 529,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 645,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 712,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 218,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 227,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 180,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 185,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 437,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 468,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 432,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 511,
+      "source": "PublicationMeasurements"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 88,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 118,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 148,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 176,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 42,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 107,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 143,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 162,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 180,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 246,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 283,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 154,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 201,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 129,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 47,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 141,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 299,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 316,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 78,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 250,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 510,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 74,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 79,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 129,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 179,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 240,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 276,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 308,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 442,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 475,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 113,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 601,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 646,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 693,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 846,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 926,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 520,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 31,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 35,
+      "source": "pi.PiEvent"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 97,
+      "source": "TurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 85,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 119,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 131,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 153,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 109,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 147,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 148,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 149,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 110,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 110,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_s10_boundary_guards.py",
+      "line": 108,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_s10_boundary_guards.py",
+      "line": 115,
+      "source": "PiEvent"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 473,
+      "source": "SelectedSummarySlot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 473,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 512,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 750,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 764,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 72,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 138,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 263,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 498,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 88,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 520,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 91,
+      "source": "slot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 534,
+      "source": "slot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 561,
+      "source": "slot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 258,
+      "source": "SelectedSummarySlot"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 319,
+      "source": "slot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 273,
+      "source": "slot.run_selected_summary"
+    },
+    {
+      "path": "tests/test_selected_tool_native_fake.py",
+      "line": 105,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 140,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 168,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 203,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 264,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 302,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 65,
+      "source": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_tracked_terminal_measurements.py",
+      "line": 18,
+      "source": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_tracked_terminal_measurements.py",
+      "line": 37,
+      "source": "TrackedTurnSession"
+    }
+  ],
+  "ambiguity": "AST names/attributes are candidate references; dynamic dispatch and native generation are read semantically, not inferred from zero matches."
+}
