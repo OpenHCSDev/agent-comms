@@ -1,0 +1,213 @@
+{
+  "base": "0608319c02c5109c7b852e80c34841dec12bda5b",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent",
+  "files": 278,
+  "parse_omissions": [],
+  "resolution_limit": "Lexical bundled Acorn traversal; computed properties, runtime imports and injected RPC dispatch read semantically. Unchanged pinned native dependency; base injection captured by exact git object.",
+  "sites": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 755,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1834,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 2099,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 495,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/native-proof-journal.js",
+      "line": 82,
+      "name": "entryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/native-proof-journal.js",
+      "line": 89,
+      "name": "entryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/session-entry-store.js",
+      "line": 232,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/session-entry-store.js",
+      "line": 240,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "line": 534,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "line": 1204,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "line": 1271,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 51,
+      "name": "acSelectedCompactionSettings",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 177,
+      "name": "acAdmitSummary",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 209,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 739,
+      "name": "acSelectedCompactionSettings",
+      "node": "Identifier"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 745,
+      "name": "acAdmitSummary",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:stack/native-compaction-selected-summary.mjs",
+      "line": 24,
+      "name": "acSelectedCompactionSettings",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:stack/native-compaction-selected-summary.mjs",
+      "line": 150,
+      "name": "acAdmitSummary",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:stack/native-compaction-selected-summary.mjs",
+      "line": 182,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:stack/native-compaction-selected-summary.mjs",
+      "line": 55,
+      "name": "acSelectedCompactionSettings",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:stack/native-compaction-selected-summary.mjs",
+      "line": 65,
+      "name": "acSelectedCompactionPreparation",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:stack/native-compaction-selected-summary.mjs",
+      "line": 72,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:stack/native-compaction-selected-summary.mjs",
+      "line": 189,
+      "name": "acAdmitSummary",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:stack/native-compaction-selected-summary.mjs",
+      "line": 221,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 6,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 8,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 10,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "0608319c02c5109c7b852e80c34841dec12bda5b:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 13,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 6,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 8,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 10,
+      "name": "DiskEntryStore",
+      "node": "Identifier"
+    },
+    {
+      "path": "working:src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "line": 13,
+      "name": "prepareCompaction",
+      "node": "Identifier"
+    }
+  ]
+}
