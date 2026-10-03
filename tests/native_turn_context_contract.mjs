@@ -4,7 +4,8 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {constructNativeConditions,applyBoundedNativeCondition} from './retained_native_conditions.mjs';
+import {constructNativeConditions,applyBoundedNativeCondition,
+    transformBoundedNativeCondition,armBoundedNativeCondition} from './retained_native_conditions.mjs';
 
 const [pkg, suppliedRoot] = process.argv.slice(2);
 const root=resolve(suppliedRoot);
@@ -132,6 +133,23 @@ try {
         const {SessionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
         SessionContext.restore(session);
         assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        const fresh={role:'user',content:'Distinct new input preserved.',timestamp:500};
+        const raw=[...session.agent.state.messages,fresh];
+        const transformed=await transformBoundedNativeCondition(session,pkg,source,raw);
+        assert.equal(transformed[0].summary,source.summary);
+        assert.deepEqual(transformed.slice(1),raw.slice(1));
+        assert.deepEqual(session.agent.state.messages,raw.slice(0,-1));
+        await assert.rejects(transformBoundedNativeCondition(session,pkg,source,raw.slice(1)),/not unique/);
+        const originalTransform=async messages=>[...messages,fresh];
+        session.agent.transformContext=originalTransform;
+        const restore=armBoundedNativeCondition(session,pkg,source,
+            transformBoundedNativeCondition,
+            join(root,'application-observation.jsonl'),'authored-control');
+        const hooked=await session.agent.transformContext(raw.slice(0,-1));
+        assert.deepEqual(hooked.at(-1),fresh);
+        assert.equal(hooked[0].summary,source.summary);
+        restore();
+        assert.equal(session.agent.transformContext,originalTransform);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);
     }
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
