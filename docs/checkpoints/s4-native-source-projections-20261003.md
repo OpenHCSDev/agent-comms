@@ -46,5 +46,16 @@ Member calls are lexical evidence, not proof of dynamic resolution. TypeScript
 declarations were read separately: existing TurnContext runtime methods are not
 declared in turn-context.d.ts; encoded context/event interfaces do not change.
 
-Working source is published for review. Matching native compilation and the
-affected SDK source construction check are still pending; this is not Ready.
+Matching native7c2a2e644420c349 was compiled once after parent source review.
+The three compiled owners are byte-identical to source aa8bee42; other native
+members match frozen2b. The actual SDK construction command exited0, provider
+calls0, unchanged journal bytes, and preview-only provenance. Full/recent/canonical
+views have 4/2/3 messages, respectively; full excludes summary entries, recent
+excludes old ancestry and summary, and canonical equals the original SDK context.
+
+This authored SDK source fixture selected openrouter/moonshotai/kimi-k2.6 through
+its original SDK selection. No request was made to that or any provider. Native
+ContextBudget estimates admitted the three small fixture views. This is not the
+configured Sol/HIGH study, representative-history capacity, complete-condition
+application, HTTP coverage or recall acceptance. Bounded remains unavailable.
+Sanitized receipt: evidence/s4-native-source-projections589-20261003/receipt.json.
