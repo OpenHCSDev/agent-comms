@@ -20,7 +20,7 @@ from agent_comms.native_pi import NativePiRpcLaunch
 
 
 @contextmanager
-def observe_native_requests(package, observation, *, contexts=None):
+def observe_native_requests(package, observation, *, contexts=None, summaries=None):
     """Borrow original native frames and retire every owned inspector on exit."""
     observer = Path(__file__).with_name('summary_prefix_native_observer.mjs').resolve()
     observers = []
@@ -41,7 +41,9 @@ def observe_native_requests(package, observation, *, contexts=None):
                 port = reservation.getsockname()[1]
             observers.append(subprocess.Popen(
                 ['node', str(observer), str(port), str(package), str(observation),
-                 *([str(contexts)] if contexts is not None else [])],
+                 *([str(contexts) if contexts is not None else '',
+                    str(summaries) if summaries is not None else '']
+                   if contexts is not None or summaries is not None else [])],
                 env={'PATH': os.defpath}, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL))
             argv = (argv[0], f'--inspect-brk=127.0.0.1:{port}', *argv[1:])

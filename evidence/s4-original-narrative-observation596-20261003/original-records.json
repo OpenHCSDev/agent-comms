@@ -1,0 +1,26 @@
+{
+  "scope": "read-only original three cuts and original private native assembly; no model input",
+  "correct": 9,
+  "questions": 9,
+  "original_checkpoints": 3,
+  "historical_missing_narratives_unavailable": true,
+  "foreign_capture_refused": true,
+  "originals_unchanged": true,
+  "original_hashes": {
+    "continuation-2-receipt.json": "c5e9be6ee35edc66c8833f47f230e63b85d9d53a6319b4a59273690a901e5808",
+    "continued-run.private.json": "d6951db5ba27f522491e4fa0dc7fae0483f7256d1e5a790c17f36a873e0c8e89",
+    "original-measurements.private.json": "49ead4b4f790d8deba1b69a228458d76dd25419d0d678825cb3489c73264fe4f",
+    "cut-3-checkpoint.private.json": "682af599361a028ec1b9e03941940376cd07d26c032b38c8685a6d5eb0897ee7",
+    "cut-3-registry.private.json": "464a532f07003c4f69dfb65f3dfe605fdd6040baa5a56d5bbc50a34377c79ac7",
+    "cut-3-manifest.private.json": "bf56925cc401ac3c6c1df849c9f8ada2a018006803f4171eaa028031d84cb55b",
+    "cut-3-inputs.private.json": "dafdf25398fb8a2c0e3c4e01b33b34e4111e9101bd4ec4aae1f461ae158e8d69"
+  },
+  "assembly_sha256": "c28f9eff53da37a2438d52a4f2ed8a9aad212ea7f6164c815f220ea64931c414",
+  "assembly_observation": {
+    "evaluated": true,
+    "sha256": "77a9f472dcd2d833a996c99397e00e0bd29c8a1226e666e7ebc73c25685d0507",
+    "utf8_bytes": 29,
+    "generated_part_count": 1,
+    "scope": "Original pre-pack assembly; not packed-budget admission, submitted context, HTTP bytes or recall"
+  }
+}
