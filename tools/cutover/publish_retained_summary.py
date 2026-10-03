@@ -7,6 +7,7 @@ signal, native input or alternative owner-stop/launch implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from abc import ABC, abstractmethod
 from contextlib import ExitStack
 import fcntl
 import json
@@ -15,6 +16,7 @@ from pathlib import Path
 import sys
 import time
 from typing import Annotated
+from urllib.parse import unquote, urlsplit
 
 from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked
 from agent_comms.comms import Comms
@@ -75,9 +77,44 @@ class PackageVcsInfo:
 
 
 @dataclass(frozen=True)
-class PackageDirectUrl:
+class PackageDirectUrl(ABC):
     url: str
+
+    @abstractmethod
+    def require_original(self, source_head: str):
+        """Validate the installer origin; source bytes are owned by InstalledSource."""
+
+
+@dataclass(frozen=True)
+class VcsPackageDirectUrl(PackageDirectUrl):
     vcs_info: PackageVcsInfo
+
+    def require_original(self, source_head: str):
+        if self.vcs_info.commit_id != source_head:
+            raise RuntimeError('Installed VCS origin differs from the declared source')
+
+
+@dataclass(frozen=True)
+class PackageArchiveInfo:
+    hashes: dict[str, str]
+    hash: str | None = field(default=None, metadata={'wire_omit_default': True})
+
+    def require_original(self, path: Path):
+        sha256 = self.hashes.get('sha256')
+        if not sha256 or (self.hash is not None and self.hash != f'sha256={sha256}'):
+            raise RuntimeError('Installed archive has no consistent SHA256 provenance')
+        ReviewedArtifact(path, sha256).require_original()
+
+
+@dataclass(frozen=True)
+class ArchivePackageDirectUrl(PackageDirectUrl):
+    archive_info: PackageArchiveInfo
+
+    def require_original(self, source_head: str):
+        origin = urlsplit(self.url)
+        if origin.scheme != 'file' or origin.netloc not in ('', 'localhost'):
+            raise RuntimeError('Installed archive requires its original local artifact')
+        self.archive_info.require_original(Path(unquote(origin.path)))
 
 
 @dataclass(frozen=True)
@@ -88,8 +125,13 @@ class InstalledSource:
     files: int
     python_files: int
     byte_equal: bool
-    direct_url: PackageDirectUrl
+    direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl
     inventory_sha256: str
+
+    def require_original(self):
+        if not self.byte_equal:
+            raise RuntimeError('Installed source bytes are not verified')
+        self.direct_url.require_original(self.head)
 
 
 @dataclass(frozen=True)
@@ -125,8 +167,7 @@ class InstalledSourceProof:
                 activation.native_package, activation.native_manifest, activation.native_tree):
             raise RuntimeError('Source proof names another native artifact')
         for source in self.sources:
-            if not source.byte_equal or source.direct_url.vcs_info.commit_id != source.head:
-                raise RuntimeError('Unverified source/native proof')
+            source.require_original()
         if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
             raise RuntimeError('Package/source/native trust is incomplete')
 
