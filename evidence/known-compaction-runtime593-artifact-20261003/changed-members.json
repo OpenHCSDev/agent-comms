@@ -1,0 +1,11 @@
+[
+  {
+    "path": "dist/core/agent-session.js"
+  },
+  {
+    "path": "dist/core/session-manager.js"
+  },
+  {
+    "path": "dist/modes/rpc/rpc-mode.js"
+  }
+]

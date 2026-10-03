@@ -1,0 +1,36 @@
+{
+  "source_checkpoint": "be1a0c47fe1363ec49588e48eff9b9ced7bdbbda",
+  "builder_source": "99572b63fd211600091f6d8b48dc0dc900f2221c",
+  "manifest": "89b56aea0bb128c4bf3e2c979de8a5afa79ac88b1f51a74c49cc1cab46da60d2",
+  "tree": "4b7f66f396a342e523d631c753686789b61313c34c30d894ddf24b5a861caa26",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/agent-session.js",
+      "original_sha256": "1e3c92eae16489662829d44e85a342a75d8b00818588e53a16aa262091a898e0",
+      "new_sha256": "20c648a193c63521af51eb4d4e366ea0885dc64fba844406b530ebed9f848c4b"
+    },
+    {
+      "path": "dist/core/session-manager.js",
+      "original_sha256": "7b3799fbe242db43864685f7bbc8ccd84c3c48e9db5b7721aa2f28effbbd580c",
+      "new_sha256": "626e94576349684a655cc224b4b4ce3eb8e648b1ec3fde59f229707055a8e193"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "488a9b07f84c96758826b0a0c64030c727077c03bd1d2b80fa9d0469377cffeb",
+      "new_sha256": "bb12e541a1e6a28dd7fe183ffc4b39ee5829ca2a3baa1cd44fd34ed1d1d8a791"
+    }
+  ],
+  "all_other_members_equal_native589_7c": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138415186,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; Known committed SDK reload/stale-cut/cancellation/hook changed-path acceptance remains Mendel-owned; not Ready/live/S4-complete.",
+  "full_normal_recipe_verification": "PASS canonical prepare-pi-native verified full manifest/import/tree and reused successor"
+}
