@@ -1,0 +1,15 @@
+{
+  "measurement_controls": {
+    "passed": 3
+  },
+  "legacy_scorer_module": {
+    "run": false,
+    "reason": "Installed runtime has no pytest; no environment changes"
+  },
+  "frozen_questions": 9,
+  "oracle_omitted": true,
+  "native_observation_anchors": 3,
+  "python_compile": true,
+  "node_syntax": true,
+  "production_differences_from_installed_52f": []
+}
