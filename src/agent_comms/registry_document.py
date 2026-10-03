@@ -35,8 +35,35 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
 
 
+class RegistryPresence(RegistryNames[Thread]):
+    """Presence reads shared by the acquired document and its detached cut."""
+
+    __slots__ = ()
+
+    statuses: Mapping[str, ThreadStatus]
+    last_seen: Mapping[str, float]
+
+    def status(self, name: str) -> ThreadStatus:
+        canonical = self.canonical_name(name)
+        try:
+            return self.statuses[canonical]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+
+    def require_active(self, name: str) -> Thread:
+        try:
+            thread = self.require(name)
+            self.status(thread.name).require_active()
+        except UnregisteredThreadError as error:
+            raise RelationViolationError("live owner is stopped or unavailable") from error
+        return thread
+
+    def seen_at(self, name: str) -> float:
+        return self.last_seen[self.require(name).name]
+
+
 @dataclass(slots=True)
-class RegistryDocument(RegistryNames):
+class RegistryDocument(RegistryPresence):
     threads: dict[str, Thread] = field(default_factory=dict)
     statuses: dict[str, ThreadStatus] = field(default_factory=dict)
     last_seen: dict[str, float] = field(default_factory=dict)
@@ -168,7 +195,7 @@ class RegistryDocument(RegistryNames):
         for thread in additions:
             self.threads[thread.name] = thread
             self.statuses[thread.name] = source.statuses[thread.name].restored()
-            self.last_seen[thread.name] = source.last_seen.get(thread.name, 0.0)
+            self.last_seen[thread.name] = source.seen_at(thread.name)
             self.admissions.advance(thread.name)
             self.owners.advance(thread.name)
         if additions or aliases:
@@ -367,20 +394,13 @@ class RegistryDocument(RegistryNames):
 
 
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(RegistryProvenance):
+class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
     last_seen: Mapping[str, float]
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
-
-    def status(self, name: str) -> ThreadStatus:
-        canonical = self.canonical_name(name)
-        try:
-            return self.statuses[canonical]
-        except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
@@ -394,15 +414,6 @@ class RegistrySnapshot(RegistryProvenance):
         return {
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
-
-    def require_active(self, name: str) -> Thread:
-        canonical = self.canonical_name(name)
-        try:
-            thread = self.threads[canonical]
-            self.statuses[canonical].require_active()
-        except KeyError as error:
-            raise RelationViolationError("live owner is stopped or unavailable") from error
-        return thread
 
     def require_unambiguous_ownership(self) -> None:
         """Archived identities remain readable; publication requires unique owners."""
