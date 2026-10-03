@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -84,8 +85,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observed_phase(self, phase):
         return phase
 
-    def observe_request(self, session: TurnSession) -> None:
+    def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
         """A transport measurement is independent of turn-phase publication."""
+        return False
 
     def require_request(self, request: PiCommand) -> PiResponseData:
         raise ValueError("Native event is not a request response")
@@ -146,8 +148,10 @@ class AgentStart(PiEvent):
 class ModelRequestProgress(PiEvent):
     progress: "RequestProgress"
 
-    def observe_request(self, session: TurnSession) -> None:
-        session.record_request_progress(self.progress)
+    def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
+        if observer is not None:
+            observer(self.progress)
+        return True
 
 
 @dataclass(frozen=True, kw_only=True)

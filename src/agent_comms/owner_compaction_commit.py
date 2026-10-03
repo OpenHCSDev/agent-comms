@@ -7,6 +7,7 @@ or treats a visible terminal SQL row as authority to replay an original input.
 from __future__ import annotations
 
 import json
+from functools import partial
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from .text_digest import TextDigest
 from .thread_identity import TurnId
 from .threads import Thread
 from .pi_vocabulary import CompactionReason, ThresholdCompactionReason
+from .diagnostics import record_request_progress
 
 
 class OwnerCompactionCommit:
@@ -82,7 +84,11 @@ class OwnerCompactionCommit:
             attestation.require_registry(self.registry, owner)
             settings.require_current(await decision())
             result = await SelectedSummarySlot(
-                owner.name, prepared.witness.session_id
+                owner.name, prepared.witness.session_id,
+                request_observer=partial(
+                    record_request_progress, self.journal.path.parent,
+                    owner.require_turn_lease(),
+                ),
             ).run_selected_summary(
                 persistent, self.journal, prepared.witness,
                 SelectedSummarySource(

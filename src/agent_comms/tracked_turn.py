@@ -254,7 +254,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     try:
                         await self.attest()
                         if self.prompt_send_boundary is not None:
-                            await self.prompt_send_boundary.prepare_context(self)
+                            with self.startup.measurements.operation("selected_context_preparation"):
+                                await self.prompt_send_boundary.prepare_context(self)
                         await self.admit_prompt()
                         while not self.finished:
                             event = await self.next_event()

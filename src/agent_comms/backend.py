@@ -343,7 +343,7 @@ class TurnSession:
 
     async def consume_native_event(self, event):
         """Observe one decoded event through the shared native lifecycle owner."""
-        event.observe_request(self)
+        event.observe_request(self.record_request_progress)
         previous = self.watchdog.phase
         async for update in self.watchdog.observe(event, self):
             yield update

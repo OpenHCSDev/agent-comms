@@ -316,7 +316,8 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
         const result = await compact(preparation, binding.model, undefined, undefined,
             request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
             { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
-            { onSummaryText: progress,
+            { onRequestProgress: session.agent.onRequestProgress,
+              onSummaryText: progress,
               summaryPrefix: async (messages, instructions, options) => {
                   // A context hook can transform the original request. Its
                   // absence here is a route admission fact, not an alias/mirror.

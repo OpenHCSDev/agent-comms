@@ -26,6 +26,9 @@ from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
 from .threads import Thread
 from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
+from .request_progress import RequestProgress
+from .child_process import ProcessIdentity
+from .compaction_identity import SummaryOperationIdentity
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
@@ -61,6 +64,11 @@ class SelectedSummarySlot:
     owner: str
     session: str
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # Optional diagnostic sink, not source/input/lifecycle state. The acquired
+    # child lends its exact process identity only inside the RPC read lifetime.
+    request_observer: Callable[[RequestProgress, ProcessIdentity, SummaryOperationIdentity], None] | None = field(
+        default=None, kw_only=True, repr=False, compare=False,
+    )
 
     async def run_selected_summary(
         self,
@@ -126,6 +134,11 @@ class SelectedSummarySlot:
                 future_queue=future_queue,
             )
             request = replace(request, operation_id=operation)
+            identity = SummaryOperationIdentity(session_file, operation)
+
+            def observation(progress):
+                if self.request_observer is not None:
+                    self.request_observer(progress, proc.identity, identity)
             # The durable reservation blocks new inputs even after process
             # death; retain it for exact commit linkage on a complete result.
             try:
@@ -139,6 +152,10 @@ class SelectedSummarySlot:
                     async with asyncio.timeout_at(deadline):
                         raw = await reader.readline()
                     event = PiRpcChannel.decode_record(raw, strict=True)
+                    if event.observe_request(observation):
+                        # A timing sample cannot settle this journal operation
+                        # or renew its progress deadline. Continue the same read.
+                        continue
                     if not isinstance(event, AgentCommsCompactionProgress):
                         break
                     if event.id != request.id or event.operation_id != operation:
