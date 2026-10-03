@@ -1,0 +1,539 @@
+{
+  "sourceHead": "d01d40deb27bbd205249b0e36f22f82c4fb5041e",
+  "dependency": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent",
+  "parsed": 371,
+  "omitted": [],
+  "sites": [
+    {
+      "path": "stack/inspect-native-compaction-plan.mjs",
+      "line": 16,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore, settings, model, manager.getLeafId())"
+    },
+    {
+      "path": "stack/native-compaction-policy.mjs",
+      "line": 156,
+      "kind": "MethodDefinition",
+      "name": "retainedFits",
+      "source": "retainedFits(required, messages, model, reserveTokens) {"
+    },
+    {
+      "path": "stack/native-compaction-policy.mjs",
+      "line": 146,
+      "kind": "MethodDefinition",
+      "name": "requireContext",
+      "source": "requireContext(messages, model, reserveTokens) {"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 197,
+      "kind": "FunctionDeclaration",
+      "name": "acExecuteSummary",
+      "source": "async function acExecuteSummary(slot, session, request, preparation, binding, output) {"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 345,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 336,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 316,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation, binding.model, undefined, undefined,"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 326,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 212,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible",
+      "source": "acSummaryCompatible(session, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 211,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 149,
+      "kind": "FunctionDeclaration",
+      "name": "acAdmitSummary",
+      "source": "function acAdmitSummary(request, session, conflict, spent, host) {"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 193,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 181,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore, settings, model, manager.getLeafId(), request.retainedText)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 179,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible",
+      "source": "acSummaryCompatible(session)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 174,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness(request.witness.firstKeptEntryId)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 103,
+      "kind": "FunctionDeclaration",
+      "name": "acSummaryCurrent",
+      "source": "function acSummaryCurrent(session, request, binding) {"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 119,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId(), request.retainedText)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 117,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 109,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible",
+      "source": "acSummaryCompatible(session, binding)"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 90,
+      "kind": "FunctionDeclaration",
+      "name": "acSummaryCompatible",
+      "source": "function acSummaryCompatible(session, binding) {"
+    },
+    {
+      "path": "stack/native-session-context.mjs",
+      "line": 66,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "session.compact()"
+    },
+    {
+      "path": "stack/probe-native-adaptive-writer.mjs",
+      "line": 79,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness?.(firstKeptEntryId)"
+    },
+    {
+      "path": "stack/test-native-adaptive-writer-prototype.mjs",
+      "line": 32,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness(first)"
+    },
+    {
+      "path": "stack/test-native-committed-context.mjs",
+      "line": 66,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation,model,'local-test',{},'Preserve every source part',"
+    },
+    {
+      "path": "stack/test-native-committed-context.mjs",
+      "line": 60,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore,actualSettings,model)"
+    },
+    {
+      "path": "stack/test-native-compaction-journal.mjs",
+      "line": 38,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "reopened.captureCompactionWitness(f.witness.firstKeptEntryId)"
+    },
+    {
+      "path": "stack/test-native-compaction-journal.mjs",
+      "line": 18,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness(kept)"
+    },
+    {
+      "path": "stack/test-native-compaction.mjs",
+      "line": 116,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation,"
+    },
+    {
+      "path": "stack/test-native-compaction.mjs",
+      "line": 105,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000},model)"
+    },
+    {
+      "path": "stack/test-native-parallel-compaction.mjs",
+      "line": 138,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation,model,'local-only',{},'CUSTOM_KEEP_REQUEST_727',undefined,undefined,"
+    },
+    {
+      "path": "stack/test-native-parallel-compaction.mjs",
+      "line": 133,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000},model)"
+    },
+    {
+      "path": "stack/test-native-shared-compaction.mjs",
+      "line": 96,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation, model, undefined, undefined, 'SHARED_SOURCE_ACCEPTANCE',"
+    },
+    {
+      "path": "stack/test-native-shared-compaction.mjs",
+      "line": 40,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore, settings, model, manager.getLeafId())"
+    },
+    {
+      "path": "stack/test-native-task-packing.mjs",
+      "line": 26,
+      "kind": "CallExpression",
+      "name": "requireContext",
+      "source": "policy.requireContext([createCompactionSummaryMessage(packed, 1000, 1), ...recent], model, 2048)"
+    },
+    {
+      "path": "stack/test-native-writer-coverage.mjs",
+      "line": 343,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness('seed-user')"
+    },
+    {
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 80,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "m.captureCompactionWitness(f.kept)"
+    },
+    {
+      "path": "stack/test-native-writer-failure-state.mjs",
+      "line": 25,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness(kept)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 852,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "session.compact(command.customInstructions)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 754,
+      "kind": "CallExpression",
+      "name": "acExecuteSummary",
+      "source": "acExecuteSummary(slot, selectedSession, command,"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 744,
+      "kind": "CallExpression",
+      "name": "acAdmitSummary",
+      "source": "acAdmitSummary(command, session,"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 224,
+      "kind": "FunctionDeclaration",
+      "name": "acExecuteSummary",
+      "source": "async function acExecuteSummary(slot, session, request, preparation, binding, output) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 372,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 363,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 343,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation, binding.model, undefined, undefined,"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 353,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 239,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible",
+      "source": "acSummaryCompatible(session, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 238,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 176,
+      "kind": "FunctionDeclaration",
+      "name": "acAdmitSummary",
+      "source": "function acAdmitSummary(request, session, conflict, spent, host) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 220,
+      "kind": "CallExpression",
+      "name": "acSummaryCurrent",
+      "source": "acSummaryCurrent(session, request, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 208,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(manager.entryStore, settings, model, manager.getLeafId(), request.retainedText)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 206,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible",
+      "source": "acSummaryCompatible(session)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 201,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "manager.captureCompactionWitness(request.witness.firstKeptEntryId)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 130,
+      "kind": "FunctionDeclaration",
+      "name": "acSummaryCurrent",
+      "source": "function acSummaryCurrent(session, request, binding) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 146,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId(), request.retainedText)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 144,
+      "kind": "CallExpression",
+      "name": "captureCompactionWitness",
+      "source": "session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 136,
+      "kind": "CallExpression",
+      "name": "acSummaryCompatible",
+      "source": "acSummaryCompatible(session, binding)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 117,
+      "kind": "FunctionDeclaration",
+      "name": "acSummaryCompatible",
+      "source": "function acSummaryCompatible(session, binding) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 17,
+      "kind": "ImportDeclaration",
+      "source": "import { compact, prepareCompaction } from \"../../core/compaction/index.js\";"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-client.js",
+      "line": 235,
+      "kind": "MethodDefinition",
+      "name": "compact",
+      "source": "async compact(customInstructions) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+      "line": 5520,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "this.session.compact(customInstructions)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+      "line": 1587,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "this.session.compact(options?.customInstructions)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 66,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "session.compact()"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 2428,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "this.compact(options?.customInstructions)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 2099,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId())"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1822,
+      "kind": "MethodDefinition",
+      "name": "compact",
+      "source": "async compact(customInstructions) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1834,
+      "kind": "CallExpression",
+      "name": "prepareCompaction",
+      "source": "prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId())"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1801,
+      "kind": "CallExpression",
+      "name": "compact",
+      "source": "compact(preparation, requestModel, apiKey, headers, customInstructions, signal, \"low\", this.agent.streamFunction, env, { enabled: false, max"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 29,
+      "kind": "ImportDeclaration",
+      "source": "import { calculateContextTokens, collectEntriesForBranchSummary, compact, estimateContextTokens, estimateTokens, generateBranchSummary, prepareCompaction, shouldCompact, } from \"./compaction/index.js\";"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "line": 821,
+      "kind": "MethodDefinition",
+      "name": "captureCompactionWitness",
+      "source": "captureCompactionWitness(firstKeptEntryId) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-policy.js",
+      "line": 156,
+      "kind": "MethodDefinition",
+      "name": "retainedFits",
+      "source": "retainedFits(required, messages, model, reserveTokens) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-policy.js",
+      "line": 146,
+      "kind": "MethodDefinition",
+      "name": "requireContext",
+      "source": "requireContext(messages, model, reserveTokens) {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 573,
+      "kind": "FunctionDeclaration",
+      "name": "compact",
+      "source": "async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sess"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 621,
+      "kind": "CallExpression",
+      "name": "requireContext",
+      "source": "policy.requireContext(committedContext(),model,settings.reserveTokens)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 495,
+      "kind": "FunctionDeclaration",
+      "name": "prepareCompaction",
+      "source": "function prepareCompaction(store, settings, model, leafId=store.lastId, retainedText=\"\") {"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 523,
+      "kind": "CallExpression",
+      "name": "retainedFits",
+      "source": "policy.retainedFits(required,retained,model,settings.reserveTokens)"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js",
+      "line": 514,
+      "kind": "CallExpression",
+      "name": "requireContext",
+      "source": "policy.requireContext([required],model,settings.reserveTokens)"
+    }
+  ],
+  "dynamicResolution": "Dotted member calls are possible consumers; binding must be read semantically. Generated RPC helper injection is inventoried by its Python patch."
+}
