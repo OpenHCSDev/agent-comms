@@ -1,7 +1,266 @@
 {
   "owner": "Mendel",
   "released_to": "Bohr",
-  "scope": "Obsolete regenerable wheel/build outputs only; source branches/evidence already published. These are not current import paths. Current576wheel/534holder/original560controller and all failed/current fork roots remain protected.",
-  "released": [],
-  "total_allocated_bytes": 0
+  "scope": "Obsolete regenerable wheel/build outputs only, including generated .gitignore. Source branches/evidence published; not current imports. Current576wheel/534holder/original560controller and all failed/current fork roots protected.",
+  "released": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/certified-read-worker-custody563",
+      "allocated_bytes": 868352,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/certified-read-worker-custody563/wheels/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "532815c9b1ead76939d46c95e71acae0ef36dc63b556e8b7e2c0ea8376aad5f0"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/certified-read-worker-custody563/wheels/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/compaction-native-evidence568-wheel",
+      "allocated_bytes": 872448,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/compaction-native-evidence568-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "4b62c93197adb8d4393f4a2a97cb567f332420bce9cd4371e5c227165be012a4"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/compaction-native-evidence568-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-launch-custody571-wheel",
+      "allocated_bytes": 868352,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-launch-custody571-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "dd0da7ff0a1ffce937295834faf26aa8a75876e35390c1fb3690fe88b0a151f5"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-launch-custody571-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-merged-wheel",
+      "allocated_bytes": 868352,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-merged-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "136417d2822c16d595723a7b76495b660e4aaf8d0c16525c413b12a53534f334"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-merged-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-wheel",
+      "allocated_bytes": 868352,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "136417d2822c16d595723a7b76495b660e4aaf8d0c16525c413b12a53534f334"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/saved-native-startup567-wheel",
+      "allocated_bytes": 864256,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/saved-native-startup567-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "2c32929510d2f99b2beb33544478adcdc4ccfeaa082619c5c4070a15fc035d9c"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/saved-native-startup567-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-acquisition574-wheel",
+      "allocated_bytes": 872448,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-acquisition574-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "07d86a026a1ab2b8ad1095bd71bc71bfa11c0ba9f33b3ccb0ff4ea64aff9c16f"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-acquisition574-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-final-wheel",
+      "allocated_bytes": 872448,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-final-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "568ec8aea6e87b127a5fb446afd91007ee597c2290efe6295dd3594e3db565f8"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-final-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-matched-wheel",
+      "allocated_bytes": 8192,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-matched-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-wheel",
+      "allocated_bytes": 8192,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native-preparation569-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/tracked-settings575-wheel",
+      "allocated_bytes": 872448,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/tracked-settings575-wheel/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "5b2469eabfd8e53eb5e94ca8132a2f4460074d0f64048c48f273ee25667f9033"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/tracked-settings575-wheel/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels",
+      "allocated_bytes": 843776,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "ebb360089ba9f44eea3274ebd8e0ccd623e4d9b3d080e2354c9dec7813ac20be"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-dispatch-consumption536",
+      "allocated_bytes": 856064,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-dispatch-consumption536/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "10a2bb96e773b8ab8c463ca2cc4e5739a50b1ceea3333d19ef7aa37a095eb053"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-dispatch-consumption536/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-native-progress528",
+      "allocated_bytes": 843776,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-native-progress528/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "1f2092d8461f1fd3e859838da5d07564ea48c618775110e467d8679e4cfb5131"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-native-progress528/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-owned-observation536",
+      "allocated_bytes": 860160,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-owned-observation536/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "ccbc65890754eab5f6159ce7d0a0c660101edd0143daacc63b71ac2da61edada"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-owned-observation536/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-scoped-input534",
+      "allocated_bytes": 860160,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-scoped-input534/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "b7288a46f096572d48513344cebe919f4e652a2b4e9c58dc46f6c62553256e66"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-scoped-input534/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530",
+      "allocated_bytes": 847872,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "deeabf06d4f9bbef94d78b4ad5d92a8c02e2afe9c8042980f1a973669805a577"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530-main",
+      "allocated_bytes": 856064,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530-main/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "b304bbe44f07a2c0dd448c137a46137f26615001831182fbbc2bf020f5470eb0"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530-main/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-sqlite537",
+      "allocated_bytes": 860160,
+      "files": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-sqlite537/agent_comms-0.1.0-py3-none-any.whl",
+          "sha256": "09c7077d81f015ca6f3941831b451ce79e39e3615e2f6cc195198d31494d3157"
+        },
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-sqlite537/.gitignore",
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        }
+      ]
+    }
+  ],
+  "total_allocated_bytes": 14671872
 }
