@@ -215,19 +215,19 @@ class SavedSelectedSession(SelectedSession):
             self.identity.require_session(owner.require_saved_session())
             snapshot = participant.comms.registry.snapshot()
             generation = snapshot.owner_generations[owner.name]
-            bridge = await Coordination.run_worker(partial(
-                OwnerCompactionCommit, participant.comms.registry.store.path, turn.launch.package
-            ))
-            source = ManualSource(
-                incarnation=owner.incarnation, owner=owner.process_identity,
-                turn=TurnId(participant.owner.require_active_turn().id),
-                reserved_revision=SessionRevision.observe(self.session_file).require_available(),
-            )
-            result = await bridge.compact_selected(
-                owner, generation, persistent, source, selected, settings,
-                on_event=participant.dispatch,
-            )
-            settings.require_prepared(result)
+            async with OwnerCompactionCommit.open(
+                participant.comms.registry.store.path, turn.launch.package, self.session_file
+            ) as bridge:
+                source = ManualSource(
+                    incarnation=owner.incarnation, owner=owner.process_identity,
+                    turn=TurnId(participant.owner.require_active_turn().id),
+                    reserved_revision=SessionRevision.observe(self.session_file).require_available(),
+                )
+                result = await bridge.compact_selected(
+                    owner, generation, persistent, source, selected, settings,
+                    on_event=participant.dispatch,
+                )
+                settings.require_prepared(result)
             # A committed compaction retires/reopens the selected source. Only
             # that crossing needs a new native acquisition and attestation.
             # An unchanged original child remains under this turn's custody.

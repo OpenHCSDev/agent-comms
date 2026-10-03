@@ -6,7 +6,6 @@ Stock Pi's separate saved-session /compact remains outside canonical roots.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,26 +59,26 @@ async def compact_manual_owner(
     package = runner.effects._private_nk_native_package
     if package is None:
         raise ValueError("Canonical native package is unavailable")
-    bridge = await asyncio.to_thread(
-        OwnerCompactionCommit, runner.comms.registry.store.path, Path(package)
-    )
+    async with OwnerCompactionCommit.open(
+        runner.comms.registry.store.path, Path(package), session_file
+    ) as bridge:
 
-    settings = await read_selected_compaction_decision(
-        persistent, session_file=session_file,
-        expected_package=Path(package), selected=selected,
-        registry=bridge.registry, thread_name=owner.name, purpose=ManualCompactionReason,
-    )
-    source = ManualSource(
-        incarnation=owner.incarnation,
-        owner=owner.process_identity,
-        turn=TurnId(turn.id),
-        reserved_revision=SessionRevision.observe(session_file).require_available(),
-    )
+        settings = await read_selected_compaction_decision(
+            persistent, session_file=session_file,
+            expected_package=Path(package), selected=selected,
+            registry=bridge.registry, thread_name=owner.name, purpose=ManualCompactionReason,
+        )
+        source = ManualSource(
+            incarnation=owner.incarnation,
+            owner=owner.process_identity,
+            turn=TurnId(turn.id),
+            reserved_revision=SessionRevision.observe(session_file).require_available(),
+        )
 
-    return await bridge.compact_selected(
-        owner, generation, persistent, source, selected, settings,
-        instructions=instructions.strip() if instructions else None,
-        on_event=lambda event: runner.effects._emit_event(session_id, event),
-        reason="manual",
-        purpose=ManualCompactionReason,
-    )
+        return await bridge.compact_selected(
+            owner, generation, persistent, source, selected, settings,
+            instructions=instructions.strip() if instructions else None,
+            on_event=lambda event: runner.effects._emit_event(session_id, event),
+            reason="manual",
+            purpose=ManualCompactionReason,
+        )

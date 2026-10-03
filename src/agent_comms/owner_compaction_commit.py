@@ -7,8 +7,9 @@ or treats a visible terminal SQL row as authority to replay an original input.
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from functools import partial
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
 from .agent_events import AgentEvent
@@ -21,9 +22,11 @@ from .compaction_identity import SelectedCommitReference
 from .compaction_journal import CompactionJournal
 from .compaction_records import CompactionOperation, SelectedSummaryAttempt
 from .compaction_source import CompactionSource
+from .coordinator import Coordination
 from .input_disposition import FutureInputQueue, InputDispositions
 from .native_compaction_request import NativeIntent, NativeSummaryPayload
 from .native_compaction_writer import NativeCompactionWriter
+from .native_entries import NativeEvidenceRead
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
 from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
 from .pi_summary_payloads import SelectedModel, SummaryDeclinedData, SummaryFiles, SummaryUsage
@@ -38,13 +41,37 @@ from .diagnostics import record_request_progress
 
 
 class OwnerCompactionCommit:
-    def __init__(self, registry_path: Path, package_dir: Path, *, future_queue: FutureInputQueue | None = None):
+    def __init__(self, registry_path: Path, package_dir: Path, *,
+                 future_queue: FutureInputQueue | None = None,
+                 native_reader: NativeEvidenceRead | None = None):
         root = registry_path.parent.resolve(strict=True)
         self.native = NativeCompactionWriter(package_dir)
         self.registry = Registration(registry_path)
         self.inputs = InputDispositions(root / InputDispositions.filename)
-        self.boundary = CompactionBoundary(self.registry, self.inputs, future_queue)
+        self.boundary = CompactionBoundary(
+            self.registry, self.inputs, future_queue, native_reader=native_reader
+        )
         self.journal = CompactionJournal(registry_path.with_name("compaction-commits.sqlite3"))
+
+    @classmethod
+    @asynccontextmanager
+    async def open(
+        cls, registry_path: Path, package_dir: Path, session_file: str, *,
+        future_queue: FutureInputQueue | None = None,
+    ) -> AsyncIterator[OwnerCompactionCommit]:
+        """One acquired native reader for the original compaction operation.
+
+        The descriptor retains decoded entries, never source or turn authority.
+        Each held cut still verifies original bytes before global ingress locks.
+        Joined worker construction and caller teardown own cancellation as well
+        as normal completion; no reader escapes into the next native turn.
+        """
+        with NativeEvidenceRead.open(Path(session_file)) as reader:
+            bridge = await Coordination.run_worker(partial(
+                cls, registry_path, package_dir,
+                future_queue=future_queue, native_reader=reader,
+            ))
+            yield bridge
 
     async def compact_selected(
         self, owner: Thread, owner_generation: int, persistent: PersistentPiSession,
@@ -107,7 +134,9 @@ class OwnerCompactionCommit:
             def settle_refusal(data):
                 self.settle_selected_refusal(owner, owner_generation, captured, data)
 
-            return source.summary_outcome(result, self.journal, settings.reason, settle_refusal)
+            return await Coordination.run_worker(partial(
+                source.summary_outcome, result, self.journal, settings.reason, settle_refusal
+            ))
 
         return await compact_owner_once(
             self, owner, owner_generation, persistent, summarize,

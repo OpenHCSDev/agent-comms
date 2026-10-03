@@ -7,7 +7,6 @@ single-send backend path and its strict saved-session reopen.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 
 from .agent_events import AgentEvent
@@ -68,20 +67,20 @@ async def maybe_compact_owner_turn(
     # compaction is disabled. Do not reinterpret its decision in Python.
     if not settings.trigger:
         return False
-    bridge = await asyncio.to_thread(
-        OwnerCompactionCommit, registry.store.path, package, future_queue=future_queue
-    )
-    try:
-        revision = SessionRevision.observe(session_file).require_available()
-    except SessionRevisionUnavailable as error:
-        raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
-    source = SelectedAdmissionSource.capture(
-        owner, TurnId(turn_id), turn.admission_generation, original_input_keys,
-        bridge.inputs.read(), input_text, revision,
-    )
-    result = await bridge.compact_selected(
-        owner, owner_generation, persistent, source, selected, settings,
-        pending_input_keys=original_input_keys, on_admission=on_admission,
-        on_event=on_event,
-    )
-    return result.adaptive_result()
+    async with OwnerCompactionCommit.open(
+        registry.store.path, package, session_file, future_queue=future_queue
+    ) as bridge:
+        try:
+            revision = SessionRevision.observe(session_file).require_available()
+        except SessionRevisionUnavailable as error:
+            raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
+        source = SelectedAdmissionSource.capture(
+            owner, TurnId(turn_id), turn.admission_generation, original_input_keys,
+            bridge.inputs.read(), input_text, revision,
+        )
+        result = await bridge.compact_selected(
+            owner, owner_generation, persistent, source, selected, settings,
+            pending_input_keys=original_input_keys, on_admission=on_admission,
+            on_event=on_event,
+        )
+        return result.adaptive_result()

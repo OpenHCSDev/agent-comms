@@ -27,6 +27,7 @@ from .private_path import FileRevision
 
 if TYPE_CHECKING:
     from .compaction_result import CompactionResult, RefusedCompactionResult
+    from .native_entries import NativeEvidenceRead
 
 
 class NativePreparationError(ValueError):
@@ -51,10 +52,10 @@ class NativeWitness(NativeSessionIdentity):
         if self.revision != FileRevision.from_stat(file.stat()):
             raise ValueError("Native retained source changed since preparation")
 
-    def retained_task_facts(self):
-        from .native_entries import NativeEntry
+    def retained_task_facts(self, reader: NativeEvidenceRead | None = None):
+        from .native_entries import NativeEvidenceRead
 
-        with NativeEntry.open_evidence(Path(self.session_file)) as evidence:
+        with NativeEvidenceRead.borrow(Path(self.session_file), reader) as evidence:
             return evidence.retained_task_facts(self)
 
 
