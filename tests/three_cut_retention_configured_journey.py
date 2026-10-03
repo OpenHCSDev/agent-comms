@@ -61,6 +61,77 @@ def frozen_scenario(root_reference):
     return RecallScenario('configured-original-three-cut', tuple(rounds))
 
 
+async def request_construction(stage, package, original_python):
+    """One distinct configured input qualifies observation, not a new study.
+
+    The existing saved-agent owner makes the isolated fork. The native SDK
+    publisher, diagnostic owner and recorded probe own each measurement. No
+    authored answers or condition labels can replace the original request facts.
+    """
+    captured = CurrentTypedCapture(
+        Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python,
+    ).read('openhcs-architecture-memory')
+    original = captured.require_current()
+    source = Path(original.require_saved_session())
+    contexts = stage / 'sdk-contexts'
+    receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
+               'paid_comparison': False, 'acceptance_scope': 'original configured request construction observations'}
+    chunks = []
+
+    class Receiver:
+        async def session_update(self, **value):
+            update = value['update']
+            if update.session_update == 'agent_message_chunk' and update.content.type == 'text':
+                chunks.append(update.content.text)
+
+    def capture_source():
+        return captured.require_current(), captured.retained
+
+    with observe_native_requests(package, stage / 'request-observation.jsonl', contexts=contexts) as observe_launch:
+        async with configured_saved_agent(stage, package, source, Receiver(), receipt,
+                capture_source=capture_source, observe_launch=observe_launch) as (agent, owner, fork):
+            contexts.mkdir(mode=0o700)
+            marker = f'REQUEST_CONSTRUCTION_{stage.name.upper().replace("-", "_")}'
+            result = await build_agent_router(agent)('session/prompt', {
+                'sessionId': owner.name, 'prompt': [{'type': 'text',
+                    'text': f'New isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'}],
+            }, False)
+            assert result.stop_reason == 'end_turn' and marker in ''.join(chunks)
+            service = agent._comms
+            document = InputDispositions(service.root / InputDispositions.filename).read()
+            row, = document.rows.values()
+            assert row.has_started
+            session = NativeSessionIdentity(fork.session_id, fork.session_file)
+            with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
+                context = NativeContextProof.read_evidence(Path(session.session_file), row.native_id, evidence=evidence)
+                answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
+                provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
+                manifest, = (manifest for manifest in service.bus.log.context_manifests(owner.name, service.registry)
+                    if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
+                observed = request_observation_path(service.root, row.turn_id)
+                sdk = contexts / f'context-{context.llm_context_digest}.json'
+                serialized = contexts / f'segments-{context.llm_context_digest}.json'
+                probe = RecordedNativeProbe(session, row.native_id, answer.id,
+                    sdk_context=FileProvenance(str(sdk), digest(sdk)),
+                    context_manifest=record(stage / 'original-manifest.private.json', manifest),
+                    sdk_segment_bytes=FileProvenance(str(serialized), digest(serialized)),
+                    submitted_inputs=record(stage / 'original-inputs.private.json', document),
+                    fork_journal=service.root / 'compaction-commits.sqlite3',
+                    request_observations=FileProvenance(str(observed), digest(observed)))
+                measured = probe.read(evidence)
+            record(stage / 'recorded-probe.private.json', probe)
+            record(stage / 'request-construction.private.json', measured)
+            budget = measured['construction']['request_budget']
+            assert budget['evaluated'] and manifest.request_id
+            assert measured['construction']['source_coverage']['evaluated']
+            assert all(point.request_id == manifest.request_id for point in budget['observations'])
+            assert service.registry.require(owner.name).active_turn is None
+            receipt.update(complete=True, original_input_count=1,
+                exact_manifest_request=True, original_budget_observations=len(budget['observations']),
+                condition_intervention_evaluated=False, final_HTTP_bytes_evaluated=False,
+                action_validity_evaluated=False, model_recall_evaluated=False)
+
+
 def committed_checkpoint(stage):
     """Explicitly locate a known successful cut; never infer input replay safety."""
     from agent_comms.comms import Comms
@@ -261,5 +332,8 @@ async def run(stage, package, original_python, *, continuation=None):
 if __name__ == '__main__':
     stage = Path(sys.argv[1]).absolute()
     modes = {'--continue-committed': committed_checkpoint, '--continue-completed': completed_continuation}
-    continuation = modes[sys.argv[4]](stage) if sys.argv[4:] else None
-    asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))
+    if sys.argv[4:] == ['--request-construction']:
+        asyncio.run(request_construction(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute()))
+    else:
+        continuation = modes[sys.argv[4]](stage) if sys.argv[4:] else None
+        asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))

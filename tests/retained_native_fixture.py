@@ -468,7 +468,7 @@ class RecordedNativeProbe:
                         "unreferenced_message_entries": tuple(identity for identity in messages if identity not in included),
                         "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages),
                         "full_context_capacity": {"evaluated": False,
-                            "reason": "Original request model capacity/final transport budget is not captured"}}
+                            "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}}
             if self.checkpoint is not None:
                 identity = checkpoint["native_entry_id"]
                 coverage["managed_checkpoint"] = {"entry_id": identity,
