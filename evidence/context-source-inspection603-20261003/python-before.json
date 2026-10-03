@@ -1,0 +1,744 @@
+{
+  "revision": "c245a9b0",
+  "parser": "existing refactor-audit audit.findings.Package",
+  "roots": [
+    "src",
+    "tests",
+    "stack"
+  ],
+  "parsed_modules": 686,
+  "omissions": [],
+  "declarations": [
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 749,
+      "class": "ContextCliCommand",
+      "bases": [
+        "CliCommand"
+      ],
+      "methods": [
+        "apply"
+      ]
+    },
+    {
+      "file": "src/agent_comms/input_origin.py",
+      "line": 44,
+      "class": "InputProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": [
+        "require_human_input",
+        "require_original"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 87,
+      "class": "NativeCustody",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        "available",
+        "managed_launch",
+        "reuse",
+        "idle",
+        "inspect_context",
+        "expected",
+        "retire",
+        "closed",
+        "reopen"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 123,
+      "class": "EmptyNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "inspect_context"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 145,
+      "class": "ReopenNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "expected",
+        "reopen"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 168,
+      "class": "RetiringNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "retire",
+        "closed",
+        "reopen"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 193,
+      "class": "BorrowedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "inspect_context",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 221,
+      "class": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "current",
+        "idle",
+        "selected",
+        "reload",
+        "inspect_context",
+        "reuse",
+        "managed_launch",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 12,
+      "class": "NativeContextManifestData",
+      "bases": [
+        "PiResponseData"
+      ],
+      "methods": [
+        "for_turn",
+        "record"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 34,
+      "class": "NativeContextData",
+      "bases": [
+        "PiResponseData"
+      ],
+      "methods": [
+        "for_turn",
+        "require_session_file"
+      ]
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 240,
+      "class": "CompleteAwareness",
+      "bases": [
+        "ContextSegment",
+        "OptionalAwarenessResult"
+      ],
+      "methods": [
+        "segments",
+        "context",
+        "require_resource_budget",
+        "text",
+        "render"
+      ]
+    },
+    {
+      "file": "src/agent_comms/retained_context.py",
+      "line": 17,
+      "class": "RetainedSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "methods": [
+        "capture",
+        "text",
+        "original_text_source",
+        "inspection",
+        "export"
+      ]
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 327,
+      "class": "ContextRuntimeRequest",
+      "bases": [
+        "ResultRuntimeRequest"
+      ],
+      "methods": [
+        "result"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 26,
+      "class": "Provenance",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "methods": [
+        "require_human_input"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 36,
+      "class": "FileProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 42,
+      "class": "OwnerProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 48,
+      "class": "WireProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 53,
+      "class": "JournalProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 59,
+      "class": "NativeProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 66,
+      "class": "PreviewProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 72,
+      "class": "ResourceProvenance",
+      "bases": [
+        "Provenance"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 96,
+      "class": "SegmentManifest",
+      "bases": [],
+      "methods": [
+        "__post_init__"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 112,
+      "class": "ContextSegment",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "methods": [
+        "__post_init__",
+        "text",
+        "render_into",
+        "manifest",
+        "contribution"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 160,
+      "class": "UserInputSegment",
+      "bases": [
+        "SuppliedSegment",
+        "ContextSegment"
+      ],
+      "methods": [
+        "contribution"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 166,
+      "class": "MeasuredNativeSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "methods": [
+        "provider_value",
+        "render_into",
+        "text",
+        "measured_manifest"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 188,
+      "class": "SystemLayerSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "methods": [
+        "provider_value",
+        "render_into"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 202,
+      "class": "NativeMessages",
+      "bases": [],
+      "methods": [
+        "provider_value",
+        "render_into"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 218,
+      "class": "TranscriptSegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 223,
+      "class": "CompactionSummarySegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 228,
+      "class": "InjectionMessageSegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "methods": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 233,
+      "class": "ToolCatalogSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "methods": [
+        "provider_value",
+        "render_into"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 247,
+      "class": "InstructionSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "methods": [
+        "values",
+        "text"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 422,
+      "class": "ContextManifest",
+      "bases": [],
+      "methods": [
+        "changed_from_history",
+        "changed_since"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 461,
+      "class": "TurnContext",
+      "bases": [],
+      "methods": [
+        "for_owner",
+        "prepend",
+        "append",
+        "render",
+        "render_segments",
+        "manifest"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 95,
+      "class": "TurnRunner",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "bind",
+        "session_busy",
+        "turn_state",
+        "owns_turn",
+        "transition_turn",
+        "observe_compaction",
+        "native_arguments",
+        "prepare_selected_session",
+        "inspect_context",
+        "prompt_owned",
+        "collect_replies",
+        "peer_progress",
+        "cancel",
+        "extension_ui_permission",
+        "acquire_turn",
+        "finish_turn",
+        "settle_turn",
+        "current_turn_update",
+        "replay_turn_state",
+        "active_backend_inbox",
+        "close_idle_backend",
+        "run_selected",
+        "run_agent_turn",
+        "close"
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 129,
+      "call": "TurnRunner"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 765,
+      "call": "ctx.bus.log.context_manifests"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 131,
+      "call": "acquired.inspect_context"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 19,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 41,
+      "call": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 257,
+      "call": "self.marker.access.context_manifests"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 412,
+      "call": "record.context_manifests"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 331,
+      "call": "agent.turns.inspect_context"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 48,
+      "call": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 127,
+      "call": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 183,
+      "call": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 512,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 197,
+      "call": "persistent.custody.inspect_context"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 169,
+      "call": "source.context_manifests"
+    },
+    {
+      "file": "src/agent_comms/wire_metadata.py",
+      "line": 135,
+      "call": "record.context_manifests"
+    },
+    {
+      "file": "src/agent_comms/wire_record.py",
+      "line": 122,
+      "call": "self.observation.context_manifests"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 63,
+      "call": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 230,
+      "call": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 238,
+      "call": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 68,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 236,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 241,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 246,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 474,
+      "call": "NativeContextData"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 475,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 213,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 224,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 226,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 343,
+      "call": "SegmentManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 345,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 214,
+      "call": "SegmentManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 228,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 230,
+      "call": "observation"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 22,
+      "call": "SegmentManifest"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 23,
+      "call": "ContextManifest"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 67,
+      "call": "NativeContextManifestData"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 233,
+      "call": "reopened.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 235,
+      "call": "reopened.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 248,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 269,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 285,
+      "call": "Comms(comms.root).bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 294,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 140,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 141,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 237,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 65,
+      "call": "original.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 242,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 236,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 240,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 202,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 203,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 180,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 112,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 303,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 257,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 349,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 435,
+      "call": "reopened.bus.log.context_manifests"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 348,
+      "call": "ContextCliCommand"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 351,
+      "call": "ContextCliCommand"
+    }
+  ],
+  "limits": "Lexical source evidence, not proof of dynamic receiver resolution; original DeclaredFamily/NativeQuery owners read separately. JavaScript captured separately."
+}

@@ -26,6 +26,26 @@ if TYPE_CHECKING:
 class Provenance(DeclaredFamily, affix="Provenance"):
     """A source coordinate, not permission to execute or replay it."""
 
+    @abstractmethod
+    def public_description(self) -> str: ...
+
+    def public_text(self, comms) -> str:
+        """Read an authenticated source, never reconstruct request wording.
+
+        The inspection owner checks membership before calling this method.
+        Coordinates without original text evidence remain unavailable.
+        """
+        raise ValueError(f"Original text is not retained by {self.public_description()}")
+
+    def preview_observations(self) -> tuple[PreviewProvenance, ...]:
+        return ()
+
+    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
+        return ()
+
+    def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
+        return ()
+
     def require_human_input(self):
         from .errors import RelationViolationError
 
@@ -37,22 +57,48 @@ class FileProvenance(Provenance):
     path: str
     sha256: str
 
+    def public_description(self) -> str:
+        return f"File {self.path} · SHA256 {self.sha256}"
+
+    def public_text(self, comms) -> str:
+        raw = Path(self.path).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.sha256:
+            raise ValueError("Original file bytes are unavailable: the source has changed")
+        return raw.decode("utf-8")
+
 
 @dataclass(frozen=True)
 class OwnerProvenance(Provenance):
     owner: ThreadIncarnation
     revision: str
 
+    def public_description(self) -> str:
+        return f"Owner {self.owner.name} · born {self.owner.created_at} · revision {self.revision}"
+
 
 @dataclass(frozen=True)
 class WireProvenance(Provenance):
     source: MessageReference
+
+    def public_description(self) -> str:
+        return f"Wire message {self.source.seq} · {self.source.message_id}"
+
+    def public_text(self, comms) -> str:
+        (original,) = comms.bus.log.messages_for_references((self.source,))
+        return original.body
 
 
 @dataclass(frozen=True)
 class JournalProvenance(Provenance):
     path: str
     entries: tuple[str, ...]
+
+    def public_description(self) -> str:
+        return f"Native journal {self.path} · entries {', '.join(self.entries)}"
+
+    def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
+        identity.require_session(self.path)
+        return self.entries
 
 
 @dataclass(frozen=True)
@@ -61,11 +107,24 @@ class NativeProvenance(Provenance):
     request_generation: int
     context_digest: str
 
+    def public_description(self) -> str:
+        return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
+                f"· context {self.context_digest}")
+
+    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
+        return (self.identity,)
+
 
 @dataclass(frozen=True)
 class PreviewProvenance(Provenance):
     identity: NativeSessionIdentity
     context_digest: str
+
+    def public_description(self) -> str:
+        return f"Current native preview {self.identity.session_id} · context {self.context_digest}"
+
+    def preview_observations(self) -> tuple[PreviewProvenance, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -73,6 +132,17 @@ class ResourceProvenance(Provenance):
     path: str
     sha256: str
     representation: str
+
+    def public_description(self) -> str:
+        return f"Resource {self.path} · {self.representation} · SHA256 {self.sha256}"
+
+
+@dataclass(frozen=True)
+class ContextSourceText:
+    """A public source-read result, not another context or input record."""
+
+    description: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -100,12 +170,101 @@ class SegmentManifest:
     utf8_bytes: int
     tokens: int
     contributors: tuple[SegmentManifest, ...] = ()
+    captured_text: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
             raise ValueError("Invalid original context segment observation")
         if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
             raise ValueError("Context segment requires its measured byte digest")
+
+    def source_membership(self):
+        yield from self.provenance
+        for contributor in self.contributors:
+            yield from contributor.source_membership()
+
+    def public_description(self) -> str:
+        return f"{self.kind.replace('_', ' ').title()} · {self.tokens} estimated tokens"
+
+    def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
+        selected = self
+        for position in positions:
+            if not 0 <= position < len(selected.contributors):
+                raise ValueError("Original request has no selected contributor")
+            selected = selected.contributors[position]
+        return selected
+
+    def capture_public(self, values: tuple[MeasuredNativeSegment, ...]) -> SegmentManifest:
+        """Project the original SDK publication; never capture a later preview."""
+        matched = tuple(value for value in values if value.measured_manifest() == self)
+        text = self.captured_text
+        if matched:
+            public = {value.public_text() for value in matched}
+            if len(public) != 1:
+                raise ValueError("Captured SDK public text is ambiguous")
+            text = tuple(public)
+        return replace(self, captured_text=text,
+                       contributors=tuple(child.capture_public(values) for child in self.contributors))
+
+    def contains_value(self, value: MeasuredNativeSegment) -> bool:
+        return (value.measured_manifest() == self
+                or any(child.contains_value(value) for child in self.contributors))
+
+    def native_identity(self) -> NativeSessionIdentity:
+        originals = {identity for source in self.provenance for identity in source.native_identities()}
+        if len(originals) != 1:
+            raise ValueError("Original segment has no unambiguous native source identity")
+        (identity,) = originals
+        return identity
+
+    def journal_entries(self) -> tuple[str, ...]:
+        identity = self.native_identity()
+        entries = tuple(dict.fromkeys(entry for source in self.provenance
+                                      for entry in source.journal_entries(identity)))
+        if not entries:
+            raise ValueError("Original segment has no recoverable journal coordinates")
+        return entries
+
+    async def public_text(self, read_reference) -> str:
+        if self.public_text_recorded:
+            return self.recorded_public_text({})
+        return await read_reference(self)
+
+    def recorded_parts(self) -> tuple[SegmentManifest, ...]:
+        return ContextSegment.decode(self.kind).recorded_parts(self)
+
+    def requested_parts(self) -> tuple[SegmentManifest, ...]:
+        return tuple(part for part in self.recorded_parts() if not part.public_text_recorded)
+
+    def recorded_public_text(self, values_by_digest) -> str:
+        """Render the one acquired SDK result alongside original captures.
+
+        The SDK reader owns complete source resolution. A returned whole value
+        takes precedence over its annotation children; otherwise the same result
+        contains all uncaptured message parts. No child opens another reader.
+        """
+        if self.captured_text:
+            return "\n".join(self.captured_text)
+        for value in values_by_digest.get(self.sha256, ()):
+            if value.matches_recorded(self):
+                return value.public_text()
+        parts = self.recorded_parts()
+        if parts:
+            return "\n".join(child.recorded_public_text(values_by_digest)
+                             for child in parts)
+        raise ValueError("Recorded SDK source differs from the original measured bytes")
+
+    def original_values(self):
+        yield self
+        for contributor in self.contributors:
+            yield from contributor.original_values()
+
+    @property
+    def public_text_recorded(self) -> bool:
+        if self.captured_text:
+            return True
+        parts = self.recorded_parts()
+        return bool(parts) and all(part.public_text_recorded for part in parts)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -119,6 +278,20 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     @abstractmethod
     def text(self) -> str: ...
 
+    def public_description(self) -> str:
+        return self.declared_name.replace("_", " ").title()
+
+    def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
+        return ()
+
+    @classmethod
+    def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
+        # Source annotations do not partition a complete provider value.
+        return ()
+
+    def public_text(self) -> str:
+        return self.text()
+
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
 
@@ -127,6 +300,14 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
         return SegmentManifest(
             self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
         )
+
+    def source_membership(self):
+        yield from self.provenance
+
+    def require_source(self, source: Provenance) -> Provenance:
+        if source not in self.source_membership():
+            raise ValueError("Source is outside the selected context segment")
+        return source
 
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
@@ -183,6 +364,21 @@ class MeasuredNativeSegment(ContextSegment):
         return SegmentManifest(self.declared_name, self.provenance,
                                self.sha256, self.utf8_bytes, self.tokens, self.contributors)
 
+    def matches_recorded(self, original: SegmentManifest) -> bool:
+        return (self.declared_name == original.kind and self.sha256 == original.sha256
+                and self.utf8_bytes == original.utf8_bytes)
+
+    def source_membership(self):
+        yield from super().source_membership()
+        for contributor in self.contributors:
+            yield from contributor.source_membership()
+
+    def public_description(self) -> str:
+        return self.measured_manifest().public_description()
+
+    def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
+        return self.contributors
+
 
 @dataclass(frozen=True, kw_only=True)
 class SystemLayerSegment(MeasuredNativeSegment):
@@ -192,6 +388,9 @@ class SystemLayerSegment(MeasuredNativeSegment):
     utf8_bytes: int
 
     def provider_value(self):
+        return self.content
+
+    def public_text(self) -> str:
         return self.content
 
     def render_into(self, prompt_parts, provider):
@@ -207,8 +406,21 @@ class NativeMessages:
     sha256: str
     utf8_bytes: int
 
+    @classmethod
+    def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
+        # SDK capture emits one same-kind child per provider message. A single
+        # message's logical input-range annotations have other declared kinds.
+        if all(part.kind == cls.declared_name for part in original.contributors):
+            return original.contributors
+        return ()
+
     def provider_value(self):
         return list(self.messages)
+
+    def public_text(self) -> str:
+        from .pi_payloads import PiMessage
+
+        return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
 
     def render_into(self, prompt_parts, provider):
         provider.setdefault("messages", []).extend(self.messages)
@@ -428,6 +640,40 @@ class ContextManifest:
     # never observed dispatch. It grants neither admission nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
+    @property
+    def public_text_recorded(self) -> bool:
+        return bool(self.segments) and all(segment.public_text_recorded for segment in self.segments)
+
+    def require_request_id(self) -> str:
+        if not self.request_id:
+            raise ValueError("Original request ID was not captured by this historical context")
+        return self.request_id
+
+    def selected_segment(self, position: int, contributors: tuple[int, ...] = ()) -> SegmentManifest:
+        if not 0 <= position < len(self.segments):
+            raise ValueError("Original request has no selected segment")
+        return self.segments[position].selected_contributor(contributors)
+
+    def require_source(self, source: Provenance) -> Provenance:
+        for segment in self.segments:
+            if source in segment.source_membership():
+                return source
+        raise ValueError("Source is outside the original recorded context")
+
+    @classmethod
+    def for_request(cls, history, turn: RecordedContextTurn, request_id: str) -> ContextManifest:
+        """Select the original indexed publication, never today's preview."""
+        selected = tuple(record for record in history
+                         if record.turn == turn and record.request_id == request_id)
+        if not request_id or len(selected) != 1:
+            raise ValueError("Original context request is absent or ambiguous")
+        return selected[0]
+
+    def public_source_text(self, comms, segment: int, source: Provenance) -> ContextSourceText:
+        if source not in self.selected_segment(segment).source_membership():
+            raise ValueError("Source is outside the original recorded context segment")
+        return ContextSourceText(source.public_description(), source.public_text(comms))
+
     def changed_from_history(self, history: tuple[ContextManifest, ...]) -> dict:
         """Compare with the previous original turn at this sealed wire position.
 
@@ -462,6 +708,26 @@ class TurnContext:
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]
+
+    @classmethod
+    def for_inspection(cls, comms, owner: Thread) -> TurnContext:
+        """The current Core contributors, before any future original input.
+
+        This is a preview through the same contributor declarations used by
+        preparation. It is never a recorded SDK request or an input grant.
+        """
+        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views())
+        for segment in owner.context_goal_segments():
+            context = context.prepend(segment)
+        for segment in comms.bus.awareness_segments(owner):
+            context = context.append(segment)
+        return context
+
+    def require_source(self, source: Provenance) -> Provenance:
+        for segment in self.segments:
+            if source in segment.source_membership():
+                return source
+        raise ValueError("Source is outside the selected context preview")
 
     @classmethod
     def for_owner(

@@ -202,9 +202,21 @@ class TurnRunner:
         await self.effects._emit_event(session_id, info)
 
     async def inspect_context(self, session_id, thread):
+        from .pi_commands import AgentCommsInspectContext
+
+        return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
+
+    async def inspect_context_segment(self, session_id, thread, manifest):
+        from .pi_commands import AgentCommsInspectContextSegment
+
+        request = AgentCommsInspectContextSegment.for_manifest(manifest)
+        context = await self.inspect_native_request(session_id, thread, request)
+        return context.recorded_public_text(manifest)
+
+    async def inspect_native_request(self, session_id, thread, request):
         persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
-        context = await persistent.custody.inspect_context(
-            persistent, partial(self.prepare_selected_session, session_id, thread)
+        context = await persistent.custody.inspect(
+            persistent, partial(self.prepare_selected_session, session_id, thread), request,
         )
         return context.require_session_file(thread.require_saved_session())
 

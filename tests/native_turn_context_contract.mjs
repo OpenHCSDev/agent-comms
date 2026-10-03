@@ -78,6 +78,35 @@ try {
     assert(system.provenance.some(s=>s.path===join(cwd,'.pi','APPEND_SYSTEM.md')));
     assert(!JSON.stringify(captured.manifest()).includes('Original source summary'));
     assert.deepEqual((await TurnContext.next(session)).render(),provider);
+    // Recorded roots and mixed original parts borrow one real SDK projection.
+    // Counters observe this acquisition; all data comes from the original store.
+    const selected=await TurnContext.project(session,[kept]);
+    const recorded=selected.manifest().segments.find(segment=>segment.kind==='transcript');
+    assert(recorded?.contributors.length);
+    const project=TurnContext.project;
+    let projections=0;
+    TurnContext.project=async function(...args) {
+        projections++;
+        return project.apply(this,args);
+    };
+    try {
+        const whole=await TurnContext.recordedSegment(session,full.identity,[kept],recorded,[]);
+        assert.equal(projections,1);
+        assert.equal(whole.full().segments.length,1);
+        assert.equal(whole.full().segments[0].sha256,recorded.sha256);
+        projections=0;
+        const mixed={...recorded,sha256:'c'.repeat(64)};
+        const parts=recorded.contributors;
+        const resolved=await TurnContext.recordedSegment(session,full.identity,[kept],mixed,parts);
+        assert.equal(projections,1);
+        assert.deepEqual(resolved.full().segments.map(segment=>segment.sha256),parts.map(part=>part.sha256));
+        await assert.rejects(TurnContext.recordedSegment(session,full.identity,[kept],mixed,[]),/projected bytes differ/);
+        await assert.rejects(TurnContext.recordedSegment(session,full.identity,[kept],mixed,
+            [{...parts[0],sha256:'f'.repeat(64)}]),/projected bytes differ/);
+        await assert.rejects(TurnContext.recordedSegment(session,{...full.identity,sessionId:'another'},
+            [kept],recorded,[]),/another native session/);
+    } finally {TurnContext.project=project;}
+    assert.deepEqual(readFileSync(manager.getSessionFile()),before);
     const conditions = process.argv.includes('--source-projections')
         ? await constructNativeConditions(session, pkg) : undefined;
     if (conditions) {

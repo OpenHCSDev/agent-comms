@@ -1,0 +1,39 @@
+{
+  "state": "SOURCE-CONTROLS-COMPLETE; INSTALLED-CURRENT-UI AND MATCHING-RECORDED-PRODUCER NOT YET QUALIFIED",
+  "source": "b0e5b57be2b3d78bc3b2fb2f960c78aabfa84a5c",
+  "main_ancestor": "3e5c97f9a38d10e65c3a5d06919d85d8e38b98ab",
+  "production_files": 12,
+  "production_added": 460,
+  "production_deleted": 35,
+  "source_controls": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "11",
+    "time": "3.097",
+    "timestamp": "2026-10-03T17:35:19.548122-04:00",
+    "hostname": "desktop"
+  },
+  "cli_completeness_control": {
+    "tests": 1,
+    "failures": 0,
+    "log": "cli-final.log"
+  },
+  "native_artifact": "unchanged native89 supports current preview/source refs; new recorded segment command and future values require Sch matching artifact",
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "historical_absence": "Not reconstructed from current files/previews",
+  "negative_controls": [
+    {
+      "scope": "initial source sanity",
+      "failed": 2,
+      "cause": "external Pi role records require original PiMessage.from_wire boundary; raw native response fixture similarly uses original PiResponseData.from_wire. Corrected current reader, no alternate codec."
+    }
+  ],
+  "qualification_limits": [
+    "Source controls are not installed UI or new native producer qualification.",
+    "Prior native89 current requests cannot be treated as future captured text.",
+    "Read-only resource/schema projection does not grant input/turn/replay authority."
+  ]
+}
