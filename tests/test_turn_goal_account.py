@@ -1,5 +1,8 @@
 """Goal settlement reuses the real SQLite grants and nominal state hierarchy."""
 
+import asyncio
+from threading import Event
+
 import pytest
 
 from agent_comms import agent_events as events
@@ -129,4 +132,51 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         with pytest.raises(GoalAttemptError):
             store.ready_grant(goal.id, store.snapshot(goal.id).number)
     finally:
+        await owner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
+    comms, tmp_path, monkeypatch,
+):
+    """Cancellation cannot leave a recorded input after suppressing worker delivery."""
+    owner = CommsAgent(
+        comms, agent_bin="unused", auto_wake=False,
+        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+        private_nk_native_package=tmp_path,
+    )
+    session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+    name = owner.sessions.bindings[session.session_id]
+    execution = OwnedTurn(owner.turns, session.session_id, name, "cancel before native",
+                          original_owner_input=True)
+    captured, release = Event(), Event()
+    reserve = OriginalTurnInput.reserve
+
+    def paused_reservation(*args, **kwargs):
+        original = reserve(*args, **kwargs)
+        captured.set()
+        assert release.wait(5), "Original reservation worker was not released"
+        return original
+
+    monkeypatch.setattr(OriginalTurnInput, "reserve", paused_reservation)
+    running = asyncio.create_task(execution.run())
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(captured.wait, 5), 6)
+        running.cancel()
+        await asyncio.sleep(0)
+        assert not running.done(), "Cancellation escaped the original reservation worker"
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(running, 6)
+        original, = owner.inputs.dispositions.read().rows.values()
+        assert isinstance(original, NotSentInput)
+        assert comms.registry.require(name).turn_lease is None
+        assert session.session_id not in owner.inputs.original_sources
+        assert session.session_id not in owner.inputs.backend_inboxes
+        assert not owner.turns.persistent_backends
+    finally:
+        release.set()
+        if not running.done():
+            running.cancel()
+            await asyncio.gather(running, return_exceptions=True)
         await owner.shutdown()
