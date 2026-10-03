@@ -1,0 +1,49 @@
+{"scope": "installed configured saved-owner native dry preparations; no provider/input/UI", "root": "/home/ts/.cache/agent-scratch/m569-preparation", "source": "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl", "root_id": "5acf338107bc494fa0c61f458daecd61", "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea/node_modules/@earendil-works/pi-coding-agent", "name": "context547", "process": {"pid": 2610884, "start_time": 48361783}, "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python", "core_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/comms.py", "before_source_hashes": {"/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl": "e864648e12beb2e7a376b447783235dc6149ed3d34b817e6bebd3b89ea440770", "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl.input-proof": "31339d72123405bd5015f48de43c10fec7fbdbe92ed61589cda18ae626055fcf"}, "configured_model": "openai-codex/gpt-6.1-sol", "thinking": "high", "auto_wake": false, "prompt_dispatched": false, "reattached_original_private_root": false, "unopened_refused": "Native context requires an acquired native child", "native_process": {"pid": 2611075, "start_time": 48362153}, "prepared_child_alive": true, "preparation": {"selected": {"provider": "openai-codex", "modelId": "gpt-6.1-sol", "contextWindow": 272000}, "settings": {"reserveTokens": 16384, "keepRecentTokens": 20000, "enabled": true, "taskAware": false, "reason": "manual", "boundary": []}, "initial": {"status": "ready", "witness": {"sessionId": "01a0fff9-b33d-739a-a0e0-be33e00d7073", "sessionFile": "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl", "leafId": "599b31ad", "firstKeptEntryId": "ab248d25", "revision": "2084:3168193:42116826:1791001093870103518:1791001093870103518"}, "tokensBefore": 40344, "isSplitTurn": false}, "allocated": {"status": "ready", "witness": {"sessionId": "01a0fff9-b33d-739a-a0e0-be33e00d7073", "sessionFile": "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl", "leafId": "599b31ad", "firstKeptEntryId": "ab248d25", "revision": "2084:3168193:42116826:1791001093870103518:1791001093870103518"}, "tokensBefore": 40344, "isSplitTurn": false}, "initial_seconds": 0.18316650798078626, "retained_seconds": 0.166233430034481, "retained_fact_count": 0, "retained_bytes": 54, "retained_sha256": "1ba563f6cc092a6ccafd9064c611b2303872aff819af76405b76edebef48fc1b", "same_acquired_child": true}}
+Exception in callback _UnixReadPipeTransport._add_reader()
+handle: <Handle _UnixReadPipeTransport._add_reader()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 521, in _add_reader
+    self._loop._add_reader(fd, callback)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py", line 283, in _add_reader
+    self._selector.register(fd, selectors.EVENT_READ,
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            (handle, None))
+                            ^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/selectors.py", line 345, in register
+    self._selector.register(key.fd, poller_events)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/native-operation-custody-20261002/installed-context-owner.py", line 168, in main
+    await control.readline()
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py", line 562, in readline
+    line = await self.readuntil(sep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py", line 677, in readuntil
+    await self._wait_for_data('readuntil')
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py", line 539, in _wait_for_data
+    await self._waiter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/native-operation-custody-20261002/installed-context-owner.py", line 196, in <module>
+    asyncio.run(main(parser.parse_args()))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 132, in run
+    raise KeyboardInterrupt()
+KeyboardInterrupt

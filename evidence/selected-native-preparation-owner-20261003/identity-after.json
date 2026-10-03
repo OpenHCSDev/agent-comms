@@ -1,0 +1,60 @@
+{
+  "source_head": "280e6948f56d653746f1a1d05a87742ac0caaf1e",
+  "modules": 726,
+  "parse_omissions": [],
+  "references": [
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 355,
+      "expression": "NativeForkCreation.recorded_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 18,
+      "expression": "NativeForkCreation.declared_name"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 109,
+      "expression": "NativeSessionIdentity.locate"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 61,
+      "expression": "NativeForkCreation.one"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 383,
+      "expression": "NativeForkCreation.one"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 56,
+      "expression": "NativeSessionIdentity.locate"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 79,
+      "expression": "NativeSessionIdentity.locate"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 96,
+      "expression": "NativeSessionIdentity.locate"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 557,
+      "expression": "NativeSessionIdentity.locate"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 216,
+      "expression": "NativeSessionIdentity.locate"
+    }
+  ],
+  "behavioral_identity_table_overlap": [],
+  "fork_sql_read_owner": "TypedRow.read",
+  "limits": "Named AST references; dynamic resolution not inferred. Runtime member overlap excludes Python-generated double-underscore/dataclass members. Original installed SELECT and configured startup exercise actual MRO and locator consumers."
+}
