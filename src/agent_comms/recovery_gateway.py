@@ -35,6 +35,7 @@ from .field_codec import FieldCodec
 from .coordination_database import CoordinationStore
 from .recovery_projection import RecoveryRequest, RecoverySelection
 from .typed_table import SQLiteJournalMode
+from .private_path import PrivateSocketRole
 
 _MAX_REQUEST = 1024
 _MAX_REPLY = 4096
@@ -207,8 +208,6 @@ class RecoveryGateway:
         if fcntl is None or os.getuid() != os.geteuid():
             raise GatewayUnavailableError("gateway platform or privileges unsupported")
         _validate_paths(self.root, self.database)
-        if len(os.fsencode(self.path)) >= 100:
-            raise GatewayUnavailableError("socket path is too long for this endpoint")
         with suppress(FileExistsError):
             self.directory.mkdir(mode=0o700)
         _owned(self.directory, stat.S_IFDIR, 0o700)
@@ -239,7 +238,8 @@ class RecoveryGateway:
             raise GatewayUnavailableError("socket permissions are not private")
         with closing(socket.socket(socket.AF_UNIX)) as probe:
             probe.settimeout(0.1)
-            error = probe.connect_ex(str(self.path))
+            with PrivateSocketRole.address(self.path) as address:
+                error = probe.connect_ex(str(address))
             if error == 0:
                 raise GatewayUnavailableError("another listener already owns the socket")
             if error != errno.ECONNREFUSED:
@@ -268,7 +268,8 @@ class RecoveryGateway:
             try:
                 bound = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 try:
-                    bound.bind(str(self.path))
+                    with PrivateSocketRole.address(self.path) as address:
+                        bound.bind(str(address))
                     info = self.path.lstat()
                     self._socket_identity = (info.st_dev, info.st_ino)
                     if (

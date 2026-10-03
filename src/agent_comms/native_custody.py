@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from contextlib import ExitStack, asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,6 +14,7 @@ from .native_attestation import NativeAttestation, PendingAttestation, SavedSess
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
+from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .selected_source import SessionRevision
@@ -27,6 +28,7 @@ class PiSessionChild:
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
+    resources: ExitStack = field(default_factory=ExitStack, repr=False)
 
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
@@ -34,15 +36,23 @@ class PiSessionChild:
     @classmethod
     async def start(cls, key, attestation):
         launch, _ = key
-        proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
-        assert proc.stdout is not None and proc.stderr is not None
-        return cls(
-            proc,
-            PiRpcChannel(proc.stdout),
-            asyncio.create_task(cls.stderr_tail(proc.stderr)),
-            key,
-            attestation,
-        )
+        with ExitStack() as resources:
+            environment = dict(launch.env)
+            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
+                address = resources.enter_context(PrivateSocketRole.address(
+                    Path(environment["AGENT_COMMS_PROJECT_SOCKET"])
+                ))
+                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
+            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
+            assert proc.stdout is not None and proc.stderr is not None
+            return cls(
+                proc,
+                PiRpcChannel(proc.stdout),
+                asyncio.create_task(cls.stderr_tail(proc.stderr)),
+                key,
+                attestation,
+                resources=resources.pop_all(),
+            )
 
     @staticmethod
     async def stderr_tail(stream: asyncio.StreamReader) -> str:
@@ -54,6 +64,7 @@ class PiSessionChild:
     async def close(self) -> None:
         await self.proc.stop()
         await asyncio.gather(self.stderr_task, return_exceptions=True)
+        self.resources.close()
 
     @asynccontextmanager
     async def failures(self):
