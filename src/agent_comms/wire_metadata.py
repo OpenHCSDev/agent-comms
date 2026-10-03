@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import BinaryIO
 
-    from .message_page import MessagePage, MessagePageRequest
+    from .bus_page_index import BusPageIndex
     from .private_bus_checkpoint import CertifiedSourceRead, PrefixWitness
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
@@ -53,7 +53,10 @@ class WireAccess(DeclaredFamily, affix="Access"):
                           stream: BinaryIO, path: Path) -> PrefixWitness: ...
 
     @abstractmethod
-    def read_page(self, request: MessagePageRequest, log: WireLog) -> MessagePage: ...
+    def open_page_index(self, path: Path) -> BusPageIndex: ...
+
+    @abstractmethod
+    def prepare_page_index(self, index: BusPageIndex) -> bool: ...
 
     @abstractmethod
     def context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation,
@@ -75,8 +78,13 @@ class WritableAccess(WireAccess):
 
         return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
 
-    def read_page(self, request, log):
-        return request.read_indexed(log)
+    def open_page_index(self, path):
+        from .bus_page_index import BusPageIndex
+
+        return BusPageIndex(path)
+
+    def prepare_page_index(self, index):
+        return index.sync()
 
     def context_manifests(self, source, incarnation, snapshot):
         return source.indexed_context_manifests(incarnation, snapshot)
@@ -104,8 +112,13 @@ class ArchivedAccess(WireAccess):
             raise RelationViolationError("Archived source prefix tail changed.")
         return saved
 
-    def read_page(self, request, log):
-        return request.read_original(log)
+    def open_page_index(self, path):
+        from .bus_page_index import BusPageIndex
+
+        return BusPageIndex(path, readonly=True)
+
+    def prepare_page_index(self, index):
+        return index.current()
 
     def context_manifests(self, source, incarnation, snapshot):
         from .wire_log import WireLog
