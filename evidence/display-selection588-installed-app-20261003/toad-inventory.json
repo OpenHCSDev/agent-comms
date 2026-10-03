@@ -1,0 +1,1597 @@
+[
+  {
+    "path": "toad/__init__.py",
+    "bytes": 1044,
+    "sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337"
+  },
+  {
+    "path": "toad/__main__.py",
+    "bytes": 65,
+    "sha256": "c6d5a4802fec39fdbeff05333271f65cdc95d9a9bd530705c7b5f4595a22185b"
+  },
+  {
+    "path": "toad/_loop.py",
+    "bytes": 2602,
+    "sha256": "c03baabeff8f1e427f1030f3793fe3d341947160dda40ac77dc825b07b5fff5c"
+  },
+  {
+    "path": "toad/_path_fuzzy_search.py",
+    "bytes": 1363,
+    "sha256": "cb72f3ffe0b1bd225ff7494a801ac9b5d01fd1684509f3442daf4037b16620ce"
+  },
+  {
+    "path": "toad/about.py",
+    "bytes": 3395,
+    "sha256": "f169f61925cb678abd5712fd1e30696cc6e9a2499c92fccb76fbc3441620d0d5"
+  },
+  {
+    "path": "toad/acp/agent.py",
+    "bytes": 16987,
+    "sha256": "ae39bf3312a8689e4fccea26ad26cad0d1596ebe7b8797fe199f69d75794195d"
+  },
+  {
+    "path": "toad/acp/agent_configuration.py",
+    "bytes": 5139,
+    "sha256": "bef1f0ec34f72f9fac3279ee7e2e023a9c7fec50ef80e318bba814280ee58b74"
+  },
+  {
+    "path": "toad/acp/agent_controller.py",
+    "bytes": 17848,
+    "sha256": "312067e1f4d5aab81147f0f18607123c888080ee50657abc6a871da34ad6672c"
+  },
+  {
+    "path": "toad/acp/agent_process.py",
+    "bytes": 9887,
+    "sha256": "14db65b96f4526252e1e804d7df5318e9c05b7153ad7bde67da4245c1ca6dc16"
+  },
+  {
+    "path": "toad/acp/agent_session.py",
+    "bytes": 13917,
+    "sha256": "be61bfe9e7eaa9bd5a99dffd7c7b538a0aba81074ca985bc1de6023a4dff5b88"
+  },
+  {
+    "path": "toad/acp/api.py",
+    "bytes": 2086,
+    "sha256": "06251cde7130c9114086791dab9f5eb1cafe8491c34c9c62be14f0bf2fce0988"
+  },
+  {
+    "path": "toad/acp/attachment_presentation.py",
+    "bytes": 412,
+    "sha256": "2da8fbd976c38d13302f3f866c79cd06031fb73bd8b8e4f5bb9880820a20a825"
+  },
+  {
+    "path": "toad/acp/client_files.py",
+    "bytes": 1240,
+    "sha256": "62c8fea900c5ab380bf4adc625df5f9aa94def5314d0928b96590019a2d1d5ad"
+  },
+  {
+    "path": "toad/acp/client_session.py",
+    "bytes": 1583,
+    "sha256": "3be2e90dd989858ba7dfe5eda193f18d39c91e2deaea5ba181009b277adfba7c"
+  },
+  {
+    "path": "toad/acp/comms_updates.py",
+    "bytes": 8607,
+    "sha256": "f38d6e87630259fcdf1c8a31bf49eff5d2a056d7313f57c5c13037f18f28f235"
+  },
+  {
+    "path": "toad/acp/context_measurement.py",
+    "bytes": 2559,
+    "sha256": "b3f00e5d713a156853e3bfa8f5cbf771a2d13dde4ef21f982e0a010e5588405a"
+  },
+  {
+    "path": "toad/acp/encode_tool_call_id.py",
+    "bytes": 404,
+    "sha256": "8aa517eeba15904e55a2bc5de211e6c5373e7fea1113fce9de66980631cd749f"
+  },
+  {
+    "path": "toad/acp/log_records.py",
+    "bytes": 8117,
+    "sha256": "f013aa98467c682722dc518d2f434609631fb62201978db236962d896fabbda1"
+  },
+  {
+    "path": "toad/acp/maintenance_ingress.py",
+    "bytes": 10660,
+    "sha256": "74ee6e3c4bfb721b6cf7de2ce84543a0e569675b61578b43281dc4fa56afc1d4"
+  },
+  {
+    "path": "toad/acp/notification_items.py",
+    "bytes": 810,
+    "sha256": "7a0a576b7233d45ff76645c461a393e5a82a0e95bf6d85ea4a4748206e5efe4d"
+  },
+  {
+    "path": "toad/acp/permission_controller.py",
+    "bytes": 5645,
+    "sha256": "ddc60014c242064353471d89eb2adc83c2897e0351c2260c6c9ffec64b99a1bd"
+  },
+  {
+    "path": "toad/acp/projection_attachment.py",
+    "bytes": 8128,
+    "sha256": "ec14c493a5400a5e4c5c9ebcb26760ffd3fec5c340ed7ac3f70fb46dd463d71f"
+  },
+  {
+    "path": "toad/acp/prompt.py",
+    "bytes": 2791,
+    "sha256": "58a9ad4cd996c662da4566154d21b3742236d39b77269ac42f3584637ce7fdc9"
+  },
+  {
+    "path": "toad/acp/queue_attachment.py",
+    "bytes": 3426,
+    "sha256": "f1dd7a4f4b85ceefd21b3312b9c0e85705cd8b37f73f604673ea505f0f983e0b"
+  },
+  {
+    "path": "toad/acp/sdk_boundary.py",
+    "bytes": 2942,
+    "sha256": "4a3981a16cfcde254d29aa0fbd8030b35061dab0bd675db253e56f83fc7fdd74"
+  },
+  {
+    "path": "toad/acp/session_updates.py",
+    "bytes": 6259,
+    "sha256": "0c047a34cf0d1d23e5c9b3061c2e4dc2818cb4fc4870b81fe5f025460ab7bb3e"
+  },
+  {
+    "path": "toad/acp/shell_command.py",
+    "bytes": 632,
+    "sha256": "6b986221d2e6b9a991013bc9e5ed71acc78b0ec26e43308ddbd34179c1a14826"
+  },
+  {
+    "path": "toad/acp/status.py",
+    "bytes": 1647,
+    "sha256": "39d25e11d26b39203879502e65fbd198e6c438b2340feb0d16035eb2ca7a4f1d"
+  },
+  {
+    "path": "toad/acp/terminal_controller.py",
+    "bytes": 4062,
+    "sha256": "a0fb6af2182f742603ff6f2500c35a0f7d3816fb2c36cf01d4ffe69ff4d06f6c"
+  },
+  {
+    "path": "toad/acp/terminal_owner.py",
+    "bytes": 4141,
+    "sha256": "8a8e6e80c1fe86a319838c157b12a0ff66029ccfc2469a4a290ef9c4444f66d2"
+  },
+  {
+    "path": "toad/acp/tool_calls.py",
+    "bytes": 1320,
+    "sha256": "2bae465484a7d2497511de35dc74be0369f26a29116c510710f17cfd3a84e981"
+  },
+  {
+    "path": "toad/acp/transcript_reader.py",
+    "bytes": 6086,
+    "sha256": "f167a6f21a91462f26a9af0af2f1fe8f61e2f2fcc4f38ae131afdbf05348e677"
+  },
+  {
+    "path": "toad/acp/wire_message.py",
+    "bytes": 1450,
+    "sha256": "e4869ca75436887d0150af91ac17b6962d8306008ac49b12597a4a8f013050be"
+  },
+  {
+    "path": "toad/agent.py",
+    "bytes": 2367,
+    "sha256": "0d0ed04088c0cfc647eeaa6831dc4c3b55240d47e645a015d53f975e5f7c1d3e"
+  },
+  {
+    "path": "toad/agent_presentation.py",
+    "bytes": 3298,
+    "sha256": "af439e1fe9a7536811e52e4fb6e9eff937add8846079e56b98072b77f2cd801e"
+  },
+  {
+    "path": "toad/agent_schema.py",
+    "bytes": 2171,
+    "sha256": "9e15fb07331aa5a342aa06ba49626811ad2953bfe04e5505d7e31605f474f6d8"
+  },
+  {
+    "path": "toad/agent_surface.py",
+    "bytes": 7185,
+    "sha256": "b7f4a5bb74ba45e9450235f219e2f021ee568c4a51d5c8f7cfaa9517839b997e"
+  },
+  {
+    "path": "toad/agents.py",
+    "bytes": 1166,
+    "sha256": "bad668e3a4854c6682b35f0a6b90a86aaca87114cdb319496e92baf978ffc786"
+  },
+  {
+    "path": "toad/ansi/__init__.py",
+    "bytes": 59,
+    "sha256": "f5f865077c4a291dd0c34926ac98f630e9f8e9ccc958a1a15c71b24196c6d360"
+  },
+  {
+    "path": "toad/ansi/_ansi.py",
+    "bytes": 57181,
+    "sha256": "b5c3ffd905821bd11c8ec640719e8433f55582dec7b66ce5d9363bb31414bad1"
+  },
+  {
+    "path": "toad/ansi/_ansi_colors.py",
+    "bytes": 171,
+    "sha256": "2e711e54988095870ded3b46251423ca5b3e1590356b60da76459740a72123db"
+  },
+  {
+    "path": "toad/ansi/_control_codes.py",
+    "bytes": 606,
+    "sha256": "e03519962e14d609c91ee2060d9503357896e26873ec16211389157d33d179d0"
+  },
+  {
+    "path": "toad/ansi/_keys.py",
+    "bytes": 10675,
+    "sha256": "d1cb58c0bbf37d435a796a3e49991b4402f74703be60177c46865076d1d71899"
+  },
+  {
+    "path": "toad/ansi/_sgr_styles.py",
+    "bytes": 2294,
+    "sha256": "a16293d3d41e6355775e5bb3994f720882a3665e76f8585423b16a6449a578c3"
+  },
+  {
+    "path": "toad/ansi/_stream_parser.py",
+    "bytes": 8568,
+    "sha256": "9340de03c3c311e27e5ce3406c294dd499c6cd52703b3ba83b78527c72dada0a"
+  },
+  {
+    "path": "toad/answer.py",
+    "bytes": 606,
+    "sha256": "400fdb677c5746b366cf93f32bc7fb386b5c6270e339b451b0537465a22008df"
+  },
+  {
+    "path": "toad/app.py",
+    "bytes": 27790,
+    "sha256": "e17d12047606523c1a69b3756388490bd8bd1034a56f29be1176a9cc75315b4a"
+  },
+  {
+    "path": "toad/application_actions.py",
+    "bytes": 5969,
+    "sha256": "05bc09524c98c297be3234dff6a0895e1bfbb0aa6d694a72c0df889167e10c0f"
+  },
+  {
+    "path": "toad/application_lifetime.py",
+    "bytes": 3758,
+    "sha256": "ea6df71d056df6d47d2befbc523fd332c7e7bc22fcd8932945833125113b10c5"
+  },
+  {
+    "path": "toad/atomic.py",
+    "bytes": 1015,
+    "sha256": "280e8cc64f35131b2db25e1e9d724384be4a2ca80fd9c75ebc22b62f196d57bc"
+  },
+  {
+    "path": "toad/block_content.py",
+    "bytes": 1195,
+    "sha256": "ca0a66d3df6b7e7bc987a51f20a7d8f0dfbbae09a44c907bb65450fa66cfbe11"
+  },
+  {
+    "path": "toad/block_navigation.py",
+    "bytes": 4458,
+    "sha256": "6c5b1a3e238af1dedd0852c5c10d350a5867a9fbd96b0f54a97540bd4918e709"
+  },
+  {
+    "path": "toad/catalog_actions.py",
+    "bytes": 3466,
+    "sha256": "e72e9740a75d83d74158827840fe4fb95c32915f3439ad360cfd33d357c642fe"
+  },
+  {
+    "path": "toad/channel_preparation.py",
+    "bytes": 7919,
+    "sha256": "5c43e1b7d099cb2a77159325a454190ee39d2d42e297f7cfc23664791d001dd3"
+  },
+  {
+    "path": "toad/cli.py",
+    "bytes": 11707,
+    "sha256": "b7f9413df050d00ca8335335a67d7bebc330618faa6c4bc14243eb9071ef8c6f"
+  },
+  {
+    "path": "toad/clipboard.py",
+    "bytes": 1911,
+    "sha256": "bfb4dee5e07235a7c0123f391ebc3ed9c77e148560056e785b1d764392bbd0fb"
+  },
+  {
+    "path": "toad/clipboard_image.py",
+    "bytes": 2401,
+    "sha256": "49271f14235b0782c4cccf6ddb20e8ac7ecb9ad3838abda2bc3ad82eced42abc"
+  },
+  {
+    "path": "toad/command_catalog.py",
+    "bytes": 2279,
+    "sha256": "c035a8cf108aa52625cc15809283b797299abf19e74f818f0b62655e0a4975ab"
+  },
+  {
+    "path": "toad/comms_root.py",
+    "bytes": 8703,
+    "sha256": "15f8e1095f78a07fe4076c9c64fb4b58b06826cca79436ac394b8a0ccc288570"
+  },
+  {
+    "path": "toad/complete.py",
+    "bytes": 1018,
+    "sha256": "7014d97a0c7d6750d928bf947b76674d00a4a076b806bb90616599d2dff194e8"
+  },
+  {
+    "path": "toad/constants.py",
+    "bytes": 1746,
+    "sha256": "2ba25ad4d27235637293bf7e0fc601880ab178dde17bb33ac594cea9075208f5"
+  },
+  {
+    "path": "toad/conversation_actions.py",
+    "bytes": 2554,
+    "sha256": "a10f7f8d44c55526c1b9238eb5025c246d5ae9d2402e76f30b40f85b79cb9356"
+  },
+  {
+    "path": "toad/conversation_kind.py",
+    "bytes": 10484,
+    "sha256": "ba2d2400d4fc953a3f975f33fd90239a31ba5c84d48975ee82f148cba1711894"
+  },
+  {
+    "path": "toad/conversation_markdown.py",
+    "bytes": 7522,
+    "sha256": "ce8358aba5a368f4b35c23249cfc029f9d4d49c748b9deb6a0c3595e88defce4"
+  },
+  {
+    "path": "toad/conversation_submission.py",
+    "bytes": 10795,
+    "sha256": "e046ee4f92c9ec249b8829f25d864ed6edb2090ea5004fc90870691d94aa88f5"
+  },
+  {
+    "path": "toad/conversation_turn.py",
+    "bytes": 7398,
+    "sha256": "0cad6e05db51185f63b254f05cf8eb3ccfc4707e37fbda96f74b224bda3809a5"
+  },
+  {
+    "path": "toad/coordination_context_format.py",
+    "bytes": 3938,
+    "sha256": "4737bcabcec18fe2240e23c19a2cd7afee68cfeee5e5bc4f54be34f8a92bce4a"
+  },
+  {
+    "path": "toad/core/__init__.py",
+    "bytes": 220,
+    "sha256": "82c48d17abc0b3c94c202938da675ccd5a7e56baa8bfd78440267c6960cf476d"
+  },
+  {
+    "path": "toad/core/context_inspection.py",
+    "bytes": 8837,
+    "sha256": "4f60819485d901814d92e2a4ba26d2494eaf48d4e5c3e8b16319934bfb128fd3"
+  },
+  {
+    "path": "toad/core/events.py",
+    "bytes": 7918,
+    "sha256": "08e0800676beba20b5e9c5f29f1718b78cc148a735a0833621a5d9f2769906b4"
+  },
+  {
+    "path": "toad/core/input_events.py",
+    "bytes": 1816,
+    "sha256": "218eb9d9ea1f7acf26a0f1fdc048538f643af4a2c0e40ceb359896c4cb5a6d86"
+  },
+  {
+    "path": "toad/core/preference_events.py",
+    "bytes": 353,
+    "sha256": "155b4338b1a35ef314e753b27bf9c1931d86018528738d6259dd031baafc498b"
+  },
+  {
+    "path": "toad/core/session_requests.py",
+    "bytes": 2766,
+    "sha256": "c5d47a2723acc56af3a36cb40df151877c33321f4c583f9fda649cd99c649bc8"
+  },
+  {
+    "path": "toad/core/source_events.py",
+    "bytes": 1264,
+    "sha256": "eba0107e8074cd9b0987400d152c89cb2f583a7e550bcb50f1d5bd959c2f8a0c"
+  },
+  {
+    "path": "toad/core_event_carrier.py",
+    "bytes": 5028,
+    "sha256": "578385dd75277e77a103fb1db5983c622c087c83182c441ab2189752e7c4c53a"
+  },
+  {
+    "path": "toad/danger.py",
+    "bytes": 7232,
+    "sha256": "13813f77a1c4d46780113dfd94a3264487f157aeb5a34eabb878e8ceea7f03cd"
+  },
+  {
+    "path": "toad/data/agents/ampcode.com.toml",
+    "bytes": 1642,
+    "sha256": "f335895990f46624ceafec2a6260f4e6c1c307484efd5b100856e3733dfdf5a4"
+  },
+  {
+    "path": "toad/data/agents/augmentcode.com.toml",
+    "bytes": 1262,
+    "sha256": "4a62ff4d3e88a51173d315e7bd3eed5986681ac7031b711b58374ab623aa7485"
+  },
+  {
+    "path": "toad/data/agents/claude.com.toml",
+    "bytes": 1187,
+    "sha256": "b89b23f444934c39c279389fcdd6146513804159e32cd51e08db83659b43a9d5"
+  },
+  {
+    "path": "toad/data/agents/copilot.github.com.toml",
+    "bytes": 1129,
+    "sha256": "728d28565803382537b014cc33bcfb892448f0ecb15959ac8221931d55c1972c"
+  },
+  {
+    "path": "toad/data/agents/crowai.dev.toml",
+    "bytes": 914,
+    "sha256": "00339d808f6360c24b3729e526c17608beeb398c7097694a584f79fcfcd44b55"
+  },
+  {
+    "path": "toad/data/agents/cursor.com.toml",
+    "bytes": 1004,
+    "sha256": "16c68599d7aedffa9682cc8068752cf07e4ad03ebfbb9ed31b2ea2bf32bc8b94"
+  },
+  {
+    "path": "toad/data/agents/deepagents.langchain.com.toml",
+    "bytes": 930,
+    "sha256": "f52b60e1d9ee0c4f13e12aed1f4944b98ce2088baf28eea2ff8ced9441b134c4"
+  },
+  {
+    "path": "toad/data/agents/docker.com.toml",
+    "bytes": 1907,
+    "sha256": "8095f114bba39ac92aba412d49dcd2870476c9ae472aec00190be2b97e3a4b26"
+  },
+  {
+    "path": "toad/data/agents/geminicli.com.toml",
+    "bytes": 847,
+    "sha256": "7c8dd43769f37af9f1b8e3a33961cbe8a8cff6c00a29964f43fc0573181b424d"
+  },
+  {
+    "path": "toad/data/agents/goose.ai.toml",
+    "bytes": 1618,
+    "sha256": "c28d4d388ffa959eb7bc22a324a9a777f5d30f038312a35697468c3a878cdde4"
+  },
+  {
+    "path": "toad/data/agents/grok.x.ai.toml",
+    "bytes": 914,
+    "sha256": "f8029fcf78299250a194f91f8fd58dd78c1b8f2568415b380a871e28841421f6"
+  },
+  {
+    "path": "toad/data/agents/inference.huggingface.co.toml",
+    "bytes": 1084,
+    "sha256": "8ca5660e9e22d2a80054b7b55410abac61d1fab6101c489fd6007ac9dc97b2e3"
+  },
+  {
+    "path": "toad/data/agents/kimi.com.toml",
+    "bytes": 997,
+    "sha256": "98cba50c6433cfb0b0624498b751dd1f51c82ff40b68cf53bcd35399f65e0ccc"
+  },
+  {
+    "path": "toad/data/agents/kiro.dev.toml",
+    "bytes": 1296,
+    "sha256": "8d4c0ca2748a2b57ba3be1e2e297fdb6077e84125a0d9541efe5969f21165907"
+  },
+  {
+    "path": "toad/data/agents/openai.com.toml",
+    "bytes": 1583,
+    "sha256": "93dd46a4bf09c605a90cc6d066301786bd7ec2b4dbf6bb8371fa0cc0e2e53d57"
+  },
+  {
+    "path": "toad/data/agents/openclaw.ai.toml",
+    "bytes": 975,
+    "sha256": "da8abb47709a20956bbc4fd3f531cabe1476850d78707828f482b34ff8d1735b"
+  },
+  {
+    "path": "toad/data/agents/opencode.ai.toml",
+    "bytes": 1147,
+    "sha256": "d2ada95988c4be57abd41ea012a86192241f8d5c5239f8adc34d4fbce6ec988d"
+  },
+  {
+    "path": "toad/data/agents/openhands.dev.toml",
+    "bytes": 1508,
+    "sha256": "3c69b04612b4c28bb256acde6c1d6d095ed8a62561a4bf17e597c6be98e2fd4f"
+  },
+  {
+    "path": "toad/data/agents/stakpak.dev.toml",
+    "bytes": 1824,
+    "sha256": "d29c32e3b0b9b7904ea95bd175dca913e58eb87343511d9e65a797cde2d8c37d"
+  },
+  {
+    "path": "toad/data/agents/vibe.mistral.ai.toml",
+    "bytes": 967,
+    "sha256": "bb0cfac27f0f5e4d97adcf2d0324eb0873431e0733bb5defccbf6707b711d3a1"
+  },
+  {
+    "path": "toad/data/agents/vtcode.dev.toml",
+    "bytes": 1895,
+    "sha256": "18885c107c2ef675436e66e8a92fa165ac83151b0c7c643010cbc50c210ff4ed"
+  },
+  {
+    "path": "toad/data/images/frog.png",
+    "bytes": 6943,
+    "sha256": "39e20aa8ea757dccd23c34e0570e4d7116e7d1945bfcf450cc2e0e9f28de1b47"
+  },
+  {
+    "path": "toad/data/sounds/question.wav",
+    "bytes": 658658,
+    "sha256": "9e6da775c6867d5916a47362ea81c7eda4a07828c6fcb7556b9fe0f8a3a87c87"
+  },
+  {
+    "path": "toad/data/sounds/turn-over.wav",
+    "bytes": 1530004,
+    "sha256": "0dadbba8ce7dbd4f92c1ffd77eb0ff159feb900dd22f07e4ac1588a072a64157"
+  },
+  {
+    "path": "toad/db.py",
+    "bytes": 6696,
+    "sha256": "893d2b2ce868744389d15ab27f66b37e65633bf467bf7957967aca928471bebd"
+  },
+  {
+    "path": "toad/dec.py",
+    "bytes": 10051,
+    "sha256": "c2d9c3f3a3ac0309a1971a40a603ac2f6db5eabe72f5d6037e08d8f6940fabaf"
+  },
+  {
+    "path": "toad/delivery_failure_view.py",
+    "bytes": 1281,
+    "sha256": "d422f55c80ca7a635a1302f16701390aafcab63cfb90aa1990f4f9b8b26a7c8f"
+  },
+  {
+    "path": "toad/directory.py",
+    "bytes": 6819,
+    "sha256": "2bf35783c55b5ae89d7504d005039aca3830107bbc68638fe90561604dbd1901"
+  },
+  {
+    "path": "toad/directory_suggester.py",
+    "bytes": 2767,
+    "sha256": "b486e7683c4c626e08a895d64bf295adf5010bba446e15cc33f96a0dd85f4ea1"
+  },
+  {
+    "path": "toad/directory_watcher.py",
+    "bytes": 11149,
+    "sha256": "556a371b0d74ea16a31db48c1b31f4a912ce7a86261686a6072b55d2d11f0fad"
+  },
+  {
+    "path": "toad/file_kind.py",
+    "bytes": 1520,
+    "sha256": "0d444cf081eb10864a490a9777838cd1e8f4b00ca1fd672cf12753f0987309fa"
+  },
+  {
+    "path": "toad/format_path.py",
+    "bytes": 736,
+    "sha256": "e24cc71ab4818bf4aae61d6f2155ad2488c34e963c2d2bbacc544f5853f102e2"
+  },
+  {
+    "path": "toad/frame_presentation.py",
+    "bytes": 5313,
+    "sha256": "e571db440738ef3a978f1a12fe462dae816c8b0aca83891ab394d0c2e5a760f5"
+  },
+  {
+    "path": "toad/fuzzy.py",
+    "bytes": 4313,
+    "sha256": "056f87d6865b2dd51c275132370103fc4a1e548a4ed672f889a7597c9be88e41"
+  },
+  {
+    "path": "toad/fuzzy_index.py",
+    "bytes": 9202,
+    "sha256": "6fbc2b94916d018574068d0d994c7ea5bbf90679a0798100957c8e3c9ad157e9"
+  },
+  {
+    "path": "toad/goal_display.py",
+    "bytes": 2785,
+    "sha256": "46a02c2633a0fe1211022f8684ffea9a629f35a38e489647a876ee4091b84a83"
+  },
+  {
+    "path": "toad/goal_interaction.py",
+    "bytes": 7323,
+    "sha256": "0fd114a09ac96f6952fd99c99276f2903f774834a11a401459cdac535557e9a0"
+  },
+  {
+    "path": "toad/history.py",
+    "bytes": 4053,
+    "sha256": "252205e7fb0f2407818e4adc81726755497e47835c360ad6048b88e21e604359"
+  },
+  {
+    "path": "toad/input_history.py",
+    "bytes": 3670,
+    "sha256": "710bf5a2f3823d22699ca5a037258a2ba18fc772fe5172456cafac8714d408a6"
+  },
+  {
+    "path": "toad/jsonrpc.py",
+    "bytes": 19478,
+    "sha256": "48ba846bf95f654d22487d9e4038ee77fbec438c601758a3bd8a86ccfda335bb"
+  },
+  {
+    "path": "toad/layout.py",
+    "bytes": 433,
+    "sha256": "fa33813691ed4602ed333a983eacfdbb1787d2836c6e6d55b0aeb8d34ca6b3c9"
+  },
+  {
+    "path": "toad/live_output.py",
+    "bytes": 6391,
+    "sha256": "cb9e7dadd4ffdec9d6aa17b430ec5f84e80c3c4216e53b2eb83e1aef1ee3bcb8"
+  },
+  {
+    "path": "toad/markdown_preparation.py",
+    "bytes": 1106,
+    "sha256": "f735cce23d3d51bb0c3c4477b71dd7e870612c5b6749e539efbd7230eefff959"
+  },
+  {
+    "path": "toad/mcp_commands.py",
+    "bytes": 2309,
+    "sha256": "8ce7c118fb61871482621b6ceaa52a52604c0b9e260b387924362852aa55c623"
+  },
+  {
+    "path": "toad/mcp_decision.py",
+    "bytes": 6722,
+    "sha256": "646cecd8261e0e4218f128abc76ead6225747c5136cb417ee12a11b46f57c0ab"
+  },
+  {
+    "path": "toad/mcp_declarations.py",
+    "bytes": 7659,
+    "sha256": "c39bcb880b14ef1d350f7d4cda03e77420e9ebe9f768f24b37b6beb8404d7e9d"
+  },
+  {
+    "path": "toad/mcp_inventory.py",
+    "bytes": 4496,
+    "sha256": "5071e43a1c1404e1459bb8e01945f62eaa4f67254d1a37a0347fec325c7dc1f9"
+  },
+  {
+    "path": "toad/mcp_outcomes.py",
+    "bytes": 1410,
+    "sha256": "8157b467a4b6fb8bca5e202ed9e7335d8c1720d616ef371a1f690f3b2c1d1e64"
+  },
+  {
+    "path": "toad/menus.py",
+    "bytes": 162,
+    "sha256": "a4d53453feac3db81bd6f208d6d428aec474bc74a9af0baf109703f2bde82ad8"
+  },
+  {
+    "path": "toad/message_viewport.py",
+    "bytes": 1646,
+    "sha256": "595246415ad20c870561aee1899eeeb712e0e61f74ae4212aa1cd1f10b5b0b40"
+  },
+  {
+    "path": "toad/messages.py",
+    "bytes": 797,
+    "sha256": "c3fa5aef23b7a2f2b6ca4ea864996fc204c4238432da4620b0879430cac33498"
+  },
+  {
+    "path": "toad/mounted_message_history.py",
+    "bytes": 17636,
+    "sha256": "a169bbdd82f1b9b1aba985e37742d77910c60f8cb63bb7e9ca804715b5044757"
+  },
+  {
+    "path": "toad/native_themes.py",
+    "bytes": 692,
+    "sha256": "f15ee6056caaec49abe1f7a4eb7bcacfef1c05b3bc62ae8292557bd93bb96e96"
+  },
+  {
+    "path": "toad/navigation_preparation.py",
+    "bytes": 8195,
+    "sha256": "ff375ced2fa855af28977da6496f4ce6198447ff976e3c451df42bba0bdbc52a"
+  },
+  {
+    "path": "toad/navigation_target.py",
+    "bytes": 5477,
+    "sha256": "0f6ab7c127ea89d85a009821d6a1e3e7dc3aba16260eb189c7cbbf000089a37e"
+  },
+  {
+    "path": "toad/owner_preparation.py",
+    "bytes": 818,
+    "sha256": "0070b6e99c2b97384b8065b9d7e9d696f85a06635ac237f28d72f7b269ed7b02"
+  },
+  {
+    "path": "toad/path_complete.py",
+    "bytes": 6597,
+    "sha256": "86c4a2deb72824143cbb82301c32f3c710cc9493b69b24e8ddeb8e7ec1895eea"
+  },
+  {
+    "path": "toad/path_filter.py",
+    "bytes": 4067,
+    "sha256": "7a2c397f15aff6fd1d76ebdec81cf37440056c8f25c92ecbbf7463f251e77af1"
+  },
+  {
+    "path": "toad/path_search_ranking.py",
+    "bytes": 1519,
+    "sha256": "740cd5e3cc821fa7d30d1087fe997ff1dffd09467bdb723defebebf88b7e113f"
+  },
+  {
+    "path": "toad/paths.py",
+    "bytes": 1760,
+    "sha256": "8fab705c6bb31439c938cb20740564ad655548d4e86c300b0972519b15d688cf"
+  },
+  {
+    "path": "toad/permission_presentation.py",
+    "bytes": 1918,
+    "sha256": "1c0f615a0ce2a54efe44e8251ddbf84ae42d5e1866216220d1d860a16be09bc9"
+  },
+  {
+    "path": "toad/pill.py",
+    "bytes": 943,
+    "sha256": "16a6d250cac2696d25b4f7770999433c5f0f4688dfe30317374c492fa6ef1b9b"
+  },
+  {
+    "path": "toad/plan.py",
+    "bytes": 2872,
+    "sha256": "eb2aa12a1352d361601e97850f200e9404ee2bbf2caf47265a7164b2efb771c0"
+  },
+  {
+    "path": "toad/preferences.py",
+    "bytes": 14465,
+    "sha256": "ec9b89834d0c0e543fa6143e8912487cb87e43e28b64924150f9e57594f0dee7"
+  },
+  {
+    "path": "toad/private_native_cursor.py",
+    "bytes": 1086,
+    "sha256": "e0466d6b64b39721750cc2d207bef8b5d71dafb7aa4192176b1d079f54e4662e"
+  },
+  {
+    "path": "toad/project_link.py",
+    "bytes": 8683,
+    "sha256": "923f3886c358b5b177118250f674aa466eff0b94d454f3a464c194013393c6f4"
+  },
+  {
+    "path": "toad/project_path_owner.py",
+    "bytes": 844,
+    "sha256": "2f0c4de34edb18dc028c0c0a1cf5da402c387e25cbb6624d2ce04ab58dfade7b"
+  },
+  {
+    "path": "toad/prompt/extract.py",
+    "bytes": 484,
+    "sha256": "96d65fdaab773d55c2b6596299a349c414d6dd7605d91c9752df287672cb5b84"
+  },
+  {
+    "path": "toad/prompt/resource.py",
+    "bytes": 2299,
+    "sha256": "d8ad4cda8b0017b9958f33ef12cbc6543c3075acb54c73b3e66c420a48c0f591"
+  },
+  {
+    "path": "toad/prompt_actions.py",
+    "bytes": 1234,
+    "sha256": "cca52351b817395cb7a467935c6e95f08886fcd6465b0debf87140cbecb0cb3a"
+  },
+  {
+    "path": "toad/prompt_cursor.py",
+    "bytes": 4209,
+    "sha256": "4b08bd1ecd122dab9708c064e4f702bf401360b381c9e8dcd76fcf98c658d224"
+  },
+  {
+    "path": "toad/question_actions.py",
+    "bytes": 3247,
+    "sha256": "aecb96eb89a1973c79927e50dd49f1efdca6473f7c3ddbc905af96975ec65da5"
+  },
+  {
+    "path": "toad/question_presentation.py",
+    "bytes": 2351,
+    "sha256": "b590c74572e8dfc6d1240b34c43dba98f5d2761b5e807c98b216600304776c31"
+  },
+  {
+    "path": "toad/render_backend.py",
+    "bytes": 3361,
+    "sha256": "4e56b3de3cec09f8a01a4a3f983b95d2545a8972e73884b8addb34e22fd583e9"
+  },
+  {
+    "path": "toad/render_choices.py",
+    "bytes": 1402,
+    "sha256": "35dc97844bac87ac1f75becd151c814cc9dedeb190893b14d42cbcc1c135c388"
+  },
+  {
+    "path": "toad/render_identity.py",
+    "bytes": 3123,
+    "sha256": "f589a6c819b19656c3943d385e13afc9c0e8243030fb83f79b38c17ae73b27e9"
+  },
+  {
+    "path": "toad/render_processes.py",
+    "bytes": 5296,
+    "sha256": "8bdea112f1de60f05a5f5d6f3c70d02129c5418b5d685f5170108081a40df0a2"
+  },
+  {
+    "path": "toad/render_protocol.py",
+    "bytes": 6942,
+    "sha256": "3d6d0874acb101caf942e4a9f162190e84f44f150635beb352a9c61fccf1e822"
+  },
+  {
+    "path": "toad/render_runtime.py",
+    "bytes": 5334,
+    "sha256": "54029f7e774673a94b300f92c2b020dbf7c430146a4464d3292dc543f8808a96"
+  },
+  {
+    "path": "toad/render_server.py",
+    "bytes": 1266,
+    "sha256": "c4ca8920ed173e7a6367a7761c481a016abf905c5684c1fdb55a9cfd98844965"
+  },
+  {
+    "path": "toad/render_service.py",
+    "bytes": 6379,
+    "sha256": "f168901e484efd8e0dc4744f66c00712b18e9634d0c7fc50ceae133ca3fdb44e"
+  },
+  {
+    "path": "toad/render_tasks.py",
+    "bytes": 3446,
+    "sha256": "58a7b5a7ce8ea837948de77d1ab11d63a592b075ded060c695b32c125478b671"
+  },
+  {
+    "path": "toad/render_zmq.py",
+    "bytes": 13407,
+    "sha256": "c4a7360859d282dc6b1bcddf04b70259a0a16d82030f9f9b43926e92c77ed5dc"
+  },
+  {
+    "path": "toad/response_delivery.py",
+    "bytes": 1941,
+    "sha256": "fc66047716a382e11089ab86f2dec1aa807fe9e90079d3c9b1c85d571d9814db"
+  },
+  {
+    "path": "toad/rich_preparation.py",
+    "bytes": 5248,
+    "sha256": "8b9b126aa0d1ef91490b93c3af72eeb2640040c55bb2367be2cce54d2102411d"
+  },
+  {
+    "path": "toad/screens/action_modal.py",
+    "bytes": 3826,
+    "sha256": "b4cdc769f18b28542d733d9a3126fd013670317a3767689dab039ee6e44a721b"
+  },
+  {
+    "path": "toad/screens/agent_modal.py",
+    "bytes": 4329,
+    "sha256": "b27efd4c453ff3a916e09e00cc91a822e2c5d3a7b706d1deb3e5afd2f53df244"
+  },
+  {
+    "path": "toad/screens/command_edit_modal.py",
+    "bytes": 2346,
+    "sha256": "e1a6d840e66d70c3a6cfd7c154cea1fe58884f79f28b5cc0ae2a1bbfc8b77207"
+  },
+  {
+    "path": "toad/screens/comms.py",
+    "bytes": 12163,
+    "sha256": "c3b103d66c8bbe9e4870d1143de0284a26f807ad328c91ba612580402ab6ee7f"
+  },
+  {
+    "path": "toad/screens/comms.tcss",
+    "bytes": 596,
+    "sha256": "3eb429a0cf08c47a16d950db659a8267a5e646daace69d725821d3defc4c2cd5"
+  },
+  {
+    "path": "toad/screens/file_preview.py",
+    "bytes": 1392,
+    "sha256": "a9e96ebc81c48a3ac12d4322cf63e128b730f4fda9bf23babca63e18d07eec38"
+  },
+  {
+    "path": "toad/screens/goal_details.py",
+    "bytes": 4127,
+    "sha256": "ad56acdc9d43afdf3acd43e53ac2cd6e0e8c46cf101dbfd12e360d3558003848"
+  },
+  {
+    "path": "toad/screens/goal_edit.py",
+    "bytes": 3444,
+    "sha256": "301f342baaa6ea3c4b5e7e168e5e6b8ddae3904efac76d0563eb2af3a9271a52"
+  },
+  {
+    "path": "toad/screens/historical_sessions.py",
+    "bytes": 7909,
+    "sha256": "238ef80a645ddd3f2ef90c412fbbce165f6f0f435f9845327de28564b721b2f5"
+  },
+  {
+    "path": "toad/screens/main.py",
+    "bytes": 24248,
+    "sha256": "a3c81682dbfc92fdefa25d720b528ff9a259b63259bccb56eb4b73a395ded300"
+  },
+  {
+    "path": "toad/screens/main.tcss",
+    "bytes": 11580,
+    "sha256": "7ccc9a407bc253b11be16fc80e6d340dab15d1a6a5a39cd9781c777bb48a4e62"
+  },
+  {
+    "path": "toad/screens/mcp_decision.py",
+    "bytes": 4454,
+    "sha256": "14601fd5db6928e0bca4103730d7e36cf6924724861b6031fde8917da65407e1"
+  },
+  {
+    "path": "toad/screens/mcp_inventory.py",
+    "bytes": 5843,
+    "sha256": "bebaedf7fac0ed2c00643b38ad3d4e780dc7396dd60214301a93ceac5f5ce80a"
+  },
+  {
+    "path": "toad/screens/permissions.py",
+    "bytes": 7521,
+    "sha256": "793e6a995f015056bafbb8d577d4c2bf7bbf3de18e1204107dfe3fe643be39c9"
+  },
+  {
+    "path": "toad/screens/permissions.tcss",
+    "bytes": 1450,
+    "sha256": "49b905b3b376947695dd1ffc6f9e4c9b36305dff276d08a08a682bc958be2c77"
+  },
+  {
+    "path": "toad/screens/session_resume_modal.py",
+    "bytes": 4483,
+    "sha256": "11019580f0f253f5e1c399eaa88de201b34ea90ea58aee3846e36e35d4508a9d"
+  },
+  {
+    "path": "toad/screens/session_resume_modal.tcss",
+    "bytes": 726,
+    "sha256": "9ed7ecadd10f13e7bec50b770fc2b45a4323b19bf80681986639199826cadbab"
+  },
+  {
+    "path": "toad/screens/session_view.py",
+    "bytes": 3262,
+    "sha256": "0ed2eff49ba55e282f7ba8afaca19524b4ccb07f4f7cc8028236a171f6686be5"
+  },
+  {
+    "path": "toad/screens/settings.py",
+    "bytes": 2473,
+    "sha256": "eb3769a92bc4980d39610ce05be5cd0d9cbd84d165451e7bc2ba8cbe854d1493"
+  },
+  {
+    "path": "toad/screens/settings.tcss",
+    "bytes": 1902,
+    "sha256": "0103da2f0b9ecebfbdffb123c79267e70499e85efa596bd3af9f1bdd46653110"
+  },
+  {
+    "path": "toad/screens/store.py",
+    "bytes": 21054,
+    "sha256": "798b92470c58ebd922322d2b0257b584d7b0d937d58d71d29dabf6619fedf474"
+  },
+  {
+    "path": "toad/screens/store.tcss",
+    "bytes": 5997,
+    "sha256": "3404799f012b290cb91c5ee96da68d9dd4955a831e0950a671f42943ec16da36"
+  },
+  {
+    "path": "toad/screens/workspace.py",
+    "bytes": 17009,
+    "sha256": "a76562858184764807301d4d929db942486644a602075227a2a1688cd991124c"
+  },
+  {
+    "path": "toad/session_admission.py",
+    "bytes": 8476,
+    "sha256": "4aaede0b8996217b1e53b7d8c619cbf9a87d06a4f80df96baf16926441bcaf0a"
+  },
+  {
+    "path": "toad/session_navigation.py",
+    "bytes": 9464,
+    "sha256": "ee9789d316ba66e94f88c1eb63f95c55f4658c0b3cde4c23fc950482dd4a2c24"
+  },
+  {
+    "path": "toad/session_observation.py",
+    "bytes": 5329,
+    "sha256": "d07835edd419719470b3194315fd1baf06ef9e2cb56caf0c1cecd187d2635c48"
+  },
+  {
+    "path": "toad/session_presentation.py",
+    "bytes": 11632,
+    "sha256": "d3906e66cb269dc3c759f8ac9c3ecd1d29a32b1d3519431b013c4fad36976563"
+  },
+  {
+    "path": "toad/session_tracker.py",
+    "bytes": 6094,
+    "sha256": "eb7f98c785037c00872b15ce5e900e1d4c2d84b7d1fa054123eace5464b99c84"
+  },
+  {
+    "path": "toad/setting_choices.py",
+    "bytes": 4869,
+    "sha256": "e17ee6f3a27a2e8b07c109d17167438ec67062f5d106931b42b6c1deac39319b"
+  },
+  {
+    "path": "toad/setting_effects.py",
+    "bytes": 2103,
+    "sha256": "7878f3fce31afbc0d8442279faab6f01df4e87d67899d9327693cdd7a244d956"
+  },
+  {
+    "path": "toad/setting_widgets.py",
+    "bytes": 2525,
+    "sha256": "eaac63d3fbd3602de17d0082535ebad2c63ac3def6a302307d6db3ffd57677d5"
+  },
+  {
+    "path": "toad/settings.py",
+    "bytes": 13355,
+    "sha256": "b6dc6f1212c50cc089d5a008c9f0353ae07667b8e24bb5580e459bab43b6f68b"
+  },
+  {
+    "path": "toad/shell.py",
+    "bytes": 10053,
+    "sha256": "7f0bad415ec963f1637fe555af1d5e9fd862ecfa1c370f6a04651eb617c3c561"
+  },
+  {
+    "path": "toad/shell_output.py",
+    "bytes": 1632,
+    "sha256": "91be8e136ea05ab05695325dfc54261b1c50b3ac0494faf52ca316e233715fa9"
+  },
+  {
+    "path": "toad/shell_read.py",
+    "bytes": 1413,
+    "sha256": "986bdff8731a7a2237b2a7429e067a2c38e0037f6e190f5ce632bdebb139ed02"
+  },
+  {
+    "path": "toad/shell_source.py",
+    "bytes": 3287,
+    "sha256": "4874cdbe768042392d0d5ff944f1fd9f77d3928ff33174bded0d2caff042a376"
+  },
+  {
+    "path": "toad/sidebar_layout.py",
+    "bytes": 8323,
+    "sha256": "4f212a560955042e28fe1c24e20ed4142e97120c8dc2f14a6cc284749375d186"
+  },
+  {
+    "path": "toad/sidebar_navigation.py",
+    "bytes": 8250,
+    "sha256": "404eae8164b4a35915eff17ba6938ac45300254640386bb743ab94cebdb54d5b"
+  },
+  {
+    "path": "toad/sidebar_observation.py",
+    "bytes": 12590,
+    "sha256": "6df507031ad7ff001e01540942f03eff7c53dff20ee95a058b0caa388b0cb303"
+  },
+  {
+    "path": "toad/sidebar_preparation.py",
+    "bytes": 5696,
+    "sha256": "f84b1d4664bcc2659e8a67775e3e100383a3493ed486d1414cfdc06f52241f16"
+  },
+  {
+    "path": "toad/sidebar_projection.py",
+    "bytes": 8012,
+    "sha256": "a0bed4ab51513f0de393676c9ae0519005ac20fa60de2af1ddf1df8de47e285e"
+  },
+  {
+    "path": "toad/sidebar_snapshot.py",
+    "bytes": 1385,
+    "sha256": "409340714c45e4d8c2809fe15a4dea96d2d4f2a7b219d02aa4abe7ba869082aa"
+  },
+  {
+    "path": "toad/slash_command.py",
+    "bytes": 11215,
+    "sha256": "2a0f052fbc42e63d1cac49345956d4fd952b54faee2c9357431710e42dc5f409"
+  },
+  {
+    "path": "toad/slash_command_results.py",
+    "bytes": 1761,
+    "sha256": "aae1f6512ab3db4a8a82188bae8b7c0a6dd4b5fee9e556ba56d8ead73e17e83c"
+  },
+  {
+    "path": "toad/surface_binding.py",
+    "bytes": 1904,
+    "sha256": "addc02e61b6e89b6a6182635a07c968a974c4a5cf72bf847869046ffbbca73bb"
+  },
+  {
+    "path": "toad/tab_order.py",
+    "bytes": 3503,
+    "sha256": "4f72d2ef02f3ec7cbf78cdc2673b8062e5b744b6fb0f22b4ac7627c700543296"
+  },
+  {
+    "path": "toad/target_commands.py",
+    "bytes": 11680,
+    "sha256": "459e07717a86155ad629206253f68422693bcf8d0b12561318d4e2c20d96e71a"
+  },
+  {
+    "path": "toad/terminal_attention.py",
+    "bytes": 5575,
+    "sha256": "c72a43b2c4a7d622562c5b33a1bddafb1515e2cb4f767cfa3df4284b6a498454"
+  },
+  {
+    "path": "toad/terminal_environment.py",
+    "bytes": 771,
+    "sha256": "2d7bf0eb49eae31953063ce1c7f173ae8d015d9ae7d5e545dd591d5acaabb3a2"
+  },
+  {
+    "path": "toad/terminal_execution.py",
+    "bytes": 18200,
+    "sha256": "5a447550c80481a0a7fc743a2daa12efc0503194e6637c0a2e6a51fc47f1efe8"
+  },
+  {
+    "path": "toad/thread_actions.py",
+    "bytes": 9669,
+    "sha256": "57617826ae3b6c3aecea800ac245e816261c5b2cb99e0e862a3800f2d45b22ab"
+  },
+  {
+    "path": "toad/thread_navigation.py",
+    "bytes": 4295,
+    "sha256": "0ea6452318a7cd8846fcaf1a0401d62f28c07af7bef89b9397de0ea7a497642c"
+  },
+  {
+    "path": "toad/toad.tcss",
+    "bytes": 5498,
+    "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636"
+  },
+  {
+    "path": "toad/tool_output.py",
+    "bytes": 17032,
+    "sha256": "12edb2437d574f2a19d2d7f805e93f57eed56711e01f82bd352ffa9b9ae20899"
+  },
+  {
+    "path": "toad/transcript_filter.py",
+    "bytes": 11764,
+    "sha256": "db1686225c9b99622d56bd64ead42798f9dc81478d35338fe5868461f88ecd79"
+  },
+  {
+    "path": "toad/transcript_preparation.py",
+    "bytes": 14567,
+    "sha256": "87d021cb1770f464e87e7155875b0aeae4d8ffd49279fd93c72f6e5bc5ae5bbe"
+  },
+  {
+    "path": "toad/transcript_publication.py",
+    "bytes": 35019,
+    "sha256": "193e96b2cb2b053b38bdc1e5ea4235652f4ab5090ec737b201e0c1ba85107e02"
+  },
+  {
+    "path": "toad/transcript_source_preparation.py",
+    "bytes": 8950,
+    "sha256": "f30defe7863daac1daf07c19b0ee3aaf26ae9ab4d2bd6b632443daae5fdedcab"
+  },
+  {
+    "path": "toad/transcript_state.py",
+    "bytes": 10029,
+    "sha256": "dab5a3c3c7fea9ff51fa703dcc1d008190817a32b6e44b098d93819633fb5924"
+  },
+  {
+    "path": "toad/twitter.py",
+    "bytes": 1107,
+    "sha256": "ca03130bdfb18259a59f63972c45b752fced609dca0dcec89134512ea220e135"
+  },
+  {
+    "path": "toad/version.py",
+    "bytes": 3270,
+    "sha256": "7dd5ad99ac84afc06dc282c489e33fb1d11752d1e65b97a5c2f9a346260f40a8"
+  },
+  {
+    "path": "toad/visuals/columns.py",
+    "bytes": 8673,
+    "sha256": "242d17c229ea8ce887dd37236fd6cbf6a589e767b9491863db285192153670d3"
+  },
+  {
+    "path": "toad/web_server.py",
+    "bytes": 6384,
+    "sha256": "ea1a59167972742d1fb799b92ef9bcd696451a478d1811973447c7a339bd1d40"
+  },
+  {
+    "path": "toad/widget_actions.py",
+    "bytes": 1355,
+    "sha256": "3b50d4f0c9e6becba8b07cc9aed081bbdd8163abd08a8393fb633fe9237c1748"
+  },
+  {
+    "path": "toad/widgets/acp_content.py",
+    "bytes": 531,
+    "sha256": "53876ecbc7abbc65f71ab89f416186550d33dc02b92fe360b97f750ca88a2bd6"
+  },
+  {
+    "path": "toad/widgets/acp_log.py",
+    "bytes": 5235,
+    "sha256": "b2f992331ea417be6676db3426acfa0d41b0e5d533c9efa4fb822d282fc830ca"
+  },
+  {
+    "path": "toad/widgets/activity_spinner.py",
+    "bytes": 431,
+    "sha256": "7647a7165b23e6a470e861e9a70e386330dd5d34d15eb75cdc1b0f894b9bffaf"
+  },
+  {
+    "path": "toad/widgets/agent_activity.py",
+    "bytes": 683,
+    "sha256": "43923d9238dde099667038699000c4c7fc9e6ec29d788b8597237b3728cad257"
+  },
+  {
+    "path": "toad/widgets/agent_response.py",
+    "bytes": 1584,
+    "sha256": "98aa1335d9037e09d30f65b8fbc6edb42efaba7ca00bbdc277b4144bd9c13312"
+  },
+  {
+    "path": "toad/widgets/agent_thought.py",
+    "bytes": 2741,
+    "sha256": "743a2e9a6c98d1ef14d790660ab4fce90e8740426042b90ac333ffcb5d1d9953"
+  },
+  {
+    "path": "toad/widgets/channel_participants.py",
+    "bytes": 1879,
+    "sha256": "13c4e9bdbfdb0b10689bfe8c11c624ab9070b7496dc1d2a6453f4e23af4a148e"
+  },
+  {
+    "path": "toad/widgets/channel_prompt.py",
+    "bytes": 4663,
+    "sha256": "a894f714c907414aaadac97ff523ef032aacd2338816266fb3406e75273716a6"
+  },
+  {
+    "path": "toad/widgets/channels_sidebar.py",
+    "bytes": 1059,
+    "sha256": "cfc530b4239c62c289bb22df7918bd7dd43822efbb96cfaf0b8e2d5e1315ad11"
+  },
+  {
+    "path": "toad/widgets/command_pane.py",
+    "bytes": 3490,
+    "sha256": "c686361d3a88a8e4a7310f3472a4e24bfc6fa92b7e1dea79f47e53d4e464410e"
+  },
+  {
+    "path": "toad/widgets/committed_presentation.py",
+    "bytes": 11490,
+    "sha256": "06ac73aa705fd598af15fab2e378a5890a7eaff8f62a038318494e495136009d"
+  },
+  {
+    "path": "toad/widgets/comms_chat.py",
+    "bytes": 20783,
+    "sha256": "c25f795f343785fbae34a9489ac9ac8ddd2f69c439f580257d35d4b68da9189e"
+  },
+  {
+    "path": "toad/widgets/comms_fork_dialog.py",
+    "bytes": 2850,
+    "sha256": "e2ca115f5c2a9ddb559de5a5d4bc632ab7a5d9a9b928df0c2d771093d743b835"
+  },
+  {
+    "path": "toad/widgets/comms_menu.py",
+    "bytes": 5838,
+    "sha256": "e7e82864deba737a4bb76f78494083e09e8e1840063dec25162bb2636df5839b"
+  },
+  {
+    "path": "toad/widgets/comms_sidebar.py",
+    "bytes": 20759,
+    "sha256": "bf74878f5fc15a9459cb03ce60538e5dab9d2b9898eea61f9e0aa96f27e8f4f5"
+  },
+  {
+    "path": "toad/widgets/comms_transfer.py",
+    "bytes": 9736,
+    "sha256": "df9900ad36f29b48d0ab8e646ad25adfc5db0b4e1912c18b6589dab8d1c7ee29"
+  },
+  {
+    "path": "toad/widgets/condensed_path.py",
+    "bytes": 3388,
+    "sha256": "4409e8483feaad783345e1547f6d5967ecb4378695bd2694aad82ca1cebfc5fc"
+  },
+  {
+    "path": "toad/widgets/context_explorer.py",
+    "bytes": 12518,
+    "sha256": "d4aa2fbfd416be7593c828d48dfaa8597557d6ea5c0fb3e3edee4b576e4ef992"
+  },
+  {
+    "path": "toad/widgets/conversation.py",
+    "bytes": 86088,
+    "sha256": "070f577a17e08c027141872e009148983de4073934f515685386fdc88bd8918e"
+  },
+  {
+    "path": "toad/widgets/coordination_context.py",
+    "bytes": 2894,
+    "sha256": "55424b1ce165e15b55aa3119c9ae375a211af39c4d6e515cefa5f02f049a8703"
+  },
+  {
+    "path": "toad/widgets/diff_view.py",
+    "bytes": 1660,
+    "sha256": "3658324136b17cdb9e1084866d2adfd25c8c51513e4803e2d96cc87a3427fecb"
+  },
+  {
+    "path": "toad/widgets/directory_input.py",
+    "bytes": 200,
+    "sha256": "580c2c3334bcf26615bd26ea1a1a076488973e5ff84af2a36cf4a98ddea8a81a"
+  },
+  {
+    "path": "toad/widgets/flash.py",
+    "bytes": 2189,
+    "sha256": "e2fad46bc5f24b344d7d6600f399085ed1b50534937813ecd078fbae4ce3e638"
+  },
+  {
+    "path": "toad/widgets/footer.py",
+    "bytes": 2393,
+    "sha256": "b5aeb83e5e3dd5e1e31d5b313c2f3e2b7c8d4a543b146711c0d6f547553f402b"
+  },
+  {
+    "path": "toad/widgets/future_text.py",
+    "bytes": 3540,
+    "sha256": "b27b6ea6dd5939804408cab7c60d6a77a5869deed01902b11fbd831bb1f02e3f"
+  },
+  {
+    "path": "toad/widgets/goal_bar.py",
+    "bytes": 12954,
+    "sha256": "5695e444fc73d04472c0d433b56d4af0bed7fc020eae0c8038cad9c243cde635"
+  },
+  {
+    "path": "toad/widgets/goal_text.py",
+    "bytes": 1493,
+    "sha256": "6a29a56ecfa208114f18aed06e4ef8ada1e89b05c252a9809e45d31973c21eac"
+  },
+  {
+    "path": "toad/widgets/grid_select.py",
+    "bytes": 6947,
+    "sha256": "ef385c9fad738d55a36138155b23cd50f3076c758254da4d7c9504acdd4aa2e4"
+  },
+  {
+    "path": "toad/widgets/highlighted_textarea.py",
+    "bytes": 5619,
+    "sha256": "e7bee63b3297fe0e30dc8953e6cc15f7734c4ef2b4884461c094d07db821a5c2"
+  },
+  {
+    "path": "toad/widgets/history_anchor.py",
+    "bytes": 15338,
+    "sha256": "41cf1414a102b795c4299370ad19ae37c9e6642ae2465dc39e27b4e737fd5f31"
+  },
+  {
+    "path": "toad/widgets/incoming_message.py",
+    "bytes": 2058,
+    "sha256": "3af7365157a308ec43e030e640fc39e69cea7ec526b7541835773deba992f225"
+  },
+  {
+    "path": "toad/widgets/inline_message.py",
+    "bytes": 2268,
+    "sha256": "b9371d79f0e584dfce0ae5434040f05336a02f31ff9190f5cb4e81977faf9949"
+  },
+  {
+    "path": "toad/widgets/input_delivery.py",
+    "bytes": 10766,
+    "sha256": "c9831f8818c2e6ccc962221c534ba6dbf40f98d6122faf69226b224c980881e4"
+  },
+  {
+    "path": "toad/widgets/irc_message.py",
+    "bytes": 6405,
+    "sha256": "8932f30c99fd85e8733f14f30609e6c15633759cec30ef0e430314c178d8e738"
+  },
+  {
+    "path": "toad/widgets/mandelbrot.py",
+    "bytes": 9029,
+    "sha256": "e6d462d875ae852cd3e2fa1165036aabd519af578cc09bc828d5a7d938625b1a"
+  },
+  {
+    "path": "toad/widgets/markdown_note.py",
+    "bytes": 216,
+    "sha256": "0facca2e534500d3c3dacd414028cada9b50da42bd1c017f8345e488025c3d50"
+  },
+  {
+    "path": "toad/widgets/menu.py",
+    "bytes": 4428,
+    "sha256": "3c067608264eefd338bbbe33cbcec9d2ae47042da294664d744288bdd76e07c1"
+  },
+  {
+    "path": "toad/widgets/message_divider.py",
+    "bytes": 3572,
+    "sha256": "345fea8323a847e247fd7f8b1031a5c2140e2acf0a77ee80813b82562fba8cf8"
+  },
+  {
+    "path": "toad/widgets/message_filter.py",
+    "bytes": 5310,
+    "sha256": "6c9739315064dd6af0093eac04c45bf61ea12abef72391a158530f325801f298"
+  },
+  {
+    "path": "toad/widgets/message_notifications.py",
+    "bytes": 2557,
+    "sha256": "3ef8099489eebdd4b5a9d3837f791ac4f0e0dd02c6c3fc1ed404650922051528"
+  },
+  {
+    "path": "toad/widgets/model_switcher.py",
+    "bytes": 9234,
+    "sha256": "1e1bcb7dd0a8beefef62d7d0aa5450e9e184b6c62a87ad1010f17d699eba42b9"
+  },
+  {
+    "path": "toad/widgets/native_history.py",
+    "bytes": 719,
+    "sha256": "d7f94c0ef5bba2abcb5a19d04826ecf490a115fdb73aa311ad2cd780ebf672c5"
+  },
+  {
+    "path": "toad/widgets/non_selectable_label.py",
+    "bytes": 94,
+    "sha256": "1f396c518bd6578cce97d7a13391d4581d5523a37e7c35a1d20a827af9762cb8"
+  },
+  {
+    "path": "toad/widgets/note.py",
+    "bytes": 242,
+    "sha256": "38c0eaac045e89e0d0d71214b1316ffbd97f7482e6c13bc786b3b6f179307aca"
+  },
+  {
+    "path": "toad/widgets/observed_thread_activity.py",
+    "bytes": 5324,
+    "sha256": "89a017a3646df572de841dfa7bbc174200bd29222fa792e2a1551fdb8ab1ff95"
+  },
+  {
+    "path": "toad/widgets/outgoing_message.py",
+    "bytes": 1486,
+    "sha256": "8fd81b19fd30d4870a6c8f0f93e8c7920a6d7738567f377ac9e4fe9b6cfb6468"
+  },
+  {
+    "path": "toad/widgets/patch_diff.py",
+    "bytes": 20565,
+    "sha256": "7f2ed0c02f87709c773e67c95d0a93e15798549787f635c29abadcf8f65d2024"
+  },
+  {
+    "path": "toad/widgets/path_search.py",
+    "bytes": 15686,
+    "sha256": "43c8682b7bad5c45c95bd016fb9c7d7e40a9ee5d6506758fea88f52d03b7db32"
+  },
+  {
+    "path": "toad/widgets/plan.py",
+    "bytes": 2519,
+    "sha256": "537aae92989d293c7277d6c49c27de527cc1b2be6147b1af16d0fd22cfbc4710"
+  },
+  {
+    "path": "toad/widgets/prepared_markdown.py",
+    "bytes": 11730,
+    "sha256": "f9ce9619332acfb8cd242d85c773dfacf8bfbe58a065b5609d4be0892b8d3c79"
+  },
+  {
+    "path": "toad/widgets/presentation_window.py",
+    "bytes": 9932,
+    "sha256": "c04fb98b89b3eddf6bf014f7fd0c5d39382228fc537da9586eb0a9b2a9f5ae6a"
+  },
+  {
+    "path": "toad/widgets/project_directory_tree.py",
+    "bytes": 5105,
+    "sha256": "33b8a3d68be4f2ac74865712eccdc02ea50cf0d1ddeda3a73abedbf74d8eb436"
+  },
+  {
+    "path": "toad/widgets/project_panel.py",
+    "bytes": 6370,
+    "sha256": "e3ff6cd97b4e08cc8870c4ebd690d8e74e95ec1deb3a513155c51044f395f9f5"
+  },
+  {
+    "path": "toad/widgets/project_tree_intent.py",
+    "bytes": 2367,
+    "sha256": "50cbf462c034b4372f5f617d087d2ae5c2debc856e3b545f87ea9513f63b96c8"
+  },
+  {
+    "path": "toad/widgets/prompt.py",
+    "bytes": 30687,
+    "sha256": "e7b290f15d346f05fa38e94fb1a9f1aa4b308bd7862d9c9346cc00c09e721cc7"
+  },
+  {
+    "path": "toad/widgets/prompt_popup.py",
+    "bytes": 2897,
+    "sha256": "ad94850ef35f0488d19288d753168734d46f63b7adc3677ca0fd082c2ea4e59e"
+  },
+  {
+    "path": "toad/widgets/question.py",
+    "bytes": 7717,
+    "sha256": "2b714836430044467ac9bd518800b1cb05aff641705a3596c77521f3be698748"
+  },
+  {
+    "path": "toad/widgets/recovery_view.py",
+    "bytes": 5957,
+    "sha256": "d47aba18ca5efb1c6af91d0ccdc311f6f9130146f813fbab802cd79e20572e77"
+  },
+  {
+    "path": "toad/widgets/retiring_sidebar.py",
+    "bytes": 1872,
+    "sha256": "8d7d497586f7e27825ad436e4bf3edd2505d3ca4062b1efae80410a3fcf2cfba"
+  },
+  {
+    "path": "toad/widgets/route_header.py",
+    "bytes": 2670,
+    "sha256": "c47869494d2b9cfb238673233c50f58f9aea0101a530d21ba966f410db4e89e3"
+  },
+  {
+    "path": "toad/widgets/selection.py",
+    "bytes": 2322,
+    "sha256": "6bbd67518be4772152efc69ff2b5aa87c3a9b7fbbe93f10d3ba78dc4eca9b956"
+  },
+  {
+    "path": "toad/widgets/session_details.py",
+    "bytes": 5601,
+    "sha256": "a2eaa4d911059df43d0824151fa672c3e474531c515f746219995987b64af2b1"
+  },
+  {
+    "path": "toad/widgets/session_history_details.py",
+    "bytes": 1181,
+    "sha256": "e02e08268da00c30960f8d6937173cd78b23ef44bce4917fd7bfdbf875f1513a"
+  },
+  {
+    "path": "toad/widgets/session_sidebar.py",
+    "bytes": 3509,
+    "sha256": "d1baf63bc2ae5afeab50c09d27d87ba2759b15723188f453e45e7748266d5f19"
+  },
+  {
+    "path": "toad/widgets/session_sort.py",
+    "bytes": 6035,
+    "sha256": "044cec20f338654833a390203ff39533d6251ef74d2fedd303c901dd7d8bf42d"
+  },
+  {
+    "path": "toad/widgets/session_tabs.py",
+    "bytes": 14152,
+    "sha256": "bbaf1274803df52b5ee55fa931c23df00e840e2a97e14c82305fa0f001341f55"
+  },
+  {
+    "path": "toad/widgets/session_thread_panels.py",
+    "bytes": 4818,
+    "sha256": "05e6bb51c16c789a7be557c38ea6a1e3f57a536d1a504c93aa5d4a12c024c2d3"
+  },
+  {
+    "path": "toad/widgets/session_thread_sidebar.py",
+    "bytes": 2331,
+    "sha256": "5d3f7858eadf06f9350c630081c34af841525fc7eebea72b95fbee9746796d28"
+  },
+  {
+    "path": "toad/widgets/shell_result.py",
+    "bytes": 1093,
+    "sha256": "6cff664bf4746cda5b3e8054b150247eb05a556b3ddce394fc8df48853b07c1e"
+  },
+  {
+    "path": "toad/widgets/shell_terminal.py",
+    "bytes": 1090,
+    "sha256": "825b111951fc908ba423581e6ceda525334045562f617ae6c2ead2a216a55daa"
+  },
+  {
+    "path": "toad/widgets/side_bar.py",
+    "bytes": 39596,
+    "sha256": "68117ff17aea5f806dd02a8d4de4a2e6493a2e4d3b8e4fd450a459f2a34ac394"
+  },
+  {
+    "path": "toad/widgets/sidebar_tree.py",
+    "bytes": 7890,
+    "sha256": "986fd13e5a17b600f0c0bbf71c1b4b5c2efb48d0293b4ca16220402f921ff660"
+  },
+  {
+    "path": "toad/widgets/sidebar_viewport.py",
+    "bytes": 1462,
+    "sha256": "29629ff6904c2cd0a94282014cb86ab9803347aa8be141324e08936cafd514a4"
+  },
+  {
+    "path": "toad/widgets/slash_complete.py",
+    "bytes": 4787,
+    "sha256": "91594d9b26edd266954c06b442bea149a00c6102d349423332ba2e222fe3e2bb"
+  },
+  {
+    "path": "toad/widgets/streaming_markdown.py",
+    "bytes": 8479,
+    "sha256": "22910455c62028d423c17448a8e9e6fe6776454b78c75be32d356aa18c8de29e"
+  },
+  {
+    "path": "toad/widgets/strike_text.py",
+    "bytes": 1772,
+    "sha256": "a4bd5e1708e952b79866d204838247d6f14d247f5cc2c595449aeca4d90eaaa2"
+  },
+  {
+    "path": "toad/widgets/terminal.py",
+    "bytes": 16528,
+    "sha256": "e55a2ab052b2c5d7d52f26f72547d0e8a5492fdd5219160302c7846e760149a8"
+  },
+  {
+    "path": "toad/widgets/terminal_projection.py",
+    "bytes": 2943,
+    "sha256": "31dffe864d4a7e2f88f52b6bcfe3a881d047f6f7255ad2f18e74b070de899621"
+  },
+  {
+    "path": "toad/widgets/terminal_tool.py",
+    "bytes": 2632,
+    "sha256": "b9514fab1b761b5da5d2381f46a636e5ae74f0a1b899642560263880f241b71b"
+  },
+  {
+    "path": "toad/widgets/thread_comms.py",
+    "bytes": 25042,
+    "sha256": "5c59a7ca4e1eb090a32be801e14268ff1c9c714800541ab6515d52fd5b3dbbe1"
+  },
+  {
+    "path": "toad/widgets/thread_comms_model.py",
+    "bytes": 1140,
+    "sha256": "0bf8a7a0117ba311e644c747b13eaff1d778101d5e7052a1c68deb220da2b749"
+  },
+  {
+    "path": "toad/widgets/thread_comms_source.py",
+    "bytes": 937,
+    "sha256": "e50fe222b8a1d31b22408e94a7bb0cf0f1db940356510011e07cd99ee6d15b7c"
+  },
+  {
+    "path": "toad/widgets/throbber.py",
+    "bytes": 5538,
+    "sha256": "ff918cc053d26fe1c1731c4f73a51440a5913561337a149f5799192fb5b3922f"
+  },
+  {
+    "path": "toad/widgets/tool_call.py",
+    "bytes": 11060,
+    "sha256": "c23d652996e4546781e987d4de2715c490df7897998ee4198486f54e2dd89bca"
+  },
+  {
+    "path": "toad/widgets/tool_content.py",
+    "bytes": 8555,
+    "sha256": "6d8242546fcf41870afc6a67efa9ecfd770f6a8ba33a0d78c3da0a4529ce01f1"
+  },
+  {
+    "path": "toad/widgets/transcript_fragments.py",
+    "bytes": 9726,
+    "sha256": "4a31e35ef6a778f993f7a55ec351c9786f023fe1134a678e1dd55c2c44188a6c"
+  },
+  {
+    "path": "toad/widgets/transcript_history.py",
+    "bytes": 46466,
+    "sha256": "adc759b09d48767110171504d2dc5c65e1330a8839e36fc3e55cac07eb210555"
+  },
+  {
+    "path": "toad/widgets/user_input.py",
+    "bytes": 2216,
+    "sha256": "58df9932024b55c7162168775f1b2c38e2e8a75ed5111ff9c21abba11434de5f"
+  },
+  {
+    "path": "toad/widgets/viewport_body.py",
+    "bytes": 40919,
+    "sha256": "248b9f8ff6cedbee06c658eccce8afb1d276c95a2674a189cc5d5fe078aa6d01"
+  },
+  {
+    "path": "toad/widgets/wire_message_handling.py",
+    "bytes": 1932,
+    "sha256": "72a376d2e94a1e02b0d014bc8a59e41c3ef79352c22608e41e9acae30edcad8b"
+  },
+  {
+    "path": "toad/widgets/worker_static.py",
+    "bytes": 9172,
+    "sha256": "7565a5ffb259c0d9b19df2a8fdf54fb6f3b64611cb8bf301e86be35094dff47a"
+  },
+  {
+    "path": "toad/work_preparation.py",
+    "bytes": 13330,
+    "sha256": "3af9ea8b02363454c2a7bf62e9b1452a45de7818489c48eff49f8f89521b3ced"
+  },
+  {
+    "path": "toad/workspace_chrome.py",
+    "bytes": 2632,
+    "sha256": "259184944d4950f28491a3805617e56326ddcb4529f5d1e9e6c4eb66ca3b2a05"
+  },
+  {
+    "path": "toad/workspace_sessions.py",
+    "bytes": 5513,
+    "sha256": "f321ae69bfe1aeee9d0328c91651552b57060b05967b55335cdfe4a4bf91a5b1"
+  }
+]

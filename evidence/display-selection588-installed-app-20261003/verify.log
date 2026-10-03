@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "5025c4ba84c5623f475706475fb7743ce0e8f156",
+      "files": 339,
+      "byte_equal": true
+    },
+    {
+      "module": "toad",
+      "head": "38ede873b675756d995e0da5e7c4d89bf9e36819",
+      "files": 319,
+      "byte_equal": true
+    },
+    {
+      "module": "textual",
+      "head": "0ab687e007fca311ce9f786634d8f5fc991ff808",
+      "files": 266,
+      "byte_equal": true
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "files": 3,
+      "byte_equal": true
+    }
+  ],
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "package_count": 69,
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002"
+}

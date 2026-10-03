@@ -1,0 +1,24 @@
+{
+  "at": 1791033853.0575964,
+  "packageWritersTerminal": true,
+  "app05TerminalExit": 0,
+  "visibleOwnUidPrefixOrRunFdBorrowers": [],
+  "inaccessibleOwnUidPids": [
+    68488,
+    216738,
+    1561676,
+    1786012,
+    1953373
+  ],
+  "note": "Raw05 privateWorkerPids are original private registry fixture process IDs, not native worker launches; they are absent. Proc scan is limited to accessible own-UID processes.",
+  "rawReceiptSha256": "99f8feee874fdad90426d7fc3656e5f925bb4b2942ef7d6585f117ae0e312b5b",
+  "scope": "Installed App/saved-bus render/ACK: App02 original channel20+heartbeat/ACK; App05 same saved20+DM exact rendered IDs/DM ACK/channel return,0newinputs. No ACP/provider/readable physical PNG claim.",
+  "svgInspection": "App05 exported text inspected during same run; black raster export preserved, not qualified readable pixels.",
+  "originalFailures": [
+    "app01 renderer main-guard/BrokenProcessPool",
+    "app02/03 first hidden retained view queried",
+    "app04 DM ACK succeeded, first hidden DM queried as channel"
+  ],
+  "publicEffects": 0,
+  "providerCalls": 0
+}
