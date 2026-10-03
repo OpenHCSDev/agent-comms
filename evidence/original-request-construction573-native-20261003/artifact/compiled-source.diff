@@ -1,0 +1,300 @@
+--- native915/dist/core/agent-session.js
++++ native573/dist/core/agent-session.js
+@@ -165,9 +165,9 @@
+         SessionContext.restore(this);
+         this.agent.onRequestProgress = progress => this._emitNativePresentation({
+             type: "model_request_progress", progress });
+-        this.agent.onContextReady = async (context) => {
++        this.agent.onContextReady = async (context, requestId) => {
+             const source = await this._commitNativeContext(context);
+-            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).manifest()});
++            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).manifest(requestId)});
+         };
+         this._installAgentToolHooks();
+         this._installAgentNextTurnRefresh();
+--- native915/dist/core/turn-context.d.ts
++++ native573/dist/core/turn-context.d.ts
+@@ -24,6 +24,7 @@
+ export interface NativeContextManifest {
+     counter: string;
+     segments: readonly NativeContextSegmentManifest[];
++    requestId?: string;
+ }
+ export interface NativeContextData {
+     identity: {sessionId: string; sessionFile: string};
+--- native915/dist/core/turn-context.js
++++ native573/dist/core/turn-context.js
+@@ -190,6 +190,9 @@
+         // Match SDK Context member order for recorded-input byte comparisons.
+         return {systemPrompt:provider.systemPrompt,messages:provider.messages,tools:provider.tools};
+     }
+-    manifest() { return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest())}; }
++    manifest(requestId) {
++        return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest()),
++            ...(requestId === undefined ? {} : {requestId})};
++    }
+     full() { return {identity:this.identity,counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.full())}; }
+ }
+--- native915/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
++++ native573/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
+@@ -201,7 +201,7 @@
+     };
+     // Trusted native boundary: the final transformed and converted Pi context is
+     // present. This callback MUST be awaited and allowed to fail before transport.
+-    await config.onContextReady?.(llmContext);
++    await config.onContextReady?.(llmContext, request.requestId);
+     // Resolve API key (important for expiring tokens)
+     const resolvedApiKey = (config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
+     const response = await streamFunction(config.model, llmContext, {
+--- native915/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
++++ native573/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
+@@ -10,7 +10,7 @@
+     getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
+     onPayload?: SimpleStreamOptions["onPayload"];
+     onResponse?: SimpleStreamOptions["onResponse"];
+-    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;
++    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context, requestId: string) => Promise<void>;
+     onRequestProgress?: (progress: import("../../pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress) => void;
+     beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
+     afterToolCall?: (context: AfterToolCallContext, signal?: AbortSignal) => Promise<AfterToolCallResult | undefined>;
+@@ -47,7 +47,7 @@
+     shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext, signal?: AbortSignal) => boolean | Promise<boolean>;
+     prepareNextTurn?: (signal?: AbortSignal) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
+     prepareNextTurnWithContext?: (context: PrepareNextTurnContext, signal?: AbortSignal) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
+-    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;
++    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context, requestId: string) => Promise<void>;
+     onRequestProgress?: (progress: import("../../pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress) => void;
+     private activeRun?;
+     /** Session identifier forwarded to providers for cache-aware backends. */
+--- native915/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
++++ native573/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
+@@ -149,7 +149,7 @@
+      */
+     convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
+     /** Awaited native post-transform context boundary; errors prevent provider invocation. */
+-    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;
++    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context, requestId: string) => Promise<void>;
+     onRequestProgress?: (progress: import("../../pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress) => void;
+     /**
+      * Optional transform applied to the context before `convertToLlm`.
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js
+@@ -1,6 +1,7 @@
+ /** Generation intent, capability admission, and pre-stream rejection recovery. */
+ import { normalizeProviderError } from "../utils/error-body.js";
+ import { estimateContextTokens, estimateSerializedRequestTokens } from "../utils/estimate.js";
++import { observeRequest } from "../utils/agent-comms-request-observation.js";
+ 
+ export class BudgetAdmissionError extends Error {
+     constructor(message) {
+@@ -50,9 +51,23 @@
+         return fitted;
+     }
+ 
+-    admit(parameters, field, minimum = 1) {
+-        const fitted = this.allowance(parameters[field], minimum);
++    admit(parameters, field, minimum = 1, options) {
++        const requested = parameters[field];
++        const fitted = this.allowance(requested, minimum);
+         if (fitted !== undefined) parameters[field] = fitted;
++        this.observeAdmission(parameters, field, requested, minimum, options);
++    }
++
++    observeAdmission(parameters, field, requested, minimum, options) {
++        // This original calculation supplies the observation. Readers neither
++        // recalculate admission nor treat it as proof of an HTTP dispatch.
++        observeRequest(options, { stage: "budget_admission", detail: "Model request budget admitted",
++            model: {provider:this.model.provider, id:this.model.id, name:this.model.name,
++                contextWindow:this.model.contextWindow, maxTokens:this.model.maxTokens},
++            estimatedInputTokens:this.input,
++            availableTokens:Number.isFinite(this.available) ? this.available : undefined,
++            outputTokenField:field, requestedOutputTokens:requested,
++            admittedOutputTokens:parameters[field], minimumOutputTokens:minimum });
+     }
+ }
+ 
+@@ -103,10 +118,10 @@
+     revisedAllowance(request) {
+         // An explicit allowance must identify this rejected request's count.
+         if (request.allowance !== undefined && request.allowance !== this.completion) return undefined;
+-        const ceiling = request.allowance ?? Math.min(this.completion, request.model.maxTokens);
+-        const limit = Math.min(this.limit, request.model.contextWindow);
++        const ceiling = request.allowance ?? Math.min(this.completion, request.budget.model.maxTokens);
++        const limit = Math.min(this.limit, request.budget.model.contextWindow);
+         const uncertainty = Math.abs(this.input - request.budget.input);
+-        const available = Math.min(request.model.maxTokens, limit - this.input - uncertainty);
++        const available = Math.min(request.budget.model.maxTokens, limit - this.input - uncertainty);
+         if (available <= 0 || available >= ceiling) return undefined;
+         return available;
+     }
+@@ -132,30 +147,31 @@
+ }
+ 
+ export class ContextBudgetRequest {
+-    constructor(model, context, params, budgetField, send, serializedInput, signal) {
+-        this.model = model;
++    constructor(model, context, params, budgetField, send, serializedInput, options) {
+         this.params = params;
+         this.budgetField = budgetField;
+         this.sendRequest = send;
+-        this.signal = signal;
++        this.options = options;
+         this.budget = new ContextBudget(model, context, serializedInput);
+-        this.budget.admit(this.params, this.budgetField);
++        this.budget.admit(this.params, this.budgetField, 1, options);
+     }
+ 
+     get allowance() { return this.params[this.budgetField]; }
+ 
+     async send(attempt) {
+         for (;;) {
+-            this.signal?.throwIfAborted();
++            this.options?.signal?.throwIfAborted();
+             try {
+                 return await this.sendRequest(this.params, attempt);
+             } catch (error) {
+-                this.signal?.throwIfAborted();
++                this.options?.signal?.throwIfAborted();
+                 const revised = ProviderRejection.decode(error).revisedAllowance(this);
+                 if (revised === undefined) throw error;
+                 // Strictly decreasing positive allowances terminate negotiation.
+                 // An accepted stream is consumed outside this retry boundary.
++                const requested = this.allowance;
+                 this.params = { ...this.params, [this.budgetField]: revised };
++                this.budget.observeAdmission(this.params, this.budgetField, requested, 1, this.options);
+             }
+         }
+     }
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+@@ -384,7 +384,7 @@
+                 params = { ...nextParams, stream: true };
+             }
+             new ContextBudget(model, context, anthropicInput(params))
+-                .admit(params, "max_tokens");
++                .admit(params, "max_tokens", 1, options);
+             if (params.thinking?.type === "enabled" && params.thinking.budget_tokens >= params.max_tokens) {
+                 throw new BudgetAdmissionError("Thinking budget leaves no answer room after final request admission");
+             }
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
+@@ -81,7 +81,7 @@
+                 params = nextParams;
+             }
+             new ContextBudget(model, context, responsesInput(params))
+-                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS);
++                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS, options);
+             const requestOptions = {
+                 ...(options?.signal ? { signal: options.signal } : {}),
+                 ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+@@ -156,7 +156,7 @@
+                 commandInput = nextCommandInput;
+             }
+             new ContextBudget(model, context, bedrockInput(commandInput))
+-                .admit(commandInput.inferenceConfig ?? {}, "maxTokens");
++                .admit(commandInput.inferenceConfig ?? {}, "maxTokens", 1, options);
+             const command = new ConverseStreamCommand(commandInput);
+             observeRequest(options, { stage: "dispatch", transport: "http",
+                 detail: "Waiting for provider response" });
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
+@@ -47,7 +47,7 @@
+                 params = nextParams;
+             }
+             new ContextBudget(model, context, googleInput(params))
+-                .admit(params.config ?? {}, "maxOutputTokens");
++                .admit(params.config ?? {}, "maxOutputTokens", 1, options);
+             const googleStream = await retryGoogleRequest(attempt => {
+                 observeRequest(options, { stage: "dispatch", transport: "http", attempt,
+                     detail: "Waiting for provider response" });
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
+@@ -57,7 +57,7 @@
+                 params = nextParams;
+             }
+             new ContextBudget(model, context, googleInput(params))
+-                .admit(params.config ?? {}, "maxOutputTokens");
++                .admit(params.config ?? {}, "maxOutputTokens", 1, options);
+             const googleStream = await retryGoogleRequest(attempt => {
+                 observeRequest(options, { stage: "dispatch", transport: "http", attempt,
+                     detail: "Waiting for provider response" });
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
+@@ -167,7 +167,7 @@
+     const signal = options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+     const wirePayload = toMistralWirePayload(payload);
+     new ContextBudget(model, context, chatInput(wirePayload))
+-        .admit(wirePayload, "max_tokens");
++        .admit(wirePayload, "max_tokens", 1, options);
+     observeRequest(options, { stage: "dispatch", transport: "http",
+         detail: "Waiting for provider response" });
+     const response = await (options?.fetch ?? globalThis.fetch)(url, {
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
+@@ -191,7 +191,7 @@
+             const sseHeaders = buildSSEHeaders(model.headers, options?.headers, accountId, apiKey, codexSessionId);
+             const websocketHeaders = buildWebSocketHeaders(model.headers, options?.headers, accountId, apiKey, websocketRequestId);
+             new ContextBudget(model, context, responsesInput(body))
+-                .admit(body, "max_output_tokens");
++                .admit(body, "max_output_tokens", 1, options);
+             const bodyJson = JSON.stringify(body);
+             const httpTimeoutMs = normalizeTimeoutMs(options?.timeoutMs);
+             const websocketConnectTimeoutMs = normalizeTimeoutMs(options?.websocketConnectTimeoutMs);
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+@@ -221,7 +221,7 @@
+                 observeRequest(options, { stage: "dispatch", transport: "http", attempt,
+                     detail: "Waiting for provider response" });
+                 return client.chat.completions.create(payload, requestOptions).withResponse();
+-            }, chatInput(params), options?.signal);
++            }, chatInput(params), options);
+             const { data: openaiStream, response } = await retryProviderRequest(attempt => budgetRequest.send(attempt), {
+                 maxRetries: options?.maxRetries,
+                 maxRetryDelayMs: options?.maxRetryDelayMs,
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+@@ -119,7 +119,7 @@
+                 params = nextParams;
+             }
+             new ContextBudget(model, context, responsesInput(params))
+-                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS);
++                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS, options);
+             const requestOptions = {
+                 ...(options?.signal ? { signal: options.signal } : {}),
+                 ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+--- native915/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
++++ native573/node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
+@@ -271,7 +271,7 @@
+                 payload = nextPayload;
+             }
+             new ContextBudget(model, payload.context, payload.context)
+-                .admit(payload.options ?? {}, "maxTokens");
++                .admit(payload.options ?? {}, "maxTokens", 1, options);
+             observeRequest(options, { stage: "dispatch", transport: "http",
+                 detail: "Waiting for provider response" });
+             const response = await (options?.fetch ?? globalThis.fetch)(url, {
+--- native915/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
++++ native573/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
+@@ -1,4 +1,6 @@
+ /** Diagnostic request coordinates. Not an admission or retry receipt. */
++import type { Api, Model } from "../types.js";
++
+ export interface RequestObservationPoint {
+     stage: string;
+     detail?: string;
+@@ -7,6 +9,13 @@
+     status?: number;
+     responseId?: string;
+     callback?: string;
++    model?: Pick<Model<Api>, "provider" | "id" | "name" | "contextWindow" | "maxTokens">;
++    estimatedInputTokens?: number;
++    availableTokens?: number;
++    outputTokenField?: string;
++    requestedOutputTokens?: number;
++    admittedOutputTokens?: number;
++    minimumOutputTokens?: number;
+ }
+ export interface NativeRequestProgress extends RequestObservationPoint {
+     requestId: string;
