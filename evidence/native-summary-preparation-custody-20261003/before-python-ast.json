@@ -1,0 +1,913 @@
+{
+  "head": "d01d40deb27bbd205249b0e36f22f82c4fb5041e",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omitted": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/bus_route_counts.py",
+          "line": 107,
+          "call": "self.connection.commit"
+        },
+        {
+          "path": "src/agent_comms/compaction_journal.py",
+          "line": 195,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/compaction_journal.py",
+          "line": 191,
+          "call": "self.commit"
+        },
+        {
+          "path": "src/agent_comms/compaction_journal.py",
+          "line": 198,
+          "call": "db.commit"
+        },
+        {
+          "path": "src/agent_comms/compaction_private_inputs.py",
+          "line": 284,
+          "call": "self.journal.commit"
+        },
+        {
+          "path": "src/agent_comms/goal_attempts.py",
+          "line": 616,
+          "call": "conn.commit"
+        },
+        {
+          "path": "src/agent_comms/goal_attempts.py",
+          "line": 564,
+          "call": "conn.commit"
+        },
+        {
+          "path": "src/agent_comms/goal_history.py",
+          "line": 224,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/goal_history.py",
+          "line": 120,
+          "call": "connection.commit"
+        },
+        {
+          "path": "src/agent_comms/goal_history.py",
+          "line": 132,
+          "call": "connection.commit"
+        },
+        {
+          "path": "src/agent_comms/manual_compaction_bridge.py",
+          "line": 60,
+          "call": "runner.prepare_selected_session"
+        },
+        {
+          "path": "src/agent_comms/manual_compaction_bridge.py",
+          "line": 75,
+          "call": "runner.settle_turn"
+        },
+        {
+          "path": "src/agent_comms/native_session_reopen.py",
+          "line": 61,
+          "declaration": "validate_native_reopen"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 368,
+          "call": "self.runner.prepare_selected_session"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_adaptive.py",
+          "line": 82,
+          "call": "bridge.compact_selected"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_commit.py",
+          "line": 49,
+          "declaration": "compact_selected"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_commit.py",
+          "line": 238,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_commit.py",
+          "line": 112,
+          "call": "compact_owner_once"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_commit.py",
+          "line": 169,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_manual.py",
+          "line": 79,
+          "call": "bridge.compact_selected"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_prepare.py",
+          "line": 144,
+          "declaration": "prepare_native_source"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_runtime.py",
+          "line": 86,
+          "declaration": "compact_owner_once"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_runtime.py",
+          "line": 154,
+          "declaration": "_commit_native_summary"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_runtime.py",
+          "line": 135,
+          "call": "_commit_native_summary"
+        },
+        {
+          "path": "src/agent_comms/participant_store.py",
+          "line": 124,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/private_registry_guard.py",
+          "line": 205,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/private_send_admission.py",
+          "line": 192,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/private_send_admission.py",
+          "line": 193,
+          "call": "self.stage.commit"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 279,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 346,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 57,
+          "call": "edit.document.prepare_native_source"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 110,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 117,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 126,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 140,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 149,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 158,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 167,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 176,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 182,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 188,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 194,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 201,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 234,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 256,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 300,
+          "call": "edit.commit"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 112,
+          "call": "history.commit"
+        },
+        {
+          "path": "src/agent_comms/registry_document.py",
+          "line": 357,
+          "declaration": "prepare_native_source"
+        },
+        {
+          "path": "src/agent_comms/registry_store.py",
+          "line": 31,
+          "declaration": "commit"
+        },
+        {
+          "path": "src/agent_comms/registry_store.py",
+          "line": 93,
+          "call": "guard.commit"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 109,
+          "call": "validate_native_reopen"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 226,
+          "call": "bridge.compact_selected"
+        },
+        {
+          "path": "src/agent_comms/selected_triage.py",
+          "line": 131,
+          "call": "stage.commit"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 264,
+          "call": "request.admission.commit"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 174,
+          "declaration": "prepare_selected_session"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 410,
+          "declaration": "settle_turn"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 257,
+          "call": "self.settle_turn"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 141,
+          "call": "connection.commit"
+        }
+      ]
+    },
+    {
+      "root": "stack",
+      "parsed": 13,
+      "omitted": [],
+      "sites": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omitted": [],
+      "sites": [
+        {
+          "path": "tools/cutover/install_retained_routing.py",
+          "line": 62,
+          "call": "connection.commit"
+        },
+        {
+          "path": "tools/cutover/seed_original_owner_capture.py",
+          "line": 34,
+          "call": "edit.commit"
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "parsed": 361,
+      "omitted": [],
+      "sites": [
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 28,
+          "declaration": "commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 59,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 60,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 72,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 73,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 74,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 85,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 86,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 97,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 98,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 120,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 123,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 146,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 148,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 154,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 169,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 170,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 177,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 178,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 187,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 188,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 196,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 197,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 203,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 208,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 209,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 217,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 218,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 226,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 227,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 250,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 251,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 256,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 264,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 265,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 291,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 292,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 300,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 301,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 337,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 338,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 350,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 357,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/guards/test_debt_ratchet.py",
+          "line": 358,
+          "call": "repo.commit"
+        },
+        {
+          "path": "tests/retained_context_native_journey.py",
+          "line": 97,
+          "call": "owner.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_acp_channel_disposition.py",
+          "line": 192,
+          "call": "edit.commit"
+        },
+        {
+          "path": "tests/test_agent_events.py",
+          "line": 237,
+          "call": "owner.turns.settle_turn"
+        },
+        {
+          "path": "tests/test_agent_events.py",
+          "line": 214,
+          "call": "owner.turns.settle_turn"
+        },
+        {
+          "path": "tests/test_agent_events.py",
+          "line": 212,
+          "call": "owner.turns.settle_turn"
+        },
+        {
+          "path": "tests/test_child_process.py",
+          "line": 274,
+          "call": "db.commit"
+        },
+        {
+          "path": "tests/test_coordination_store.py",
+          "line": 212,
+          "call": "db.participants.commit"
+        },
+        {
+          "path": "tests/test_coordination_store.py",
+          "line": 213,
+          "call": "db.participants.commit"
+        },
+        {
+          "path": "tests/test_current_delivery.py",
+          "line": 110,
+          "call": "index.connection.commit"
+        },
+        {
+          "path": "tests/test_envelope_bus_integration.py",
+          "line": 399,
+          "call": "edit.commit"
+        },
+        {
+          "path": "tests/test_goal_attempts.py",
+          "line": 337,
+          "call": "conn.commit"
+        },
+        {
+          "path": "tests/test_goal_attempts.py",
+          "line": 471,
+          "call": "conn.commit"
+        },
+        {
+          "path": "tests/test_goal_history.py",
+          "line": 142,
+          "call": "commit"
+        },
+        {
+          "path": "tests/test_native_arguments.py",
+          "line": 145,
+          "call": "owner.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_native_context_inspection.py",
+          "line": 189,
+          "call": "owner.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_native_context_inspection.py",
+          "line": 142,
+          "call": "owner.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_native_context_inspection.py",
+          "line": 55,
+          "call": "owner.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_native_session_reopen.py",
+          "line": 59,
+          "call": "validate_native_reopen"
+        },
+        {
+          "path": "tests/test_native_session_reopen.py",
+          "line": 62,
+          "call": "validate_native_reopen"
+        },
+        {
+          "path": "tests/test_native_session_reopen.py",
+          "line": 87,
+          "call": "validate_native_reopen"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 129,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 179,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 240,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 276,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 308,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 360,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 442,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 536,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 695,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 758,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 813,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 392,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 417,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 475,
+          "call": "OwnerCompactionCommit.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 530,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 668,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 699,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 721,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 738,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 742,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 781,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 789,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_commit.py",
+          "line": 370,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 125,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 616,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 886,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 1008,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 1021,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 73,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 85,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 536,
+          "call": "bridge.commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 658,
+          "call": "compact_owner_once"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 552,
+          "call": "validate_native_reopen"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 722,
+          "call": "compact_owner_once"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 973,
+          "call": "compact_owner_once"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 117,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 604,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 879,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_prepare.py",
+          "line": 524,
+          "call": "prepare_native_source"
+        },
+        {
+          "path": "tests/test_owner_compaction_runtime.py",
+          "line": 69,
+          "declaration": "commit"
+        },
+        {
+          "path": "tests/test_owner_compaction_runtime.py",
+          "line": 84,
+          "call": "compact_owner_once"
+        },
+        {
+          "path": "tests/test_recovery_projection.py",
+          "line": 132,
+          "call": "db.commit"
+        },
+        {
+          "path": "tests/test_registration_authority.py",
+          "line": 55,
+          "call": "edit.commit"
+        },
+        {
+          "path": "tests/test_registration_authority.py",
+          "line": 69,
+          "call": "edit.commit"
+        },
+        {
+          "path": "tests/test_retained_manual_compaction.py",
+          "line": 203,
+          "call": "agent.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_runtime_collaboration_documents.py",
+          "line": 51,
+          "call": "agent.turns.prepare_selected_session"
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "line": 218,
+          "call": "runner.settle_turn"
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "line": 255,
+          "call": "runner.settle_turn"
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "line": 264,
+          "call": "runner.settle_turn"
+        },
+        {
+          "path": "tests/test_selected_tool_broker.py",
+          "line": 322,
+          "declaration": "commit"
+        },
+        {
+          "path": "tests/test_selected_tool_runner_hook.py",
+          "line": 299,
+          "call": "edit.commit"
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "line": 123,
+          "call": "owner.turns.prepare_selected_session"
+        }
+      ]
+    }
+  ],
+  "dynamic_resolution": "Attribute names locate possible consumers, not proof of runtime dispatch."
+}
