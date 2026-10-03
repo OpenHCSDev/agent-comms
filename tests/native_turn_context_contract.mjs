@@ -4,6 +4,7 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+import {constructNativeConditions} from './retained_native_conditions.mjs';
 
 const [pkg, suppliedRoot] = process.argv.slice(2);
 const root=resolve(suppliedRoot);
@@ -76,9 +77,28 @@ try {
     assert(system.provenance.some(s=>s.path===join(cwd,'.pi','APPEND_SYSTEM.md')));
     assert(!JSON.stringify(captured.manifest()).includes('Original source summary'));
     assert.deepEqual((await TurnContext.next(session)).render(),provider);
+    const conditions = process.argv.includes('--source-projections')
+        ? await constructNativeConditions(session, pkg) : undefined;
+    if (conditions) {
+        const fullSource=JSON.stringify(conditions['full-context'].context);
+        const recent=JSON.stringify(conditions['recent-only'].context);
+        assert(fullSource.includes('Original prior question'));
+        assert(!fullSource.includes('Original source summary.'));
+        assert(!recent.includes('Original prior question'));
+        assert(!recent.includes('Original source summary.'));
+        assert(recent.includes('Original kept question'));
+        assert.deepEqual(conditions['task-memory'].context, provider);
+        for (const name of ['full-context','recent-only','task-memory']) {
+            const observed=conditions[name];
+            assert.deepEqual(observed.manifest.identity, full.identity);
+            assert(observed.manifest.segments.every(segment=>segment.provenance.some(source=>source.kind==='preview')));
+        }
+        assert.equal(conditions.bounded.evaluated, false);
+        assert.deepEqual(readFileSync(manager.getSessionFile()),before);
+    }
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
         provider_bytes_identical:true,journal_bytes_unchanged:true,
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
-        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full}));
+        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions}));
 } finally {session.dispose();}

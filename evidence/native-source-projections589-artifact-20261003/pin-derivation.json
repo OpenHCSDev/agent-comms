@@ -1,0 +1,35 @@
+{
+  "source_checkpoint": "aa8bee420ece30d9a241f22b316692cb664fd394",
+  "builder_source": "581bf3cb9fbcd5711addb6ef398732018bb8d06f",
+  "manifest": "7c2a2e644420c349dfdbadf0e1fa555d783697298bb984f1459e3326015b1dcf",
+  "tree": "29fb1f9c57a829511f6a03acc15dc5d84e8652c57d1e95ee03fb37d4d02a3d91",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7c2a2e644420c349/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/session-context.js",
+      "original_sha256": "7c91a93256e940b20b9db84e2c986ab1a8799774d2f8bcee00049e6ed188de48",
+      "new_sha256": "b644b4283b4059587a9883602910b4868adde69907dd740e1a636062ffcdf5fd"
+    },
+    {
+      "path": "dist/core/session-entry-store.js",
+      "original_sha256": "66d34653479999e5110dd34183fdf69626ffd9cbd55c9b429a3e868919a5de11",
+      "new_sha256": "d1595267809937b4dc7b6aaf43b420805c6702732620d7faddd26cf0ebb876c4"
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "original_sha256": "07518abbacece28c63eb9a1c40d4a3ce5d795db2c7434a675627f703b9920a3a",
+      "new_sha256": "11bcccebf0234a0ca5e2eeb9293637eb481ba8a73304e9ec14c7f3e4294443e4"
+    }
+  ],
+  "all_other_members_equal_native583_2b": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138414075,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; Private full/kept original-entry SDK construction acceptance remains Arendt-owned; not Ready/live/S4-complete."
+}

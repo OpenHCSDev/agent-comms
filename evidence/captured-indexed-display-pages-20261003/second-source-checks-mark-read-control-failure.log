@@ -1,0 +1,2607 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-cleanup-live-integration-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 18 items / 2 deselected / 16 selected
+
+tests/test_message_page_request.py ...                                   [ 18%]
+tests/test_channel_display.py ..........F..                              [100%]
+
+=================================== FAILURES ===================================
+__________ test_public_mark_read_and_append_share_one_viewer_boundary __________
+
+need_sequence = False
+
+    @contextmanager
+    def concurrent_public_mark(*, need_sequence=True):
+        with original(need_sequence=need_sequence) as snapshot:
+            writer = WorkerThread(target=mark_then_append, daemon=True)
+            writer.start()
+            assert started.wait(timeout=3) and not finished.is_set()
+            try:
+>               yield snapshot
+
+tests/test_channel_display.py:384: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/wire_log.py:476: in page_snapshot
+    yield metadata, through, revision, stream, records
+src/agent_comms/wire_log.py:486: in _record_snapshot
+    yield through, records
+src/agent_comms/presentation.py:265: in snapshot
+    yield basis, records, bus_revision
+src/agent_comms/history_views.py:366: in viewer_snapshot
+    sent = self.last_sent_timestamps()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/history_views.py:218: in last_sent_timestamps
+    for sender, timestamp in self.bus.last_sent_timestamps().items():
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:379: in last_sent_timestamps
+    _, sent = self._activity_clocks()
+              ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:102: in _activity_clocks
+    with self.log.projection_snapshot() as (_, revision, stream, _records):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:148: in __exit__
+    next(self.gen)
+src/agent_comms/wire_log.py:445: in projection_snapshot
+    with self._opened_wire_snapshot(need_sequence=False) as (
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:148: in __exit__
+    next(self.gen)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+need_sequence = False
+
+    @contextmanager
+    def concurrent_public_mark(*, need_sequence=True):
+        with original(need_sequence=need_sequence) as snapshot:
+            writer = WorkerThread(target=mark_then_append, daemon=True)
+            writer.start()
+            assert started.wait(timeout=3) and not finished.is_set()
+            try:
+                yield snapshot
+            finally:
+                writer.join(timeout=3)
+>               assert finished.is_set()
+E               assert False
+E                +  where False = is_set()
+E                +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+
+tests/test_channel_display.py:387: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/display592-final-checks-20261003/run02/test_public_mark_read_and_appe0')
+
+    def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
+        comms = populated(tmp_path)
+        comms.messaging.send("bob", "#api", "row1")
+        original = comms.bus.log._opened_wire_snapshot
+        started, finished = Event(), Event()
+    
+        def mark_then_append():
+            started.set()
+            comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+            comms.messaging.send("bob", "#api", "row2")
+            finished.set()
+    
+        @contextmanager
+        def concurrent_public_mark(*, need_sequence=True):
+            with original(need_sequence=need_sequence) as snapshot:
+                writer = WorkerThread(target=mark_then_append, daemon=True)
+                writer.start()
+                assert started.wait(timeout=3) and not finished.is_set()
+                try:
+                    yield snapshot
+                finally:
+                    writer.join(timeout=3)
+                    assert finished.is_set()
+    
+        with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=concurrent_public_mark):
+>           assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_channel_display.py:390: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:353: in viewer_snapshot
+    with self.presentation.snapshot(viewer=viewer) as (basis, records, bus_revision):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+src/agent_comms/presentation.py:252: in snapshot
+    with ExitStack() as stack:
+         ^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:619: in __exit__
+    raise exc
+/usr/lib/python3.14/contextlib.py:604: in __exit__
+    if cb(*exc_details):
+       ^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+src/agent_comms/wire_log.py:483: in _record_snapshot
+    with self.page_snapshot(need_sequence=need_sequence) as (
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+src/agent_comms/wire_log.py:462: in page_snapshot
+    with self._opened_wire_snapshot(need_sequence=need_sequence) as (
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+need_sequence = False
+
+    @contextmanager
+    def concurrent_public_mark(*, need_sequence=True):
+        with original(need_sequence=need_sequence) as snapshot:
+            writer = WorkerThread(target=mark_then_append, daemon=True)
+            writer.start()
+            assert started.wait(timeout=3) and not finished.is_set()
+            try:
+                yield snapshot
+            finally:
+                writer.join(timeout=3)
+>               assert finished.is_set()
+E               assert False
+E                +  where False = is_set()
+E                +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+
+tests/test_channel_display.py:387: AssertionError
+=============================== warnings summary ===============================
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-47 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-45 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-46 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-48 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-44 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-43 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-42 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-41 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-40 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-39 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-38 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-37 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-34 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-36 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-33 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-32 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-35 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-29 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-30 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-31 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-28 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-25 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-26 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-24 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-27 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-23 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-22 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-21 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-20 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-19 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-18 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-17 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-16 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-15 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-14 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-13 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-12 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-11 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-10 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-9 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-8 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-7 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-5 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-4 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-6 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-3 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_busy_display_journey_uses_identity_not_presence_file_replacement
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-49 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_busy_display_journey_uses_identity_not_presence_file_replacement
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-51 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_channel_display.py::test_busy_display_journey_uses_identity_not_presence_file_replacement
+  /usr/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-50 (mark_then_append)
+  
+  Traceback (most recent call last):
+    File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/usr/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 373, in mark_then_append
+      comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/history_views.py", line 419, in mark_channel_view_read
+      self.presentation.mark_channel_read(
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+          target,
+          ^^^^^^^
+      ...<2 lines>...
+          expected_scope=expected_scope,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      )
+      ^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/presentation.py", line 311, in mark_channel_read
+      with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+           ~~~~~~~~~^^
+    File "/usr/lib/python3.14/contextlib.py", line 619, in __exit__
+      raise exc
+    File "/usr/lib/python3.14/contextlib.py", line 604, in __exit__
+      if cb(*exc_details):
+         ~~^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/wire_log.py", line 434, in verified_snapshot
+      with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    File "/usr/lib/python3.14/contextlib.py", line 148, in __exit__
+      next(self.gen)
+      ~~~~^^^^^^^^^^
+    File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/test_channel_display.py", line 387, in concurrent_public_mark
+      assert finished.is_set()
+  AssertionError: assert False
+   +  where False = is_set()
+   +    where is_set = <threading.Event at 0x7f8d73faa0d0: unset>.is_set
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary
+=========== 1 failed, 15 passed, 2 deselected, 49 warnings in 10.84s ===========

@@ -1,0 +1,11 @@
+[
+  {
+    "path": "dist/core/session-entry-store.js"
+  },
+  {
+    "path": "dist/core/session-context.js"
+  },
+  {
+    "path": "dist/core/turn-context.js"
+  }
+]

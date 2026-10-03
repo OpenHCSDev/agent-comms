@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-cleanup-live-integration-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items / 2 deselected / 22 selected
+
+tests/test_message_page_request.py ...                                   [ 13%]
+tests/test_channel_display.py .............                              [ 72%]
+tests/test_dm_scoped_ack.py ......                                       [100%]
+
+====================== 22 passed, 2 deselected in 11.72s =======================
