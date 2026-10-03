@@ -224,7 +224,13 @@ class MessagePageRequest:
         return self.traversal.collect(self, records)
 
     def read(self, log) -> MessagePage:
+        return log.read_metadata_unlocked().access.read_page(self, log)
+
+    def read_indexed(self, log) -> MessagePage:
         with log.locked():
+            # Index publication is permitted only by the same current access
+            # declaration used to select this reader, never an archive.
+            log.read_metadata_unlocked().access.require_append()
             try:
                 with BusPageIndex(log.path) as index:
                     if index.sync():
@@ -232,6 +238,9 @@ class MessagePageRequest:
             except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
                 # A disposable index cannot replace the durable wire authority.
                 pass
+        return self.read_original(log)
+
+    def read_original(self, log) -> MessagePage:
         # A missing derived index does not grant a reader the writer's lock for
         # a full scan. The canonical log owns the opened inode and byte bound.
         with log._record_snapshot(need_sequence=False) as (_, records):

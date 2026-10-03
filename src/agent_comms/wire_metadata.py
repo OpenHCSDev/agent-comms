@@ -5,13 +5,26 @@ from __future__ import annotations
 import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import TextRepresentation
+
+if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Iterator
+    from pathlib import Path
+    from typing import BinaryIO
+
+    from .message_page import MessagePage, MessagePageRequest
+    from .private_bus_checkpoint import CertifiedSourceRead, PrefixWitness
+    from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadIncarnation
+    from .turn_context import ContextManifest
+    from .wire_log import WireLog
 
 
 class WireRootIdText(TextRepresentation):
@@ -32,17 +45,85 @@ class WireAccess(DeclaredFamily, affix="Access"):
     @abstractmethod
     def require_append(self) -> None: ...
 
+    @abstractmethod
+    def open_checkpoint(self, path: Path) -> sqlite3.Connection: ...
+
+    @abstractmethod
+    def verify_checkpoint(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                          stream: BinaryIO, path: Path) -> PrefixWitness: ...
+
+    @abstractmethod
+    def read_page(self, request: MessagePageRequest, log: WireLog) -> MessagePage: ...
+
+    @abstractmethod
+    def context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation,
+                          snapshot: RegistrySnapshot) -> Iterator[ContextManifest]: ...
+
 
 @dataclass(frozen=True)
 class WritableAccess(WireAccess):
     def require_append(self) -> None:
         pass
 
+    def open_checkpoint(self, path):
+        from .private_bus_checkpoint import _connect
+
+        return _connect(path)
+
+    def verify_checkpoint(self, bus, marker, db, stream, path):
+        from .private_bus_checkpoint import _verify_open_checkpoint_unlocked
+
+        return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
+
+    def read_page(self, request, log):
+        return request.read_indexed(log)
+
+    def context_manifests(self, source, incarnation, snapshot):
+        return source.indexed_context_manifests(incarnation, snapshot)
+
 
 @dataclass(frozen=True)
 class ArchivedAccess(WireAccess):
     def require_append(self) -> None:
         raise RelationViolationError("Archived history is read-only.")
+
+    def open_checkpoint(self, path):
+        from .private_bus_checkpoint import _connect
+
+        return _connect(path, readonly=True)
+
+    def verify_checkpoint(self, bus, marker, db, stream, path):
+        from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail
+
+        # The immutable certificate binds the original bytes and sidecar, not
+        # the current writer's disposable index membership. No recovery writes
+        # or suffix adoption are permitted in an archived source.
+        saved = PrefixCertificate.read_witness(db)
+        CertifiedSourceRead(bus.path, marker, db, stream, saved).require_current()
+        if _tail(stream, saved.offset) != saved.tail:
+            raise RelationViolationError("Archived source prefix tail changed.")
+        return saved
+
+    def read_page(self, request, log):
+        return request.read_original(log)
+
+    def context_manifests(self, source, incarnation, snapshot):
+        from .wire_log import WireLog
+
+        # Later observation indexes are not part of an older archive. Read
+        # the original typed observations in the same certified byte cut.
+        source.require_current()
+        source.stream.seek(0)
+        manifests = tuple(
+            manifest
+            for record in WireLog._snapshot_records(
+                source.marker, source.stream, source.witness.offset,
+            )
+            for manifest in record.context_manifests()
+            if manifest.thread.resolved(snapshot) == incarnation
+        )
+        source.require_current()
+        return iter(manifests)
 
 
 @dataclass
