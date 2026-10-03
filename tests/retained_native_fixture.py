@@ -11,13 +11,13 @@ from typing import Annotated
 from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, NativeForkCreation, SelectedSummaryAttempt
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import FieldCodec, FieldRepresentation, PathText
 from agent_comms.input_disposition import InputDocument
 from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 from agent_comms.native_compaction_request import NativeIntent
-from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+from agent_comms.pi_commands import AgentCommsSummarizeCompaction, PiCommand
 
 from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
@@ -38,6 +38,21 @@ from agent_comms.turn_context import ContextManifest, FileProvenance, JournalPro
 from agent_comms.wire_log import WireLog
 
 
+class SummaryCommandCapture(FieldRepresentation):
+    """Expose PiCommand's existing RPC representation to the record codec."""
+
+    @classmethod
+    def encode(cls, value):
+        return value.to_rpc()
+
+    @classmethod
+    def decode(cls, value):
+        command = PiCommand.from_wire(value)
+        if not isinstance(command, AgentCommsSummarizeCompaction):
+            raise ValueError("Summary assembly requires the original selected summary command")
+        return command
+
+
 @dataclass(frozen=True)
 class RecordedSummaryAssembly:
     """Original private inspector observation, not a native result or authority.
@@ -48,7 +63,7 @@ class RecordedSummaryAssembly:
     """
 
     strict_fields = True
-    request: AgentCommsSummarizeCompaction
+    request: Annotated[AgentCommsSummarizeCompaction, SummaryCommandCapture]
     summary: str
     generated_parts: tuple[str, ...]
     inherited_summary: str | None

@@ -16,6 +16,7 @@ from uuid import uuid4
 import pytest
 
 from agent_comms.retained_task_facts import RetainedTaskFacts
+from agent_comms.field_codec import FieldCodec
 from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -283,7 +284,7 @@ async def test_original_summary_assembly_inspector(tmp_path):
     """
     from dataclasses import replace
     from agent_comms.pi_commands import AgentCommsSummarizeCompaction
-    from agent_comms.pi_summary_payloads import SummarySummarizedData
+    from agent_comms.selected_pi_summary_rpc import _summary_response
     from agent_comms.turn_context import FileProvenance
     from retained_native_fixture import RecordedNativeCheckpoint, RecordedSummaryAssembly
     from summary_prefix_configured_installed_journey import observe_native_requests
@@ -301,9 +302,9 @@ async def test_original_summary_assembly_inspector(tmp_path):
                 id="original-source-capture", version=1, operation_id=uuid4().hex,
                 witness=preparation.witness, selected=selected, settings=settings,
                 retained_text="Original exact injected task envelope.")
-            _, reply = await exchange(FieldCodec.encode(command))
+            raw, reply = await exchange(command.to_rpc())
             assert reply["success"], reply
-            result = FieldCodec.decode(SummarySummarizedData, reply["data"])
+            result = _summary_response(raw, command, preparation.tokens_before)
             path = summaries / f"summary-{command.operation_id}.json"
             capture = RecordedNativeCheckpoint.read_record(
                 FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest()),
