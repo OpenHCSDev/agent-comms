@@ -13,9 +13,10 @@ import re
 import shutil
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -539,9 +540,27 @@ class NativePiRpcLaunch:
             worktree, environment, self.session)
 
     @classmethod
-    def tracked(
+    def acquire_tracked(cls, package: Path) -> Callable[..., NativePiRpcLaunch]:
+        """Acquire one immutable artifact's executable construction behavior.
+
+        The returned factory retains the original verified CLI for its owner's
+        lifetime. Every call still constructs a new complete source/auth launch;
+        it grants no child readiness, input admission or prior context proof.
+        """
+        package = Path(package).absolute()
+        cli = _trusted_package(package)
+        return partial(cls._tracked, package, cli)
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+        return cls.acquire_tracked(package)(**options)
+
+    @classmethod
+    def _tracked(
         cls,
         package: Path,
+        cli: Path,
         *,
         worktree: Path,
         session: SelectedSession,
@@ -550,16 +569,14 @@ class NativePiRpcLaunch:
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
-        acquired_launch: NativePiRpcLaunch | None = None,
     ) -> NativePiRpcLaunch:
-        """Verify compiled Pi bytes and acquire private writable resources before spawning.
+        """Construct a complete launch through its acquired immutable artifact.
 
         A backend must explicitly consume this launch, not guess Pi from a basename
         or trust an RPC capability response from an arbitrary executable. This
         only establishes the executable and its resources; native input, context,
         and model-delivery proofs remain separate per-attempt observations.
         """
-        package = Path(package).absolute()
         session_dir, session_file = session.directory, session.path
         try:
             for value in (provider, model):
@@ -571,12 +588,6 @@ class NativePiRpcLaunch:
         if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
             raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
         session.require_launch_tools(selected_tool_mode)
-        if acquired_launch is None:
-            cli = _trusted_package(package)
-        else:
-            if package.absolute() != acquired_launch.package:
-                raise NativePiUnavailable("Tracked launch differs from its acquired native artifact")
-            cli = acquired_launch.package / "dist" / "cli.js"
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
         _durable_private_session_dir(session_dir)

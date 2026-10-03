@@ -28,8 +28,8 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     from pathlib import Path
 
     from agent_comms import native_pi
-    from agent_comms import coordinated_runtime
     from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.coordination_errors import IdentityConflict
     from agent_comms.coordinator import Coordination
     from agent_comms.native_custody import PiSessionChild
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
@@ -60,7 +60,6 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         return verify(artifact)
 
     monkeypatch.setattr(native_pi, "_trusted_package", observed)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", observed)
     await Coordination.run_worker(execution.validate)
     launches, children = [], []
     for stage in range(2):
@@ -84,12 +83,12 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         finally:
             await child.close()
         assert child.proc.retired and await child.stderr_task == ""
-    assert len(verifications) == 2  # pre-claim plus first fresh acquired launch
+    assert len(verifications) == 1  # both stages consume the pre-claim acquisition
     assert launches[0][1] != launches[1][1]
     assert children[0].proc.identity != children[1].proc.identity
-    with pytest.raises(native_pi.NativePiUnavailable, match="differs from its acquired"):
-        await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
-            package.parent, acquired_launch=launches[0][0],
+    with pytest.raises(IdentityConflict, match="differs from its execution package"):
+        await Coordination.run_worker(partial(execution.tracked_launch,
+            package.parent,
             worktree=native.project, session=session,
             provider="response-local", model="fixture"))
     malformed = native.project / "malformed.jsonl"
@@ -104,10 +103,10 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
         package, worktree=native.project, session=session,
         provider="response-local", model="fixture"))
-    assert len(verifications) == 3 and native.provider.posts == 0
+    assert len(verifications) == 2 and native.provider.posts == 0
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
     print("actual_selected_launch_custody", json.dumps({
-        "preclaim_and_first_verifications": 2, "borrowed_verifications": 0,
+        "preclaim_and_first_verifications": 1, "borrowed_verifications": 0,
         "independent_verifications": 1, "auth_changed": True,
         "children_retired": [child.proc.retired for child in children],
         "source_bytes": source.stat().st_size, "source_sha256": before,
