@@ -1,0 +1,207 @@
+{
+  "exact_recorded_process_exits": [
+    {
+      "identity": {
+        "pid": 2124156,
+        "start_time": 47658224
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 2124999,
+        "start_time": 47659620
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 2129665,
+        "start_time": 47672375
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ],
+  "owner_idle": true,
+  "last_finished_turn_id": "a356d5feff534eee98c2bfb38f38f57b",
+  "input_count": 1,
+  "inputs": [
+    {
+      "key": "acp:5397d96c5a35433998a1d4693ef2c870",
+      "kind": "StartedInput",
+      "has_started": true
+    }
+  ],
+  "transcript_checkpoint": {
+    "session_file": "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl",
+    "offset": 42116826,
+    "receipts": {
+      "root": "/home/ts/.cache/agent-scratch/m562-configured/wire",
+      "recipient": {
+        "name": "source529",
+        "created_at": 1791000954.0122695
+      },
+      "sequence": 1
+    },
+    "outcomes": null
+  },
+  "native_requests": {
+    "26b3d0ff-9992-4051-b33d-a25555160707": [
+      {
+        "stage": "preparing",
+        "elapsed_ms": 0.072938,
+        "observed_at_ms": 1791001090537,
+        "receipt_monotonic_ns": 476729741674818
+      },
+      {
+        "stage": "callback",
+        "elapsed_ms": 137.849182,
+        "observed_at_ms": 1791001090675,
+        "receipt_monotonic_ns": 476729914512904
+      },
+      {
+        "stage": "callback_end",
+        "elapsed_ms": 137.938922,
+        "observed_at_ms": 1791001090675,
+        "receipt_monotonic_ns": 476729915141987
+      },
+      {
+        "stage": "connecting",
+        "elapsed_ms": 140.62804,
+        "observed_at_ms": 1791001090678,
+        "receipt_monotonic_ns": 476729915672713
+      },
+      {
+        "stage": "connected",
+        "elapsed_ms": 423.898331,
+        "observed_at_ms": 1791001090961,
+        "receipt_monotonic_ns": 476730143613997
+      },
+      {
+        "stage": "dispatch",
+        "elapsed_ms": 423.976028,
+        "observed_at_ms": 1791001090961,
+        "receipt_monotonic_ns": 476730144437669
+      },
+      {
+        "stage": "first_event",
+        "elapsed_ms": 898.705838,
+        "observed_at_ms": 1791001091436,
+        "receipt_monotonic_ns": 476730613865147
+      },
+      {
+        "stage": "callback",
+        "elapsed_ms": 898.934051,
+        "observed_at_ms": 1791001091436,
+        "receipt_monotonic_ns": 476730614843532
+      },
+      {
+        "stage": "callback_end",
+        "elapsed_ms": 899.050552,
+        "observed_at_ms": 1791001091436,
+        "receipt_monotonic_ns": 476730616207608
+      },
+      {
+        "stage": "first_delta_consumed",
+        "elapsed_ms": 2949.087331,
+        "observed_at_ms": 1791001093486,
+        "receipt_monotonic_ns": 476732665448237
+      },
+      {
+        "stage": "stream_end",
+        "elapsed_ms": 3330.897128,
+        "observed_at_ms": 1791001093868,
+        "receipt_monotonic_ns": 476733045802355
+      },
+      {
+        "stage": "callback",
+        "elapsed_ms": 3331.376236,
+        "observed_at_ms": 1791001093868,
+        "receipt_monotonic_ns": 476733048981321
+      },
+      {
+        "stage": "callback_end",
+        "elapsed_ms": 3334.244624,
+        "observed_at_ms": 1791001093871,
+        "receipt_monotonic_ns": 476733059301196
+      },
+      {
+        "stage": "finished",
+        "elapsed_ms": 3334.277717,
+        "observed_at_ms": 1791001093871,
+        "receipt_monotonic_ns": 476733059933495
+      }
+    ],
+    "e752880d-7ac5-4fdc-b10c-88eefc8dffee": [
+      {
+        "stage": "preparing",
+        "elapsed_ms": 0.043322,
+        "observed_at_ms": 1791000978834,
+        "receipt_monotonic_ns": 476618111467108
+      },
+      {
+        "stage": "callback",
+        "elapsed_ms": 10.430174,
+        "observed_at_ms": 1791000978845,
+        "receipt_monotonic_ns": 476618114828581
+      },
+      {
+        "stage": "callback_end",
+        "elapsed_ms": 10.511428,
+        "observed_at_ms": 1791000978845,
+        "receipt_monotonic_ns": 476618115475938
+      },
+      {
+        "stage": "connecting",
+        "elapsed_ms": 14.886172,
+        "observed_at_ms": 1791000978849,
+        "receipt_monotonic_ns": 476618115786036
+      },
+      {
+        "stage": "connected",
+        "elapsed_ms": 873.320132,
+        "observed_at_ms": 1791000979707,
+        "receipt_monotonic_ns": 476618889820877
+      },
+      {
+        "stage": "dispatch",
+        "elapsed_ms": 873.407257,
+        "observed_at_ms": 1791000979708,
+        "receipt_monotonic_ns": 476618890563345
+      },
+      {
+        "stage": "first_event",
+        "elapsed_ms": 1099.103846,
+        "observed_at_ms": 1791000979933,
+        "receipt_monotonic_ns": 476619111233515
+      },
+      {
+        "stage": "first_delta_consumed",
+        "elapsed_ms": 2862.688275,
+        "observed_at_ms": 1791000981697,
+        "receipt_monotonic_ns": 476620875162496
+      },
+      {
+        "stage": "stream_end",
+        "elapsed_ms": 98139.073893,
+        "observed_at_ms": 1791001076973,
+        "receipt_monotonic_ns": 476716151224060
+      },
+      {
+        "stage": "finished",
+        "elapsed_ms": 98140.51243,
+        "observed_at_ms": 1791001076975,
+        "receipt_monotonic_ns": 476716336768496
+      }
+    ]
+  },
+  "settings_equal_original": {
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "worktree": "/home/ts/code/projects/openhcs"
+  },
+  "no_public_mutation": true
+}

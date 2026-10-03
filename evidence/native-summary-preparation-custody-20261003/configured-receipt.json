@@ -1,0 +1,61 @@
+{
+  "intent": {
+    "head": "cc56dbee09aa062b3a89c644c94360b21efcc668",
+    "interpreter": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001/bin/python",
+    "installed_module": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001/lib/python3.14/site-packages/agent_comms",
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent",
+    "native_manifest_sha256": "044646789787e3d3bcc43391e62c214d94ddffeb528692235c9d35f0db7af968",
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-merged-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "sdk": "0.12.1",
+    "source_files_equal": 339,
+    "original_selection": {
+      "identity": {
+        "incarnation": {
+          "name": "openhcs-audit-merged-boundaries",
+          "created_at": 1790873473.1996155
+        },
+        "generation": 2412
+      },
+      "process": {
+        "pid": 2079775,
+        "start_time": 47570512
+      },
+      "admission_generation": 2376
+    },
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "source_bytes": 42045168,
+    "protected_before": {
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "e7575aac784196d2cfae74ec70dc4c4385460e54a863638212dc5a296a2b7bbe",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "c7e0f6ed9fac32fd4cfd88b7dbd5f99d08e9a6fadb4eacb2d4c9c9ec682a6f87",
+      "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/79cb9232873a4501a118cc25da9fca67.json": "a997603d0a073c1e9c9266fcc373be029cc3f6f1f52dea24646c9b99553cec0d"
+    },
+    "public_inputs": 0,
+    "replay": false
+  },
+  "journey": {
+    "complete": true,
+    "public_inputs": 0,
+    "input_replays": 0,
+    "installed_UI": false,
+    "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "source_bytes": 42045168,
+    "original_sha256": "e7575aac784196d2cfae74ec70dc4c4385460e54a863638212dc5a296a2b7bbe",
+    "fork_bytes": 42045151,
+    "manual_commit": "e9a9ed6a2ee541bc87ac90dc7814228d",
+    "peer_messages_during_summary": 1,
+    "original_inputs_before_new_prompt": 0,
+    "distinct_input_started_once": true,
+    "distinct_answer": true,
+    "elapsed_seconds": 147.61738297401462,
+    "original_source_unchanged": true,
+    "native_children_closed": true
+  },
+  "scope": "Actual configured provider, SDK/ACP selected summary followed by one distinct original input and terminal/checkpoint; no UI or controlled latency comparison.",
+  "original_protected_unchanged": true
+}
