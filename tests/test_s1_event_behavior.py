@@ -218,8 +218,6 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         assert progress.terminal_failure["diagnostic"] == diagnostic
     await runner.settle_turn(
         execution.session_id,
-        execution.thread_name,
-        execution.turn_id,
         execution.turn_lease,
     )
     assert comms.goals.goal_wait("waiting") is None
@@ -252,8 +250,6 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
     with pytest.raises(ConnectionError, match="client disconnected"):
         await runner.settle_turn(
             execution.session_id,
-            execution.thread_name,
-            execution.turn_id,
             execution.turn_lease,
         )
     assert comms.goals.goal_wait("waiting") is None

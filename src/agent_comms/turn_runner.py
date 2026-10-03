@@ -416,7 +416,7 @@ class TurnRunner:
         """
         owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
         resources.push_async_callback(
-            self.settle_turn, session_id, thread_name, turn_id, owner.turn_lease,
+            self.settle_turn, session_id, owner.turn_lease,
             task=task,
         )
         return owner
@@ -435,8 +435,6 @@ class TurnRunner:
     async def settle_turn(
         self,
         session_id: str,
-        thread_name: str,
-        turn_id: str,
         lease: TurnLeaseFence,
         *,
         task: asyncio.Task[Any] | None = None,

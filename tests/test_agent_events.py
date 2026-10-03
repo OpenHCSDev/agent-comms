@@ -222,9 +222,9 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     monkeypatch.setattr(comms.goals, "release_waits_after_terminal_turn", release)
     if publication_fails:
         with pytest.raises(RuntimeError, match="client closed"):
-            await owner.turns.settle_turn("session", "bot", "turn", lease, task=task)
+            await owner.turns.settle_turn("session", lease, task=task)
     else:
-        await owner.turns.settle_turn("session", "bot", "turn", lease, task=task)
+        await owner.turns.settle_turn("session", lease, task=task)
     assert effects == ["publish", "release"]
 
 
@@ -253,7 +253,7 @@ async def test_stale_settlement_preserves_replacement_turn(
         observed.append(event.state)
 
     monkeypatch.setattr(owner, "_emit_event", emit)
-    await owner.turns.settle_turn("session", "bot", "turn", lease)
+    await owner.turns.settle_turn("session", lease)
     assert released == [None]
     assert comms.registry.require("bot").turn_lease == replacement
     assert observed[0].active.turn_generation == replacement.identity.generation
@@ -303,7 +303,7 @@ async def test_cancelled_worker_keeps_original_lease_and_waiter_cleanup(
         monkeypatch.setattr(comms.agents, "finish_turn", hold)
 
         async def run():
-            await owner.turns.settle_turn("session", "bot", "turn", lease)
+            await owner.turns.settle_turn("session", lease)
 
     pending = asyncio.create_task(run())
     try:
