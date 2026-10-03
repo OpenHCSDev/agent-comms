@@ -221,7 +221,7 @@ async def test_recorded_native_recall_consumes_original_probe_and_preserves_sour
     assert observed["context"]["inputId"] == owner.starts[-1][1]
     assert observed["answer"]["id"] == answer.id
     assert observed["answer_text"] == owner.provider.text
-    assert result["provider_prompt_presence"] == "not measured; native user/context proof reported"
+    assert result["provider_prompt_presence"][first.identity]["evaluated"] is False
     with pytest.raises(ValueError, match="frozen held-out"):
         scenario.rounds[1].score_native(decoded.rounds[first.identity])
     bad_answer = replace(decoded.rounds[first.identity], answer_entry_id=answer.parent_id)

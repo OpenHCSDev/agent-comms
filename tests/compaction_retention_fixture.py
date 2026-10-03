@@ -1,8 +1,9 @@
-"""Synthetic repeated-compaction recall oracle.
+"""Frozen recall scoring and original-record repeated-compaction measurements.
 
 Run directly to export public history/questions. --answers scores supplied JSON;
 --native-probes reads original input/context/answer/checkpoint references.
 --native-checkpoint measures an original committed cut without a model call.
+--recorded-run measures declared original cuts and recorded probes together.
 Oracle metadata is omitted from exported questions.
 Exact-match scoring deliberately measures identifiers/state, not prose quality.
 """
@@ -12,7 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import argparse
 from collections.abc import Iterator
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
 import json
@@ -20,6 +21,8 @@ from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import unique_fields
+from agent_comms.native_entries import NativeEntry
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
 
@@ -31,6 +34,46 @@ class RecordedAnswers:
 @dataclass(frozen=True)
 class RecordedNativeProbes:
     rounds: dict[str, RecordedNativeProbe]
+    checkpoints: dict[str, RecordedNativeCheckpoint] = field(default_factory=dict)
+
+    def observe(self, rounds):
+        """Visit declared cuts in frozen round order, borrowing each source once."""
+        if self.rounds.keys() & self.checkpoints.keys():
+            raise ValueError("A probed round's checkpoint belongs on its RecordedNativeProbe")
+        selected = dict(self.checkpoints)
+        for identity, probe in self.rounds.items():
+            if probe.checkpoint is not None:
+                selected[identity] = probe.checkpoint
+        unexpected = selected.keys() - {item.identity for item in rounds}
+        if unexpected:
+            raise ValueError(f"Unknown checkpoint rounds: {sorted(unexpected)}")
+        cuts = tuple((item.identity, selected[item.identity]) for item in rounds
+                     if item.identity in selected)
+        if not cuts and not self.rounds:
+            return {}, {}
+        path = Path(cuts[0][1].reference.session_file) if cuts else Path(
+            next(iter(self.rounds.values())).session.session_file
+        )
+        reports, observations = {}, {}
+        with NativeEntry.open_evidence(path) as evidence:
+            header, _ = evidence.observe()
+            session = NativeSessionIdentity(header.id, str(path))
+            previous = None
+            for identity, checkpoint in cuts:
+                attempt, entry, covered = checkpoint.capture(session, evidence)
+                report = checkpoint._report(attempt, entry, covered)
+                if previous is not None:
+                    old, prior_attempt, prior_entry = previous
+                    if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
+                        raise ValueError("Repeated measurements require distinct original ancestor cuts")
+                    report["source_changes"] = attempt.request.retained.changed_from(prior_attempt.request.retained)
+                    report["revision_mass"] = checkpoint.revision_from(old, prior_attempt, attempt)
+                reports[identity] = report
+                previous = checkpoint, attempt, entry
+            for identity, probe in self.rounds.items():
+                session.require_same_session(probe.session)
+                observations[identity] = probe.read(evidence)
+        return reports, observations
 
 
 class Condition(str, Enum):
@@ -210,7 +253,10 @@ class RecallRound:
         )
 
     def score_native(self, probe: RecordedNativeProbe):
-        original = probe.observe()
+        return self.score_recorded(probe.observe())
+
+    def score_recorded(self, original):
+        """Score an already corroborated original; resource ownership stays upstream."""
         if original["prompt"] != self.probe_text():
             raise ValueError("Recorded native probe differs from the frozen held-out questions")
         answers = decode_answers(original["answer_text"])
@@ -265,24 +311,35 @@ class RecallScenario:
         unexpected = probes.rounds.keys() - {item.identity for item in self.rounds}
         if unexpected:
             raise ValueError(f"Unknown native rounds: {sorted(unexpected)}")
-        scored, evidence = [], {}
+        checkpoints, evidence = probes.observe(self.rounds)
+        scored = []
         for item in self.rounds:
             if item.identity in probes.rounds:
-                score, original = item.score_native(probes.rounds[item.identity])
-                evidence[item.identity] = original
+                score, _ = item.score_recorded(evidence[item.identity])
             else:
                 score = item.score({})
             scored.append(score)
         result = ScoredScenario(self, condition, tuple(scored)).public()
         return dict(result, native_probes=evidence,
                     scope="recorded original native probes; condition label is not construction proof",
+                    checkpoints=checkpoints,
+                    original_checkpoint_count=len(checkpoints),
+                    three_original_cuts_observed=len(checkpoints) >= 3,
                     canonical_availability={
-                        item.identity: evidence[item.identity]["canonical_availability"]
+                        item.identity: checkpoints[item.identity]["canonical_availability"]
+                        if item.identity in checkpoints else {
+                            "evaluated": False, "reason": "No original committed checkpoint supplied"
+                        } for item in self.rounds
+                    },
+                    provider_prompt_presence={
+                        item.identity: evidence[item.identity]["provider_prompt_presence"]
                         if item.identity in evidence else {
                             "evaluated": False, "reason": "No original native probe supplied"
                         } for item in self.rounds
                     },
-                    provider_prompt_presence="not measured; native user/context proof reported")
+                    revision_mass={identity: report["revision_mass"]
+                                   for identity, report in checkpoints.items()},
+                    recall_scope="Original recorded answers only; authored answers are scorer controls")
 
 
 def coding_scenario() -> RecallScenario:
@@ -415,6 +472,8 @@ def main() -> None:
     recorded = parser.add_mutually_exclusive_group()
     recorded.add_argument("--answers", type=Path)
     recorded.add_argument("--native-probes", type=Path)
+    recorded.add_argument("--recorded-run", type=Path,
+                          help="RecordedNativeProbes with ordered checkpoint and original evidence references")
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
     parser.add_argument("--previous-checkpoint", type=Path,
@@ -436,6 +495,11 @@ def main() -> None:
         probes = FieldCodec.decode(RecordedNativeProbes, {
             "rounds": json.loads(args.native_probes.read_text(), object_pairs_hook=unique_fields)
         })
+        result = scenario.score_native(args.condition, probes)
+    if args.recorded_run is not None:
+        probes = FieldCodec.decode(RecordedNativeProbes, json.loads(
+            args.recorded_run.read_text(), object_pairs_hook=unique_fields
+        ))
         result = scenario.score_native(args.condition, probes)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
