@@ -1,0 +1,805 @@
+{
+  "source": "80b4bad953d6f17c3bc22ae4131d653554193f6a",
+  "roots": [
+    "src",
+    "tests",
+    "tools"
+  ],
+  "modules": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 275,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/compaction_boundary.py",
+      "line": 198,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/compaction_boundary.py",
+      "line": 199,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/compaction_source.py",
+      "line": 32,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/compaction_source.py",
+      "line": 45,
+      "node": "Attribute",
+      "expression": "self.settings_paths"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 43,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 80,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/fresh_private_session.py",
+      "line": 462,
+      "node": "Name",
+      "expression": "_durable_private_session_dir"
+    },
+    {
+      "file": "src/agent_comms/fresh_private_session.py",
+      "line": 526,
+      "node": "Name",
+      "expression": "_fsync_directory"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 27,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 82,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 133,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 146,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 160,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 163,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 161,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 139,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 141,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_fork.py",
+      "line": 35,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 394,
+      "node": "ClassDef",
+      "name": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 774,
+      "node": "FunctionDef",
+      "name": "_fsync_directory"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 783,
+      "node": "FunctionDef",
+      "name": "_durable_private_session_dir"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 542,
+      "node": "FunctionDef",
+      "name": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 491,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 553,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 341,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 527,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 100,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 322,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 344,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 575,
+      "node": "Name",
+      "expression": "_durable_private_session_dir"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 582,
+      "node": "Name",
+      "expression": "_durable_private_session_dir"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 603,
+      "node": "Attribute",
+      "expression": "session.launch_environment"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 288,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 323,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 804,
+      "node": "Name",
+      "expression": "_fsync_directory"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 808,
+      "node": "Name",
+      "expression": "_fsync_directory"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 329,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 347,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 352,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "src/agent_comms/native_startup.py",
+      "line": 71,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 100,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 100,
+      "node": "Attribute",
+      "expression": "launch.configuration.settings_paths"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 167,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 144,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 191,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 130,
+      "node": "Name",
+      "expression": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/owner_launch.py",
+      "line": 92,
+      "node": "FunctionDef",
+      "name": "for_agent"
+    },
+    {
+      "file": "src/agent_comms/owner_launch.py",
+      "line": 109,
+      "node": "FunctionDef",
+      "name": "settings_paths"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 295,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 501,
+      "node": "Attribute",
+      "expression": "self.stop_reason.tracked"
+    },
+    {
+      "file": "src/agent_comms/pi_vocabulary.py",
+      "line": 48,
+      "node": "FunctionDef",
+      "name": "tracked"
+    },
+    {
+      "file": "src/agent_comms/pi_vocabulary.py",
+      "line": 60,
+      "node": "FunctionDef",
+      "name": "tracked"
+    },
+    {
+      "file": "src/agent_comms/pi_vocabulary.py",
+      "line": 72,
+      "node": "FunctionDef",
+      "name": "tracked"
+    },
+    {
+      "file": "src/agent_comms/pi_vocabulary.py",
+      "line": 74,
+      "node": "Attribute",
+      "expression": "super().tracked"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 75,
+      "node": "FunctionDef",
+      "name": "launch_environment"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 297,
+      "node": "FunctionDef",
+      "name": "launch_environment"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 84,
+      "node": "Attribute",
+      "expression": "RestartEnvironment.inherit(environment).for_agent"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 215,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 215,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/conftest.py",
+      "line": 63,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/conftest.py",
+      "line": 92,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/conftest.py",
+      "line": 82,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/native_event_host.py",
+      "line": 26,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/native_event_host.py",
+      "line": 27,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/native_event_host.py",
+      "line": 56,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/native_event_host.py",
+      "line": 57,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 156,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/native_initialization_installed_pilot.py",
+      "line": 29,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/native_initialization_installed_pilot.py",
+      "line": 29,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 64,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 272,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 273,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 274,
+      "node": "Name",
+      "expression": "tracked"
+    },
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 34,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 51,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_backend_response_ownership.py",
+      "line": 31,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 636,
+      "node": "Attribute",
+      "expression": "fresh_module._fsync_directory"
+    },
+    {
+      "file": "tests/test_fresh_private_session.py",
+      "line": 309,
+      "node": "Attribute",
+      "expression": "module._fsync_directory"
+    },
+    {
+      "file": "tests/test_input_drain_native.py",
+      "line": 134,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_input_drain_native.py",
+      "line": 154,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_maintenance_native_boundary.py",
+      "line": 62,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_maintenance_native_boundary.py",
+      "line": 73,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_managed_project_native_latency.py",
+      "line": 75,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_managed_project_native_latency.py",
+      "line": 84,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_catalog_discovery.py",
+      "line": 153,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_evidence_boundary.py",
+      "line": 124,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_evidence_boundary.py",
+      "line": 105,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_evidence_boundary.py",
+      "line": 124,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_evidence_boundary.py",
+      "line": 105,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_only_execution.py",
+      "line": 48,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_only_execution.py",
+      "line": 120,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_only_execution.py",
+      "line": 46,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_only_execution.py",
+      "line": 70,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_owner_launcher_resolution.py",
+      "line": 31,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_owner_launcher_resolution.py",
+      "line": 34,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_owner_launcher_resolution.py",
+      "line": 41,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_owner_launcher_resolution.py",
+      "line": 52,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_owner_launcher_resolution.py",
+      "line": 65,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 268,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 274,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 331,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 801,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 233,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 268,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 274,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 331,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 801,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 820,
+      "node": "Attribute",
+      "expression": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 233,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 820,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 519,
+      "node": "Attribute",
+      "expression": "configuration.for_agent"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 529,
+      "node": "Attribute",
+      "expression": "fork.settings_paths"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 530,
+      "node": "Attribute",
+      "expression": "fork.settings_paths"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 541,
+      "node": "Attribute",
+      "expression": "configuration.for_agent"
+    },
+    {
+      "file": "tests/test_pi_rpc_nominal.py",
+      "line": 98,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 513,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 532,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1001,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1019,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 168,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "node": "Name",
+      "expression": "NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 47,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 54,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 47,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 54,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 65,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 69,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 65,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 69,
+      "node": "Attribute",
+      "expression": "native_pi.NativePiRpcLaunch"
+    }
+  ],
+  "limits": "Lexical references only, not dynamic dispatch. Existing NRA Package parser."
+}
