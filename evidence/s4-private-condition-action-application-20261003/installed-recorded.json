@@ -1,0 +1,42 @@
+{
+  "complete": true,
+  "source_revision": "da8cce269055c0025703680a5b405aada798741d",
+  "focused_controls": {
+    "passed": 3,
+    "seconds": 0.268
+  },
+  "original_recorded_export_unchanged": true,
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "original_checkpoint_count": 3,
+  "actual_tool_steps": {
+    "cut-1": 0,
+    "cut-2": 1,
+    "cut-3": 1
+  },
+  "action_questions_in_original": 0,
+  "original_started_rows_unchanged": 2,
+  "provider_calls": 0,
+  "new_inputs": 0,
+  "condition_application_qualified": false,
+  "all_constraint_permission_qualified": false,
+  "scope": "Installed original-record scorer and frozen invocation plumbing; no model action/intervention claim"
+}
