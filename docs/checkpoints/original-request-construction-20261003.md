@@ -69,18 +69,63 @@ and the measurement probes; their existing observation lifecycle is preserved.
 
 [Native source owners](../../evidence/original-request-construction-20261003/native-source-owners.json)
 
-## Still open; not Ready
+## Correlated source checkpoint
 
-Budget records use the original request ID. The exact SDK context's native
-generation/digest still needs to cross the original context-publication boundary;
-input ID alone is insufficient. `onContextReady` currently has a void return
-contract, while the native publisher separately emits the original manifest.
-That relation must be closed through those owners before the scorer can bind a
-budget to an original manifest. No historical field or guessed join is added.
+`74f67b00` closes the original manifest/request handoff. The native loop passes
+its acquired request ID to `onContextReady`. That hook still returns void and
+publishes the original committed context through `TurnContext.manifest(requestId)`.
+All three native callback declarations change together. The existing native and
+Python manifest declarations retain that observation; there is no second source
+generation, digest calculation, context owner or new publication store.
 
-Condition construction still needs an actual original source selection through
-`SessionContext`/native execution. These new budget fields neither create that
-selection nor establish full-context eligibility or exact final HTTP bytes.
-This is a published source checkpoint, not installed acceptance. No native
-artifact, environment, provider call or original input was created or changed.
-Final checks follow the complete related owner/caller implementation.
+`RecordedNativeProbe` selects the original admitted budget records by this exact
+manifest request ID, then corroborates the recorded owner turn, session and input.
+It retains ordered revised allowances. Same-input or clock guesses are excluded.
+The existing diagnostics owner now supplies its publication path to both writer
+and the configured three-cut recorder. No current registry/catalog or completion
+metadata fills a missing original request fact.
+
+Existing previews, historical manifests and records without request measurements
+remain unavailable for this question. Their optional observation is omitted on
+encoding. This does not restore a historical dispatch relation. Original SDK source
+membership and exact byte observations keep their prior owners and limits.
+
+The new manifest coordinate is part of native/Python event and durable observation
+JSON. Old observation JSON remains readable by the existing optional-field contract;
+older core readers cannot consume new native manifest fields. Receiving requires
+one matching native artifact and Core decoder, with owners and clients moved
+normally together. There is no SQL/source/proof/input schema change or reset.
+Native915 and the installed pair are untouched.
+
+The AST receipt records the original and changed native owner declarations with
+zero parse omissions. Existing NRA parsing of Python production, test and tool
+roots finds 12 relevant declarations and 118 lexical consumers at this checkpoint,
+with zero omissions. Patch-generated native calls were read separately; these
+outputs do not resolve dynamic imports, generated code or MRO execution.
+
+[Python owner consumers](../../evidence/original-request-construction-20261003/python-source-owners.json)
+
+## Final source sanity and remaining acceptance
+
+Eleven original measurement controls pass, including exact request/turn/session/input
+binding, ordered revised allowances, unavailable historical observations and refusal
+of unrelated records. Nine changed Python/native source files pass syntax checks.
+The changed native classes linked to the original SDK estimators pass requested vs
+admitted allowance, omitted output intent, overflow without an admission record,
+request correlation and preview absence controls without provider calls.
+The initial sanity invocations found missing pytest in the borrowed interpreter
+and an inline driver's builtin import URL mistake; the existing dependency path
+and driver import were corrected. No environment or package was created.
+
+[Native source sanity](../../evidence/original-request-construction-20261003/native-source-sanity.json)
+
+This remains draft, not installed or live-qualified. The next receiving step needs
+a matching native artifact through Sch's existing builder. The actual installed
+context→budget→diagnostic→scorer path must then be exercised once. No new paid
+comparative study or historical input replay is proposed.
+
+Actual experimental source selection and full-history eligibility are still not
+supplied by labels, the admitted current-context estimate or journal membership.
+Provider-token counts and final HTTP bytes remain distinct absent evidence.
+The separate thirty-pair study remains unapproved; it has not run. Seven original
+capture hashes, two Started inputs and the completed three-cut proofs are untouched.

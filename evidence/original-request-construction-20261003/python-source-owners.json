@@ -1,0 +1,755 @@
+{
+  "revision": "74f67b000c1b769e9c033dbf0cf64d78b2dcd835",
+  "tool": "audit.findings.Package",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "name": "ContextObserved",
+      "line": 56,
+      "bases": [
+        "AgentEvent"
+      ],
+      "members": []
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "name": "NativeContextManifestData",
+      "line": 12,
+      "bases": [
+        "PiResponseData"
+      ],
+      "members": [
+        "for_turn",
+        "record"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "name": "TurnContextObserved",
+      "line": 326,
+      "bases": [
+        "PiEvent"
+      ],
+      "members": [
+        "apply"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "name": "PiModel",
+      "line": 763,
+      "bases": [
+        "PiPayload",
+        "DeclaredFamily"
+      ],
+      "members": [
+        "wire_member",
+        "matches_identity",
+        "require_selection",
+        "for_compaction"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "name": "ReportedModel",
+      "line": 791,
+      "bases": [
+        "PiModel"
+      ],
+      "members": [
+        "identity",
+        "matches_identity",
+        "require_selection",
+        "for_compaction",
+        "display_name"
+      ]
+    },
+    {
+      "path": "src/agent_comms/request_progress.py",
+      "name": "RequestProgress",
+      "line": 8,
+      "bases": [
+        "PiPayload"
+      ],
+      "members": [
+        "__post_init__",
+        "label"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "NativeProvenance",
+      "line": 59,
+      "bases": [
+        "Provenance"
+      ],
+      "members": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "ContextManifest",
+      "line": 422,
+      "bases": [],
+      "members": [
+        "changed_from_history",
+        "changed_since"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "TurnContext",
+      "line": 461,
+      "bases": [],
+      "members": [
+        "for_owner",
+        "prepend",
+        "append",
+        "render",
+        "render_segments",
+        "manifest"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "name": "TurnLeaseFence",
+      "line": 132,
+      "bases": [
+        "TurnFence"
+      ],
+      "members": []
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeCheckpoint",
+      "line": 40,
+      "bases": [],
+      "members": [
+        "read_bytes",
+        "read_json",
+        "read_json_lines",
+        "read_record",
+        "summary_usage",
+        "capture",
+        "_report",
+        "observe",
+        "inspect",
+        "revision_from",
+        "scoped_facts"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274,
+      "bases": [],
+      "members": [
+        "submitted_prompt",
+        "answer_for_input",
+        "read_sdk_context",
+        "sdk_request",
+        "request_manifest",
+        "prompt_presence",
+        "request_budget",
+        "observe",
+        "construction",
+        "model_steps",
+        "tool_steps",
+        "read"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 180,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 184,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 188,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 59,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 356,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 205,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 294,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 776,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 129,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 111,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 338,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 143,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 410,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 400,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 41,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 19,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 41,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 289,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 212,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 327,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 88,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 151,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 783,
+      "name": "PiModel"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 791,
+      "name": "PiModel"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 901,
+      "name": "PiModel"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 771,
+      "name": "ReportedModel"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 929,
+      "name": "PiModel"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 385,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 255,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 258,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 185,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 191,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 197,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 312,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 339,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 351,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 354,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/request_progress.py",
+      "line": 28,
+      "name": "PiModel"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 89,
+      "name": "TurnContextObserved"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 90,
+      "name": "TurnContextObserved"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 69,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 46,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 49,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 344,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 331,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 338,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 198,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 495,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 475,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 489,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 492,
+      "name": "TurnContext"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 511,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 450,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 512,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 431,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 93,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 154,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 407,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 417,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 63,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 38,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 39,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 510,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 763,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 766,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 81,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 282,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 350,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 356,
+      "name": "NativeProvenance"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 148,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 301,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 350,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 402,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 410,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 334,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 369,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 407,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 343,
+      "name": "NativeProvenance"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 212,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 213,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 443,
+      "name": "TurnContext"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 431,
+      "name": "TurnContext"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 434,
+      "name": "TurnContext"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 53,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 101,
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 51,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 65,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 66,
+      "name": "TurnLeaseFence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 67,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 68,
+      "name": "RequestProgress"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 126,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 182,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 251,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 332,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 335,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 109,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 215,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 222,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 255,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 70,
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 312,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 330,
+      "name": "NativeProvenance"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 23,
+      "name": "ContextManifest"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 67,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 301,
+      "name": "TurnContext"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 137,
+      "name": "ContextObserved"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 139,
+      "name": "TurnContextObserved"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 73,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 97,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 104,
+      "name": "NativeProvenance"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 107,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 102,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 223,
+      "name": "NativeProvenance"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 227,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 209,
+      "name": "RecordedNativeCheckpoint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 221,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 301,
+      "name": "TurnContext"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 289,
+      "name": "TurnContext"
+    }
+  ],
+  "scope": "Lexical AST references; dynamic report readers and MRO resolution require semantic review"
+}
