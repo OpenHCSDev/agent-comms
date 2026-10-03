@@ -1,7 +1,8 @@
 # Installed original context readers
 
 Ready: source90a34762, required-parts compiled d5 artifact, reused thin540.
-Actual model onContextReady publication remains unqualified.
+This original SDK-authored receipt does not qualify model publication. The
+separate later configured publication receipt now qualifies that path.
 
 The SDK contract authored one original capture and one transformed-message
 capture. Installed original RuntimeConnection resolved the root, its distinct

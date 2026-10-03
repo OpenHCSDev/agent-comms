@@ -11,8 +11,8 @@ Actual SDK request values belong to AgentSession.onContextReady after
 _commitNativeContext. Its existing TurnContextObserved/ContextManifest publication now captures
 nonrecoverable public values and preserves verified native/input/journal/file
 references. Recoverable native history is not copied wholesale into the wire.
-The matching SDK capture/read is qualified; actual model onContextReady
-execution remains unqualified.
+The matching SDK capture/read and the one actual configured model onContextReady
+publication are now qualified, with distinct receipts below.
 
 An original reference may supply text only when the original bytes can be
 verified. Current files/previews cannot replace historical missing values.
@@ -100,7 +100,8 @@ The original b0 source checkpoint preceded qualification. #603 is now Ready
 for SDK-authored capture and installed authenticated reader scope. Parent406
 current-instruction physical gates retain native89 scope; they do not qualify
 the new command. Sch supplied matching d5; the installed reader receipt below
-qualifies that artifact without claiming model onContextReady execution.
+qualifies that artifact. The final configured model publication has its own
+39.747-second receipt; it is not inferred from the SDK-authored gate.
 
 ## Owner and consumer closure
 
@@ -252,3 +253,40 @@ child exited. This is authored SDK capture and installed authenticated read
 acceptance; no model onContextReady request, HTTP body, recall or physical UI
 claim. Native d5 compiled source is unchanged. Evidence includes the original
 negative and corrected terminal/read receipts.
+
+
+## Actual configured publication
+
+Main605 was normally merged at40f557d4 before input. RegistryDocument,
+RegistryNames/Presence, Registration and ThreadView exactly match determining
+main db620680; no snapshot/default rollback remains. The same thin540 received
+only a normal Core wheel, with unchanged dependencies and matching d5 native.
+
+The existing configured journey forked the original idle architecture-memory
+42,662,475-byte source through SDKFork/RetainedOwnerLaunch, preserving actual
+Sol6.1/HIGH/model/auth configuration. It sent ONE distinct terse input through
+actual stdioACP and RuntimeServer, with no replay or forced compaction.
+
+Actual AgentSession.onContextReady → TurnContextObserved → PiEvent decoder →
+TurnProgress leased sealed ContextManifest publication produced original request
+`f948ca63-c6b5-4ca5-a4d5-f7c624762478`. Its generation/digest match the committed
+native input proof. No direct observed.record or fixture SQL seeding occurs in
+this configured mode. Original root/system/exact-child RPC reads matched the
+original manifest and returned through the same native child. System public text
+20,816 bytes, transcript root363,603 bytes. The selected original childb3f9408e
+is ThinkingContent+ToolCallContent, so canonical public text is exactly empty;
+this is not unavailable data. The SDK-authored gate separately covers distinct
+nonempty child and mixed captures. No hidden content was copied to results.
+
+The configured journey passed39.7472s; prompt through return19.7830s is not pure
+provider time. Four actual ACP usage updates arrived. Original source SHA stayed
+1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258.
+Original native user/reply, Started disposition, terminal lease, waiter release,
+query-byte preservation, ACP exit and native child retirement are retained.
+No claim of finalHTTP bytes, recall or physical recorded UI is made.
+
+Source/runtime were frozen throughout execution; final driver observation uses
+the original typed StartedInput directly. Receipt fields are projections only.
+No additional provider run is requested. Raw private receipt and saved source
+remain in the owned fixture; sanitized original IDs/hashes and cleanup are in
+`evidence/context-source603-configured-publication-20261003/`.

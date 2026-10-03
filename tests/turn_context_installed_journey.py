@@ -70,7 +70,7 @@ async def configured_terminal(owner, thread, output, receipt, marker):
     return marker, child
 
 
-async def read_actual_context_publication(owner, thread, child, output, receipt):
+async def read_actual_context_publication(owner, thread, child, original_input, output, receipt):
     """Read the manifest emitted by the one actual model turn, never publish it."""
     import hashlib
     from agent_comms.field_codec import FieldCodec
@@ -80,10 +80,9 @@ async def read_actual_context_publication(owner, thread, child, output, receipt)
 
     service = owner._comms
     manifest, = (value for value in service.bus.log.context_manifests(thread.name, service.registry)
-                  if value.turn.identity.value == receipt['original_lease']['turn_id'])
+                  if value.turn.identity.value == original_input.turn_id)
     request_id = manifest.require_request_id()
-    input_id = receipt['original_input']['native_id']
-    proof = NativeContextProof.read_evidence(Path(thread.require_saved_session()), input_id)
+    proof = NativeContextProof.read_evidence(Path(thread.require_saved_session()), original_input.native_id)
     native_sources = tuple(source for segment in manifest.segments
                            for source in segment.provenance if isinstance(source, NativeProvenance))
     assert native_sources
@@ -266,7 +265,7 @@ async def run_configured(options):
                 original_native_reply=replies[-1].id, source_unchanged=True,
                 private_root=str(service.root), fork_file=identity.session_file)
             if options.recorded_publication:
-                await read_actual_context_publication(owner, service.registry.require(thread.name), child, output, receipt)
+                await read_actual_context_publication(owner, service.registry.require(thread.name), child, original, output, receipt)
                 receipt['state'] = 'CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS'
             return
 
