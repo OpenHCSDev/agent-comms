@@ -1,0 +1,10 @@
+{
+  "sdk_observation": "/home/ts/.cache/agent-scratch/context603-root-installed01/capture/original-recorded-sdk-source.json",
+  "sdk_observation_sha256": "d94943417e90566fd8c430ee1a192f04bef4212d806c7ba96f4531604f1242a4",
+  "selected_sdk_session": "/home/ts/.cache/agent-scratch/context603-root-installed01/capture/recorded-sdk-source/sessions/2026-10-03T23-14-26-107Z_01a1040c-20ba-7051-9a0e-224e76332678.jsonl",
+  "selected_sdk_session_sha256": "b28c926e59f0687502bf55a422bfdd77187a569c55f7238d97e2a9cfa7700eb3",
+  "selected_sdk_session_bytes": 1852,
+  "original_refusal_unchanged": true,
+  "reuse_completed_capture_without_recreation": true,
+  "native_compiled_artifact_unchanged": true
+}

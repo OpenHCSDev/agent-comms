@@ -1,0 +1,9 @@
+{
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "scope": "Authored SDK recorded root/mixed/child installed RPC reads",
+  "model_request_capture": false,
+  "new_native_inputs": 0,
+  "state": "FAILED_NO_REPLAY",
+  "error": "RuntimeError('Original segment has no unambiguous native source identity')",
+  "elapsed_seconds": 4.112669826019555
+}

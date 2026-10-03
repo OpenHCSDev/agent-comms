@@ -189,14 +189,34 @@ class TurnRunner:
             worktree=thread.worktree,
             environment=environment,
             session_file=thread.session_file,
+            observe=partial(self.observe_selected_preparation, session_id, thread),
         )
-        state.model.require_selection(thread.model)
         return state
 
+    async def observe_selected_preparation(
+        self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
+    ) -> None:
+        """Publish this attested saved owner through the shared info consumer."""
+        state.model.require_selection(thread.model)
+        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await self.effects._emit_event(session_id, info)
+
     async def inspect_context(self, session_id, thread):
+        from .pi_commands import AgentCommsInspectContext
+
+        return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
+
+    async def inspect_context_segment(self, session_id, thread, manifest):
+        from .pi_commands import AgentCommsInspectContextSegment
+
+        request = AgentCommsInspectContextSegment.for_manifest(manifest)
+        context = await self.inspect_native_request(session_id, thread, request)
+        return context.recorded_public_text(manifest)
+
+    async def inspect_native_request(self, session_id, thread, request):
         persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
-        context = await persistent.custody.inspect_context(
-            persistent, partial(self.prepare_selected_session, session_id, thread)
+        context = await persistent.custody.inspect(
+            persistent, partial(self.prepare_selected_session, session_id, thread), request,
         )
         return context.require_session_file(thread.require_saved_session())
 

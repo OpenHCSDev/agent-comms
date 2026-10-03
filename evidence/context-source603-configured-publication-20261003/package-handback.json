@@ -1,0 +1,20 @@
+{
+  "state": "FINAL603_605_CONFIGURED_PACKAGE_HANDOFF",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "installed_production_revision": "40f557d44fec3e7b7c97b47d8f498609af48a361",
+  "qualified_receipt_source": "e3115d780a8aa71379e17d551ed02420c165ed98",
+  "archive": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/retired-env-metadata/540-current603-605-configured-before-handback.tar.gz",
+  "archive_sha256": "e68fb54c1e5796174ab9159b8ba96233d18c77732104dfb0e27cb2b43488a2ee",
+  "archive_bytes": 1654711,
+  "regular_members_equal": 448,
+  "symlinks_equal": 3,
+  "readback_verified": true,
+  "allUID_processes": 236,
+  "permission_gaps": 0,
+  "borrowers": 0,
+  "owned_controller_ACP_native_socket_closed": true,
+  "model_onContextReady_published_and_read": true,
+  "original606_and_initial603_archives_unchanged": true,
+  "native_d5_immutable_held": true,
+  "original_auth_root_sessions_proofs_UNKNOWN_excluded": true
+}

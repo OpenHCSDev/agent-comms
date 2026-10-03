@@ -1,0 +1,9 @@
+{
+  "scope": "Observed identity is read corroboration, not native input proof",
+  "authored_preview_read_identity": true,
+  "ambiguous_identity_refused": true,
+  "foreign_identity_refused": true,
+  "unchanged_dependency_distributions": 9,
+  "unchanged_dependency_metadata_files": 60,
+  "all_installed_distributions_including_Core": 10
+}
