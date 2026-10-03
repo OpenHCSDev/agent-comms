@@ -20,6 +20,7 @@ def install_event_host(
     native_settings=None,
     ui_probe=None,
     replacement_probe=None,
+    compaction_probe=None,
     cancelled_session=None,
 ):
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
@@ -53,6 +54,8 @@ def install_event_host(
         if replacement_probe is not None:
             env["S1_REPLACEMENT_PROBE"] = str(replacement_probe)
             env["S1_CANCELLED_SESSION"] = str(cancelled_session)
+        if compaction_probe is not None:
+            env["S1_COMPACTION_PROBE"] = str(compaction_probe)
         if comms_tools:
             env["S1_COMMS_TOOLS"] = "1"
         options = launch.argv[launch.argv.index(str(package / "dist/cli.js")) + 1 :]

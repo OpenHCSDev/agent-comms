@@ -532,3 +532,108 @@ async def test_actual_saved_source_reservation_borrows_native_coverage(native_ba
         "source_sha256": before, "redecoded_rows": len(decoded), "provider_requests": 0,
         "scope": "returned SDK fork/coverage reservation; no provider/commit/input authority",
     }), flush=True)
+
+
+async def test_known_compaction_retains_original_sdk_context_and_next_input(native_backend, monkeypatch):
+    """One real saved SDK fork -> fenced commit -> hook -> distinct input."""
+    import hashlib
+    import os
+    from pathlib import Path
+
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.goals import Goal
+    from agent_comms.native_fork import ForkSessionRequest
+    from agent_comms.native_session_prepare import NativeSessionPreparation
+    from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+    from agent_comms.owner_compaction_provider import NativeSummary
+    from agent_comms.owner_compaction_runtime import _commit_native_summary
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from agent_comms.pi_vocabulary import ManualCompactionReason
+    from agent_comms.registration import Registration
+    from agent_comms.selected_pi_route import prepare_selected_native_source
+    from agent_comms.threads import Thread
+    from native_event_host import install_event_host
+    from urllib.parse import urlsplit
+
+    native = native_backend
+    name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not name:
+        pytest.skip("PI_WRITER_TEST_SOURCE must name original saved native evidence")
+    donor = Path(name).resolve(strict=True)
+    original = hashlib.sha256(donor.read_bytes()).hexdigest()
+    created = await CompactionJournal(native.root / "compaction-commits.sqlite3").private_inputs.fork(
+        ForkSessionRequest(os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor),
+            str(native.project), directory=str(native.root / "native-sessions")),
+        cwd=native.project,
+    )
+    native.session = created.path
+    registry = Registration(native.root / "registry.json")
+    registry.register(Thread("owner", frozenset(), str(native.project),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        session_file=created.session_file, model="response-local/fixture",
+        goal=Goal("Keep original source and inputs", "known-commit-control")))
+    owner, generation = registry.live_owner_with_generation("owner")
+    owner, generation = registry.lease_live_turn_with_generation(
+        owner, "known-commit-control", expected_owner_generation=generation,
+    )
+    endpoint = urlsplit(json.loads((native.config / "models.json").read_text())[
+        "providers"]["response-local"]["baseUrl"])
+    probe = native.root / "native-compaction-hooks.jsonl"
+    command = "sdk-known-compaction-probe"
+    install_event_host(monkeypatch, command, f"{endpoint.scheme}://{endpoint.netloc}",
+        compaction_probe=probe, native_settings={"compaction": {
+            "enabled": False, "reserveTokens": 2048, "keepRecentTokens": 1},
+            "retry": {"enabled": False}})
+    arguments = ["--provider", "response-local", "--model", "fixture", "--thinking", "off",
+        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+        "--no-prompt-templates", "--no-tools"]
+    await NativeSessionPreparation.open(native.persistent, command, arguments,
+        worktree=str(native.project), environment=dict(os.environ),
+        session_file=created.session_file)
+    acquired = native.persistent.custody.idle()
+    launch = acquired.child.key[0]
+
+    async def prepare(text):
+        return await prepare_selected_native_source(native.persistent,
+            session_file=created.session_file, expected_package=launch.package,
+            selected=SelectedModel("response-local", "fixture", 2000000),
+            settings=PiCompactionSettings(2048, 1), retained_text=text)
+
+    async with OwnerCompactionCommit.open(native.root / "registry.json", launch.package,
+            created.session_file, native_launch=launch) as bridge:
+        prepared, source = await bridge.prepare_source(owner, generation,
+            prepared=(await prepare("")).require_ready(), prepare=prepare)
+        operation = await _commit_native_summary(bridge, owner, generation, native.persistent,
+            prepared, source, NativeSummary(source.retained.text + "\n\nControlled SDK commit.", None, None),
+            reason=ManualCompactionReason)
+    assert native.persistent.custody.idle().child is acquired.child
+    hooks = [json.loads(line) for line in probe.read_text().splitlines()]
+    assert [entry["event"] for entry in hooks] == ["session_start", "session_compact"]
+    assert hooks[-1]["entryId"] == operation.committed_outcome().entry_id
+    assert hooks[-1]["originalSessionId"] == created.session_id
+    assert native.provider.posts == 0
+    # Use the same SDK-host command for the next real transport, without copying
+    # its session or issuing a second compaction/provider-summary operation.
+    async with asyncio.timeout(30):
+        result = [event async for event in backend.stream_agent_events(command, arguments,
+            "Distinct input after the known commit", str(native.project),
+            session_file=created.session_file, persistent_session=native.persistent,
+            native_start=native.started)]
+    assert result[-1].ok, result[-1]
+    assert native.persistent.custody.idle().child is acquired.child
+    assert native.provider.posts == 1
+    assert len(native.starts) == 1
+    assert native.starts[0][2] == "Distinct input after the known commit"
+    assert sum(message.get("inputId") == native.starts[0][1]
+        for message in native.saved_inputs()) == 1
+    assert hashlib.sha256(donor.read_bytes()).hexdigest() == original
+    await native.persistent.close_idle()
+    assert not acquired.child.proc.alive() and acquired.child.proc.retired
+    assert await acquired.child.stderr_task == ""
+    print("known_compaction_runtime", json.dumps({"donor_sha256": original,
+        "source_bytes": donor.stat().st_size, "fork": created.session_file,
+        "pid": acquired.child.proc.pid, "hooks": hooks, "commit": operation.commit_id,
+        "next_input_terminal": result[-1].ok, "provider_requests": native.provider.posts,
+        "child_retired": acquired.child.proc.retired}), flush=True)
