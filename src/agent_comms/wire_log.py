@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -41,6 +43,8 @@ from .store_files import (
     _iter_jsonl_records,
     _iter_jsonl_stream,
     _store_lock,
+    _store_lock_file,
+    _held_store_source,
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
@@ -67,11 +71,41 @@ class WireLog:
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
         """Borrow the original source verified by this canonical lock barrier."""
         with _store_lock(self.path, blocking=blocking, contention=contention) as lock:
-            marker = self._private_marker_unlocked()
-            source = lock.certified_read()
-            source.require_marker(marker)
-            yield source
-            source.require_current()
+            with self._certified_source(lock) as source:
+                yield source
+
+    async def read_certified_async(self, read: Callable):
+        """Acquire cancellably, then consume the whole source in its worker.
+
+        Return detached observations only. Verification and the callback share
+        one resource thread; no SQLite connection crosses to the event loop.
+        Cancellation joins acquired work before the original descriptor closes.
+        """
+        from .child_process import Platform
+        from .coordinator import Coordination
+
+        platform = Platform.current()
+        with _store_lock_file(self.path) as lock_file:
+            await StoreLockContention(math.inf).acquire_async(
+                lock_file.fileno(), platform, shared=False,
+            )
+            return await Coordination.run_worker(
+                partial(self._read_certified, lock_file, platform, read),
+            )
+
+    def _read_certified(self, lock_file, platform, read):
+        with _held_store_source(self.path, lock_file, platform, None) as lock:
+            with self._certified_source(lock) as source:
+                return read(source)
+
+    @contextmanager
+    def _certified_source(self, lock: StoreLock):
+        """Sync and async acquisition consume the same marker/currentness owner."""
+        marker = self._private_marker_unlocked()
+        source = lock.certified_read()
+        source.require_marker(marker)
+        yield source
+        source.require_current()
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
