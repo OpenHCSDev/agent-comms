@@ -168,11 +168,19 @@ class RecordedMeasurementTests(unittest.TestCase):
                     'r2': {'answer_support': {'unassisted_recall': False}}}
         totals = score.support_totals(evidence)
         self.assertEqual(tuple(totals[name]['questions'] for name in totals), (7, 7, 7))
-        paired = score.paired_quality(score, evidence, {'r1': evidence['r2']})
+        alignment = {round_.identity: {'evaluated': round_.identity == 'r1'} for round_ in scenario.rounds}
+        paired = score.paired_quality(score, evidence, {'r1': evidence['r2']}, alignment)
         self.assertEqual(paired['tool_assisted_task_quality']['candidate']['questions'], 7)
         self.assertEqual(paired['unobserved']['candidate']['questions'], 14)
         self.assertFalse(paired['unobserved']['evaluated'])
         self.assertIsNone(paired['unobserved']['correct_difference'])
+        unmatched = score.paired_quality(score, evidence, {'r1': evidence['r2']},
+            {round_.identity: {'evaluated': False} for round_ in scenario.rounds})
+        self.assertEqual(unmatched['unmatched']['candidate']['questions'], 7)
+        self.assertEqual(unmatched['unobserved']['candidate']['questions'], 14)
+        self.assertFalse(unmatched['unmatched']['evaluated'])
+        self.assertIsNone(unmatched['unmatched']['correct_difference'])
+        self.assertFalse(unmatched['unassisted_recall']['evaluated'])
         with self.assertRaisesRegex(ValueError, 'complete frozen scenario'):
             replace(score, rounds=score.rounds[:1])
 
@@ -189,20 +197,64 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertTrue(all(not row['evaluated'] for row in missing.values()))
         different = RecordedNativeProbes({'r1': replace(original,
             session=NativeSessionIdentity('other', str(self.root / 'other.jsonl')), input_id='b' * 32)})
-        def observation(source, model=('provider', 'model')):
+        def observation(source, model='provider/model'):
+            point = RequestProgress('request', self.identity.session_id, original.input_id,
+                1, 2, '3', 1, 0, 0, 0, 'budget_admission',
+                model=ReportedModel(provider='provider', id='model', context_window=100, max_tokens=20))
             return {'construction': {'fork': {'source': source, 'sourceRevision': 'original'},
                 'sdk_manifest': {'counter': 'native', 'segments': [
-                    {'kind': 'tool_catalog', 'sha256': 'c' * 64, 'utf8_bytes': 10}]}},
-                'model_steps': (),
+                    {'kind': 'tool_catalog', 'sha256': 'c' * 64, 'utf8_bytes': 10}]},
+                'request_budget': {'evaluated': True, 'observations': (point,)}},
+                'model_steps': ({'selection': {'evaluated': True, 'provider': 'provider', 'model': 'model',
+                    'api': 'original-api', 'response_model': None, 'provider_thinking_level': None}},),
                 'scoped_facts': {'configured_settings': {'evaluated': True, 'model': model, 'thinking': 'high'}}}
         a = {'r1': observation('parent')}
         with self.assertRaisesRegex(ValueError, 'source histories'):
             candidate.alignment(different, a, {'r1': observation('other-parent')}, scenario.rounds)
         with self.assertRaisesRegex(ValueError, 'model/effort'):
-            candidate.alignment(different, a, {'r1': observation('parent', ('other', 'model'))}, scenario.rounds)
+            candidate.alignment(different, a, {'r1': observation('parent', 'other/model')}, scenario.rounds)
         observed = candidate.alignment(different, a, a, scenario.rounds)
         self.assertTrue(observed['r1']['evaluated'])
         self.assertFalse(observed['r2']['evaluated'])
+        unavailable = observation('parent')
+        unavailable['construction']['request_budget'] = {'evaluated': False, 'reason': 'Historical record absent'}
+        self.assertFalse(candidate.alignment(different, a, {'r1': unavailable}, scenario.rounds)['r1']['evaluated'])
+
+    def test_request_alignment_preserves_missing_intent_and_revised_allowances(self):
+        # Prevent configured-model matches and missing output intent from
+        # granting equal actual requests; retry allowances are observations.
+        point = RequestProgress('request', self.identity.session_id, 'a' * 32,
+            1, 2, '3', 1, 0, 0, 0, 'budget_admission',
+            model=ReportedModel(provider='original', id='model', context_window=100, max_tokens=20),
+            estimated_input_tokens=80, available_tokens=20, output_token_field='max_tokens',
+            requested_output_tokens=50, admitted_output_tokens=20, minimum_output_tokens=1)
+
+        def observed(*points):
+            return {'construction': {'request_budget': {'evaluated': True, 'observations': points}}}
+
+        a = observed(point, replace(point, requested_output_tokens=20, admitted_output_tokens=10))
+        b = observed(replace(point, estimated_input_tokens=70, available_tokens=30, admitted_output_tokens=30))
+        match = RecordedNativeProbes.request_alignment(a, b, 'original/model')
+        self.assertTrue(match['evaluated'])
+        self.assertEqual(len(match['candidate']['observations']), 2)
+        self.assertTrue(match['model_capacity']['context_window']['same'])
+        absent = observed(replace(point, requested_output_tokens=None, admitted_output_tokens=None))
+        missing = RecordedNativeProbes.request_alignment(absent, absent, 'original/model')
+        self.assertFalse(missing['request_contract']['requested_output_tokens']['evaluated'])
+        self.assertIsNone(missing['request_contract']['requested_output_tokens']['same'])
+        for changed in (
+            replace(point, model=replace(point.model, context_window=101)),
+            replace(point, model=replace(point.model, max_tokens=21)),
+            replace(point, requested_output_tokens=51),
+        ):
+            with self.assertRaises(ValueError):
+                RecordedNativeProbes.request_alignment(observed(point), observed(changed), 'original/model')
+        with self.assertRaisesRegex(ValueError, 'Prepared native model'):
+            RecordedNativeProbes.request_alignment(observed(point), observed(point), 'another/model')
+        with self.assertRaisesRegex(ValueError, 'original observations'):
+            RecordedNativeProbes.request_alignment(observed(), observed(point), 'original/model')
+        self.assertFalse(RecordedNativeProbes.request_alignment(
+            observed(replace(point, model=None)), observed(point), 'original/model')['evaluated'])
 
     def test_completion_metadata_is_original_and_never_filled_from_settings(self):
         # Detect decoder loss of selected/returned model and exact provider
