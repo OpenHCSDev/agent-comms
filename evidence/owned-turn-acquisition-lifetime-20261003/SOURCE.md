@@ -1,6 +1,6 @@
 # Working source checkpoint, not Ready
 
-61 production lines deleted /94 added in three files. Four original consumer setups
+61 production lines deleted /100 added in three files. Four original consumer setups
 delete repeated admit/begin/prompt/open sequences and use OwnedTurn.acquire. This
 batch uses original Coordinator worker joins and stack lifetimes; no new class,
 registry, queue, cache, state declaration, provider policy or native method.
@@ -26,6 +26,11 @@ the same permit custody transfers above inbox/lease. Goal settlement retains its
 original order and original grants. Existing InputBatch/TurnInputSource decisions
 are moved intact, not copied or weakened.
 
+An original ExitStack retains the reserved input's rollback until open_stream
+installs that same OriginalTurnInput on InputDrain. Cancellation before worker
+delivery therefore cannot orphan a Reserved input. Successful ownership transfer
+removes that rollback; it adds no flag/cache or independent input authority.
+
 Original resource callbacks retire goal permits in a joined worker. Project
 identity is read off-loop while project continuation remains on-loop. Cancellation
 and failure consume the same original unbound-input transaction; its optional
@@ -40,13 +45,16 @@ environment in the worker, covering original context/manual/owned callers withou
 changing NativeSessionPreparation or a native method. Its loop-owned persistent
 child remains in the original async preparation lifetime.
 
-InputDrain.finish_turn_inputs serves owned and selected turns. Its original notice
+InputDrain.finish_turn_inputs serves owned and selected turns. Its original input
 is removed/settled under the same wire cut in a joined worker; finally retires
 remaining loop capabilities, burns selected admission and preserves queued inputs
 even when cancellation is rethrown after write completion. Publication follows
 that completed resource retirement. Queue/controller resources remain resources;
 no copied lifecycle status is added. GoalAttemptStore owns per-operation SQLite
 connections, so no open connection crosses worker boundaries.
+Retirement consumes original.keys rather than original.notice_keys: notice
+membership is a display fact, not custody. Existing InputAttempt.finish_unbound
+owns each disposition; no UNKNOWN is replayed or treated as known-not-sent.
 
 ## Consumer closure and limits
 

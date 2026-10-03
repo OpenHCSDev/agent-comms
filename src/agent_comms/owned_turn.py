@@ -155,6 +155,8 @@ class OwnedTurn:
             self.lease_custody, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
+        self.input_custody = ExitStack()
+        resources.push_async_callback(Coordination.run_worker, self.input_custody.close)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with _store_lock(self.runner.comms._wire_lock_path):
@@ -274,6 +276,9 @@ class OwnedTurn:
             self.turn_lease.admission_generation,
         )
         self.original_keys = self.original.keys
+        # The worker can reserve before cancellation reaches its result. Retain
+        # original unbound cleanup until the loop has installed the input owner.
+        self.input_custody.callback(self.settle_unbound)
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
         self.backend_inbox = self.runner.inputs.bind_native_turn(
@@ -294,6 +299,7 @@ class OwnedTurn:
             self.original_keys
         )
         self.runner.inputs.original_sources[self.session_id] = self.original
+        self.input_custody.pop_all()
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)
         self.progress = TurnProgress(

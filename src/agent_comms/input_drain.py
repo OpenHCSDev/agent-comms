@@ -544,7 +544,7 @@ class InputDrain(FutureInputQueue):
         """The joined retirement owns the original notice and its wire cut."""
         with _store_lock(self.comms._wire_lock_path):
             original = self.original_sources.pop(session_id, None)
-            self.dispositions.settle_unbound(original.notice_keys if original else ())
+            self.dispositions.settle_unbound(original.keys if original else ())
 
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]

@@ -4,14 +4,14 @@
   "sites": [
     {
       "path": "src/agent_comms/acp_extension.py",
-      "line": 464,
-      "node": "FunctionDef",
+      "line": 363,
+      "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/acp_extension.py",
-      "line": 363,
-      "node": "Attribute",
+      "line": 464,
+      "node": "FunctionDef",
       "name": "capture"
     },
     {
@@ -124,6 +124,12 @@
     },
     {
       "path": "src/agent_comms/channel_input_batch.py",
+      "line": 41,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
       "line": 57,
       "node": "Name",
       "name": "InputBatch"
@@ -131,12 +137,6 @@
     {
       "path": "src/agent_comms/channel_input_batch.py",
       "line": 64,
-      "node": "Name",
-      "name": "InputBatch"
-    },
-    {
-      "path": "src/agent_comms/channel_input_batch.py",
-      "line": 41,
       "node": "Name",
       "name": "InputBatch"
     },
@@ -178,9 +178,9 @@
     },
     {
       "path": "src/agent_comms/cli_commands.py",
-      "line": 779,
+      "line": 561,
       "node": "Attribute",
-      "name": "awareness_segments"
+      "name": "capture"
     },
     {
       "path": "src/agent_comms/cli_commands.py",
@@ -190,9 +190,9 @@
     },
     {
       "path": "src/agent_comms/cli_commands.py",
-      "line": 561,
+      "line": 779,
       "node": "Attribute",
-      "name": "capture"
+      "name": "awareness_segments"
     },
     {
       "path": "src/agent_comms/cohort_foreground.py",
@@ -208,14 +208,14 @@
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 170,
-      "node": "FunctionDef",
+      "line": 69,
+      "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 69,
-      "node": "Attribute",
+      "line": 170,
+      "node": "FunctionDef",
       "name": "capture"
     },
     {
@@ -250,15 +250,15 @@
     },
     {
       "path": "src/agent_comms/compaction_private_inputs.py",
-      "line": 186,
-      "node": "FunctionDef",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/compaction_private_inputs.py",
       "line": 179,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 186,
+      "node": "FunctionDef",
+      "name": "reserve"
     },
     {
       "path": "src/agent_comms/compaction_records.py",
@@ -364,13 +364,19 @@
     },
     {
       "path": "src/agent_comms/goal_scheduler.py",
-      "line": 237,
+      "line": 210,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/goal_scheduler.py",
-      "line": 210,
+      "line": 237,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 50,
       "node": "Attribute",
       "name": "capture"
     },
@@ -394,19 +400,25 @@
     },
     {
       "path": "src/agent_comms/historical_views.py",
-      "line": 104,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/historical_views.py",
       "line": 93,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/historical_views.py",
+      "line": 104,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
       "line": 105,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 362,
       "node": "Attribute",
       "name": "capture"
     },
@@ -418,19 +430,7 @@
     },
     {
       "path": "src/agent_comms/historical_views.py",
-      "line": 50,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/historical_views.py",
       "line": 402,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/historical_views.py",
-      "line": 362,
       "node": "Attribute",
       "name": "capture"
     },
@@ -451,6 +451,12 @@
       "line": 515,
       "node": "Attribute",
       "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "src/agent_comms/import_records.py",
@@ -508,6 +514,12 @@
     },
     {
       "path": "src/agent_comms/import_records.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
       "line": 216,
       "node": "FunctionDef",
       "name": "capture"
@@ -537,18 +549,6 @@
       "name": "capture"
     },
     {
-      "path": "src/agent_comms/import_records.py",
-      "line": 20,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/import_records.py",
-      "line": 197,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "src/agent_comms/input_disposition.py",
       "line": 295,
       "node": "FunctionDef",
@@ -559,24 +559,6 @@
       "line": 54,
       "node": "alias",
       "name": "OriginalTurnInput"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 431,
-      "node": "FunctionDef",
-      "name": "bind_native_turn"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 543,
-      "node": "FunctionDef",
-      "name": "finish_original_inputs"
-    },
-    {
-      "path": "src/agent_comms/input_drain.py",
-      "line": 549,
-      "node": "AsyncFunctionDef",
-      "name": "finish_turn_inputs"
     },
     {
       "path": "src/agent_comms/input_drain.py",
@@ -598,15 +580,27 @@
     },
     {
       "path": "src/agent_comms/input_drain.py",
+      "line": 431,
+      "node": "FunctionDef",
+      "name": "bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 543,
+      "node": "FunctionDef",
+      "name": "finish_original_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
       "line": 547,
       "node": "Attribute",
       "name": "settle_unbound"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 595,
-      "node": "Attribute",
-      "name": "capture"
+      "line": 549,
+      "node": "AsyncFunctionDef",
+      "name": "finish_turn_inputs"
     },
     {
       "path": "src/agent_comms/input_drain.py",
@@ -619,6 +613,12 @@
       "line": 560,
       "node": "Attribute",
       "name": "finish_original_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 595,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "src/agent_comms/input_origin.py",
@@ -652,12 +652,6 @@
     },
     {
       "path": "src/agent_comms/message_bus.py",
-      "line": 295,
-      "node": "FunctionDef",
-      "name": "awareness_segments"
-    },
-    {
-      "path": "src/agent_comms/message_bus.py",
       "line": 264,
       "node": "Attribute",
       "name": "capture"
@@ -676,7 +670,13 @@
     },
     {
       "path": "src/agent_comms/message_bus.py",
-      "line": 337,
+      "line": 295,
+      "node": "FunctionDef",
+      "name": "awareness_segments"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 313,
       "node": "Attribute",
       "name": "capture"
     },
@@ -688,13 +688,13 @@
     },
     {
       "path": "src/agent_comms/message_bus.py",
-      "line": 373,
+      "line": 337,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/message_bus.py",
-      "line": 313,
+      "line": 373,
       "node": "Attribute",
       "name": "capture"
     },
@@ -730,19 +730,7 @@
     },
     {
       "path": "src/agent_comms/native_input_owner.py",
-      "line": 92,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/native_input_owner.py",
       "line": 49,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/native_input_owner.py",
-      "line": 158,
       "node": "Attribute",
       "name": "capture"
     },
@@ -754,7 +742,19 @@
     },
     {
       "path": "src/agent_comms/native_input_owner.py",
+      "line": 92,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
       "line": 108,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 158,
       "node": "Attribute",
       "name": "capture"
     },
@@ -850,12 +850,6 @@
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 51,
-      "node": "ClassDef",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
       "line": 18,
       "node": "alias",
       "name": "InputBatch"
@@ -868,153 +862,9 @@
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 102,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 145,
-      "node": "FunctionDef",
-      "name": "begin"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 190,
-      "node": "FunctionDef",
-      "name": "prepare_prompt"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 242,
-      "node": "FunctionDef",
-      "name": "reserve_input"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 278,
-      "node": "FunctionDef",
-      "name": "open_stream"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 325,
-      "node": "FunctionDef",
-      "name": "finish_goals"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 328,
-      "node": "AsyncFunctionDef",
-      "name": "close_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 335,
-      "node": "AsyncFunctionDef",
-      "name": "continue_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 344,
-      "node": "AsyncFunctionDef",
-      "name": "prepare_native"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 451,
-      "node": "AsyncFunctionDef",
-      "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 476,
-      "node": "FunctionDef",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 154,
-      "node": "Attribute",
-      "name": "acquire_turn"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 180,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 187,
-      "node": "Attribute",
-      "name": "prepare_prompt"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 188,
-      "node": "Attribute",
-      "name": "reserve_input"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 194,
-      "node": "Attribute",
-      "name": "native_environment"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 258,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 279,
-      "node": "Attribute",
-      "name": "bind_native_turn"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 283,
-      "node": "Attribute",
-      "name": "finish_turn_inputs"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 299,
-      "node": "Name",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 321,
-      "node": "Attribute",
-      "name": "finish_goals"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 322,
-      "node": "Attribute",
-      "name": "close_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 323,
-      "node": "Attribute",
-      "name": "continue_changed_project"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 456,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 462,
-      "node": "Attribute",
-      "name": "open_stream"
+      "line": 51,
+      "node": "ClassDef",
+      "name": "OwnedTurn"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
@@ -1024,45 +874,285 @@
     },
     {
       "path": "src/agent_comms/owned_turn.py",
+      "line": 102,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
       "line": 130,
       "node": "Attribute",
       "name": "reserve"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 180,
+      "line": 145,
+      "node": "FunctionDef",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 154,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 159,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 159,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 182,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 182,
       "node": "Name",
       "name": "InputBatch"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 211,
+      "line": 189,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 192,
+      "node": "FunctionDef",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "native_environment"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 213,
       "node": "Attribute",
       "name": "thread_views"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 330,
+      "line": 244,
+      "node": "FunctionDef",
+      "name": "reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 260,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 281,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 281,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 283,
+      "node": "FunctionDef",
+      "name": "open_stream"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 284,
+      "node": "Attribute",
+      "name": "bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 288,
+      "node": "Attribute",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 302,
+      "node": "Attribute",
+      "name": "input_custody"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 305,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 327,
+      "node": "Attribute",
+      "name": "finish_goals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 328,
+      "node": "Attribute",
+      "name": "close_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 329,
+      "node": "Attribute",
+      "name": "continue_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 331,
+      "node": "FunctionDef",
+      "name": "finish_goals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 334,
+      "node": "AsyncFunctionDef",
+      "name": "close_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 336,
       "node": "Attribute",
       "name": "run_worker"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 360,
+      "line": 341,
+      "node": "AsyncFunctionDef",
+      "name": "continue_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 344,
       "node": "Attribute",
       "name": "run_worker"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 456,
+      "line": 350,
+      "node": "AsyncFunctionDef",
+      "name": "prepare_native"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 353,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 354,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 366,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 367,
+      "node": "Attribute",
+      "name": "awareness_segments"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 379,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 398,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 399,
+      "node": "Attribute",
+      "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 457,
+      "node": "AsyncFunctionDef",
+      "name": "acquire"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 462,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 462,
       "node": "Name",
       "name": "permit_custody"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 461,
+      "line": 463,
       "node": "Attribute",
       "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 463,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 467,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 467,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 468,
+      "node": "Attribute",
+      "name": "open_stream"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
@@ -1072,117 +1162,63 @@
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 479,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 338,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 361,
-      "node": "Attribute",
-      "name": "awareness_segments"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 457,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 461,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 484,
-      "node": "Attribute",
-      "name": "prepare_native"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 347,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 373,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 457,
-      "node": "Attribute",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 465,
+      "line": 477,
       "node": "Name",
       "name": "permit_custody"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 492,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 492,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 498,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 498,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 348,
-      "node": "Attribute",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/owned_turn.py",
-      "line": 472,
+      "line": 478,
       "node": "Attribute",
       "name": "acquire"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 472,
+      "line": 478,
       "node": "Name",
       "name": "permit_custody"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 392,
+      "line": 482,
+      "node": "FunctionDef",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 485,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 490,
+      "node": "Attribute",
+      "name": "prepare_native"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 498,
       "node": "Attribute",
       "name": "run_worker"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
-      "line": 393,
+      "line": 498,
       "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 504,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 504,
+      "node": "Attribute",
+      "name": "settle_unbound"
     },
     {
       "path": "src/agent_comms/owner_compaction_adaptive.py",
@@ -1198,14 +1234,26 @@
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 191,
-      "node": "FunctionDef",
-      "name": "capture"
+      "line": 73,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "run_worker"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
       "line": 171,
       "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 191,
+      "node": "FunctionDef",
       "name": "capture"
     },
     {
@@ -1231,18 +1279,6 @@
       "line": 307,
       "node": "Attribute",
       "name": "begin"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 73,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 141,
-      "node": "Attribute",
-      "name": "run_worker"
     },
     {
       "path": "src/agent_comms/owner_compaction_manual.py",
@@ -1276,15 +1312,15 @@
     },
     {
       "path": "src/agent_comms/owner_lifecycle.py",
-      "line": 375,
-      "node": "FunctionDef",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/owner_lifecycle.py",
       "line": 177,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 375,
+      "node": "FunctionDef",
+      "name": "reserve"
     },
     {
       "path": "src/agent_comms/owner_lifecycle.py",
@@ -1312,18 +1348,6 @@
     },
     {
       "path": "src/agent_comms/presentation.py",
-      "line": 473,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/presentation.py",
-      "line": 228,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/presentation.py",
       "line": 200,
       "node": "Attribute",
       "name": "capture"
@@ -1336,7 +1360,7 @@
     },
     {
       "path": "src/agent_comms/presentation.py",
-      "line": 506,
+      "line": 228,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1348,13 +1372,25 @@
     },
     {
       "path": "src/agent_comms/presentation.py",
+      "line": 297,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
       "line": 325,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/presentation.py",
-      "line": 297,
+      "line": 473,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 506,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1366,19 +1402,7 @@
     },
     {
       "path": "src/agent_comms/private_bus_checkpoint.py",
-      "line": 694,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/private_bus_checkpoint.py",
-      "line": 774,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/private_bus_checkpoint.py",
-      "line": 783,
+      "line": 616,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1396,7 +1420,25 @@
     },
     {
       "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 694,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 774,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
       "line": 779,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 783,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1408,19 +1450,13 @@
     },
     {
       "path": "src/agent_comms/private_bus_checkpoint.py",
-      "line": 900,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/private_bus_checkpoint.py",
       "line": 896,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/private_bus_checkpoint.py",
-      "line": 616,
+      "line": 900,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1438,9 +1474,9 @@
     },
     {
       "path": "src/agent_comms/private_send_admission.py",
-      "line": 245,
+      "line": 167,
       "node": "Attribute",
-      "name": "acquire"
+      "name": "native_environment"
     },
     {
       "path": "src/agent_comms/private_send_admission.py",
@@ -1450,9 +1486,9 @@
     },
     {
       "path": "src/agent_comms/private_send_admission.py",
-      "line": 167,
+      "line": 245,
       "node": "Attribute",
-      "name": "native_environment"
+      "name": "acquire"
     },
     {
       "path": "src/agent_comms/private_send_stage.py",
@@ -1498,13 +1534,13 @@
     },
     {
       "path": "src/agent_comms/read_basis.py",
-      "line": 328,
-      "node": "FunctionDef",
+      "line": 196,
+      "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/read_basis.py",
-      "line": 370,
+      "line": 328,
       "node": "FunctionDef",
       "name": "capture"
     },
@@ -1516,8 +1552,8 @@
     },
     {
       "path": "src/agent_comms/read_basis.py",
-      "line": 196,
-      "node": "Attribute",
+      "line": 370,
+      "node": "FunctionDef",
       "name": "capture"
     },
     {
@@ -1612,12 +1648,6 @@
     },
     {
       "path": "src/agent_comms/selected_participant.py",
-      "line": 216,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/selected_participant.py",
       "line": 65,
       "node": "Attribute",
       "name": "run_worker"
@@ -1633,12 +1663,6 @@
       "line": 114,
       "node": "Attribute",
       "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/selected_participant.py",
-      "line": 242,
-      "node": "Name",
-      "name": "capture"
     },
     {
       "path": "src/agent_comms/selected_participant.py",
@@ -1659,14 +1683,20 @@
       "name": "run_worker"
     },
     {
-      "path": "src/agent_comms/selected_pi_summary_rpc.py",
-      "line": 133,
-      "node": "Attribute",
-      "name": "run_worker"
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 216,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "node": "Name",
+      "name": "capture"
     },
     {
       "path": "src/agent_comms/selected_pi_summary_rpc.py",
-      "line": 205,
+      "line": 133,
       "node": "Attribute",
       "name": "run_worker"
     },
@@ -1679,6 +1709,12 @@
     {
       "path": "src/agent_comms/selected_pi_summary_rpc.py",
       "line": 186,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 205,
       "node": "Attribute",
       "name": "run_worker"
     },
@@ -1708,27 +1744,9 @@
     },
     {
       "path": "src/agent_comms/selected_session.py",
-      "line": 257,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 316,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
       "line": 127,
       "node": "FunctionDef",
       "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/selected_session.py",
-      "line": 317,
-      "node": "Attribute",
-      "name": "admit"
     },
     {
       "path": "src/agent_comms/selected_session.py",
@@ -1743,6 +1761,24 @@
       "name": "acquire"
     },
     {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 257,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 316,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
       "path": "src/agent_comms/selected_source.py",
       "line": 176,
       "node": "FunctionDef",
@@ -1750,13 +1786,13 @@
     },
     {
       "path": "src/agent_comms/selected_summary_admission.py",
-      "line": 88,
+      "line": 50,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/selected_summary_admission.py",
-      "line": 50,
+      "line": 88,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1774,21 +1810,15 @@
     },
     {
       "path": "src/agent_comms/selected_tool_broker.py",
-      "line": 534,
-      "node": "FunctionDef",
-      "name": "admit"
-    },
-    {
-      "path": "src/agent_comms/selected_tool_broker.py",
       "line": 425,
       "node": "Attribute",
       "name": "admit"
     },
     {
-      "path": "src/agent_comms/selected_triage.py",
-      "line": 113,
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 534,
       "node": "FunctionDef",
-      "name": "acquire"
+      "name": "admit"
     },
     {
       "path": "src/agent_comms/selected_triage.py",
@@ -1798,7 +1828,37 @@
     },
     {
       "path": "src/agent_comms/selected_triage.py",
+      "line": 113,
+      "node": "FunctionDef",
+      "name": "acquire"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
       "line": 155,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 89,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1816,13 +1876,13 @@
     },
     {
       "path": "src/agent_comms/selected_turn.py",
-      "line": 56,
+      "line": 230,
       "node": "Attribute",
-      "name": "capture"
+      "name": "reserve"
     },
     {
       "path": "src/agent_comms/selected_turn.py",
-      "line": 66,
+      "line": 269,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1834,33 +1894,9 @@
     },
     {
       "path": "src/agent_comms/selected_turn.py",
-      "line": 230,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "src/agent_comms/selected_turn.py",
       "line": 315,
       "node": "Attribute",
       "name": "acquire"
-    },
-    {
-      "path": "src/agent_comms/selected_turn.py",
-      "line": 269,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/selected_turn.py",
-      "line": 61,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/selected_turn.py",
-      "line": 89,
-      "node": "Attribute",
-      "name": "capture"
     },
     {
       "path": "src/agent_comms/store_files.py",
@@ -1876,13 +1912,13 @@
     },
     {
       "path": "src/agent_comms/thread_management.py",
-      "line": 280,
+      "line": 218,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/thread_management.py",
-      "line": 218,
+      "line": 280,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1906,13 +1942,13 @@
     },
     {
       "path": "src/agent_comms/threads.py",
-      "line": 414,
+      "line": 235,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "src/agent_comms/threads.py",
-      "line": 235,
+      "line": 414,
       "node": "Attribute",
       "name": "capture"
     },
@@ -1930,6 +1966,12 @@
     },
     {
       "path": "src/agent_comms/tracked_turn.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
       "line": 416,
       "node": "Attribute",
       "name": "capture"
@@ -1937,12 +1979,6 @@
     {
       "path": "src/agent_comms/tracked_turn.py",
       "line": 461,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/tracked_turn.py",
-      "line": 216,
       "node": "Attribute",
       "name": "run_worker"
     },
@@ -2020,9 +2056,9 @@
     },
     {
       "path": "src/agent_comms/turn_goal_account.py",
-      "line": 173,
+      "line": 115,
       "node": "Attribute",
-      "name": "block_goal_after_failed_turn"
+      "name": "reserve"
     },
     {
       "path": "src/agent_comms/turn_goal_account.py",
@@ -2032,9 +2068,9 @@
     },
     {
       "path": "src/agent_comms/turn_goal_account.py",
-      "line": 115,
+      "line": 173,
       "node": "Attribute",
-      "name": "reserve"
+      "name": "block_goal_after_failed_turn"
     },
     {
       "path": "src/agent_comms/turn_input_binding.py",
@@ -2044,14 +2080,20 @@
     },
     {
       "path": "src/agent_comms/turn_input_source.py",
+      "line": 9,
+      "node": "alias",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
       "line": 104,
       "node": "ClassDef",
       "name": "OriginalTurnInput"
     },
     {
       "path": "src/agent_comms/turn_input_source.py",
-      "line": 9,
-      "node": "alias",
+      "line": 109,
+      "node": "Name",
       "name": "InputBatch"
     },
     {
@@ -2059,6 +2101,12 @@
       "line": 130,
       "node": "FunctionDef",
       "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 132,
+      "node": "Name",
+      "name": "OriginalTurnInput"
     },
     {
       "path": "src/agent_comms/turn_input_source.py",
@@ -2079,28 +2127,16 @@
       "name": "OriginalTurnInput"
     },
     {
-      "path": "src/agent_comms/turn_input_source.py",
-      "line": 109,
-      "node": "Name",
-      "name": "InputBatch"
-    },
-    {
-      "path": "src/agent_comms/turn_input_source.py",
-      "line": 132,
-      "node": "Name",
-      "name": "OriginalTurnInput"
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 34,
+      "node": "alias",
+      "name": "OwnedTurn"
     },
     {
       "path": "src/agent_comms/turn_progress.py",
       "line": 52,
       "node": "ClassDef",
       "name": "TurnProgress"
-    },
-    {
-      "path": "src/agent_comms/turn_progress.py",
-      "line": 34,
-      "node": "alias",
-      "name": "OwnedTurn"
     },
     {
       "path": "src/agent_comms/turn_progress.py",
@@ -2134,81 +2170,21 @@
     },
     {
       "path": "src/agent_comms/turn_runner.py",
-      "line": 177,
-      "node": "AsyncFunctionDef",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 409,
-      "node": "FunctionDef",
-      "name": "acquire_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 438,
-      "node": "AsyncFunctionDef",
-      "name": "settle_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 458,
-      "node": "FunctionDef",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 529,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 422,
-      "node": "Attribute",
-      "name": "settle_turn"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 433,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 436,
-      "node": "Attribute",
-      "name": "current_turn_update"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
       "line": 158,
       "node": "Attribute",
       "name": "run_worker"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
-      "line": 182,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 199,
-      "node": "Attribute",
+      "line": 177,
+      "node": "AsyncFunctionDef",
       "name": "prepare_selected_session"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
-      "line": 453,
+      "line": 182,
       "node": "Attribute",
       "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 462,
-      "node": "Attribute",
-      "name": "current_turn_update"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
@@ -2218,21 +2194,15 @@
     },
     {
       "path": "src/agent_comms/turn_runner.py",
+      "line": 199,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
       "line": 229,
       "node": "Attribute",
       "name": "run_worker"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 508,
-      "node": "Attribute",
-      "name": "finish_turn_inputs"
-    },
-    {
-      "path": "src/agent_comms/turn_runner.py",
-      "line": 531,
-      "node": "Name",
-      "name": "OwnedTurn"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
@@ -2257,6 +2227,72 @@
       "line": 262,
       "node": "Attribute",
       "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 409,
+      "node": "FunctionDef",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 422,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 433,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 436,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 438,
+      "node": "AsyncFunctionDef",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 453,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 458,
+      "node": "FunctionDef",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 462,
+      "node": "Attribute",
+      "name": "current_turn_update"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 508,
+      "node": "Attribute",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 529,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 531,
+      "node": "Name",
+      "name": "OwnedTurn"
     },
     {
       "path": "src/agent_comms/view_unread.py",
@@ -2290,15 +2326,15 @@
     },
     {
       "path": "src/agent_comms/wire_log.py",
-      "line": 204,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "src/agent_comms/wire_log.py",
       "line": 89,
       "node": "Attribute",
       "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 204,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "src/agent_comms/wire_log.py",
@@ -2320,13 +2356,13 @@
     },
     {
       "path": "tests/compaction_source_successor_installed_journey.py",
-      "line": 95,
+      "line": 51,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/compaction_source_successor_installed_journey.py",
-      "line": 51,
+      "line": 95,
       "node": "Attribute",
       "name": "capture"
     },
@@ -2337,6 +2373,108 @@
       "name": "native_environment"
     },
     {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 10,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 13,
+      "node": "alias",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 20,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 25,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 9,
+      "node": "alias",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 10,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 12,
+      "node": "alias",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 18,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 24,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
       "path": "tests/maintenance_control_fixture.py",
       "line": 43,
       "node": "FunctionDef",
@@ -2344,13 +2482,7 @@
     },
     {
       "path": "tests/native_evidence_reader_installed_journey.py",
-      "line": 134,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/native_evidence_reader_installed_journey.py",
-      "line": 57,
+      "line": 52,
       "node": "Name",
       "name": "begin"
     },
@@ -2362,13 +2494,7 @@
     },
     {
       "path": "tests/native_evidence_reader_installed_journey.py",
-      "line": 65,
-      "node": "Name",
-      "name": "begin"
-    },
-    {
-      "path": "tests/native_evidence_reader_installed_journey.py",
-      "line": 75,
+      "line": 57,
       "node": "Name",
       "name": "begin"
     },
@@ -2380,7 +2506,7 @@
     },
     {
       "path": "tests/native_evidence_reader_installed_journey.py",
-      "line": 52,
+      "line": 65,
       "node": "Name",
       "name": "begin"
     },
@@ -2392,9 +2518,21 @@
     },
     {
       "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 75,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
       "line": 77,
       "node": "Name",
       "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/native_initialization_installed_pilot.py",
@@ -2416,20 +2554,26 @@
     },
     {
       "path": "tests/retained_context_native_journey.py",
-      "line": 97,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "tests/retained_context_native_journey.py",
       "line": 93,
       "node": "Attribute",
       "name": "capture"
     },
     {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
+    },
+    {
       "path": "tests/retained_native_fixture.py",
       "line": 146,
       "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 216,
+      "node": "Attribute",
       "name": "capture"
     },
     {
@@ -2446,25 +2590,19 @@
     },
     {
       "path": "tests/retained_native_fixture.py",
-      "line": 715,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/retained_native_fixture.py",
-      "line": 216,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/retained_native_fixture.py",
       "line": 253,
       "node": "Attribute",
       "name": "capture"
     },
     {
+      "path": "tests/retained_native_fixture.py",
+      "line": 715,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
       "path": "tests/retained_task_native_journey.py",
-      "line": 134,
+      "line": 85,
       "node": "Attribute",
       "name": "capture"
     },
@@ -2476,7 +2614,7 @@
     },
     {
       "path": "tests/retained_task_native_journey.py",
-      "line": 85,
+      "line": 134,
       "node": "Attribute",
       "name": "capture"
     },
@@ -2500,27 +2638,27 @@
     },
     {
       "path": "tests/selected_summary_recovery_installed_journey.py",
-      "line": 112,
-      "node": "Attribute",
-      "name": "native_environment"
-    },
-    {
-      "path": "tests/selected_summary_recovery_installed_journey.py",
-      "line": 164,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/selected_summary_recovery_installed_journey.py",
       "line": 109,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 112,
+      "node": "Attribute",
+      "name": "native_environment"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
       "line": 160,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "reserve"
     },
     {
       "path": "tests/selected_summary_recovery_installed_journey.py",
@@ -2596,19 +2734,13 @@
     },
     {
       "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 61,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
-      "line": 616,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_acp_private_nk_delivery.py",
       "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 61,
       "node": "Attribute",
       "name": "capture"
     },
@@ -2625,8 +2757,20 @@
       "name": "capture"
     },
     {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 616,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
       "path": "tests/test_acp_queue_contract.py",
       "line": 39,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 84,
       "node": "Attribute",
       "name": "capture"
     },
@@ -2644,13 +2788,13 @@
     },
     {
       "path": "tests/test_acp_selected_write_plan.py",
-      "line": 84,
+      "line": 313,
       "node": "Attribute",
       "name": "capture"
     },
     {
-      "path": "tests/test_acp_selected_write_plan.py",
-      "line": 313,
+      "path": "tests/test_active_turn.py",
+      "line": 17,
       "node": "Attribute",
       "name": "capture"
     },
@@ -2662,27 +2806,9 @@
     },
     {
       "path": "tests/test_active_turn.py",
-      "line": 17,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_active_turn.py",
       "line": 35,
       "node": "Attribute",
       "name": "thread_views"
-    },
-    {
-      "path": "tests/test_agent_events.py",
-      "line": 256,
-      "node": "Attribute",
-      "name": "settle_turn"
-    },
-    {
-      "path": "tests/test_agent_events.py",
-      "line": 227,
-      "node": "Attribute",
-      "name": "settle_turn"
     },
     {
       "path": "tests/test_agent_events.py",
@@ -2698,21 +2824,27 @@
     },
     {
       "path": "tests/test_agent_events.py",
+      "line": 227,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
       "line": 239,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_agent_events.py",
-      "line": 268,
+      "line": 256,
       "node": "Attribute",
-      "name": "capture"
+      "name": "settle_turn"
     },
     {
       "path": "tests/test_agent_events.py",
-      "line": 306,
+      "line": 268,
       "node": "Attribute",
-      "name": "settle_turn"
+      "name": "capture"
     },
     {
       "path": "tests/test_agent_events.py",
@@ -2727,6 +2859,12 @@
       "name": "acquire_turn"
     },
     {
+      "path": "tests/test_agent_events.py",
+      "line": 306,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
       "path": "tests/test_atomic_turn_source_owner.py",
       "line": 14,
       "node": "alias",
@@ -2734,15 +2872,15 @@
     },
     {
       "path": "tests/test_atomic_turn_source_owner.py",
-      "line": 25,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/test_atomic_turn_source_owner.py",
       "line": 23,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 25,
+      "node": "Name",
+      "name": "OwnedTurn"
     },
     {
       "path": "tests/test_atomic_turn_source_owner.py",
@@ -2800,15 +2938,9 @@
     },
     {
       "path": "tests/test_channel_bus_ownership.py",
-      "line": 90,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/test_channel_bus_ownership.py",
-      "line": 104,
-      "node": "Name",
-      "name": "OwnedTurn"
+      "line": 52,
+      "node": "Attribute",
+      "name": "awareness_segments"
     },
     {
       "path": "tests/test_channel_bus_ownership.py",
@@ -2824,15 +2956,21 @@
     },
     {
       "path": "tests/test_channel_bus_ownership.py",
-      "line": 52,
+      "line": 78,
       "node": "Attribute",
       "name": "awareness_segments"
     },
     {
       "path": "tests/test_channel_bus_ownership.py",
-      "line": 78,
-      "node": "Attribute",
-      "name": "awareness_segments"
+      "line": 90,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 104,
+      "node": "Name",
+      "name": "OwnedTurn"
     },
     {
       "path": "tests/test_channel_bus_ownership.py",
@@ -2860,37 +2998,13 @@
     },
     {
       "path": "tests/test_channel_input_batch.py",
-      "line": 43,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_channel_input_batch.py",
       "line": 30,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_channel_input_batch.py",
-      "line": 42,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_channel_input_batch.py",
-      "line": 43,
-      "node": "Name",
-      "name": "InputBatch"
-    },
-    {
-      "path": "tests/test_channel_input_batch.py",
       "line": 30,
-      "node": "Name",
-      "name": "InputBatch"
-    },
-    {
-      "path": "tests/test_channel_input_batch.py",
-      "line": 42,
       "node": "Name",
       "name": "InputBatch"
     },
@@ -2903,6 +3017,30 @@
     {
       "path": "tests/test_channel_input_batch.py",
       "line": 39,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 42,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 42,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 43,
       "node": "Name",
       "name": "InputBatch"
     },
@@ -2938,6 +3076,12 @@
     },
     {
       "path": "tests/test_cohort_foreground.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
       "line": 300,
       "node": "AsyncFunctionDef",
       "name": "capture"
@@ -2946,12 +3090,6 @@
       "path": "tests/test_cohort_foreground.py",
       "line": 304,
       "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_cohort_foreground.py",
-      "line": 73,
-      "node": "Attribute",
       "name": "capture"
     },
     {
@@ -2986,13 +3124,55 @@
     },
     {
       "path": "tests/test_compaction_journal.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 81,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 100,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
       "line": 147,
       "node": "Attribute",
       "name": "begin"
     },
     {
       "path": "tests/test_compaction_journal.py",
+      "line": 156,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
       "line": 174,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 183,
       "node": "Attribute",
       "name": "begin"
     },
@@ -3034,55 +3214,13 @@
     },
     {
       "path": "tests/test_compaction_journal.py",
-      "line": 351,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 72,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 81,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 100,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 137,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 156,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 163,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
-      "line": 183,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_compaction_journal.py",
       "line": 341,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 351,
       "node": "Attribute",
       "name": "begin"
     },
@@ -3112,15 +3250,15 @@
     },
     {
       "path": "tests/test_compaction_outcome_read.py",
-      "line": 150,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_compaction_outcome_read.py",
       "line": 113,
       "node": "Attribute",
       "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 150,
+      "node": "Attribute",
+      "name": "reserve"
     },
     {
       "path": "tests/test_compaction_outcome_transcript.py",
@@ -3160,6 +3298,12 @@
     },
     {
       "path": "tests/test_continued_private_session.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
       "line": 79,
       "node": "Attribute",
       "name": "settle_unbound"
@@ -3167,12 +3311,6 @@
     {
       "path": "tests/test_continued_private_session.py",
       "line": 82,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_continued_private_session.py",
-      "line": 71,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3196,6 +3334,18 @@
     },
     {
       "path": "tests/test_continued_private_session.py",
+      "line": 187,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
       "line": 258,
       "node": "Attribute",
       "name": "reserve"
@@ -3214,6 +3364,12 @@
     },
     {
       "path": "tests/test_continued_private_session.py",
+      "line": 325,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
       "line": 377,
       "node": "Attribute",
       "name": "reserve"
@@ -3226,86 +3382,8 @@
     },
     {
       "path": "tests/test_continued_private_session.py",
-      "line": 187,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_continued_private_session.py",
-      "line": 256,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_continued_private_session.py",
-      "line": 325,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_continued_private_session.py",
       "line": 385,
       "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 1917,
-      "node": "AsyncFunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 1012,
-      "node": "Name",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 1012,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 1921,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 519,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 657,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 727,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 1042,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 792,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tests/test_coordinated_runtime.py",
-      "line": 1018,
-      "node": "Name",
       "name": "reserve"
     },
     {
@@ -3328,9 +3406,69 @@
     },
     {
       "path": "tests/test_coordinated_runtime.py",
+      "line": 431,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 434,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
       "line": 443,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 519,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 657,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 727,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 792,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1012,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1012,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1018,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1042,
+      "node": "Attribute",
+      "name": "reserve"
     },
     {
       "path": "tests/test_coordinated_runtime.py",
@@ -3346,14 +3484,14 @@
     },
     {
       "path": "tests/test_coordinated_runtime.py",
-      "line": 431,
-      "node": "Attribute",
+      "line": 1917,
+      "node": "AsyncFunctionDef",
       "name": "capture"
     },
     {
       "path": "tests/test_coordinated_runtime.py",
-      "line": 434,
-      "node": "Attribute",
+      "line": 1921,
+      "node": "Name",
       "name": "capture"
     },
     {
@@ -3388,14 +3526,38 @@
     },
     {
       "path": "tests/test_current_input_origin.py",
+      "line": 54,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
       "line": 64,
       "node": "Name",
       "name": "capture"
     },
     {
       "path": "tests/test_current_input_origin.py",
+      "line": 90,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
       "line": 103,
       "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "node": "Attribute",
       "name": "capture"
     },
     {
@@ -3418,24 +3580,6 @@
     },
     {
       "path": "tests/test_current_input_origin.py",
-      "line": 196,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 54,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 113,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
       "line": 170,
       "node": "Attribute",
       "name": "capture"
@@ -3444,6 +3588,12 @@
       "path": "tests/test_current_input_origin.py",
       "line": 175,
       "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 196,
+      "node": "Name",
       "name": "capture"
     },
     {
@@ -3459,18 +3609,6 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_current_input_origin.py",
-      "line": 90,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "tests/test_current_input_origin.py",
-      "line": 110,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "tests/test_cursor_load_recovery.py",
       "line": 23,
       "node": "Attribute",
@@ -3478,19 +3616,13 @@
     },
     {
       "path": "tests/test_declarations.py",
-      "line": 254,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_declarations.py",
-      "line": 614,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_declarations.py",
       "line": 237,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 254,
       "node": "Attribute",
       "name": "capture"
     },
@@ -3509,6 +3641,12 @@
     {
       "path": "tests/test_declarations.py",
       "line": 280,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 309,
       "node": "Attribute",
       "name": "capture"
     },
@@ -3544,6 +3682,12 @@
     },
     {
       "path": "tests/test_declarations.py",
+      "line": 432,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
       "line": 526,
       "node": "Attribute",
       "name": "capture"
@@ -3562,13 +3706,7 @@
     },
     {
       "path": "tests/test_declarations.py",
-      "line": 309,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_declarations.py",
-      "line": 432,
+      "line": 614,
       "node": "Attribute",
       "name": "capture"
     },
@@ -3592,18 +3730,6 @@
     },
     {
       "path": "tests/test_fresh_private_session.py",
-      "line": 367,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_fresh_private_session.py",
-      "line": 400,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_fresh_private_session.py",
       "line": 341,
       "node": "Attribute",
       "name": "reserve"
@@ -3622,6 +3748,12 @@
     },
     {
       "path": "tests/test_fresh_private_session.py",
+      "line": 367,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
       "line": 372,
       "node": "Attribute",
       "name": "reserve"
@@ -3629,6 +3761,12 @@
     {
       "path": "tests/test_fresh_private_session.py",
       "line": 383,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 400,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3652,6 +3790,12 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
       "line": 50,
       "node": "Attribute",
       "name": "reserve"
@@ -3670,84 +3814,6 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
-      "line": 164,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 173,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 315,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 350,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 373,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 382,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 386,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 398,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 412,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 435,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 537,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 545,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 43,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
       "line": 154,
       "node": "Attribute",
       "name": "reserve"
@@ -3755,6 +3821,18 @@
     {
       "path": "tests/test_goal_attempts.py",
       "line": 163,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 173,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3772,7 +3850,19 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
       "line": 285,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 294,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3785,6 +3875,12 @@
     {
       "path": "tests/test_goal_attempts.py",
       "line": 310,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 315,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3808,7 +3904,31 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
+      "line": 350,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
       "line": 357,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 373,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 382,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 386,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3820,7 +3940,25 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
+      "line": 398,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
       "line": 405,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 412,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 435,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3844,6 +3982,12 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
+      "line": 509,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
       "line": 518,
       "node": "Attribute",
       "name": "reserve"
@@ -3862,6 +4006,30 @@
     },
     {
       "path": "tests/test_goal_attempts.py",
+      "line": 532,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 537,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 545,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 561,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
       "line": 579,
       "node": "Attribute",
       "name": "reserve"
@@ -3869,36 +4037,6 @@
     {
       "path": "tests/test_goal_attempts.py",
       "line": 581,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 270,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 294,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 509,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 532,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_attempts.py",
-      "line": 561,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3916,13 +4054,13 @@
     },
     {
       "path": "tests/test_goal_attempts_windows.py",
-      "line": 31,
+      "line": 28,
       "node": "Attribute",
       "name": "reserve"
     },
     {
       "path": "tests/test_goal_attempts_windows.py",
-      "line": 28,
+      "line": 31,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -3940,15 +4078,15 @@
     },
     {
       "path": "tests/test_goal_block_reason.py",
-      "line": 158,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_goal_block_reason.py",
       "line": 147,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "reserve"
     },
     {
       "path": "tests/test_goal_block_reason.py",
@@ -3964,9 +4102,9 @@
     },
     {
       "path": "tests/test_goal_failure_observation.py",
-      "line": 155,
+      "line": 45,
       "node": "Attribute",
-      "name": "reserve"
+      "name": "capture"
     },
     {
       "path": "tests/test_goal_failure_observation.py",
@@ -3976,15 +4114,9 @@
     },
     {
       "path": "tests/test_goal_failure_observation.py",
-      "line": 45,
+      "line": 155,
       "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_goal_input_review.py",
-      "line": 144,
-      "node": "Attribute",
-      "name": "capture"
+      "name": "reserve"
     },
     {
       "path": "tests/test_goal_input_review.py",
@@ -3999,6 +4131,12 @@
       "name": "capture"
     },
     {
+      "path": "tests/test_goal_input_review.py",
+      "line": 144,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
       "path": "tests/test_goal_nominal.py",
       "line": 57,
       "node": "Attribute",
@@ -4009,6 +4147,18 @@
       "line": 129,
       "node": "Attribute",
       "name": "block_goal_after_failed_turn"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 88,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_goal_resume.py",
@@ -4035,24 +4185,6 @@
       "name": "block_goal_after_failed_turn"
     },
     {
-      "path": "tests/test_goal_resume.py",
-      "line": 59,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_goal_resume.py",
-      "line": 88,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_goal_standby.py",
-      "line": 187,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "tests/test_goal_standby.py",
       "line": 86,
       "node": "Attribute",
@@ -4073,6 +4205,12 @@
     {
       "path": "tests/test_goal_standby.py",
       "line": 178,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 187,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4114,8 +4252,8 @@
     },
     {
       "path": "tests/test_historical_page_scope.py",
-      "line": 161,
-      "node": "FunctionDef",
+      "line": 119,
+      "node": "Attribute",
       "name": "capture"
     },
     {
@@ -4126,14 +4264,14 @@
     },
     {
       "path": "tests/test_historical_page_scope.py",
-      "line": 167,
-      "node": "Name",
+      "line": 161,
+      "node": "FunctionDef",
       "name": "capture"
     },
     {
       "path": "tests/test_historical_page_scope.py",
-      "line": 119,
-      "node": "Attribute",
+      "line": 167,
+      "node": "Name",
       "name": "capture"
     },
     {
@@ -4168,6 +4306,18 @@
     },
     {
       "path": "tests/test_input_documents.py",
+      "line": 86,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 149,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
       "line": 217,
       "node": "Attribute",
       "name": "settle_unbound"
@@ -4175,12 +4325,6 @@
     {
       "path": "tests/test_input_documents.py",
       "line": 239,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "tests/test_input_documents.py",
-      "line": 313,
       "node": "Attribute",
       "name": "settle_unbound"
     },
@@ -4198,13 +4342,13 @@
     },
     {
       "path": "tests/test_input_documents.py",
-      "line": 86,
+      "line": 313,
       "node": "Attribute",
-      "name": "capture"
+      "name": "settle_unbound"
     },
     {
-      "path": "tests/test_input_documents.py",
-      "line": 149,
+      "path": "tests/test_input_drain.py",
+      "line": 40,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4240,19 +4384,7 @@
     },
     {
       "path": "tests/test_input_drain.py",
-      "line": 40,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_input_drain.py",
       "line": 227,
-      "node": "Name",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_input_drain.py",
-      "line": 241,
       "node": "Name",
       "name": "capture"
     },
@@ -4263,20 +4395,14 @@
       "name": "capture"
     },
     {
+      "path": "tests/test_input_drain.py",
+      "line": 241,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
       "path": "tests/test_input_drain_native.py",
       "line": 83,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_keyed_response_delivery.py",
-      "line": 157,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_keyed_response_delivery.py",
-      "line": 239,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4293,10 +4419,16 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_l0_goal_input_closure.py",
-      "line": 97,
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 157,
       "node": "Attribute",
-      "name": "reserve"
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_l0_goal_input_closure.py",
@@ -4311,10 +4443,22 @@
       "name": "capture"
     },
     {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
       "path": "tests/test_live_drain_failure.py",
       "line": 30,
       "node": "Attribute",
       "name": "thread_views"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 84,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_maintenance_barrier.py",
@@ -4336,15 +4480,39 @@
     },
     {
       "path": "tests/test_maintenance_barrier.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
       "line": 181,
       "node": "Attribute",
       "name": "begin"
     },
     {
       "path": "tests/test_maintenance_barrier.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 231,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
       "line": 236,
       "node": "Attribute",
       "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 257,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_maintenance_barrier.py",
@@ -4360,39 +4528,9 @@
     },
     {
       "path": "tests/test_maintenance_barrier.py",
-      "line": 213,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_maintenance_barrier.py",
       "line": 327,
       "node": "Attribute",
       "name": "begin"
-    },
-    {
-      "path": "tests/test_maintenance_barrier.py",
-      "line": 231,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_maintenance_barrier.py",
-      "line": 84,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_maintenance_barrier.py",
-      "line": 178,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_maintenance_barrier.py",
-      "line": 257,
-      "node": "Attribute",
-      "name": "capture"
     },
     {
       "path": "tests/test_maintenance_native_boundary.py",
@@ -4408,31 +4546,13 @@
     },
     {
       "path": "tests/test_managed_project_native_latency.py",
-      "line": 68,
-      "node": "Name",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_managed_project_native_latency.py",
-      "line": 78,
-      "node": "Name",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_managed_project_native_latency.py",
-      "line": 128,
-      "node": "Name",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_managed_project_native_latency.py",
-      "line": 139,
-      "node": "Name",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_managed_project_native_latency.py",
       "line": 52,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 57,
       "node": "Name",
       "name": "begin"
     },
@@ -4444,13 +4564,7 @@
     },
     {
       "path": "tests/test_managed_project_native_latency.py",
-      "line": 131,
-      "node": "Name",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_managed_project_native_latency.py",
-      "line": 142,
+      "line": 68,
       "node": "Name",
       "name": "begin"
     },
@@ -4462,13 +4576,37 @@
     },
     {
       "path": "tests/test_managed_project_native_latency.py",
+      "line": 78,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
       "line": 82,
       "node": "Name",
       "name": "begin"
     },
     {
       "path": "tests/test_managed_project_native_latency.py",
-      "line": 57,
+      "line": 128,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 131,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 139,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 142,
       "node": "Name",
       "name": "begin"
     },
@@ -4540,24 +4678,6 @@
     },
     {
       "path": "tests/test_native_catalog_discovery.py",
-      "line": 104,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "tests/test_native_catalog_discovery.py",
-      "line": 326,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "tests/test_native_catalog_discovery.py",
-      "line": 427,
-      "node": "Attribute",
-      "name": "run_worker"
-    },
-    {
-      "path": "tests/test_native_catalog_discovery.py",
       "line": 72,
       "node": "Attribute",
       "name": "run_worker"
@@ -4576,13 +4696,31 @@
     },
     {
       "path": "tests/test_native_catalog_discovery.py",
-      "line": 522,
+      "line": 104,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 326,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 427,
       "node": "Attribute",
       "name": "run_worker"
     },
     {
       "path": "tests/test_native_catalog_discovery.py",
       "line": 463,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 522,
       "node": "Attribute",
       "name": "run_worker"
     },
@@ -4600,7 +4738,7 @@
     },
     {
       "path": "tests/test_native_context_inspection.py",
-      "line": 177,
+      "line": 41,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4609,6 +4747,12 @@
       "line": 135,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 144,
+      "node": "Attribute",
+      "name": "prepare_selected_session"
     },
     {
       "path": "tests/test_native_context_inspection.py",
@@ -4624,19 +4768,13 @@
     },
     {
       "path": "tests/test_native_context_inspection.py",
-      "line": 191,
-      "node": "Attribute",
-      "name": "prepare_selected_session"
-    },
-    {
-      "path": "tests/test_native_context_inspection.py",
-      "line": 41,
+      "line": 177,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_native_context_inspection.py",
-      "line": 144,
+      "line": 191,
       "node": "Attribute",
       "name": "prepare_selected_session"
     },
@@ -4678,12 +4816,6 @@
     },
     {
       "path": "tests/test_native_prompt_binding.py",
-      "line": 369,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_native_prompt_binding.py",
       "line": 66,
       "node": "Attribute",
       "name": "capture"
@@ -4691,6 +4823,12 @@
     {
       "path": "tests/test_native_prompt_binding.py",
       "line": 72,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 369,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4726,6 +4864,12 @@
     },
     {
       "path": "tests/test_native_startup.py",
+      "line": 48,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tests/test_native_startup.py",
       "line": 66,
       "node": "Attribute",
       "name": "acquire"
@@ -4738,25 +4882,19 @@
     },
     {
       "path": "tests/test_native_startup.py",
-      "line": 48,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tests/test_native_startup.py",
       "line": 74,
       "node": "Attribute",
       "name": "acquire"
     },
     {
       "path": "tests/test_native_startup.py",
-      "line": 149,
+      "line": 134,
       "node": "Attribute",
       "name": "acquire"
     },
     {
       "path": "tests/test_native_startup.py",
-      "line": 134,
+      "line": 149,
       "node": "Attribute",
       "name": "acquire"
     },
@@ -4792,13 +4930,13 @@
     },
     {
       "path": "tests/test_nk_foreground.py",
-      "line": 261,
+      "line": 217,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_nk_foreground.py",
-      "line": 217,
+      "line": 261,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4846,13 +4984,13 @@
     },
     {
       "path": "tests/test_ordinary_nk_delivery.py",
-      "line": 61,
+      "line": 54,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_ordinary_nk_delivery.py",
-      "line": 54,
+      "line": 61,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4879,12 +5017,6 @@
       "line": 30,
       "node": "Attribute",
       "name": "capture"
-    },
-    {
-      "path": "tests/test_owner_compaction_commit.py",
-      "line": 808,
-      "node": "Attribute",
-      "name": "begin"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
@@ -4923,14 +5055,14 @@
       "name": "run_worker"
     },
     {
-      "path": "tests/test_owner_compaction_gate.py",
-      "line": 38,
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 808,
       "node": "Attribute",
-      "name": "capture"
+      "name": "begin"
     },
     {
-      "path": "tests/test_owner_compaction_prepare.py",
-      "line": 326,
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 38,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4943,6 +5075,18 @@
     {
       "path": "tests/test_owner_compaction_prepare.py",
       "line": 124,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 326,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 522,
       "node": "Attribute",
       "name": "capture"
     },
@@ -4967,12 +5111,6 @@
     {
       "path": "tests/test_owner_compaction_prepare.py",
       "line": 828,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_owner_compaction_prepare.py",
-      "line": 522,
       "node": "Attribute",
       "name": "capture"
     },
@@ -5026,13 +5164,13 @@
     },
     {
       "path": "tests/test_private_bus_checkpoint.py",
-      "line": 51,
+      "line": 42,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_private_bus_checkpoint.py",
-      "line": 42,
+      "line": 51,
       "node": "Attribute",
       "name": "capture"
     },
@@ -5063,13 +5201,19 @@
     {
       "path": "tests/test_private_idle_drain.py",
       "line": 78,
-      "node": "Name",
+      "node": "Attribute",
       "name": "run_worker"
     },
     {
       "path": "tests/test_private_idle_drain.py",
       "line": 78,
-      "node": "Attribute",
+      "node": "Name",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 86,
+      "node": "Name",
       "name": "run_worker"
     },
     {
@@ -5080,21 +5224,15 @@
     },
     {
       "path": "tests/test_private_idle_drain.py",
-      "line": 86,
-      "node": "Name",
-      "name": "run_worker"
+      "line": 122,
+      "node": "Attribute",
+      "name": "acquire"
     },
     {
       "path": "tests/test_private_idle_drain.py",
       "line": 166,
       "node": "Attribute",
       "name": "capture"
-    },
-    {
-      "path": "tests/test_private_idle_drain.py",
-      "line": 122,
-      "node": "Attribute",
-      "name": "acquire"
     },
     {
       "path": "tests/test_private_nk_entrypoint.py",
@@ -5116,13 +5254,13 @@
     },
     {
       "path": "tests/test_read_ledger.py",
-      "line": 163,
+      "line": 65,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_read_ledger.py",
-      "line": 65,
+      "line": 163,
       "node": "Attribute",
       "name": "capture"
     },
@@ -5146,15 +5284,9 @@
     },
     {
       "path": "tests/test_recorded_retention_measurements.py",
-      "line": 369,
+      "line": 96,
       "node": "Name",
-      "name": "admit"
-    },
-    {
-      "path": "tests/test_recorded_retention_measurements.py",
-      "line": 403,
-      "node": "Name",
-      "name": "admit"
+      "name": "capture"
     },
     {
       "path": "tests/test_recorded_retention_measurements.py",
@@ -5164,9 +5296,15 @@
     },
     {
       "path": "tests/test_recorded_retention_measurements.py",
-      "line": 96,
+      "line": 369,
       "node": "Name",
-      "name": "capture"
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 403,
+      "node": "Name",
+      "name": "admit"
     },
     {
       "path": "tests/test_registration_authority.py",
@@ -5230,12 +5368,6 @@
     },
     {
       "path": "tests/test_reservation_rules.py",
-      "line": 194,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_reservation_rules.py",
       "line": 159,
       "node": "Attribute",
       "name": "capture"
@@ -5243,6 +5375,12 @@
     {
       "path": "tests/test_reservation_rules.py",
       "line": 188,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 194,
       "node": "Attribute",
       "name": "capture"
     },
@@ -5314,13 +5452,13 @@
     },
     {
       "path": "tests/test_runtime_attachment_lifetime.py",
-      "line": 76,
+      "line": 41,
       "node": "Attribute",
       "name": "capture"
     },
     {
       "path": "tests/test_runtime_attachment_lifetime.py",
-      "line": 41,
+      "line": 76,
       "node": "Attribute",
       "name": "capture"
     },
@@ -5368,9 +5506,15 @@
     },
     {
       "path": "tests/test_s1_event_behavior.py",
-      "line": 297,
-      "node": "Name",
-      "name": "OwnedTurn"
+      "line": 134,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_s1_event_behavior.py",
@@ -5386,15 +5530,9 @@
     },
     {
       "path": "tests/test_s1_event_behavior.py",
-      "line": 147,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_s1_event_behavior.py",
-      "line": 134,
-      "node": "Attribute",
-      "name": "acquire"
+      "line": 297,
+      "node": "Name",
+      "name": "OwnedTurn"
     },
     {
       "path": "tests/test_s1_event_behavior.py",
@@ -5416,18 +5554,6 @@
     },
     {
       "path": "tests/test_selected_owner_compaction_integration.py",
-      "line": 750,
-      "node": "Name",
-      "name": "admit"
-    },
-    {
-      "path": "tests/test_selected_owner_compaction_integration.py",
-      "line": 762,
-      "node": "Name",
-      "name": "admit"
-    },
-    {
-      "path": "tests/test_selected_owner_compaction_integration.py",
       "line": 177,
       "node": "Attribute",
       "name": "capture"
@@ -5437,6 +5563,18 @@
       "line": 443,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 750,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 762,
+      "node": "Name",
+      "name": "admit"
     },
     {
       "path": "tests/test_selected_owner_compaction_integration.py",
@@ -5470,6 +5608,12 @@
     },
     {
       "path": "tests/test_selected_source_batch.py",
+      "line": 31,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
       "line": 78,
       "node": "Attribute",
       "name": "reserve"
@@ -5481,34 +5625,10 @@
       "name": "reserve"
     },
     {
-      "path": "tests/test_selected_source_batch.py",
-      "line": 31,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
       "path": "tests/test_selected_summary_admission.py",
       "line": 71,
       "node": "Attribute",
       "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_admission.py",
-      "line": 190,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_selected_summary_admission.py",
-      "line": 485,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_admission.py",
-      "line": 490,
-      "node": "Attribute",
-      "name": "begin"
     },
     {
       "path": "tests/test_selected_summary_admission.py",
@@ -5530,6 +5650,12 @@
     },
     {
       "path": "tests/test_selected_summary_admission.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
       "line": 299,
       "node": "Attribute",
       "name": "begin"
@@ -5547,15 +5673,33 @@
       "name": "reserve"
     },
     {
-      "path": "tests/test_selected_summary_exchange.py",
-      "line": 266,
-      "node": "Name",
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 485,
+      "node": "Attribute",
       "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 490,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 68,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_selected_summary_exchange.py",
       "line": 266,
       "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 266,
+      "node": "Name",
       "name": "reserve"
     },
     {
@@ -5563,12 +5707,6 @@
       "line": 271,
       "node": "Name",
       "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_exchange.py",
-      "line": 68,
-      "node": "Attribute",
-      "name": "capture"
     },
     {
       "path": "tests/test_selected_summary_exchange.py",
@@ -5608,13 +5746,13 @@
     },
     {
       "path": "tests/test_selected_summary_failure_native.py",
-      "line": 316,
+      "line": 315,
       "node": "Name",
       "name": "capture"
     },
     {
       "path": "tests/test_selected_summary_failure_native.py",
-      "line": 315,
+      "line": 316,
       "node": "Name",
       "name": "capture"
     },
@@ -5632,139 +5770,7 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
-      "line": 165,
-      "node": "FunctionDef",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
       "line": 82,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 138,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 206,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 211,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 218,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 224,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 232,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 239,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 244,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 255,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 312,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 321,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 324,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 400,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 407,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 420,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 429,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 457,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 476,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 539,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 551,
-      "node": "Attribute",
-      "name": "begin"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 612,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -5788,6 +5794,24 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 138,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 165,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 168,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 174,
       "node": "Name",
       "name": "reserve"
@@ -5800,7 +5824,25 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 206,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 210,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 211,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 218,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -5812,7 +5854,37 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 224,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 232,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 241,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 255,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -5842,6 +5914,24 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 312,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 321,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 324,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 343,
       "node": "Attribute",
       "name": "begin"
@@ -5854,13 +5944,55 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 400,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 407,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 420,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 423,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 429,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 444,
       "node": "Attribute",
       "name": "begin"
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 457,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 467,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 476,
       "node": "Attribute",
       "name": "reserve"
     },
@@ -5884,6 +6016,18 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
+      "line": 539,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 551,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
       "line": 557,
       "node": "Attribute",
       "name": "reserve"
@@ -5902,15 +6046,9 @@
     },
     {
       "path": "tests/test_selected_summary_journal.py",
-      "line": 168,
+      "line": 612,
       "node": "Attribute",
       "name": "reserve"
-    },
-    {
-      "path": "tests/test_selected_summary_journal.py",
-      "line": 423,
-      "node": "Attribute",
-      "name": "begin"
     },
     {
       "path": "tests/test_selected_summary_output_accounting.py",
@@ -5926,6 +6064,12 @@
     },
     {
       "path": "tests/test_stack_native_compaction.py",
+      "line": 398,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
       "line": 461,
       "node": "Name",
       "name": "capture"
@@ -5935,12 +6079,6 @@
       "line": 472,
       "node": "Name",
       "name": "capture"
-    },
-    {
-      "path": "tests/test_stack_native_compaction.py",
-      "line": 398,
-      "node": "Attribute",
-      "name": "thread_views"
     },
     {
       "path": "tests/test_stack_retry_running.py",
@@ -5963,30 +6101,6 @@
     {
       "path": "tests/test_summary_failure_recovery.py",
       "line": 29,
-      "node": "Attribute",
-      "name": "settle_unbound"
-    },
-    {
-      "path": "tests/test_summary_failure_recovery.py",
-      "line": 146,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_summary_failure_recovery.py",
-      "line": 186,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_summary_failure_recovery.py",
-      "line": 195,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_summary_failure_recovery.py",
-      "line": 197,
       "node": "Attribute",
       "name": "settle_unbound"
     },
@@ -6016,15 +6130,45 @@
     },
     {
       "path": "tests/test_summary_failure_recovery.py",
+      "line": 146,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 186,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
       "line": 189,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "settle_unbound"
     },
     {
       "path": "tests/test_task_decisions.py",
       "line": 40,
       "node": "FunctionDef",
       "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_task_decisions.py",
@@ -6088,12 +6232,6 @@
     },
     {
       "path": "tests/test_task_decisions.py",
-      "line": 534,
-      "node": "Name",
-      "name": "admit"
-    },
-    {
-      "path": "tests/test_task_decisions.py",
       "line": 438,
       "node": "Attribute",
       "name": "capture"
@@ -6112,15 +6250,9 @@
     },
     {
       "path": "tests/test_task_decisions.py",
-      "line": 43,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_thread_identity.py",
-      "line": 160,
-      "node": "Attribute",
-      "name": "capture"
+      "line": 534,
+      "node": "Name",
+      "name": "admit"
     },
     {
       "path": "tests/test_thread_identity.py",
@@ -6147,16 +6279,22 @@
       "name": "capture"
     },
     {
-      "path": "tests/test_thread_status.py",
-      "line": 55,
+      "path": "tests/test_thread_identity.py",
+      "line": 160,
       "node": "Attribute",
-      "name": "thread_views"
+      "name": "capture"
     },
     {
       "path": "tests/test_thread_status.py",
       "line": 34,
       "node": "Attribute",
       "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "thread_views"
     },
     {
       "path": "tests/test_thread_status.py",
@@ -6232,15 +6370,15 @@
     },
     {
       "path": "tests/test_turn_context_wire.py",
-      "line": 324,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_turn_context_wire.py",
       "line": 188,
       "node": "Attribute",
       "name": "awareness_segments"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 324,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tests/test_turn_goal_account.py",
@@ -6253,6 +6391,12 @@
       "line": 18,
       "node": "alias",
       "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "reserve"
     },
     {
       "path": "tests/test_turn_goal_account.py",
@@ -6271,18 +6415,6 @@
       "line": 97,
       "node": "Name",
       "name": "OriginalTurnInput"
-    },
-    {
-      "path": "tests/test_turn_goal_account.py",
-      "line": 39,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/test_turn_lease_release.py",
-      "line": 59,
-      "node": "Attribute",
-      "name": "capture"
     },
     {
       "path": "tests/test_turn_lease_release.py",
@@ -6305,6 +6437,12 @@
     {
       "path": "tests/test_turn_lease_release.py",
       "line": 51,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 59,
       "node": "Attribute",
       "name": "capture"
     },
@@ -6346,27 +6484,15 @@
     },
     {
       "path": "tests/test_wake_lifetime.py",
-      "line": 31,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tests/test_wake_lifetime.py",
       "line": 22,
       "node": "Attribute",
       "name": "capture"
     },
     {
-      "path": "tests/test_wire_watch.py",
-      "line": 179,
-      "node": "FunctionDef",
-      "name": "capture"
-    },
-    {
-      "path": "tests/test_wire_watch.py",
-      "line": 184,
-      "node": "Name",
-      "name": "capture"
+      "path": "tests/test_wake_lifetime.py",
+      "line": 31,
+      "node": "Attribute",
+      "name": "acquire"
     },
     {
       "path": "tests/test_wire_watch.py",
@@ -6387,14 +6513,20 @@
       "name": "capture"
     },
     {
-      "path": "tests/three_cut_retention_configured_journey.py",
-      "line": 253,
-      "node": "Attribute",
+      "path": "tests/test_wire_watch.py",
+      "line": 179,
+      "node": "FunctionDef",
       "name": "capture"
     },
     {
-      "path": "tests/turn_context_installed_journey.py",
-      "line": 388,
+      "path": "tests/test_wire_watch.py",
+      "line": 184,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 253,
       "node": "Attribute",
       "name": "capture"
     },
@@ -6411,106 +6543,10 @@
       "name": "capture"
     },
     {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 10,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 13,
-      "node": "alias",
-      "name": "OriginalTurnInput"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 90,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 24,
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 388,
       "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 24,
-      "node": "Attribute",
-      "name": "reserve"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 29,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 20,
-      "node": "Name",
-      "name": "OriginalTurnInput"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 24,
-      "node": "Name",
-      "name": "OriginalTurnInput"
-    },
-    {
-      "path": "tests/guards/test_owned_send_ownership.py",
-      "line": 25,
-      "node": "Name",
-      "name": "OriginalTurnInput"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 9,
-      "node": "alias",
-      "name": "InputBatch"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 10,
-      "node": "alias",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 12,
-      "node": "alias",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 18,
-      "node": "Name",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 24,
-      "node": "Name",
-      "name": "TurnProgress"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 29,
-      "node": "Name",
-      "name": "InputBatch"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 29,
-      "node": "Name",
-      "name": "OwnedTurn"
-    },
-    {
-      "path": "tests/guards/test_turn_progress_ownership.py",
-      "line": 29,
-      "node": "Name",
-      "name": "TurnProgress"
+      "name": "capture"
     },
     {
       "path": "tools/cutover/native_schema_carry.py",
@@ -6544,24 +6580,6 @@
     },
     {
       "path": "tools/cutover/native_schema_carry_controls.py",
-      "line": 164,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tools/cutover/native_schema_carry_controls.py",
-      "line": 236,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tools/cutover/native_schema_carry_controls.py",
-      "line": 255,
-      "node": "Attribute",
-      "name": "acquire"
-    },
-    {
-      "path": "tools/cutover/native_schema_carry_controls.py",
       "line": 143,
       "node": "Attribute",
       "name": "acquire"
@@ -6579,14 +6597,26 @@
       "name": "acquire"
     },
     {
-      "path": "tools/cutover/original_owner_capture.py",
-      "line": 53,
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 164,
       "node": "Attribute",
-      "name": "capture"
+      "name": "acquire"
     },
     {
-      "path": "tools/cutover/publish_openhcs_recovery.py",
-      "line": 368,
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 236,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 255,
+      "node": "Attribute",
+      "name": "acquire"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 53,
       "node": "Attribute",
       "name": "capture"
     },
@@ -6609,20 +6639,8 @@
       "name": "capture"
     },
     {
-      "path": "tools/cutover/publish_retained_summary.py",
-      "line": 384,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tools/cutover/publish_retained_summary.py",
-      "line": 356,
-      "node": "Attribute",
-      "name": "capture"
-    },
-    {
-      "path": "tools/cutover/publish_retained_summary.py",
-      "line": 381,
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 368,
       "node": "Attribute",
       "name": "capture"
     },
@@ -6643,6 +6661,24 @@
       "line": 310,
       "node": "Attribute",
       "name": "acquire"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 356,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 381,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 384,
+      "node": "Attribute",
+      "name": "capture"
     },
     {
       "path": "tools/cutover/read_original_owner.py",
@@ -6717,5 +6753,10 @@
       "name": "capture"
     }
   ],
-  "scope": "src/tests/tools; original NRA parser. Dynamic partial callbacks/MRO and asyncio/contextlib lifetimes require semantic reading; AST does not establish dynamic dispatch."
+  "scope": "src/tests/tools; original NRA parser. Dynamic partial callbacks/MRO and asyncio/contextlib lifetimes require semantic reading; AST does not establish dynamic dispatch.",
+  "changed_modules_refreshed": [
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/owned_turn.py",
+    "src/agent_comms/turn_runner.py"
+  ]
 }
