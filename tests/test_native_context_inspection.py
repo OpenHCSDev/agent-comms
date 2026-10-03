@@ -26,56 +26,13 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(native_backend):
-    fixture = native_backend
-    before = fixture.session.read_bytes()
-    owner = canonical_agent(
-        Comms(fixture.root), agent_bin="pi",
-        agent_args=["--model", "response-local/fixture", "--offline"],
-        auto_wake=False, runtime_enabled=True,
-    )
-    # This fixture owns the root; the existing owner launch and RPC reader remain real.
-    try:
-        await owner._runtime.start()
-        thread = Thread("context-source", frozenset(), str(fixture.project),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            session_file=str(fixture.session), model="response-local/fixture")
-        owner._comms.registry.declare(thread)
-        await owner.load_session(str(fixture.project), thread.name)
-        connection = RuntimeConnection(owner._comms, thread.name,
-            socket_path(owner._comms.root, thread.require_process().pid))
-        try:
-            async with asyncio.timeout(20):
-                assert thread.name not in owner.turns.persistent_backends
-                assert fixture.session.read_bytes() == before
-                # Cold browsing asks the runtime owner to acquire its saved
-                # source through the original selected startup, without input.
-                first = FieldCodec.decode(NativeContextData, await connection.request("context"))
-                selected_before = fixture.session.read_bytes()
-                prepared_child = owner.turns.persistent_backends[thread.name].custody.idle().child.proc
-                assert prepared_child.alive()
-                second = FieldCodec.decode(NativeContextData, await connection.request("context"))
-            assert first.identity == second.identity
-            assert first.segments == second.segments
-            assert {segment.declared_name for segment in first.segments} >= {"system_layer", "tool_catalog"}
-            selected = Path(first.identity.session_file)
-            assert selected == Path(thread.require_saved_session())
-            assert owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry) == ()
-            assert fixture.session.read_bytes() == selected_before
-        finally:
-            await connection.close()
-    finally:
-        await owner.shutdown()
-        assert fixture.provider.posts == 0
-        assert fixture.session.read_bytes().startswith(before)
-        assert fixture.saved_inputs() == []
-    assert not prepared_child.alive()
-    print("cold_context_runtime", json.dumps({"pid": prepared_child.pid,
-        "source": str(fixture.session), "cold_acquisition": True,
-        "provider_requests": fixture.provider.posts, "new_inputs": 0,
-        "repeat_source_unchanged": True, "original_source_prefix_preserved": True,
-        "child_exited": not prepared_child.alive()}), flush=True)
+@pytest.mark.parametrize('recorded_readers', [True])
+async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(
+    native_backend, recorded_readers=False
+):
+    from native_context_reader_journey import read_original_context
 
+    await read_original_context(native_backend, recorded_readers=recorded_readers)
 
 async def test_context_manifest_native_acp_and_cli_continuous(
     native_backend, receiving_only=False, authored_operations_only=False

@@ -66,7 +66,8 @@ class InputContribution {
         const encoded=JSON.stringify(content);
         return {kind:this.kind,provenance:[...this.provenance,native,journal],
             sha256:hash(encoded),utf8_bytes:Buffer.byteLength(encoded),
-            tokens:estimateTokens({role:'user',content,timestamp:0})};
+            tokens:estimateTokens({role:'user',content,timestamp:0}),
+            captured_text:[this.range.bytes(bytes).toString()]};
     }
 }
 
@@ -86,9 +87,10 @@ export class NativeInputClaim {
             // Extension transformations own their resulting value. A changed
             // range cannot claim byte-identical logical attribution or reject
             // an otherwise valid original native input.
-            return [new TransformedInputSegment(
+            const transformed=new TransformedInputSegment(
                 [...this.contributions.flatMap(source=>source.provenance),native,journal],
-                [message]).manifest()];
+                [message]);
+            return [{...transformed.manifest(),captured_text:[bytes.toString()]}];
         }
         return this.contributions.map(source=>source.observe(bytes,images,native,journal));
     }
@@ -108,6 +110,12 @@ class ContextSegment {
             contributors:this.contributors};
     }
     full() { return {...this.manifest(), ...this.payload()}; }
+    publicationValues() { return [this.full()]; }
+    matches(expected) {
+        const manifest=this.manifest();
+        return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
+    }
+    recordedValues() { return [this]; }
 }
 class SystemLayerSegment extends ContextSegment {
     tokens() { return estimateTokens({role:'user', content:[{type:'text', text:this.value}], timestamp:0}); }
@@ -115,9 +123,19 @@ class SystemLayerSegment extends ContextSegment {
     render(provider) { provider.systemPrompt = this.value; }
 }
 class NativeMessages extends ContextSegment {
+    constructor(provenance,value) {
+        super(provenance,value);
+        // Only values without exact original entry correspondence are retained.
+        // These are references to this capture's values, not a history store.
+        this.unresolved=[];
+    }
     tokens() { return this.value.reduce((count,message) => count + estimateTokens(message),0); }
     payload() { return {messages:this.value}; }
     render(provider) { provider.messages.push(...this.value); }
+    publicationValues() { return this.unresolved.map(segment=>segment.full()); }
+    recordedValues() {
+        return [this,...this.value.map(message=>new this.constructor(this.provenance,[message]))];
+    }
 }
 class TranscriptSegment extends NativeMessages {}
 class CompactionSummarySegment extends NativeMessages {}
@@ -172,8 +190,11 @@ export class TurnContext {
                 group=new declaration([...provenance],[]); segments.push(group);
             }
             group.value.push(message);
-            group.contributors.push(...(source?.contributors ?? [])
+            const observation=new declaration([...provenance,entrySource],[message]);
+            observation.contributors.push(...(source?.contributors ?? [])
                 .filter(item=>item.input_id===message.inputId).flatMap(item=>item.contributors));
+            group.contributors.push(observation.manifest());
+            if (!original) group.unresolved.push(observation);
             // Provenance is an observation, never an alternate entry/message owner.
             if (!group.provenance.some(value=>JSON.stringify(value)===JSON.stringify(entrySource)))
                 group.provenance.push(entrySource);
@@ -202,6 +223,34 @@ export class TurnContext {
         const manager=session.sessionManager;
         return this.project(session, manager.entryStore.uncompactedMetadata(manager.getLeafId()).map(meta=>meta.id));
     }
+    static async recordedSegment(session, identity, entries, expected, parts) {
+        if (session.sessionId!==identity.sessionId || session.sessionFile!==identity.sessionFile)
+            throw new Error('Original recorded context belongs to another native session');
+        const projected=await this.project(session, entries);
+        const whole=projected.segments.find(segment=>segment.matches(expected));
+        if (whole) return new this(projected.identity,[whole]);
+        // One acquired projection supplies a temporary lookup for mixed original
+        // groups. No per-message RPC, repeated conversion or retained cache.
+        const values=new Map();
+        for (const group of projected.segments) {
+            for (const value of group.recordedValues()) {
+                const manifest=value.manifest();
+                const matches=values.get(manifest.sha256) ?? [];
+                matches.push({value,manifest}); values.set(manifest.sha256,matches);
+            }
+        }
+        const resolve=original=>{
+            const found=values.get(original.sha256)?.find(({manifest})=>
+                manifest.kind===original.kind && manifest.utf8_bytes===original.utf8_bytes);
+            // Identical original JSON bytes answer the same public-value
+            // question; this does not select another source or route.
+            if (found) return found.value;
+            throw new Error('Original recorded SDK value is unavailable: projected bytes differ');
+        };
+        if (!parts.length)
+            throw new Error('Original recorded SDK value is unavailable: projected bytes differ');
+        return new this(projected.identity,parts.map(resolve));
+    }
     static async recentSource(session) {
         const manager=session.sessionManager;
         return this.project(session, manager.entryStore.keptMetadata(manager.getLeafId()).map(meta=>meta.id));
@@ -215,6 +264,10 @@ export class TurnContext {
     manifest(requestId) {
         return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest()),
             ...(requestId === undefined ? {} : {requestId})};
+    }
+    observation(requestId) {
+        return {...this.manifest(requestId),
+            values:this.segments.flatMap(segment=>segment.publicationValues())};
     }
     full() { return {identity:this.identity,counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.full())}; }
 }

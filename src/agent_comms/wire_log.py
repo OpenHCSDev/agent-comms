@@ -148,7 +148,11 @@ class WireLog:
             yield (item for record in records for item in record.delivery_messages())
 
     def record_context(self, manifest) -> None:
-        """Append one text-free observation through the original sealed writer."""
+        """Append the original context projection through its sealed writer.
+
+        Journal-backed values remain source references. Only nonrecoverable
+        public contributions are retained in this observation.
+        """
         from .wire_record import ContextManifestWireObservation, ObservationWireRecord
 
         with self.locked():
