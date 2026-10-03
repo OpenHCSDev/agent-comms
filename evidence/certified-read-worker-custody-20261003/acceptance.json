@@ -1,0 +1,23 @@
+{
+  "state": "scoped-source-and-installed-custody-ready",
+  "source_head": "4c30bd2336d841f9592ad443126e66d58257ec1a",
+  "production_added_lines": 20,
+  "production_deleted_lines": 8,
+  "source_controls": {"passed": 2, "elapsed_s": 1.47},
+  "installed_controls": {"passed": 2, "elapsed_s": 1.57},
+  "controls": [
+    "test_certified_observation_waits_and_joins_its_owned_worker",
+    "test_turn_publication_joins_cancellation_before_lease_release"
+  ],
+  "pip_check_packages": 69,
+  "source_equal_files": 339,
+  "native_changed": false,
+  "provider_calls": 0,
+  "new_native_inputs": 0,
+  "replayed_inputs": 0,
+  "public_mutations": 0,
+  "scope": "Real private resource and turn-publication controls through installed Core. Supplied native events; no fresh configured provider/native answer, physical UI, original560 recovery or latency-gain claim.",
+  "original_execution_owner": "Arendt560",
+  "release_owner": "Parent",
+  "protected_original": {"pid":1583616,"birth":46995415,"completed_final":"b7807f3e","bus_inode":17965242}
+}

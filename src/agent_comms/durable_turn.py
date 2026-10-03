@@ -43,15 +43,16 @@ class DurableTurn(MroDispatch):
         finally:
             self.attempts = original
 
-    async def consume_handlers(self, event, handlers):
+    async def consume_handlers(self, event, handlers, *args, **kwargs):
         return await Coordination.run_async(
-            self.attempts.session.path, partial(self.observe_owned, event, handlers)
+            self.attempts.session.path, partial(self.observe_owned, event, handlers, *args, **kwargs)
         )
 
-    def observe_owned(self, event, handlers, resource):
+    def observe_owned(self, event, handlers, *args, **kwargs):
         """Consume one native observation through joined, worker-owned SQLite."""
+        *context, resource = args
         with self.using_attempts(resource.attempts):
-            return self.consume_handlers_sync(event, handlers)
+            return self.consume_handlers_sync(event, handlers, *context, **kwargs)
 
     @property
     def current(self):

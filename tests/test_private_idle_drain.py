@@ -3,15 +3,18 @@
 import asyncio
 import os
 import threading
+from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
 
 import pytest
 
 from agent_comms import acp, cohort_foreground, coordinated_runtime
+from agent_comms import agent_events as events
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_cohort import next_sealed_assignment
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
 from agent_comms.store_files import file_revision
 from agent_comms.store_files import _store_lock
@@ -20,7 +23,7 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path):
+async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     log = comms.bus.log
     # A busy original source is pending, not an unavailable inbox. Cancelling
@@ -66,6 +69,36 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path):
     with log.certified_read(blocking=False) as source:
         source.require_current()
 
+    # A completed read must release physical custody before its result is
+    # delivered to the event loop. Otherwise synchronous final publication
+    # waits on this same process while preventing the awaited file close.
+    entered.clear()
+    finish.clear()
+    returned = threading.Event()
+    run_worker = Coordination.run_worker
+
+    async def observe_worker(operation):
+        def complete():
+            try:
+                return operation()
+            finally:
+                returned.set()
+        return await run_worker(complete)
+
+    with monkeypatch.context() as observation:
+        observation.setattr(Coordination, "run_worker", observe_worker)
+        task = asyncio.create_task(log.read_certified_async(consume))
+        while not entered.is_set():
+            await asyncio.sleep(0.01)
+        finish.set()
+        # Deliberately keep this loop from processing the completed Future.
+        # The real worker/certificate/lock must nevertheless be closed.
+        assert returned.wait(5)
+        assert not task.done()
+        with log.certified_read(blocking=False) as source:
+            source.require_current()
+        await task
+
     # Callback refusal remains the original error and releases its resource.
     failure = ValueError("original consumer refusal")
 
@@ -78,6 +111,57 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path):
     assert raised.value is failure
     with log.certified_read(blocking=False) as source:
         source.require_current()
+
+
+@pytest.mark.asyncio
+async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path, monkeypatch):
+    comms, agent, _root_id = _session(tmp_path)
+    execution = OwnedTurn(agent.turns, "beta", "beta", "publication custody", reply_targets=("#team",))
+    async with AsyncExitStack() as resources:
+        with ExitStack() as permits:
+            assert execution.admit(permits)
+            execution.begin(resources)
+            execution.prepare_prompt()
+            execution.open_stream(resources, permits)
+            resources.enter_context(permits.pop_all())
+            progress = execution.progress
+            # Only native events are supplied. Registry, original input,
+            # wire notices, diagnostic and final checkpoint use real owners.
+            await progress.chunk(events.Chunk("committed progress"))
+            await progress.committed_progress(events.CommittedProgress("committed progress"))
+            assert progress.reply_parts == []
+            assert [(row.body, row.notice) for row in comms.bus.log.full_history()] == [
+                ("committed progress", True),
+            ]
+            progress.result = events.Done("refused", False)
+            entered, finish = threading.Event(), threading.Event()
+            publish = progress.publish_checkpoint
+            loop_thread = threading.get_ident()
+
+            def held_publication():
+                assert threading.get_ident() != loop_thread
+                entered.set()
+                assert finish.wait(5)
+                return publish()
+
+            monkeypatch.setattr(progress, "publish_checkpoint", held_publication)
+            task = asyncio.create_task(progress.publish_result())
+            try:
+                while not entered.is_set():
+                    await asyncio.sleep(0.01)
+                task.cancel()
+                await asyncio.sleep(0.04)
+                assert not task.done()
+                assert comms.registry.require("beta").turn_lease == execution.turn_lease
+            finally:
+                finish.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            rows = comms.bus.log.full_history()
+            assert len(rows) == 2 and rows[-1].notice
+            assert "[Open diagnostic]" in rows[-1].body
+            assert comms.registry.require("beta").turn_lease == execution.turn_lease
+    assert comms.registry.require("beta").active_turn is None
 
 
 def _covered_session(tmp_path):

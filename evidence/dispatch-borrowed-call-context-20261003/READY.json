@@ -1,0 +1,48 @@
+{
+  "state": "ready-scoped",
+  "source": "3fc7e5d4d9019e65af4755dce6c4f4eda86fabb0",
+  "tested_production_source": "ebf7ff9f59268837bae2e007a4450df4b83d7f5b",
+  "normal_main_integration": "6a787ae3959a949fea3f58885384ff50c51284c8",
+  "owner_source_files": [
+    "src/agent_comms/mro_dispatch.py",
+    "src/agent_comms/durable_turn.py"
+  ],
+  "production_added": 13,
+  "production_deleted": 12,
+  "dispatch_source_unchanged_by_main_union": true,
+  "actual_installed_journey": {
+    "result": "PASS",
+    "elapsed_seconds": 2.36012429301627,
+    "original_permission_future_after_detach_reattach": true,
+    "native_pilot_diff_allow_retained_diff_reject_inline_allow": true,
+    "real_pty_terminal_completion": [
+      {
+        "terminal": "terminal-1",
+        "exit_code": 0,
+        "painted": "NATIVE_SUCCESS"
+      },
+      {
+        "terminal": "terminal-2",
+        "exit_code": 7,
+        "painted": "NATIVE_NONZERO"
+      }
+    ],
+    "real_pty_signal_completion": {
+      "signal": "SIGKILL"
+    },
+    "same_terminal_execution_and_state": true,
+    "original_agent_process_retained": true,
+    "pty_masters_before": [],
+    "pty_masters_after": [],
+    "provider_requests": 0,
+    "scope": "Actual installed Toad/ACP/Pi/PTY; native Textual Pilot/compositor, not a physical st capture. No prompt/provider/public input. Startup-failed terminal native drawing is source-reviewed, not claimed as rendered."
+  },
+  "installed_receipt": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/native-permission-terminal-frontends-20261003/installed03/native-views-receipt.json",
+  "focused_dispatcher_sanity": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/native-permission-terminal-frontends-20261003/sanity.log",
+  "ast_before": "evidence/dispatch-borrowed-call-context-20261003/before.json",
+  "ast_after_consumer_evidence": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/native-permission-terminal-frontends-20261003/after-owner-consumers.json",
+  "native_manifest": "de16647979cbad28be4f60349d39a420e83aaffb1d678941609449d306109968",
+  "native_tree": "7bf47002b579908fc556548c19451b925afd688606954ad485180a49da5c133d",
+  "public_defaults_changed": false,
+  "full_headless_or_physical_ui_claim": false
+}
