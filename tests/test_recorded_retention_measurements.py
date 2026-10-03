@@ -83,16 +83,18 @@ class RecordedMeasurementTests(unittest.TestCase):
             RecordedContextTurn(TurnId('fixture-turn'), TurnIdentity(owner.incarnation, 1)),
             (segment.measured_manifest(),), data.counter)
         probe = RecordedNativeProbe(self.identity, context.input_id, 'answer-entry',
-            sdk_context=self.artifact('context.json', data),
-            context_manifest=self.artifact('manifest.json', manifest))
-        report = probe.prompt_presence(context, retained)
+            sdk_context=self.artifact('context.json', data.to_wire()),
+            context_manifest=self.artifact('manifest.json', manifest),
+            sdk_segment_bytes=self.artifact('segments.json', tuple(s.text() for s in data.segments)))
+        original = probe.read_sdk_context()
+        report = probe.prompt_presence(context, retained, original)
         self.assertTrue(report['exact_envelope_present'])
         self.assertFalse(report['final_transport_evaluated'])
         with self.assertRaisesRegex(ValueError, 'original probe request'):
-            probe.prompt_presence(replace(context, request_generation=2), retained)
+            probe.prompt_presence(replace(context, request_generation=2), retained, original)
         Path(probe.sdk_context.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
-            probe.prompt_presence(context, retained)
+            probe.read_sdk_context()
 
     def test_scope_original_publication_and_drop_own_revision_measurement(self):
         comms = Comms(self.root / 'wire')

@@ -36,6 +36,58 @@ class RecordedNativeProbes:
     rounds: dict[str, RecordedNativeProbe]
     checkpoints: dict[str, RecordedNativeCheckpoint] = field(default_factory=dict)
 
+    def resume_fork(self, journal, inputs):
+        """Corroborate recorded work before a distinct continuation, never replay it.
+
+        This grants no input admission or ACP acknowledgement. The registry's
+        idle lease and the normal configured session still own the next turn.
+        """
+        from agent_comms.compaction_records import NativeForkCreation
+
+        selected = dict(self.checkpoints)
+        for identity, probe in self.rounds.items():
+            if probe.checkpoint is None or identity in selected:
+                raise ValueError("Continuation requires each original cut exactly once")
+            selected[identity] = probe.checkpoint
+        if not selected:
+            raise ValueError("Continuation requires original committed work")
+        paths = {cut.reference.session_file for cut in selected.values()}
+        path, = paths
+        if any(cut.journal != journal.path for cut in selected.values()):
+            raise ValueError("Continuation belongs to another compaction journal")
+        with journal.transaction() as db:
+            fork = NativeForkCreation.one(db, session_file=path)
+        if fork is None:
+            raise ValueError("Continuation has no original enrolled fork")
+        session = NativeSessionIdentity(fork.session_id, fork.session_file)
+        document = inputs.read()
+        if {row.native_id for row in document.rows.values() if row.has_started} != {
+                probe.input_id for probe in self.rounds.values()} or len(document.rows) != len(self.rounds):
+            raise ValueError("Continuation cannot include an unrecorded or uncertain input")
+        with NativeEntry.open_evidence(Path(path)) as evidence:
+            _, entries = evidence.observe()
+            terminals = []
+            for cut in selected.values():
+                _, entry, _ = cut.capture(session, evidence)
+                terminals.append(entry)
+            for probe in self.rounds.values():
+                session.require_same_session(probe.session)
+                probe.read(evidence)
+                if probe.sdk_context is None or probe.submitted_inputs is None:
+                    raise ValueError("Continuation requires the original SDK request capture")
+                from agent_comms.input_disposition import InputDocument
+                original = RecordedNativeCheckpoint.read_record(probe.submitted_inputs, InputDocument)
+                _, current = evidence.observe()
+                row, = (row for row in document.rows.values() if row.native_id == probe.input_id)
+                if original.lookup(row.key) != row:
+                    raise ValueError("Continuation differs from its original STARTED input")
+                terminals.append(next(entry for entry in current if entry.id == probe.answer_entry_id))
+            _, current = evidence.observe()
+            branch = evidence.branch(current[-1].id, current)
+            if current[-1] not in terminals or any(entry not in branch for entry in terminals):
+                raise ValueError("Continuation source has unrecorded work or different ancestry")
+        return fork
+
     def observe(self, rounds):
         """Visit declared cuts in frozen round order, borrowing each source once."""
         if self.rounds.keys() & self.checkpoints.keys():
@@ -339,7 +391,9 @@ class RecallScenario:
                     },
                     revision_mass={identity: report["revision_mass"]
                                    for identity, report in checkpoints.items()},
-                    recall_scope="Original recorded answers only; authored answers are scorer controls")
+                    answer_support={identity: original["answer_support"]
+                                    for identity, original in evidence.items()},
+                    recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls")
 
 
 def coding_scenario() -> RecallScenario:

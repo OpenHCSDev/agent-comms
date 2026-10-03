@@ -4,6 +4,7 @@ One functional private fork, original route/provider, no comparative experiment.
 The original installer captures live launch custody; credentials remain in RAM.
 """
 import asyncio
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -18,20 +19,11 @@ from compaction_source_successor_installed_journey import run
 from agent_comms.native_pi import NativePiRpcLaunch
 
 
-async def main(stage, package, original_python):
-    captured = CurrentTypedCapture(
-        Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python,
-    ).read('openhcs-architecture-memory')
-    source = captured.require_current()
-    original_file = Path(source.require_saved_session())
-    with original_file.open('rb') as stream:
-        before = hashlib.file_digest(stream, 'sha256').hexdigest()
-    observation = stage / 'prefix-observation.jsonl'
+@contextmanager
+def observe_native_requests(package, observation, *, contexts=None):
+    """Borrow original native frames and retire every owned inspector on exit."""
     observer = Path(__file__).with_name('summary_prefix_native_observer.mjs').resolve()
     observers = []
-
-    def capture_source():
-        return captured.require_current(), captured.retained
 
     def observe_launch(environment):
         environment['AC_PREFIX_PACKAGE'] = str(package)
@@ -48,7 +40,8 @@ async def main(stage, package, original_python):
                 reservation.bind(('127.0.0.1', 0))
                 port = reservation.getsockname()[1]
             observers.append(subprocess.Popen(
-                ['node', str(observer), str(port), str(package), str(observation)],
+                ['node', str(observer), str(port), str(package), str(observation),
+                 *([str(contexts)] if contexts is not None else [])],
                 env={'PATH': os.defpath}, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL))
             argv = (argv[0], f'--inspect-brk=127.0.0.1:{port}', *argv[1:])
@@ -56,6 +49,27 @@ async def main(stage, package, original_python):
 
     try:
         with patch.object(NativePiRpcLaunch, 'bootstrap', classmethod(observed_bootstrap)):
+            yield observe_launch
+    finally:
+        for process in observers:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=10)
+
+
+async def main(stage, package, original_python):
+    captured = CurrentTypedCapture(
+        Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python,
+    ).read('openhcs-architecture-memory')
+    source = captured.require_current()
+    original_file = Path(source.require_saved_session())
+    with original_file.open('rb') as stream:
+        before = hashlib.file_digest(stream, 'sha256').hexdigest()
+    observation = stage / 'prefix-observation.jsonl'
+    def capture_source():
+        return captured.require_current(), captured.retained
+    try:
+        with observe_native_requests(package, observation) as observe_launch:
             await run(stage, package, original_file,
                       capture_source=capture_source, observe_launch=observe_launch,
                       probe_marker=f'SOURCE527_{stage.name.upper().replace("-", "_")}_AFTER_COMMIT')
@@ -87,11 +101,6 @@ async def main(stage, package, original_python):
                 'original_preserved':True, 'retry_or_replay':False,
             }, indent=2) + '\n')
         raise
-    finally:
-        for process in observers:
-            if process.poll() is None:
-                process.terminate()
-            process.wait(timeout=10)
 
 
 if __name__ == '__main__':
