@@ -1,0 +1,90 @@
+{
+  "records": [
+    {
+      "label": "parallel-leaf-one",
+      "requestId": "5423b38c-4056-452d-883a-1d70b55086da",
+      "stages": [
+        "preparing",
+        "first_delta_consumed",
+        "finished"
+      ],
+      "calls": 1,
+      "stopReason": "stop"
+    },
+    {
+      "label": "parallel-leaf-two",
+      "requestId": "327949f8-c297-4a90-9266-dd909023d393",
+      "stages": [
+        "preparing",
+        "first_delta_consumed",
+        "finished"
+      ],
+      "calls": 1,
+      "stopReason": "stop"
+    },
+    {
+      "label": "throwing-observer",
+      "requestId": "886db667-ae22-4e09-859c-b69ef7830a55",
+      "stages": [
+        "preparing",
+        "first_delta_consumed",
+        "finished"
+      ],
+      "calls": 1,
+      "stopReason": "stop"
+    },
+    {
+      "label": "accepted-abort",
+      "requestId": "73de1614-1cdc-422e-80e4-65c4079ca22b",
+      "stages": [
+        "preparing",
+        "first_delta_consumed",
+        "finished"
+      ],
+      "calls": 1,
+      "stopReason": "aborted"
+    }
+  ],
+  "imports": [
+    {
+      "name": "../messages.js",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js"
+    },
+    {
+      "name": "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "selected": "/home/ts/.cache/agent-scratch/mendel-summary-request-observation555-20261003/source-projection/node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js"
+    },
+    {
+      "name": "@earendil-works/pi-ai/api/agent-comms-context-budget",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js"
+    },
+    {
+      "name": "./agent-comms-policy.js",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-policy.js"
+    },
+    {
+      "name": "@earendil-works/pi-ai",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/index.js"
+    },
+    {
+      "name": "@earendil-works/pi-ai/compat",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/compat.js"
+    },
+    {
+      "name": "../session-manager.js",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js"
+    },
+    {
+      "name": "./utils.js",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js"
+    },
+    {
+      "name": "./agent-comms-source.js",
+      "selected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-source.js"
+    }
+  ],
+  "iterator_return_closes_original": true,
+  "paid_calls": 0,
+  "native_children": 0,
+  "qualified": "Compiled source projection with unchanged donor imports and controlled event streams; no native/ACP installed workflow or provider latency claim"
+}
