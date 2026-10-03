@@ -7,6 +7,7 @@ signal, native input or alternative owner-stop/launch implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from abc import ABC, abstractmethod
 from contextlib import ExitStack
 import fcntl
 import json
@@ -15,6 +16,7 @@ from pathlib import Path
 import sys
 import time
 from typing import Annotated
+from urllib.parse import unquote, urlsplit
 
 from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked
 from agent_comms.comms import Comms
@@ -75,9 +77,56 @@ class PackageVcsInfo:
 
 
 @dataclass(frozen=True)
-class PackageDirectUrl:
+class PackageDirectUrl(ABC):
     url: str
+
+    @abstractmethod
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
+        """Validate the installer origin; source bytes are owned by InstalledSource."""
+
+
+@dataclass(frozen=True)
+class VcsPackageDirectUrl(PackageDirectUrl):
     vcs_info: PackageVcsInfo
+
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
+        if self.vcs_info.commit_id != source_head:
+            raise RuntimeError('Installed VCS origin differs from the declared source')
+
+
+@dataclass(frozen=True)
+class PackageArchiveInfo:
+    hashes: dict[str, str] = field(default_factory=dict, metadata={'wire_omit_default': True})
+    hash: str | None = field(default=None, metadata={'wire_omit_default': True})
+
+    def require_original(self, artifact: ReviewedArtifact):
+        hashes = dict(self.hashes)
+        if self.hash is not None:
+            algorithm, separator, value = self.hash.partition('=')
+            if not separator or not algorithm or not value:
+                raise RuntimeError('Installed archive has a malformed legacy hash')
+            if algorithm in hashes and hashes[algorithm] != value:
+                raise RuntimeError('Installed archive has conflicting hash provenance')
+            hashes[algorithm] = value
+        sha256 = hashes.get('sha256')
+        if sha256 is not None and sha256 != artifact.sha256:
+            raise RuntimeError('Installed archive SHA256 differs from the reviewed artifact')
+        artifact.require_original()
+
+
+@dataclass(frozen=True)
+class ArchivePackageDirectUrl(PackageDirectUrl):
+    archive_info: PackageArchiveInfo
+
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
+        origin = urlsplit(self.url)
+        if origin.scheme != 'file' or origin.netloc not in ('', 'localhost'):
+            raise RuntimeError('Installed archive requires its original local artifact')
+        path = Path(unquote(origin.path))
+        originals = tuple(artifact for artifact in artifacts if artifact.path == path)
+        if len(originals) != 1:
+            raise RuntimeError('Installed archive requires one reviewed original artifact')
+        self.archive_info.require_original(originals[0])
 
 
 @dataclass(frozen=True)
@@ -88,8 +137,13 @@ class InstalledSource:
     files: int
     python_files: int
     byte_equal: bool
-    direct_url: PackageDirectUrl
+    direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl
     inventory_sha256: str
+
+    def require_original(self, artifacts: tuple[ReviewedArtifact, ...] = ()):
+        if not self.byte_equal:
+            raise RuntimeError('Installed source bytes are not verified')
+        self.direct_url.require_original(self.head, artifacts)
 
 
 @dataclass(frozen=True)
@@ -114,6 +168,8 @@ class InstalledSourceProof:
     dependency_bypass: bool
     journey_owners: tuple[str, ...]
     journey_assessment: str
+    archive_artifacts: tuple[ReviewedArtifact, ...] = field(
+        default=(), metadata={'wire_omit_default': True})
 
     def require_activation(self, activation: CohortActivation):
         actual = {source.module: source.head for source in self.sources}
@@ -125,8 +181,7 @@ class InstalledSourceProof:
                 activation.native_package, activation.native_manifest, activation.native_tree):
             raise RuntimeError('Source proof names another native artifact')
         for source in self.sources:
-            if not source.byte_equal or source.direct_url.vcs_info.commit_id != source.head:
-                raise RuntimeError('Unverified source/native proof')
+            source.require_original(self.archive_artifacts)
         if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
             raise RuntimeError('Package/source/native trust is incomplete')
 
