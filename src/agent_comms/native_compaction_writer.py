@@ -35,6 +35,9 @@ class NativeCompactionWriter:
         if environment_launcher is None:
             raise ValueError("Isolated native environment launcher unavailable")
         self.environment_launcher = environment_launcher
+        # The writer owns this immutable deployment for its entire acquired
+        # lifetime. Each new writer verifies; exchanges keep its original
+        # package rather than hashing it again under the mutation's bus guard.
         self.verify()
 
     def verify(self) -> None:
@@ -52,7 +55,6 @@ class NativeCompactionWriter:
     def exchange(
         self, fd: int, request: NativeRequest, timeout: float, retained_fds: tuple[int, ...] = ()
     ) -> NativeOutcome:
-        self.verify()
         encoded = FieldCodec.encode(request)
         encoded["authority"] = FieldCodec.encode(NativeAuthority.capture(fd))
         if not math.isfinite(timeout) or not 0 < timeout <= 30:

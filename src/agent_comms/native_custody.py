@@ -78,6 +78,10 @@ class NativeCustody(ABC):
 
     retained = False
 
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+        return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,
+            environment=environment, session_file=session_file)
+
     def reuse(self, key) -> PiSessionChild | None:
         return None
 
@@ -227,6 +231,18 @@ class RetainedNative(NativeCustody):
             self.child.attestation = PendingAttestation(self.identity)
             return self.child
         return None
+
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+        if self.current:
+            original, authentication = self.child.key
+            candidate = original.retained_managed(command, arguments,
+                worktree=worktree, environment=environment, session_file=session_file)
+            if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
+                original, authentication
+            ):
+                return original
+        return super().managed_launch(command, arguments, worktree=worktree,
+            environment=environment, session_file=session_file)
 
     def retire(self, successor=None):
         return RetiringNative(

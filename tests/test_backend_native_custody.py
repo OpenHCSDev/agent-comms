@@ -28,16 +28,28 @@ async def test_actual_native_attestation_refuses_foreign_expected_identity(nativ
     print("native_attestation_refusal", refused[-1], flush=True)
 
 
-@pytest.mark.parametrize("changed", ["session", "credentials"])
-async def test_actual_native_revision_change_retires_child_without_replay(native_backend, changed):
+@pytest.mark.parametrize("changed", ["session", "credentials", "configuration"])
+async def test_actual_native_revision_change_retires_child_without_replay(
+    native_backend, changed, monkeypatch
+):
     owner = native_backend
     first = await owner.run("Diagnostic input before revision change")
     assert first[-1].ok, first[-1]
     previous = owner.persistent.custody.child.proc
     assert previous is not None and previous.alive()
-    path = owner.session if changed == "session" else owner.config / "auth.json"
-    stat = path.stat()
-    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1000000))
+    if changed == "configuration":
+        # Select a distinct private configuration resource with the same local
+        # endpoint. The retained launch must not own this different resource.
+        selected = owner.config.with_name("selected-config")
+        selected.mkdir(mode=0o700)
+        for name in ("auth.json", "models.json", "settings.json"):
+            (selected / name).write_bytes((owner.config / name).read_bytes())
+        monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(selected))
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(selected))
+    else:
+        path = owner.session if changed == "session" else owner.config / "auth.json"
+        stat = path.stat()
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1000000))
     second = await owner.run("New diagnostic input after revision change")
     assert second[-1].ok, second[-1]
     assert len(owner.children) == 2 and owner.persistent.custody.child.proc is not previous
