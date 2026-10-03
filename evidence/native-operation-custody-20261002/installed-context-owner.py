@@ -12,6 +12,8 @@ import inspect
 import json
 import os
 import sys
+import time
+from functools import partial
 from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
@@ -21,6 +23,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeConnection, socket_path
 from agent_comms.threads import Thread
+from agent_comms.coordinator import Coordination
 
 
 def digest(path):
@@ -97,27 +100,75 @@ async def main(args):
         receipt['prepared_child_alive'] = child.alive()
         if original != {path: digest(Path(path)) for path in original}:
             raise AssertionError('Selected startup altered original saved source')
-        connection = RuntimeConnection(comms, name, socket_path(root, process.pid))
-        try:
-            observed = await connection.request('context')
-            receipt['prepared_context_rpc_sha256'] = hashlib.sha256(
-                json.dumps(observed, sort_keys=True).encode()
-            ).hexdigest()
-        finally:
-            await connection.close()
+        if args.prepare_compaction:
+            from agent_comms.native_entries import NativeEvidenceRead
+            from agent_comms.pi_vocabulary import ManualCompactionReason
+            from agent_comms.retained_task_facts import RetainedTaskFacts
+            from agent_comms.selected_pi_route import (
+                observe_selected_compaction_decision, prepare_selected_native_source,
+            )
+            persistent = owner.turns.persistent_backends[name]
+            acquired = persistent.custody.idle()
+            selected = acquired.child.attestation.state.model.for_compaction(thread.model)
+            settings = await observe_selected_compaction_decision(
+                persistent, session_file=str(source), expected_package=args.package,
+                selected=selected, purpose=ManualCompactionReason,
+            )
+            started = time.monotonic()
+            initial = await prepare_selected_native_source(
+                persistent, session_file=str(source), expected_package=args.package,
+                selected=selected, settings=settings.summary_settings(),
+            )
+            initial_seconds = time.monotonic() - started
+            with NativeEvidenceRead.open(source) as reader:
+                facts = await Coordination.run_worker(partial(
+                    initial.require_ready().witness.retained_task_facts, reader,
+                ))
+            retained = RetainedTaskFacts(facts)
+            started = time.monotonic()
+            allocated = await prepare_selected_native_source(
+                persistent, session_file=str(source), expected_package=args.package,
+                selected=selected, settings=settings.summary_settings(),
+                retained_text=retained.text,
+            )
+            retained_seconds = time.monotonic() - started
+            if persistent.custody.idle() is not acquired:
+                raise AssertionError('Dry preparation replaced the original native child')
+            if original != {path: digest(Path(path)) for path in original}:
+                raise AssertionError('Dry preparation changed original source/proof')
+            receipt['scope'] = 'installed configured saved-owner native dry preparations; no provider/input/UI'
+            receipt['preparation'] = {
+                'selected': FieldCodec.encode(selected), 'settings': FieldCodec.encode(settings),
+                'initial': FieldCodec.encode(initial), 'allocated': FieldCodec.encode(allocated),
+                'initial_seconds': initial_seconds, 'retained_seconds': retained_seconds,
+                'retained_fact_count': len(facts),
+                'retained_bytes': len(retained.text.encode()),
+                'retained_sha256': hashlib.sha256(retained.text.encode()).hexdigest(),
+                'same_acquired_child': True,
+            }
+        else:
+            connection = RuntimeConnection(comms, name, socket_path(root, process.pid))
+            try:
+                observed = await connection.request('context')
+                receipt['prepared_context_rpc_sha256'] = hashlib.sha256(
+                    json.dumps(observed, sort_keys=True).encode()
+                ).hexdigest()
+            finally:
+                await connection.close()
         (evidence / 'owner-prepared.json').write_text(json.dumps(receipt, indent=2) + '\n')
         print(json.dumps(receipt), flush=True)
         # Local harness teardown; this line is never forwarded to native stdin.
-        control = asyncio.StreamReader()
-        transport, _ = await asyncio.get_running_loop().connect_read_pipe(
-            lambda: asyncio.StreamReaderProtocol(control), sys.stdin
-        )
-        try:
-            # The sole physical recorder bounds its run; its explicit cleanup
-            # releases this original local stdin lifetime. EOF also retires it.
-            await control.readline()
-        finally:
-            transport.close()
+        if not args.prepare_compaction:
+            control = asyncio.StreamReader()
+            transport, _ = await asyncio.get_running_loop().connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(control), sys.stdin
+            )
+            try:
+                # The sole physical recorder bounds its run; its explicit cleanup
+                # releases this original local stdin lifetime. EOF also retires it.
+                await control.readline()
+            finally:
+                transport.close()
         await owner.turns.persistent_backends[name].close_idle()
         if child.alive():
             raise AssertionError('Prepared native child survived owned retirement')
@@ -141,4 +192,6 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='openai-codex/gpt-6.1-sol')
     parser.add_argument('--thinking', default='off')
     parser.add_argument('--worktree', type=Path, default=Path('/home/ts/.agent-comms'))
+    parser.add_argument('--prepare-compaction', action='store_true',
+                        help='Observe both native dry cuts on the acquired configured saved source')
     asyncio.run(main(parser.parse_args()))

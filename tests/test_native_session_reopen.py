@@ -53,7 +53,7 @@ def test_saved_identity_preserves_bytes_and_strips_preload(saved, tmp_path, monk
         f"writeFileSync({json.dumps(str(marker))},'unsafe');"
     )
     monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
-    observed = NativeSessionIdentity.read(package, str(file))
+    observed = NativeSessionIdentity.locate(package, str(file))
     assert observed == NativeSessionIdentity(identity, str(file))
     assert file.read_bytes() == before and not marker.exists()
     with pytest.raises(NativeReopenError, match="identity changed"):
@@ -76,7 +76,7 @@ def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
         file = alias
     before = file.read_bytes() if file.exists() else None
     with pytest.raises(NativeReopenError):
-        NativeSessionIdentity.read(package, str(file))
+        NativeSessionIdentity.locate(package, str(file))
     assert (file.read_bytes() if file.exists() else None) == before
 
 
@@ -93,7 +93,7 @@ def test_native_loader_rejects_invalid_history_without_repair(saved, mutation):
     before = file.read_bytes()
     # The original header is still the same. It cannot attest valid history;
     # the real loader must refuse before constructing an agent or provider.
-    assert NativeSessionIdentity.read(package, str(file)) == NativeSessionIdentity(identity, str(file))
+    assert NativeSessionIdentity.locate(package, str(file)) == NativeSessionIdentity(identity, str(file))
     result = subprocess.run([
         "node", "--no-global-search-paths", "--import", str(package / "dist/agent-comms-import-fence.mjs"),
         "--input-type=module", "-e",

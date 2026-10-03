@@ -1,0 +1,578 @@
+{
+  "head": "0608319c02c5109c7b852e80c34841dec12bda5b",
+  "parsed_modules": 726,
+  "parse_omissions": [],
+  "resolution_limit": "Lexical Python AST; dynamic aliases require semantic reading. Native dependency parsed separately with bundled Acorn.",
+  "sites": [
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 30,
+      "node": "ImportFrom",
+      "source": "from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 169,
+      "node": "FunctionDef",
+      "source": "def prepare_source("
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 93,
+      "node": "ImportFrom",
+      "source": "from .owner_compaction_runtime import compact_owner_once"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 94,
+      "node": "ImportFrom",
+      "source": "from .selected_pi_route import observe_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 174,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 179,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 109,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 141,
+      "node": "Name",
+      "source": "compact_owner_once"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 103,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 198,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 62,
+      "node": "ClassDef",
+      "source": "class NativePreparationResult(DeclaredFamily, affix=\"PreparationResult\"):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 102,
+      "node": "ClassDef",
+      "source": "class NativePreparation(NativePreparationResult, declared_name=\"ready\"):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 139,
+      "node": "ClassDef",
+      "source": "class PrepareCompactionHelper(PiHelper):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 145,
+      "node": "FunctionDef",
+      "source": "def prepare_native_source("
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 84,
+      "node": "Name",
+      "source": "NativePreparationResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 102,
+      "node": "Name",
+      "source": "NativePreparationResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 148,
+      "node": "Name",
+      "source": "NativePreparationResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 65,
+      "node": "Name",
+      "source": "NativePreparationResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 73,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 92,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 111,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 116,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 119,
+      "node": "Name",
+      "source": "NativePreparationResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 142,
+      "node": "Name",
+      "source": "NativePreparationResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 170,
+      "node": "Name",
+      "source": "PrepareCompactionHelper"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 78,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 21,
+      "node": "ImportFrom",
+      "source": "from .owner_compaction_prepare import NativePreparation, prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 88,
+      "node": "AsyncFunctionDef",
+      "source": "async def compact_owner_once("
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 165,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 117,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 110,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 128,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 93,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 119,
+      "node": "Attribute",
+      "source": "bridge.prepare_source"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 36,
+      "node": "ImportFrom",
+      "source": "from .pi_summary_payloads import ("
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 250,
+      "node": "ClassDef",
+      "source": "class NativeQuery(PiCommand):"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 437,
+      "node": "ClassDef",
+      "source": "class AgentCommsCompactionSettings(PiCommand):"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 281,
+      "node": "Name",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 449,
+      "node": "Name",
+      "source": "NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 438,
+      "node": "Name",
+      "source": "CompactionSettingsData"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 320,
+      "node": "ClassDef",
+      "source": "class CompactionSettingsData(PiResponseData):"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 57,
+      "node": "Attribute",
+      "source": "edit.document.prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 357,
+      "node": "FunctionDef",
+      "source": "def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "source": "from .pi_commands import AgentCommsCompactionSettings, PiCommand"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 92,
+      "node": "AsyncFunctionDef",
+      "source": "async def observe_selected_compaction_decision("
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 84,
+      "node": "Name",
+      "source": "AgentCommsCompactionSettings"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 105,
+      "node": "Name",
+      "source": "AgentCommsCompactionSettings"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 125,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 149,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 25,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 140,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 29,
+      "node": "ImportFrom",
+      "source": "from agent_comms.selected_pi_route import observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 162,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 29,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import (NativePreparationError, SkipPreparationResult,"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 32,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_runtime import compact_owner_once"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 115,
+      "node": "Attribute",
+      "source": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 600,
+      "node": "Attribute",
+      "source": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 875,
+      "node": "Attribute",
+      "source": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1006,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1019,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 73,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 85,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 522,
+      "node": "Attribute",
+      "source": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 656,
+      "node": "Name",
+      "source": "compact_owner_once"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 720,
+      "node": "Name",
+      "source": "compact_owner_once"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 971,
+      "node": "Name",
+      "source": "compact_owner_once"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 117,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 602,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 877,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 524,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 14,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_runtime import compact_owner_once"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 59,
+      "node": "FunctionDef",
+      "source": "def prepare_source(self, *_args, **_kwargs):"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 43,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 61,
+      "node": "Name",
+      "source": "NativePreparation"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 84,
+      "node": "Name",
+      "source": "compact_owner_once"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 31,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 33,
+      "node": "ImportFrom",
+      "source": "from agent_comms.selected_pi_route import observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 208,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 115,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 17,
+      "node": "ImportFrom",
+      "source": "from agent_comms.pi_commands import AgentCommsCompactionSettings"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 223,
+      "node": "Name",
+      "source": "AgentCommsCompactionSettings"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "source": "from agent_comms.selected_pi_route import ("
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 33,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 150,
+      "node": "Name",
+      "source": "observe_selected_compaction_decision"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 37,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 471,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 55,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 493,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 25,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 165,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 15,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 67,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 606,
+      "node": "ImportFrom",
+      "source": "from agent_comms.owner_compaction_prepare import NativePreparation, SkipPreparationResult"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 613,
+      "node": "Name",
+      "source": "NativePreparation"
+    }
+  ]
+}

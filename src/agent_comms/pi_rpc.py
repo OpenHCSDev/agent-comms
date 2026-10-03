@@ -31,6 +31,8 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     read race, so the next read can finish the same record without losing bytes.
     """
 
+    OBSERVATION_MAX_BYTES = 16 * 1024
+
     def __init__(self, reader: asyncio.StreamReader):
         super().__init__(reader)
         self.pending = PendingRequests()
