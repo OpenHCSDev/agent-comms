@@ -237,8 +237,40 @@ class RecordedNativeCheckpoint:
         if not observed["evaluated"]:
             return observed
         return {**observed, "session": FieldCodec.encode(session),
+                "checkpoint_session": FieldCodec.encode(session),
                 "native_entry_id": entry.id, "summary": assembly.summary,
                 "source": FieldCodec.encode(self.summary_assembly)}
+
+    def fork_condition_source(self, journal: Path, session_file: Path):
+        """Bind original captured narrative through the recorded SDK creation.
+
+        The journal's NativeForkCreation covers inherited entries, not an input
+        grant. Keep its child identity distinct from the checkpoint source;
+        later child work cannot turn a new entry into inherited source.
+        """
+        creation = CompactionJournal.observe_readonly(journal, lambda db:
+            NativeForkCreation.one(db, session_file=str(session_file)), absent=None)
+        if creation is None:
+            raise ValueError("Bounded child requires its original recorded SDK fork")
+        with self.original_source() as (original, source):
+            creation.source.require_same_session(original)
+            constructed = self.condition_source(original, source)
+            with NativeEntry.open_evidence(session_file) as child:
+                header, entries = child.observe()
+                selected = NativeSessionIdentity(header.id, str(session_file))
+                creation.require_same_session(selected)
+                inherited = creation.covered_prefix(child, entries)
+                if not constructed["evaluated"]:
+                    return constructed
+                identity = constructed["native_entry_id"]
+                if identity not in inherited:
+                    raise ValueError("Original checkpoint is outside the SDK fork prefix")
+                copied, _ = child.entry_index(entries)[identity]
+                original_entry, _ = source.entry_index(source.entries)[identity]
+                if copied != original_entry:
+                    raise ValueError("Original checkpoint differs from its inherited SDK entry")
+                return {**constructed, "session": FieldCodec.encode(selected),
+                        "fork_creation": FieldCodec.encode(creation)}
 
     def inspect(self, previous: RecordedNativeCheckpoint | None = None):
         """Read a checkpoint or adjacent-cut difference without a new model input.

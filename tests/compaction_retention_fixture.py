@@ -826,6 +826,10 @@ def main() -> None:
                         default=Condition.BOUNDED)
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
+    parser.add_argument("--fork-journal", type=Path,
+                        help="PRIVATE original NativeForkCreation journal for condition source")
+    parser.add_argument("--fork-session", type=Path,
+                        help="Original SDK-created child selected for condition construction")
     parser.add_argument("--condition-source", action="store_true",
                         help="PRIVATE: export original narrative bytes for SDK preview; requires --native-checkpoint")
     parser.add_argument("--previous-checkpoint", type=Path,
@@ -835,6 +839,10 @@ def main() -> None:
         "--condition", type=Condition, choices=tuple(Condition), default=Condition.BOUNDED
     )
     args = parser.parse_args()
+    if (args.fork_journal is None) != (args.fork_session is None):
+        parser.error("--fork-journal and --fork-session belong to one SDK creation")
+    if args.fork_session is not None and not args.condition_source:
+        parser.error("--fork-session requires --condition-source")
     if args.condition_source and args.native_checkpoint is None:
         parser.error("--condition-source requires --native-checkpoint")
     if args.condition_source and args.previous_checkpoint is not None:
@@ -872,8 +880,11 @@ def main() -> None:
             args.previous_checkpoint.read_text(), object_pairs_hook=unique_fields
         )) if args.previous_checkpoint is not None else None
         if args.condition_source:
-            with checkpoint.original_source() as (session, evidence):
-                result = checkpoint.condition_source(session, evidence)
+            if args.fork_session is not None:
+                result = checkpoint.fork_condition_source(args.fork_journal, args.fork_session)
+            else:
+                with checkpoint.original_source() as (session, evidence):
+                    result = checkpoint.condition_source(session, evidence)
         else:
             result = checkpoint.inspect(previous)
     print(json.dumps(result, indent=2))
