@@ -48,5 +48,5 @@ Project-config mypy stops at existing newer-syntax tracked_turn.py; explicit3.14
 boundary parse reports existing skipped-dependency Any/Mapping annotation issues,
 so neither output is claimed as a whole-project type-check pass.
 
-Installed qualification remains pending an existing released package holder;
-no accepted599 provider journey is repeated.
+Installed CLI/member qualification completed in the explicitly granted thin540 holder.
+See READY.md and installed-receipt.json; no accepted599 provider journey repeated.
