@@ -1,0 +1,53 @@
+{
+  "source_python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+  "root_id": "a669cdb4a5474d5598d604ba433a273b",
+  "original": {
+    "name": "retained-owner",
+    "tags": [
+      "retained-tag"
+    ],
+    "worktree": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed03",
+    "created_at": 1790988692.02898,
+    "session_file": null,
+    "title": null,
+    "parent": null,
+    "task": null,
+    "process_identity": {
+      "pid": 1252473,
+      "start_time": 46433201
+    },
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking_level": "off",
+    "goal": {
+      "text": "Protected original; no replay",
+      "id": "protected-goal",
+      "progress": "",
+      "revision": 0,
+      "reported_turn": null,
+      "mention_source": null,
+      "state": {
+        "kind": "blocked",
+        "block_reason": "No replay"
+      }
+    },
+    "previous_worktrees": [],
+    "auto_title_pending": false,
+    "role": "agent",
+    "active_turn": null,
+    "channel_scope_generation": 0,
+    "turn_generation": 0,
+    "last_finished_turn_id": null
+  },
+  "arguments": [
+    "--offline",
+    "--no-tools",
+    "--thinking",
+    "off"
+  ],
+  "binary": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/pi-comms-native",
+  "process": {
+    "pid": 1252473,
+    "start_time": 46433201
+  },
+  "bus_sha256": "7b88079f4deb1ea17251c8fccebb23a1f15510bb3643ec04f8a0de96bed7e249"
+}

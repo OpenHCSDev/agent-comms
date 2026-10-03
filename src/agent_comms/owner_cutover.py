@@ -82,7 +82,16 @@ class StoppedOwnerInstallation(OwnerCutover):
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         self.after_stopped(stopped.lifecycle)
+        self.bind_target_launch(stopped.lifecycle)
         return stopped.launch()
+
+    def bind_target_launch(self, lifecycle: OwnerLifecycle) -> None:
+        """Bind installed launch authority after conversion, before any launch.
+
+        Nested installations only run after_stopped; the outer operation owns
+        the final target binding. Preserving members need no new binding.
+        """
+        pass
 
     @abstractmethod
     def after_stopped(self, lifecycle: OwnerLifecycle) -> None:

@@ -1,0 +1,15 @@
+{"source_ready": true, "pid": 1240937, "root_id": "667fea3dfab8403f893b796fd13f4cbc"}
+{"root_id": "667fea3dfab8403f893b796fd13f4cbc", "through_seq": 0, "retained_writer_descriptor_verified": true}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed/transition.py", line 29, in <module>
+    assert launch.environment['PRIVATE_NK_ROOT_ID']==source['root_id']
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'PRIVATE_NK_ROOT_ID'
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed/run.py", line 9, in <module>
+    subprocess.run([str(target),str(here/'transition.py'),str(root),str(package)],env=env,check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001/bin/python', '/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed/transition.py', '/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed/private-root', '/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent']' returned non-zero exit status 1.
