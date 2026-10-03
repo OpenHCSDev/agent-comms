@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
-from typing import TypeVar
 
 from .backend import PersistentPiSession
 from .native_pi import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
-from .owner_compaction_settings import PiCompactionDecision
-from .pi_commands import AgentCommsCompactionSettings, PiCommand
-from .pi_events import Response
+from .owner_compaction_prepare import NativePreparationResult
+from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
+from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, NativeQuery
 from .pi_rpc import PiRpcChannel
 from .pi_summary_payloads import SelectedModel
 from .pi_vocabulary import CompactionReason, ThresholdCompactionReason
@@ -27,21 +25,16 @@ class SelectedPiProbeUnknownError(NativePiUnavailable):
 
 
 
-_Observation = TypeVar("_Observation")
-
-
 async def _exchange_observation(
     persistent: PersistentPiSession,
-    request: PiCommand,
+    request: NativeQuery,
     source: NativeSessionIdentity,
-    decode: Callable[[bytes, PiCommand], _Observation],
     *,
     expected_package: Path,
     timeout: float,
-    max_response: int | None = None,
-) -> _Observation:
+):
     """One read-only request; every uncertain transport retires the borrowed child."""
-    if not 0 < timeout <= 5:
+    if not 0 < timeout <= request.observation_timeout_seconds:
         raise ValueError("Bounded selected Pi deadline required")
     async with persistent.lock:
         try:
@@ -53,16 +46,15 @@ async def _exchange_observation(
         proc, reader = retained.child.proc, retained.child.reader
         transmitted = False
         try:
-            proc.stdin.write(PiRpcChannel.command_bytes(request))
-            transmitted = True  # Even a failed drain can have put bytes on the pipe.
+            # The query owns registration, write, read and correlation. From
+            # entry into that lifetime onward a failed write/drain is uncertain.
+            transmitted = True
             async with asyncio.timeout(timeout):
-                await proc.stdin.drain()
-                raw = (
-                    await reader.readline()
-                    if max_response is None
-                    else await reader.readline(max_bytes=max_response)
+                response = await request.exchange(
+                    reader, proc.stdin, strict=True,
+                    max_bytes=PiRpcChannel.OBSERVATION_MAX_BYTES,
                 )
-            outcome = decode(raw, request)
+            outcome = response.require_request(request).require_request(request)
             if not retained.current:
                 raise SelectedPiProbeUnknownError("Selected Pi source changed during dry run")
             return outcome
@@ -80,15 +72,6 @@ async def _exchange_observation(
             raise SelectedPiProbeUnknownError("Selected Pi dry-run transport uncertain") from error
 
 
-def _read_settings_response(
-    raw: bytes, request: AgentCommsCompactionSettings
-) -> PiCompactionDecision:
-    if not raw.endswith(b"\n") or len(raw) > 16384:
-        raise SelectedPiProbeUnknownError("Incomplete selected settings response")
-    response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384)
-    return response.require_request(request).require_request(request)
-
-
 async def observe_selected_compaction_decision(
     persistent: PersistentPiSession,
     *,
@@ -97,7 +80,7 @@ async def observe_selected_compaction_decision(
     selected: SelectedModel,
     purpose: type[CompactionReason] = ThresholdCompactionReason,
     boundary: tuple[MessageReference, ...] = (),
-    timeout: float = 3.0,
+    timeout: float = AgentCommsCompactionSettings.default_observation_timeout_seconds,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
     source = persistent.custody.idle().identity
@@ -111,15 +94,40 @@ async def observe_selected_compaction_decision(
         boundary=boundary,
     )
     return await _exchange_observation(
-        persistent, request, source, _read_settings_response,
-        expected_package=expected_package, timeout=timeout, max_response=16384,
+        persistent, request, source,
+        expected_package=expected_package, timeout=timeout,
+    )
+
+
+async def prepare_selected_native_source(
+    persistent: PersistentPiSession, *, session_file: str, expected_package: Path,
+    selected: SelectedModel, settings: PiCompactionSettings, retained_text: str = "",
+    timeout: float = AgentCommsPrepareCompaction.observation_timeout_seconds,
+) -> NativePreparationResult:
+    """Prepare on the existing idle store; never open a detached history index.
+
+    Both the initial cut and the later exact retained payload use this same
+    observation lifetime. Failure retires uncertain custody and grants no
+    fallback preparation, provider request or input replay.
+    """
+    source = persistent.custody.idle().identity
+    source.require_session(session_file)
+    request = AgentCommsPrepareCompaction(
+        id=secrets.token_hex(16), session_id=source.session_id,
+        session_file=source.session_file, selected=selected, settings=settings,
+        retained_text=retained_text,
+    )
+    return await _exchange_observation(
+        persistent, request, source,
+        expected_package=expected_package, timeout=timeout,
     )
 
 
 async def read_selected_compaction_decision(
     persistent: PersistentPiSession, *, session_file: str, expected_package: Path,
     selected: SelectedModel, registry: Registration, thread_name: str,
-    purpose: type[CompactionReason] = ThresholdCompactionReason, timeout: float = 3.0,
+    purpose: type[CompactionReason] = ThresholdCompactionReason,
+    timeout: float = AgentCommsCompactionSettings.default_observation_timeout_seconds,
 ) -> PiCompactionDecision:
     """Select authored evidence only when the actual native policy opts in."""
     settings = await observe_selected_compaction_decision(

@@ -1,0 +1,27 @@
+{
+  "process": {
+    "identity": {
+      "pid": 2651634,
+      "start_time": 48419237
+    },
+    "alive": false,
+    "group_members": []
+  },
+  "native_process": {
+    "identity": {
+      "pid": 2652278,
+      "start_time": 48419614
+    },
+    "alive": false,
+    "group_members": []
+  },
+  "result": "PASS",
+  "driver_exit": 0,
+  "source_hashes_unchanged": {
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl": "e864648e12beb2e7a376b447783235dc6149ed3d34b817e6bebd3b89ea440770",
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl.input-proof": "31339d72123405bd5015f48de43c10fec7fbdbe92ed61589cda18ae626055fcf"
+  },
+  "input_rows": 0,
+  "prompt_dispatched": false,
+  "owner_runtime_closed": true
+}

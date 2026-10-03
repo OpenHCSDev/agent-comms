@@ -1,0 +1,103 @@
+{
+  "source_head": "f3e95f03e4ef6f85e237a5d9e11992b3942f51cd",
+  "modules": 726,
+  "parse_omissions": [],
+  "descendants": [
+    {
+      "class": "NativeForkCreation",
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 375,
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ],
+      "members": [
+        "__post_init__",
+        "covered_prefix",
+        "recorded_prefix"
+      ]
+    },
+    {
+      "class": "NativeSessionIdentity",
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 21,
+      "bases": [],
+      "members": [
+        "__post_init__",
+        "path",
+        "require_same_session",
+        "require_context",
+        "same_session",
+        "require_session",
+        "read"
+      ]
+    },
+    {
+      "class": "NativeWitness",
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 38,
+      "bases": [
+        "NativeSessionIdentity"
+      ],
+      "members": [
+        "__post_init__",
+        "require_current_file",
+        "retained_task_facts"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 355,
+      "expression": "NativeForkCreation.recorded_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 18,
+      "expression": "NativeForkCreation.declared_name"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 109,
+      "expression": "NativeSessionIdentity.read"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 61,
+      "expression": "NativeForkCreation.one"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 383,
+      "expression": "NativeForkCreation.one"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 56,
+      "expression": "NativeSessionIdentity.read"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 79,
+      "expression": "NativeSessionIdentity.read"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 96,
+      "expression": "NativeSessionIdentity.read"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 557,
+      "expression": "NativeSessionIdentity.read"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 216,
+      "expression": "NativeSessionIdentity.read"
+    }
+  ],
+  "limits": "AST named bases/attributes; dynamic aliases not resolved. Semantic review includes TypedTable.select/read and JournalTable.for_session/exists, NativeEvidenceRead.recorded_source_prefix and recorded retention fixtures."
+}

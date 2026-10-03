@@ -213,7 +213,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         )
         assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(
-            NativeSessionIdentity.read,
+            NativeSessionIdentity.locate,
             package,
             str(session),
         )

@@ -1,0 +1,27 @@
+{
+  "result": "PASS",
+  "scope": "installed original NativeForkCreation.one/for_session real row and select empty via inherited TypedRow.read; no journal/source/provider/native mutation",
+  "installed_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/compaction_records.py",
+  "journal": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/wire/compaction-commits.sqlite3",
+  "journal_sha256_unchanged": "5f33a71c3ab7d24d31576c0d1dc49684745867c03d5155ee9f6d059b8911294f",
+  "observation": {
+    "original_session_id": "01a0ff86-736c-73a6-904d-43705c3b9d71",
+    "original_session_file": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/forks/2026-10-03T02-09-56-587Z_01a0ff86-736c-73a6-904d-43705c3b9d71.jsonl",
+    "original_entry_count": 9618,
+    "original_prefix_digest": "104d41b41a59e519434efebb3695fb09246117e5fd64b45a775d06edb3bb50cd",
+    "real_row_count": 1,
+    "empty_row_count": 0,
+    "read_owner": "TypedRow.read",
+    "mro": [
+      "NativeForkCreation",
+      "NativeSessionIdentity",
+      "SessionJournalHistory",
+      "JournalTable",
+      "TypedTable",
+      "TypedRow",
+      "DeclaredFamily",
+      "ABC",
+      "object"
+    ]
+  }
+}

@@ -35,6 +35,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
     script: ClassVar[Path]
     request: ClassVar[type]
     result: ClassVar[type]
+    timeout_seconds: ClassVar[float] = 10
 
     @classmethod
     async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
@@ -59,7 +60,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         outcome = await BoundedRun.run(
             (*command, "--input-type=module", "--eval", cls.script.read_text()),
             input=payload.encode(),
-            timeout=10,
+            timeout=cls.timeout_seconds,
             cwd=cwd,
             env=environment,
         )
