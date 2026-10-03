@@ -56,20 +56,20 @@ async def main(args):
     owner = CommsAgent(
         comms, agent_bin='pi',
         private_nk_native_package=args.package, private_nk_wire_root_id=root_id,
-        agent_args=['--model', 'openai-codex/gpt-6.1-sol', '--thinking', 'off', '--offline'],
+        agent_args=['--model', args.model, '--thinking', args.thinking, '--offline'],
         auto_wake=False, runtime_enabled=True,
     )
     name = 'context547'
     process = ProcessIdentity.capture(os.getpid())
-    thread = Thread(name, frozenset(), '/home/ts/.agent-comms',
+    thread = Thread(name, frozenset(), str(args.worktree),
                     process_identity=process, session_file=str(source),
-                    model='openai-codex/gpt-6.1-sol', thinking_level='off')
-    receipt = {'scope': 'private saved-source owner for actual installed309 UI',
+                    model=args.model, thinking_level=args.thinking)
+    receipt = {'scope': 'private saved-source owner and installed native context RPC',
                'root': str(root), 'source': str(source), 'root_id': root_id,
                'package': str(args.package), 'name': name,
                'process': FieldCodec.encode(process), 'python': sys.executable,
                'core_module': inspect.getfile(Comms), 'before_source_hashes': original,
-               'configured_model': thread.model, 'thinking': 'off',
+               'configured_model': thread.model, 'thinking': args.thinking,
                'auto_wake': False, 'prompt_dispatched': False,
                'reattached_original_private_root': reattachment}
     try:
@@ -97,6 +97,14 @@ async def main(args):
         receipt['prepared_child_alive'] = child.alive()
         if original != {path: digest(Path(path)) for path in original}:
             raise AssertionError('Selected startup altered original saved source')
+        connection = RuntimeConnection(comms, name, socket_path(root, process.pid))
+        try:
+            observed = await connection.request('context')
+            receipt['prepared_context_rpc_sha256'] = hashlib.sha256(
+                json.dumps(observed, sort_keys=True).encode()
+            ).hexdigest()
+        finally:
+            await connection.close()
         (evidence / 'owner-prepared.json').write_text(json.dumps(receipt, indent=2) + '\n')
         print(json.dumps(receipt), flush=True)
         # Local harness teardown; this line is never forwarded to native stdin.
@@ -130,4 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--package', type=Path, required=True)
     parser.add_argument('--evidence', type=Path, required=True)
+    parser.add_argument('--model', default='openai-codex/gpt-6.1-sol')
+    parser.add_argument('--thinking', default='off')
+    parser.add_argument('--worktree', type=Path, default=Path('/home/ts/.agent-comms'))
     asyncio.run(main(parser.parse_args()))

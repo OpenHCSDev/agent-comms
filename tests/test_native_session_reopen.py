@@ -104,4 +104,3 @@ def test_native_loader_rejects_invalid_history_without_repair(saved, mutation):
     ], capture_output=True, timeout=10)
     assert result.returncode != 0
     assert file.read_bytes() == before
-
