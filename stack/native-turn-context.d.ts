@@ -24,6 +24,7 @@ export declare class NativeInputClaim {
 export interface NativeContextManifest {
     counter: string;
     segments: readonly NativeContextSegmentManifest[];
+    requestId?: string;
 }
 export interface NativeContextData {
     identity: {sessionId: string; sessionFile: string};

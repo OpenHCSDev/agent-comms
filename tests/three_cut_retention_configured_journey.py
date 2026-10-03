@@ -18,6 +18,7 @@ from agent_comms.acp_extension import CompactRequest, encode_request
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
+from agent_comms.diagnostics import request_observation_path
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof
@@ -222,12 +223,15 @@ async def run(stage, package, original_python, *, continuation=None):
                 provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
                 manifest, = (manifest for manifest in service.bus.log.context_manifests(owner.name, service.registry)
                              if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
+                observed = request_observation_path(service.root, row.turn_id)
                 probes[round_.identity] = RecordedNativeProbe(session, row.native_id, answer.id, checkpoint,
                     FileProvenance(str(sdk), digest(sdk)),
                     record(stage / f'{round_.identity}-manifest.private.json', manifest),
                     FileProvenance(str(contexts / f'segments-{context.llm_context_digest}.json'),
                                    digest(contexts / f'segments-{context.llm_context_digest}.json')),
-                    record(stage / f'{round_.identity}-inputs.private.json', inputs.read()))
+                    record(stage / f'{round_.identity}-inputs.private.json', inputs.read()),
+                    request_observations=FileProvenance(str(observed), digest(observed))
+                        if observed.is_file() else None)
                 record(stage / ('original-run.private.json' if continuation is None else
                                 'continued-run.private.json'), RecordedNativeProbes(dict(probes)))
                 receipt['completed_rounds'].append(round_.identity)
