@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from functools import partial
 
 from .agent_events import AgentEvent, CompactionSummaryProgress
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession
@@ -29,6 +30,8 @@ from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
 from .request_progress import RequestProgress
 from .child_process import ProcessIdentity
 from .compaction_identity import SummaryOperationIdentity
+from .coordinator import Coordination
+from .native_entries import NativeEvidenceRead
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
@@ -84,6 +87,7 @@ class SelectedSummarySlot:
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
         future_queue: FutureInputQueue | None = None,
+        native_reader: NativeEvidenceRead | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
         reason: str = "adaptive",
@@ -126,13 +130,14 @@ class SelectedSummarySlot:
             if witness.revision != retained.revision.native:
                 raise SelectedChildUnknown("Selected source witness is stale")
             proc, reader = retained.child.proc, retained.child.reader
-            operation = journal.summaries.reserve(
+            operation = await Coordination.run_worker(partial(journal.summaries.reserve,
                 session_file,
                 source,
                 fresh_session=fresh_session,
                 admission_generation=admission_generation,
                 future_queue=future_queue,
-            )
+                native_reader=native_reader,
+            ))
             request = replace(request, operation_id=operation)
             identity = SummaryOperationIdentity(session_file, operation)
 
@@ -173,13 +178,12 @@ class SelectedSummarySlot:
                 result = _summary_response(raw, request, tokens_before)
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
-                result.settle(journal)
             except BaseException as error:
                 persistent.require_reopen(witness)
                 # Keep the child marked unusable even if cancellation interrupts
                 # its reap. PersistentPiSession owns the shielded close task.
                 try:
-                    journal.summaries.mark_unknown(operation)
+                    await Coordination.run_worker(partial(journal.summaries.mark_unknown, operation))
                 finally:
                     with suppress(asyncio.CancelledError):
                         await persistent.close()
@@ -196,4 +200,7 @@ class SelectedSummarySlot:
                 ) from error
             # Raise only after attestation and durable settlement succeed. This
             # known terminal outcome must not enter the transport UNKNOWN handler.
+            # Cancellation joins its SQL publication; it must not turn a known
+            # failure/refusal into a second, contradictory UNKNOWN transition.
+            await Coordination.run_worker(partial(result.settle, journal))
             return result.require_result()

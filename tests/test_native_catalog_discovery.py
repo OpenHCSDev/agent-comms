@@ -381,3 +381,59 @@ async def test_actual_compaction_writer_borrows_acquired_native_launch(native_ba
         "child_retired": child.proc.retired, "borrowed_tree_verifications": 0,
         "fresh_tree_verifications": len(calls), "provider_requests": native.provider.posts,
     }), flush=True)
+
+
+async def test_actual_saved_source_reservation_borrows_native_coverage(native_backend, monkeypatch):
+    import hashlib
+    import os
+    from functools import partial
+    from pathlib import Path
+
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_entries import NativeEvidenceRead
+    from agent_comms.native_fork import ForkSessionRequest
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from selected_summary_cases import manual_summary_record
+
+    native = native_backend
+    name = os.environ.get("PI_WRITER_TEST_SOURCE")
+    if not name:
+        pytest.skip("Set PI_WRITER_TEST_SOURCE to an original saved native source")
+    donor = Path(name).resolve(strict=True)
+    before = hashlib.sha256(donor.read_bytes()).hexdigest()
+    journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
+    created = await journal.private_inputs.fork(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor), str(native.project),
+        directory=str(native.root / "native-sessions"),
+    ), cwd=native.project)
+    source = manual_summary_record(created.path,
+        selected=SelectedModel("response-local", "fixture", 2000000),
+        settings=PiCompactionSettings(2048, 1))
+    # The actual SDK creation is published in the journal, so continued-source
+    # coverage must verify its original prefix; no invented enrollment/marker.
+    with NativeEvidenceRead.open(created.path) as reader:
+        reader.observe()
+        decoded = []
+        decode = reader.decode_rows
+
+        def observe(rows):
+            rows = tuple(rows)
+            decoded.extend(rows)
+            return decode(rows)
+
+        monkeypatch.setattr(reader, "decode_rows", observe)
+        operation = await Coordination.run_worker(partial(
+            journal.summaries.reserve, created.session_file, source, native_reader=reader,
+        ))
+        assert decoded == [] and reader.entries
+    assert journal.summaries.get(operation).request == source
+    assert journal.summaries.blocking(created.session_file)
+    assert native.provider.posts == 0 and native.saved_inputs() == []
+    assert hashlib.sha256(donor.read_bytes()).hexdigest() == before
+    print("actual_saved_prefix_reservation", json.dumps({
+        "operation": operation, "source_bytes": donor.stat().st_size,
+        "source_sha256": before, "redecoded_rows": len(decoded), "provider_requests": 0,
+        "scope": "returned SDK fork/coverage reservation; no provider/commit/input authority",
+    }), flush=True)
