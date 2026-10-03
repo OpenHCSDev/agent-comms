@@ -1,0 +1,116 @@
+{
+  "actual_native_request_ms": 5976.436057,
+  "callback_cumulative_ms": 4.184085,
+  "lease_begin_to_request_preparing_seconds": 4.480160713195801,
+  "prompt_through_return_seconds": 13.01583975891117,
+  "whole_run_seconds": 24.36137062800117,
+  "native_progress": [
+    {
+      "stage": "preparing",
+      "detail": "Preparing model request",
+      "elapsedMs": 0.052019,
+      "callbackMs": 0,
+      "callbackCount": 0
+    },
+    {
+      "stage": "callback",
+      "detail": "Preparing model request",
+      "elapsedMs": 215.418299,
+      "callbackMs": 0,
+      "callbackCount": 0
+    },
+    {
+      "stage": "callback_end",
+      "detail": "Waiting for model progress",
+      "elapsedMs": 215.505354,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "budget_admission",
+      "detail": "Model request budget admitted",
+      "elapsedMs": 217.017148,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "connecting",
+      "detail": "Connecting to provider WebSocket",
+      "elapsedMs": 218.153301,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "connected",
+      "detail": "Provider WebSocket ready",
+      "elapsedMs": 1724.520188,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "dispatch",
+      "detail": "Waiting for provider response",
+      "elapsedMs": 1724.591784,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "first_event",
+      "detail": "Provider stream started",
+      "elapsedMs": 2163.308321,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "callback",
+      "detail": "Publishing model response",
+      "elapsedMs": 2163.654857,
+      "callbackMs": 0.088508,
+      "callbackCount": 1
+    },
+    {
+      "stage": "callback_end",
+      "detail": "Waiting for model progress",
+      "elapsedMs": 2163.838004,
+      "callbackMs": 0.266415,
+      "callbackCount": 2
+    },
+    {
+      "stage": "first_delta_consumed",
+      "detail": "Receiving model response",
+      "elapsedMs": 5574.714237,
+      "callbackMs": 0.509495,
+      "callbackCount": 3
+    },
+    {
+      "stage": "stream_end",
+      "detail": "Provider stream closed",
+      "elapsedMs": 5973.436063,
+      "callbackMs": 1.772597,
+      "callbackCount": 14
+    },
+    {
+      "stage": "callback",
+      "detail": "Publishing model response",
+      "elapsedMs": 5973.98849,
+      "callbackMs": 1.772597,
+      "callbackCount": 14
+    },
+    {
+      "stage": "callback_end",
+      "detail": "Waiting for model progress",
+      "elapsedMs": 5976.403134,
+      "callbackMs": 4.184085,
+      "callbackCount": 15
+    },
+    {
+      "stage": "finished",
+      "detail": "Model request finished",
+      "elapsedMs": 5976.436057,
+      "callbackMs": 4.184085,
+      "callbackCount": 15
+    }
+  ],
+  "limits": "Same original input/lease/native request; prompt through return includes ACP attachment, source acquisition and publication. No dedicated timestamp splits cold source acquisition from later preparation or terminal cleanup. Historical13.562/13.696/98/99-second spans are NOT controlled comparisons.",
+  "new_probe": false
+}
