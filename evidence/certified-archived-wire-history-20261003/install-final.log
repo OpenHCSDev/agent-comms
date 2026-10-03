@@ -1,0 +1,6 @@
+Using Python 3.14.2 environment at: /home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001
+Resolved 3 packages in 14ms
+Prepared 1 package in 15ms
+Uninstalled 1 package in 4ms
+Installed 1 package in 10ms
+ ~ agent-comms==0.1.0 (from file:///home/ts/.cache/agent-scratch/mendel-archived-wire559-20261003/wheels/agent_comms-0.1.0-py3-none-any.whl)
