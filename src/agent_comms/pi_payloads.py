@@ -866,6 +866,18 @@ class MissingData(PiResponseData):
 
 
 @dataclass(frozen=True)
+class SessionSwitchData(PiResponseData):
+    """The SDK's actual session-replacement outcome, not a local readiness flag."""
+
+    strict_fields = True
+    cancelled: bool
+
+    def require_switched(self) -> None:
+        if self.cancelled:
+            raise ValueError("Native saved-session replacement was cancelled")
+
+
+@dataclass(frozen=True)
 class NativeSessionSnapshot(PiPayload):
     """External snapshots may report only part of a saved session's identity."""
 

@@ -63,8 +63,8 @@ def idle_session_writer_fence(session_file: str) -> Iterator[int]:
     namespace. Nonblocking admission prevents a registry↔executor deadlock.
     Pass the descriptor to a trusted child and close (never LOCK_UN) so parent
     death cannot release the executor slot while that child can still mutate.
-    An idle persistent Pi process must additionally be closed by the runtime
-    before using this external-writer bridge; the lock alone cannot reload it.
+    The runtime must additionally make its idle child unavailable during the
+    write and reload it before reuse; this physical lock cannot refresh memory.
     """
     if os.name != "posix":
         raise NotImplementedError("Inherited idle-session authority requires POSIX")
@@ -85,7 +85,7 @@ def idle_session_writer_fence(session_file: str) -> Iterator[int]:
 
 @asynccontextmanager
 async def session_writer_fence(session_file: str | None) -> AsyncIterator[None]:
-    """Hold a per-session cross-process writer lock across the Pi child lifetime."""
+    """Hold the per-session writer resource through one executor operation."""
     if session_file is None:
         yield
         return

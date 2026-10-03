@@ -8,6 +8,7 @@ from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from .child_process import AttachedChild
 from .native_attestation import NativeAttestation, PendingAttestation, SavedSessionReopenError
@@ -18,6 +19,7 @@ from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .selected_source import SessionRevision
+    from .owner_compaction_prepare import NativeWitness
 
 
 @dataclass
@@ -227,6 +229,39 @@ class RetainedNative(NativeCustody):
         if not self.identity.same_session(identity) or self.child.key[0].package != package:
             raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
         return self.idle()
+
+    async def reload(self, witness: NativeWitness) -> None:
+        """Replace the old SDK runtime from this exact committed saved source.
+
+        The caller owns PersistentPiSession.external_write and its borrow lock.
+        Switching is a real SDK load, not a revision update pretending the old
+        manager saw the disk write. The original preflight attests its replacement.
+        """
+        from .owner_compaction_prepare import PrepareCompactionHelper
+        from .pi_commands import SwitchSession
+        from .selected_source import SessionRevision
+        from .session_fence import session_writer_fence
+
+        witness.require_same_session(self.identity)
+        # Use the existing whole-history preparation budget, not the cheap
+        # settings-query deadline. A refusal never authorizes another attempt.
+        async with asyncio.timeout(PrepareCompactionHelper.timeout_seconds):
+            # The commit's global resource has closed. Reload needs only the
+            # original per-session writer scope, in the same borrow->writer
+            # order used for normal execution, not another global BUS grant.
+            async with session_writer_fence(self.identity.session_file):
+                witness.require_current_file(self.identity.path)
+                request = SwitchSession(session_path=self.identity.session_file, id=uuid4().hex)
+                response = await request.exchange(self.child.reader, self.child.proc.stdin, strict=True)
+                response.require_request(request).require_switched()
+                attestation = PendingAttestation(self.identity)
+                response = await attestation.request.exchange(
+                    self.child.reader, self.child.proc.stdin, strict=True,
+                )
+                observed = attestation.accept(response)
+                witness.require_current_file(self.identity.path)
+                self.revision = SessionRevision.observe(self.identity.session_file).require_available()
+                self.child.attestation = observed
 
     async def inspect_context(self, persistent):
         from .pi_commands import AgentCommsInspectContext

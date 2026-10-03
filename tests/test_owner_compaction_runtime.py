@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
+from contextlib import asynccontextmanager
 
 import pytest
 
@@ -50,8 +51,11 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
             return SimpleNamespace(status="committed")
 
     class Persistent:
-        async def discard_for_external_write(self, *_args):
-            pass
+        @asynccontextmanager
+        async def external_write(self, *_args):
+            # This control cancels inside the joined OS worker, before reload.
+            # Actual SDK reload/source custody is qualified separately.
+            yield SimpleNamespace()
 
     async def owner():
         async with turn_lock:
