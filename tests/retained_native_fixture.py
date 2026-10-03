@@ -358,14 +358,18 @@ class RecordedNativeProbe:
             raise ValueError("Recorded SDK context is not this original probe request")
         return manifest
 
-    def prompt_presence(self, retained, data, manifest):
-        """Measure a recorded SDK payload, never reconstruct a provider prompt."""
+    def serialized_construction(self, data, manifest):
+        """Acquire original SDK bytes independently of a retained-fact oracle.
+
+        Both construction and envelope presence borrow this checked capture.
+        Re-encoding decoded segment objects cannot supply missing original bytes.
+        """
         if manifest is None:
-            return {"evaluated": False,
-                    "reason": "Original SDK payload and matching context manifest not supplied"}
+            return None, {"evaluated": False,
+                          "reason": "Original SDK payload and matching context manifest not supplied"}
         if self.sdk_segment_bytes is None:
-            return {"evaluated": False,
-                    "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"}
+            return None, {"evaluated": False,
+                          "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"}
         texts = FieldCodec.decode(tuple[str, ...], RecordedNativeCheckpoint.read_json(self.sdk_segment_bytes))
         if len(texts) != len(data.segments):
             raise ValueError("Recorded SDK serialized segments differ from their manifest")
@@ -374,6 +378,18 @@ class RecordedNativeProbe:
             if (len(raw) != segment.utf8_bytes
                     or hashlib.sha256(raw).hexdigest() != segment.sha256):
                 raise ValueError("Recorded SDK segment bytes differ from measured source")
+        return texts, {"evaluated": True, "stage": "recorded SDK provider input",
+                "artifact": self.sdk_segment_bytes,
+                "context_digest": self.sdk_request(data).context_digest,
+                "segments": len(data.segments),
+                "utf8_bytes": sum(segment.utf8_bytes for segment in data.segments),
+                "final_transport_evaluated": False,
+                "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"}
+
+    def prompt_presence(self, retained, texts, captured):
+        """Measure envelope presence in the borrowed original SDK capture."""
+        if not captured["evaluated"]:
+            return captured
         if retained is None or not retained.facts:
             return {"evaluated": False, "reason": "No eligible original retained fact denominator"}
         # Encode the exact envelope as a JSON string because measured native
@@ -383,7 +399,7 @@ class RecordedNativeProbe:
         present = any(envelope in text for text in texts)
         return {"evaluated": True, "stage": "recorded SDK provider input",
                 "final_transport_evaluated": False,
-                "context_digest": self.sdk_request(data).context_digest,
+                "context_digest": captured["context_digest"],
                 "required": len(retained.facts),
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
@@ -422,7 +438,7 @@ class RecordedNativeProbe:
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
 
-    def construction(self, evidence, branch, manifest, checkpoint):
+    def construction(self, evidence, branch, manifest, checkpoint, serialized):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -474,7 +490,7 @@ class RecordedNativeProbe:
                 coverage["managed_checkpoint"] = {"entry_id": identity,
                     "referenced_in_sdk_sources": identity in included}
         return {
-            "fork": FieldCodec.encode(fork),
+            "fork": fork,
             "journal_settings": {
                 "evaluated": bool(models and thinking),
                 "model": models[-1].model_choice if models else None,
@@ -482,7 +498,8 @@ class RecordedNativeProbe:
                 "original_entries": tuple(entry.id for entry in models[-1:] + thinking[-1:]),
                 "scope": "Historical branch metadata; not current request selection",
             },
-            "sdk_manifest": FieldCodec.encode(manifest),
+            "sdk_manifest": manifest,
+            "serialized_sdk_source": serialized,
             "request_budget": self.request_budget(manifest),
             "source_coverage": coverage,
             "condition_evaluated": False,
@@ -563,6 +580,7 @@ class RecordedNativeProbe:
         _, entries = evidence.observe()
         user, = (row for row in entries if row.id == context.session_entry_id)
         manifest = self.request_manifest(context, data)
+        texts, serialized = self.serialized_construction(data, manifest)
         answer, = (row for row in entries if row.id == self.answer_entry_id)
         if not isinstance(answer, MessageEntry) or not answer.final_reply:
             raise ValueError("Recorded recall answer is not a successful native terminal")
@@ -603,7 +621,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source_branch, manifest, checkpoint),
+            "construction": self.construction(evidence, source_branch, manifest, checkpoint, serialized),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"]["name"] for step in tools),
@@ -612,7 +630,7 @@ class RecordedNativeProbe:
             },
             "checkpoint": checkpoint,
             "canonical_availability": checkpoint["canonical_availability"],
-            "provider_prompt_presence": self.prompt_presence(retained, data, manifest),
+            "provider_prompt_presence": self.prompt_presence(retained, texts, serialized),
             "prompt_scope": "original native user and assembled-context proof, not final provider payload",
         }
 

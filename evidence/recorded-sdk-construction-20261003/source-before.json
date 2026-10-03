@@ -1,0 +1,100 @@
+{
+  "revision": "0ed285523c7e23d6f7bf9712e4f4131fbf0c0252",
+  "tool": "Existing audit.findings.Package",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "name": "NativeContextData",
+      "line": 34
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "FileProvenance",
+      "line": 36
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "MeasuredNativeSegment",
+      "line": 166
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "ContextManifest",
+      "line": 422
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274
+    }
+  ],
+  "calls": [
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 555,
+      "call": "self.read_sdk_context"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 565,
+      "call": "self.request_manifest"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 606,
+      "call": "self.construction"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 615,
+      "call": "self.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 409,
+      "call": "probe.read_sdk_context"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 410,
+      "call": "probe.request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 411,
+      "call": "probe.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 415,
+      "call": "probe.request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 418,
+      "call": "probe.read_sdk_context"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 329,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 334,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 341,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 342,
+      "call": "probe.construction"
+    }
+  ],
+  "limits": "Lexical references only; reviewed original native TurnContext.capture determines SDK values and source selection. No dynamic resolution claim."
+}
