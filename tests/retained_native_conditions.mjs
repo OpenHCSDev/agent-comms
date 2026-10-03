@@ -31,7 +31,7 @@ async function observe(session, packagePath, view) {
     };
 }
 
-async function boundedConstruction(session, packagePath, source) {
+export async function boundedMessages(session, packagePath, source) {
     if (!source?.evaluated)
         throw new Error('Original eligible narrative source required for bounded application');
     const manager=session.sessionManager, store=manager.entryStore;
@@ -47,23 +47,76 @@ async function boundedConstruction(session, packagePath, source) {
         packagePath,'dist/core/session-manager.js')));
     const {SessionContext} = await import(pathToFileURL(join(
         packagePath,'dist/core/session-context.js')));
-    const {TurnContext} = await import(pathToFileURL(join(packagePath,'dist/core/turn-context.js')));
-    const entries=Array.from(manager.buildContextEntries());
-    const [summary]=sessionEntryToContextMessages(store.get(latest.id));
+    const [originalSummary]=sessionEntryToContextMessages(store.get(latest.id));
     // This detached SDK message retains the original wrapper, timestamp and
     // tokensBefore. History/packed text is never changed or stripped.
-    summary.summary=source.summary;
+    const summary={...originalSummary,summary:source.summary};
     const kept=Array.from(store.keptMetadata(manager.getLeafId()),meta=>store.get(meta.id));
     const messages=[summary,...SessionContext.entryMessages(kept.values())];
-    const context=await SessionContext.prefixContext(session,messages);
-    const view=await TurnContext.capture(session,context,undefined,entries);
-    const observed=await observe(session,packagePath,view);
     store.assertCurrent();
     if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(latest.firstKeptEntryId)))
         throw new Error('Native selection changed during bounded construction');
-    return {messages, observed:{evaluated:true,...observed,narrative_source:source.source,
-        checkpoint_session:source.checkpoint_session,native_entry_id:latest.id,
+    return {messages,originalSummary,witness};
+}
+
+async function boundedConstruction(session, packagePath, source) {
+    const {messages,witness}=await boundedMessages(session,packagePath,source);
+    const {SessionContext}=await import(pathToFileURL(join(packagePath,'dist/core/session-context.js')));
+    const {TurnContext}=await import(pathToFileURL(join(packagePath,'dist/core/turn-context.js')));
+    const manager=session.sessionManager;
+    const entries=Array.from(manager.buildContextEntries());
+    const view=await TurnContext.capture(session,
+        await SessionContext.prefixContext(session,messages),undefined,entries);
+    const observed=await observe(session,packagePath,view);
+    manager.entryStore.assertCurrent();
+    if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(witness.firstKeptEntryId)))
+        throw new Error('Native selection changed during bounded preview');
+    return {messages,observed:{evaluated:true,...observed,narrative_source:source.source,
+        checkpoint_session:source.checkpoint_session,native_entry_id:source.native_entry_id,
         scope:'SDK bounded preview from the supplied narrative source and native kept cut; not installed/submitted input'}};
+}
+
+export async function transformBoundedNativeCondition(session,packagePath,source,messages) {
+    // Agent's original transform has already run. Preserve its entire raw
+    // result and the fresh input; replace exactly the corroborated SDK message.
+    session.storedContext.requireReady();
+    const {messages:[summary],originalSummary}=await boundedMessages(session,packagePath,source);
+    const matches=messages.filter(message=>isDeepStrictEqual(message,originalSummary));
+    if (matches.length !== 1)
+        throw new Error('Original SDK compaction message is not unique in transformed input');
+    return messages.map(message=>message===matches[0] ? summary : message);
+}
+
+export function armBoundedNativeCondition(session,packagePath,source,transform,output,inputId) {
+    // This function also crosses the private inspector's SDK boundary as source.
+    // Keep its dependencies explicit; no product globals, command or overlay.
+    const agent=session.agent, previous=agent.transformContext;
+    const fs=process.getBuiltinModule('node:fs');
+    const record=value=>fs.appendFileSync(output,JSON.stringify({input_id:inputId,...value})+'\n',{mode:0o600});
+    const restore=()=>{
+        agent.transformContext=previous;
+        unsubscribe();
+        record({stage:'bounded-transform-restored'});
+    };
+    const unsubscribe=agent.subscribe(event=>{
+        if (event.type==='agent_end') restore();
+    });
+    agent.transformContext=async(messages,signal)=>{
+        try {
+            const transformed=previous ? await previous.call(agent,messages,signal) : messages;
+            const result=await transform(session,packagePath,source,transformed);
+            record({stage:'bounded-transform-applied',session:source.session,
+                checkpoint_session:source.checkpoint_session,native_entry_id:source.native_entry_id,
+                narrative_source:source.source,message_count:result.length});
+            return result;
+        } catch(error) {
+            restore();
+            record({stage:'bounded-transform-refused',reason:error.message});
+            throw error;
+        }
+    };
+    record({stage:'bounded-transform-armed'});
+    return restore;
 }
 
 export async function applyBoundedNativeCondition(session, packagePath, source) {

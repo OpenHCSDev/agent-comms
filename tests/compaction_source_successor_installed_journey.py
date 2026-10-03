@@ -10,10 +10,12 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import replace
 import hashlib
+from importlib.metadata import distribution
 import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import time
 
 from acp.agent.router import build_agent_router
@@ -60,8 +62,23 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     installed = Path(agent_comms.__file__).resolve().parent
     checkout = Path(__file__).resolve().parents[1]
     assert installed.is_relative_to(Path(sys.prefix))
-    for path in (checkout/'src/agent_comms').rglob('*.py'):
-        assert path.read_bytes() == (installed/path.relative_to(checkout/'src/agent_comms')).read_bytes()
+    direct = json.loads(distribution('agent-comms').read_text('direct_url.json'))
+    revision = direct['vcs_info']['commit_id']
+    # The installed Core source and the current private fixture have different
+    # release identities. Verify the former against its original Git declaration,
+    # never an overlay or a mutable current-checkout approximation.
+    names = subprocess.check_output(
+        ['git','ls-tree','-r','--name-only',revision,'src/agent_comms'],cwd=checkout,text=True).splitlines()
+    source_hashes = {}
+    for name in names:
+        path=installed/Path(name).relative_to('src/agent_comms')
+        original_bytes=subprocess.check_output(['git','show',f'{revision}:{name}'],cwd=checkout)
+        assert path.read_bytes()==original_bytes, f'Installed release source differs: {name}'
+        source_hashes[name]=hashlib.sha256(original_bytes).hexdigest()
+    receipt.update(installed_core_revision=revision, installed_code_assets=len(source_hashes),
+        installed_source_digest=hashlib.sha256(json.dumps(source_hashes,sort_keys=True).encode()).hexdigest(),
+        private_fixture_revision=subprocess.check_output(
+            ['git','rev-parse','HEAD'],cwd=checkout,text=True).strip())
     if continuation is None:
         stage.mkdir(mode=0o700, exist_ok=False)
     started = time.monotonic()

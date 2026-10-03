@@ -1,10 +1,12 @@
 /** Private installed journey: original frames and separately pinned SDK bodies.
  * Inspector observes the actual route formation and selected request; it does
  * not substitute provider, transport, response, session or product source.
+ * An explicit private condition source uses the SDK's original transform hook;
+ * its application and restoration are logged separately from read observations.
  */
 import { appendFileSync } from 'node:fs';
 
-const [, , port, packageRoot, output, contexts, summaries] = process.argv;
+const [, , port, packageRoot, output, contexts, summaries, conditionSource] = process.argv;
 if (output && packageRoot) {
     // External inspection preserves the native import fence. Read only original
     // frames from this owned private child's loopback debugger; no code overlay.
@@ -70,6 +72,11 @@ if (output && packageRoot) {
         lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/compaction/compaction.js`, 'utf8').split('\n'),
             'summary = contextPolicy.packSummary(retainedText, summary, annotations,'),
     });
+    const conditionPoint = conditionSource && await post('Debugger.setBreakpointByUrl', {
+        url:pathToFileURL(`${packageRoot}/dist/core/agent-session.js`).href,
+        lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/agent-session.js`,'utf8').split('\n'),
+            '        await this.storedContext.beforeInput(this);'),
+    });
     // Inspector correlation within this one private selected operation. It does
     // not select a native source or grant a request, commit or retry.
     let originalSummaryRequest;
@@ -83,6 +90,30 @@ if (output && packageRoot) {
         try {
             if (!params.hitBreakpoints.length) return;
             const frame = params.callFrames[0];
+            if (conditionPoint && params.hitBreakpoints.includes(conditionPoint.breakpointId)) {
+                const {armBoundedNativeCondition,boundedMessages,transformBoundedNativeCondition}
+                    =await import('./retained_native_conditions.mjs');
+                const originalSource=JSON.parse(source.readFileSync(conditionSource,'utf8'));
+                const armed=await post('Debugger.evaluateOnCallFrame', {
+                    callFrameId:frame.callFrameId,
+                    // External inspector evaluation consumes the actual private
+                    // declaration bodies. Only their approved native imports run
+                    // in the child; do not add an external helper import there.
+                    expression:`(() => {
+                        const {join}=process.getBuiltinModule('node:path');
+                        const {pathToFileURL}=process.getBuiltinModule('node:url');
+                        const {isDeepStrictEqual}=process.getBuiltinModule('node:util');
+                        const boundedMessages=(${boundedMessages.toString()});
+                        const transform=(${transformBoundedNativeCondition.toString()});
+                        (${armBoundedNativeCondition.toString()})(this,${JSON.stringify(packageRoot)},
+                            ${JSON.stringify(originalSource)},transform,${JSON.stringify(output)},options.inputId);
+                        return 'armed';
+                    })()`,returnByValue:true,
+                });
+                if (armed.exceptionDetails) throw new Error('Original SDK condition transform could not be armed');
+                await post('Debugger.removeBreakpoint',{breakpointId:conditionPoint.breakpointId});
+                return;
+            }
             if (summaryRequestPoint && params.hitBreakpoints.includes(summaryRequestPoint.breakpointId)) {
                 const observed = await post('Debugger.evaluateOnCallFrame', {
                     callFrameId:frame.callFrameId,

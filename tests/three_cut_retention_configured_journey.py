@@ -8,6 +8,7 @@ later. No public input, original replay, policy activation or comparative study.
 from __future__ import annotations
 
 import asyncio
+from contextlib import ExitStack
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -18,7 +19,6 @@ from agent_comms.acp_extension import CompactRequest, encode_request
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
-from agent_comms.diagnostics import request_observation_path
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof
@@ -43,6 +43,117 @@ def record(path, value):
     path.write_text(json.dumps(FieldCodec.encode(value), ensure_ascii=False) + '\n')
     path.chmod(0o600)
     return FileProvenance(str(path), digest(path))
+
+
+async def bounded_application(stage,package,original_python):
+    """One new configured cut, original raw capture, SDK child and distinct input.
+
+    This is functional S4 verification, not a comparative provider study. The
+    inspector uses Agent's existing context transform, preserving the original
+    transform and recording its input binding. Original histories are read only.
+    """
+    captured=CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),original_python
+        ).read('openhcs-architecture-memory')
+    original=captured.require_current()
+    assert original.model=='openai-codex/gpt-6.1-sol'
+    assert ThinkingLevel.optional_name(original.thinking_level)=='high'
+    stage.mkdir(mode=0o700,exist_ok=False)
+    capture_stage=stage/'capture'
+    summaries=capture_stage/'summary-assemblies'
+    source_file=Path(original.require_saved_session())
+    def capture_source():
+        return captured.require_current(),captured.retained
+    chunks=[]
+    class Receiver:
+        async def session_update(self,**value):
+            update=value['update']
+            if update.session_update=='agent_message_chunk' and update.content.type=='text':
+                chunks.append(update.content.text)
+
+    capture_receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False}
+    # Release the inspector before the original native EOF/child join, including
+    # on refusal. ExitStack owns this resource order; no new lifetime authority.
+    with ExitStack() as observations:
+        launch=observations.enter_context(observe_native_requests(package,
+            capture_stage/'summary-observation.jsonl',summaries=summaries))
+        async with configured_saved_agent(capture_stage,package,source_file,Receiver(),capture_receipt,
+                capture_source=capture_source,observe_launch=launch) as (agent,owner,fork):
+            try:
+                summaries.mkdir(mode=0o700)
+                service=agent._comms
+                scope=record(capture_stage/'original-registry.private.json',service.registry.store.read())
+                print('CONFIGURED_FRESH_NARRATIVE_COMPACTION',flush=True)
+                await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
+                    'prompt':[{'type':'text','text':' '}],'_meta':encode_request(CompactRequest(
+                        'Create a fresh concise narrative of the selected history. Preserve exact original decisions, '
+                        'source coordinates and authorized changes. Do not resume inherited work.'))},False)
+                journal=CompactionJournal(service.root/'compaction-commits.sqlite3')
+                attempt,=journal.summaries.history(fork.session_file)
+                assert isinstance(attempt.state,ManualCommittedSummary)
+                operation=journal.operations.get(attempt.state.commit_id)
+                operation.committed_outcome()
+                checkpoint=RecordedNativeCheckpoint(journal.path,attempt.identity,operation.commit_id,
+                    scope,service.root/'bus.jsonl').capture_summary_observation(summaries)
+                record(capture_stage/'original-checkpoint.private.json',checkpoint)
+                with checkpoint.original_source() as (session,evidence):
+                    narrative=checkpoint.condition_source(session,evidence)
+                record(capture_stage/'original-narrative-source.private.json',narrative)
+                assert narrative['evaluated'],narrative['reason'] if 'reason' in narrative else narrative
+                assert not InputDispositions(service.root/InputDispositions.filename).read().rows
+                captured_source=Path(fork.session_file)
+                capture_receipt.update(complete=True,original_summary_operation=attempt.operation_id,
+                    original_commit=operation.commit_id,raw_summary_bytes=narrative['utf8_bytes'],
+                    new_original_inputs=0)
+            finally:
+                observations.close()
+
+    application_stage=stage/'application'
+    contexts=application_stage/'sdk-contexts'
+    observer_output=application_stage/'condition-observation.jsonl'
+    condition_file=application_stage/'fork-condition-source.private.json'
+    receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False,
+        'installed_UI':False,'acceptance_scope':'original configured cut/capture/SDK fork/bounded SDK input and distinct answer'}
+    with ExitStack() as observations:
+        launch=observations.enter_context(observe_native_requests(package,observer_output,
+            contexts=contexts,condition_source=condition_file))
+        async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
+                capture_source=capture_source,observe_launch=launch) as (agent,owner,fork):
+            try:
+                contexts.mkdir(mode=0o700)
+                service=agent._comms
+                condition=checkpoint.fork_condition_source(
+                    service.root/'compaction-commits.sqlite3',Path(fork.session_file))
+                record(condition_file,condition)
+                assert condition['evaluated']
+                assert condition['session']!=condition['checkpoint_session']
+                chunks.clear()
+                marker='ORIGINAL_BOUNDED_S4_APPLICATION_VERIFIED'
+                text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'
+                print('CONFIGURED_FORK_BOUNDED_DISTINCT_INPUT',flush=True)
+                result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
+                    'prompt':[{'type':'text','text':text}]},False)
+                assert result.stop_reason=='end_turn' and marker in ''.join(chunks)
+                document=InputDispositions(service.root/InputDispositions.filename).read()
+                row,=document.rows.values()
+                assert row.has_started and row.source_text==text
+                session=NativeSessionIdentity(fork.session_id,fork.session_file)
+                probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
+                    application_stage,checkpoint,observer_output)
+                record(application_stage/'recorded-probe.private.json',probe)
+                measured=probe.observe()
+                record(application_stage/'recorded-application.private.json',measured)
+                construction=measured['construction']
+                assert construction['condition_application']['evaluated']
+                assert construction['request_budget']['evaluated']
+                assert construction['request_completion']['evaluated']
+                assert service.registry.require(owner.name).active_turn is None
+                receipt.update(complete=True,original_cut_correlated=True,
+                    SDK_child_binding=True,bounded_original_narrative_in_actual_SDK_input=True,
+                    canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
+                    model_steps=len(measured['model_steps']),model_recall_evaluated=False,
+                    final_HTTP_bytes_evaluated=False)
+            finally:
+                observations.close()
 
 
 def frozen_scenario(root_reference):
@@ -105,26 +216,12 @@ async def request_construction(stage, package, original_python):
             row, = document.rows.values()
             assert row.has_started
             session = NativeSessionIdentity(fork.session_id, fork.session_file)
-            with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
-                context = NativeContextProof.read_evidence(Path(session.session_file), row.native_id, evidence=evidence)
-                answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
-                provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
-                manifest, = (manifest for manifest in service.bus.log.context_manifests(owner.name, service.registry)
-                    if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
-                observed = request_observation_path(service.root, row.turn_id)
-                sdk = contexts / f'context-{context.llm_context_digest}.json'
-                serialized = contexts / f'segments-{context.llm_context_digest}.json'
-                probe = RecordedNativeProbe(session, row.native_id, answer.id,
-                    sdk_context=FileProvenance(str(sdk), digest(sdk)),
-                    context_manifest=record(stage / 'original-manifest.private.json', manifest),
-                    sdk_segment_bytes=FileProvenance(str(serialized), digest(serialized)),
-                    submitted_inputs=record(stage / 'original-inputs.private.json', document),
-                    fork_journal=service.root / 'compaction-commits.sqlite3',
-                    request_observations=FileProvenance(str(observed), digest(observed)))
-                measured = probe.read(evidence)
+            probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,stage)
+            measured=probe.observe()
             record(stage / 'recorded-probe.private.json', probe)
             record(stage / 'request-construction.private.json', measured)
             budget = measured['construction']['request_budget']
+            manifest=measured['construction']['sdk_manifest']
             assert budget['evaluated'] and manifest.request_id
             assert measured['construction']['source_coverage']['evaluated']
             assert all(point.request_id == manifest.request_id for point in budget['observations'])
@@ -295,22 +392,8 @@ async def run(stage, package, original_python, *, continuation=None):
                 assert result.stop_reason == 'end_turn'
                 row, = (row for row in inputs.read().rows.values() if row.source_text == round_.probe_text())
                 assert row.has_started
-                with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
-                    context = NativeContextProof.read_evidence(Path(session.session_file), row.native_id, evidence=evidence)
-                    answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
-                sdk = contexts / f'context-{context.llm_context_digest}.json'
-                provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
-                manifest, = (manifest for manifest in service.bus.log.context_manifests(owner.name, service.registry)
-                             if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
-                observed = request_observation_path(service.root, row.turn_id)
-                probes[round_.identity] = RecordedNativeProbe(session, row.native_id, answer.id, checkpoint,
-                    FileProvenance(str(sdk), digest(sdk)),
-                    record(stage / f'{round_.identity}-manifest.private.json', manifest),
-                    FileProvenance(str(contexts / f'segments-{context.llm_context_digest}.json'),
-                                   digest(contexts / f'segments-{context.llm_context_digest}.json')),
-                    record(stage / f'{round_.identity}-inputs.private.json', inputs.read()),
-                    request_observations=FileProvenance(str(observed), digest(observed))
-                        if observed.is_file() else None)
+                probes[round_.identity]=RecordedNativeProbe.capture_input(
+                    service,owner,session,row,contexts,stage,checkpoint)
                 record(stage / ('original-run.private.json' if continuation is None else
                                 'continued-run.private.json'), RecordedNativeProbes(dict(probes)))
                 receipt['completed_rounds'].append(round_.identity)
@@ -342,6 +425,8 @@ if __name__ == '__main__':
     modes = {'--continue-committed': committed_checkpoint, '--continue-completed': completed_continuation}
     if sys.argv[4:] == ['--request-construction']:
         asyncio.run(request_construction(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute()))
+    elif sys.argv[4:]==['--bounded-application']:
+        asyncio.run(bounded_application(stage,Path(sys.argv[2]).resolve(),Path(sys.argv[3]).absolute()))
     else:
         continuation = modes[sys.argv[4]](stage) if sys.argv[4:] else None
         asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))
