@@ -195,6 +195,8 @@ class FieldCodec(Sealed):
     the single record codec and declaration-derived schema.
     """
 
+    _declaration_cache_capacity = 256
+
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
         if get_origin(annotation) is Annotated:
@@ -221,7 +223,7 @@ class FieldCodec(Sealed):
         return representation
 
     @staticmethod
-    @lru_cache(maxsize=256)
+    @lru_cache(maxsize=_declaration_cache_capacity)
     def _fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
@@ -246,7 +248,7 @@ class FieldCodec(Sealed):
         )
 
     @staticmethod
-    @lru_cache(maxsize=256)
+    @lru_cache(maxsize=_declaration_cache_capacity)
     def _types(declaration: type) -> dict[str, Any]:
         return get_type_hints(declaration, include_extras=True)
 
@@ -426,13 +428,16 @@ class FieldCodec(Sealed):
         return cls.encode(value)
 
     @staticmethod
-    def _projections(declaration: type, view: str) -> dict[str, Projected]:
-        return {
+    @lru_cache(maxsize=_declaration_cache_capacity)
+    def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
+        # Cache immutable declarations only. Each consumer still invokes the
+        # original property on the current record; projected values are never cached.
+        return types.MappingProxyType({
             name: member
             for base in reversed(declaration.__mro__)
             for name, member in vars(base).items()
             if isinstance(member, Projected) and member.view == view
-        }
+        })
 
     @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
