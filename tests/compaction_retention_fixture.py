@@ -23,6 +23,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_tools import CodingTool
 from agent_comms.message_reference import MessageReference
 from agent_comms.turn_context import JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -485,6 +486,9 @@ class Question:
     # Original execution coordinates, distinct from an authored answer or a
     # Decision alternative. This does not assert proposal/constraint validity.
     action_source: JournalProvenance | None = None
+    # Frozen oracle intent, never reconstructed from a model answer or receipt.
+    # CodingTool owns the native invocation; no second argument schema lives here.
+    expected_tool: CodingTool | None = None
 
     def __post_init__(self) -> None:
         if not self.identity or not self.prompt or not self.evidence_ref:
@@ -498,6 +502,8 @@ class Question:
                 raise ValueError("An execution source belongs on an action question")
             if len(self.action_source.entries) != 2 or len(set(self.action_source.entries)) != 2:
                 raise ValueError("An execution source requires distinct original request/result entries")
+        if self.expected_tool is not None and self.measurement is not Measurement.ACTION:
+            raise ValueError("A frozen intended invocation belongs on an action question")
 
     def score(self, answer: str | None) -> AnswerScore:
         return AnswerScore(
@@ -514,27 +520,31 @@ class Question:
         result = {"execution": self.executed_action(original),
                   "constraint_validity": {"evaluated": False,
                                           "reason": "Decision membership does not evaluate every constraint"}}
+        return dict(result, declared_alternative=self.declared_alternative(answer, original))
+
+    def declared_alternative(self, answer, original):
+        """Resolve the original scoped Decision once for proposal and execution."""
         if self.decision_source is None or original is None:
-            return dict(result, declared_alternative={"evaluated": False,
-                "reason": "No original Decision reference and recorded probe supplied"})
+            return {"evaluated": False,
+                "reason": "No original Decision reference and recorded probe supplied"}
         observed = original["scoped_facts"]
         if not observed["evaluated"]:
-            return dict(result, declared_alternative=observed)
+            return observed
         selected = tuple(item for item in observed["decisions"]
                          if item["lineage"] == self.decision_source)
         if not selected:
-            return dict(result, declared_alternative={"evaluated": False,
-                "reason": "Referenced Decision is not current in the original captured scope"})
+            return {"evaluated": False,
+                "reason": "Referenced Decision is not current in the original captured scope"}
         item, = selected
         decision = item["declaration"]
         if not decision.contains_alternative(self.expected):
             raise ValueError("Frozen action oracle contradicts its original Decision alternatives")
-        return dict(result, declared_alternative={
+        return {
             "evaluated": True, "missing": answer is None,
             "valid": decision.contains_alternative(answer),
-            "chosen": answer == decision.chosen, "source": FieldCodec.encode(item["current"]),
+            "chosen": answer == decision.chosen, "source": item["current"],
             "scope": observed["scope"],
-        })
+        }
 
     def executed_action(self, original):
         """Corroborate a named SDK result without crediting a lexical proposal."""
@@ -545,10 +555,26 @@ class Question:
         if len(selected) != 1:
             raise ValueError("Execution source is outside this original probe branch")
         step, = selected
-        return dict(step["completion"], source=FieldCodec.encode(step["source"]), call=step["call"],
+        return dict(step["completion"], source=step["source"], call=step["call"],
                     scope="Original SDK tool result, not current filesystem or every task constraint",
-                    proposal_alignment={"evaluated": False,
-                        "reason": "A tool receipt does not bind its arguments to a declared Decision alternative"})
+                    proposal_alignment=self.bind_execution(step["call"], original))
+
+    def bind_execution(self, request, original):
+        """Match frozen invocation intent to an original scoped alternative.
+
+        This is oracle-to-request alignment. A successful result and permission
+        under prose constraints remain separate questions; neither is inferred.
+        """
+        if self.expected_tool is None:
+            return {"evaluated": False, "reason": "No frozen intended tool invocation supplied"}
+        alternative = self.declared_alternative(self.expected, original)
+        if not alternative["evaluated"]:
+            return alternative
+        return {"evaluated": True,
+                "matches": self.expected_tool.matches_request(request),
+                "alternative": self.expected, "decision_source": alternative["source"],
+                "expected_tool": self.expected_tool,
+                "scope": "Frozen oracle invocation and current original Decision; not task constraint permission"}
 
 
 @dataclass(frozen=True)

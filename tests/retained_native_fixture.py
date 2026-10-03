@@ -577,7 +577,7 @@ class RecordedNativeProbe:
                 if call.id in pending:
                     raise ValueError("Recorded probe repeats an outstanding SDK tool call")
                 observation = {"source": JournalProvenance(self.session.session_file, (entry.require_entry_id(),)),
-                    "call": FieldCodec.encode(call),
+                    "call": call,
                     "completion": {"evaluated": False, "reason": "No original SDK result on this probe branch"}}
                 measured.append(observation)
                 pending[call.id] = (entry, observation)
@@ -591,7 +591,7 @@ class RecordedNativeProbe:
                 observation.update(source=JournalProvenance(self.session.session_file,
                                       (request.require_entry_id(), entry.require_entry_id())),
                     completion={"evaluated": True, "successful": not message.is_error,
-                                "artifacts": FieldCodec.encode(message.completed_artifacts())})
+                                "artifacts": message.completed_artifacts()})
         return tuple(measured)
 
     def read(self, evidence: NativeEvidenceRead):
@@ -652,7 +652,7 @@ class RecordedNativeProbe:
             "construction": self.construction(evidence, source_branch, manifest, checkpoint, serialized, answer),
             "scoped_facts": scoped,
             "answer_support": {
-                "tool_calls": len(tools), "tools": tuple(step["call"]["name"] for step in tools),
+                "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),
                 "unassisted_recall": not tools,
                 "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall",
             },
