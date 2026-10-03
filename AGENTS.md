@@ -50,6 +50,18 @@ Use ordinary language: what changed, what still fails, what happens next.
   accurately. Retire test processes and owned scratch; check disk/RAM before large
   work. Never replay an uncertain input or restart an active owner for convenience.
 
+- Retire evidence when its work is accepted or superseded. Keep concise source,
+  results and receipts; keep a recording or large profile only while an unresolved
+  diagnosis or comparison needs it. Delete completed disposable movies, derived
+  sheets and intermediate verification output in batches after checking actual
+  active borrowers. Do not keep every recording, require every past reader's
+  acknowledgement, or copy whole logs into status reports. Preserve user sessions,
+  auth, wire data, UNKNOWN inputs and scientific originals. Inactive Codex session
+  logs may be reversibly truncated and gzip archived through the existing
+  `~/.codex/scripts/codex_truncate_sessions.py`; active sessions stay untouched.
+  Build file wheels from the existing owned checkout and reuse unchanged wheels
+  and dependencies instead of creating another VCS source clone for each stage.
+
 - Keep implementation and verification with the agent that already owns the context. Delegate genuinely independent work; do not transfer a continuing task merely to redistribute activity.
 
 - Proactively question suspicious existing and newly written code throughout implementation: duplicate authorities or behavior, unnecessary distinctions, hardcoded policy and forwarding-only abstractions. Regularly revisit the actual NRA/refactor-audit examples; trace the existing owner and all related consumers, then fold coherent deletions into the current owned change. Do not wait for a reported bug or create a separate audit ceremony.
