@@ -16,12 +16,13 @@ from .errors import RelationViolationError
 from .diagnostics import PublicationMeasurements
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
 from .native_pi import NativePiUnavailable, _session_location
 from .owner_launch import RestartEnvironment
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
 
 if TYPE_CHECKING:
+    from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .tracked_turn import TrackedTurnSession
 
@@ -115,8 +116,14 @@ class SelectedSession:
         path: Path | None,
         fresh: bool,
         thinking_level: str | None,
-        package: Path,
+        execution: SelectedExecution,
     ) -> SelectedSession:
+        """Borrow the original execution's acquired artifact for its header read.
+
+        SelectedExecution validates before selecting this participant. This
+        joined preparation shares that immutable acquisition; standalone
+        for_launch remains a separate verified lookup.
+        """
         def acquire() -> SelectedSession:
             directory = participant.comms.root / "native-sessions" / participant.lookup
             worktree = Path(participant.owner.thread.worktree).absolute()
@@ -127,8 +134,11 @@ class SelectedSession:
                 # Captured registry intent selects ordinary continuation. An explicit
                 # operator selection remains explicit; no downstream reader guesses it.
                 selected = path if path is not None else participant.owner.thread.session_file
-                return cls.for_launch(directory,
-                    Path(selected).absolute() if selected is not None else None, package)
+                if selected is None:
+                    return cls(directory)
+                return SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(
+                    execution.native_package, str(Path(selected).absolute()),
+                ))
             # Original wire→bus→registry→store→journal order spans exclusive file
             # creation, fsync and enrollment. No historical-file coverage inference.
             with (
