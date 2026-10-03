@@ -1,5 +1,5 @@
 {
-  "head": "48324afc4d7415afb347cbc1f5f52cfc6820ac73",
+  "head": "5639e72692539d1391628d44050ed49c75d15f55",
   "roots": [
     {
       "root": "src/agent_comms",
@@ -146,115 +146,139 @@
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 17,
+      "line": 16,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 18,
       "kind": "import",
       "expression": "from .owner_compaction_prepare import NativeWitness"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 28,
+      "line": 29,
       "kind": "ClassDef",
       "expression": "@dataclass(frozen=True)"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 157,
+      "line": 159,
       "kind": "ClassDef",
       "expression": "@dataclass(frozen=True)"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 87,
+      "line": 89,
       "kind": "FunctionDef",
       "expression": "@contextmanager"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 166,
+      "line": 168,
       "kind": "FunctionDef",
       "expression": "def capture(self, pending_input_keys: tuple[str, ...], settings_paths: tuple[str, ...] | None) -> CompactionSource:"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 159,
+      "line": 33,
+      "kind": "Name",
+      "expression": "native_reader"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 161,
       "kind": "Name",
       "expression": "CompactionBoundary"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 160,
+      "line": 162,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 164,
+      "line": 166,
       "kind": "Name",
       "expression": "native_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 95,
+      "line": 33,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 97,
       "kind": "Name",
       "expression": "HeldCompaction"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 184,
+      "line": 186,
       "kind": "Attribute",
       "expression": "self.native_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 91,
+      "line": 93,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 102,
+      "line": 104,
       "kind": "Name",
       "expression": "native_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 182,
+      "line": 184,
       "kind": "Attribute",
       "expression": "owner.retained_task_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 66,
+      "line": 68,
       "kind": "Attribute",
       "expression": "RetainedSegment.capture"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 69,
+      "line": 71,
       "kind": "Attribute",
       "expression": "inputs.retained_task_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 102,
+      "line": 104,
       "kind": "Attribute",
       "expression": "witness.retained_task_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 113,
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "self.native_reader"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 115,
       "kind": "Name",
       "expression": "HeldCompaction"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 116,
+      "line": 118,
       "kind": "Name",
       "expression": "native_facts"
     },
     {
       "path": "src/agent_comms/compaction_boundary.py",
-      "line": 70,
+      "line": 72,
       "kind": "Attribute",
       "expression": "owner.retained_task_facts"
     },
@@ -1064,267 +1088,321 @@
     },
     {
       "path": "src/agent_comms/owner_compaction_adaptive.py",
-      "line": 17,
+      "line": 16,
       "kind": "import",
       "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/owner_compaction_adaptive.py",
-      "line": 78,
+      "line": 47,
+      "kind": "Attribute",
+      "expression": "RegistryOwner.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 77,
       "kind": "Attribute",
       "expression": "SelectedAdmissionSource.capture"
     },
     {
       "path": "src/agent_comms/owner_compaction_adaptive.py",
-      "line": 48,
-      "kind": "Attribute",
-      "expression": "RegistryOwner.capture"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_adaptive.py",
-      "line": 72,
+      "line": 70,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/owner_compaction_adaptive.py",
-      "line": 82,
+      "line": 81,
       "kind": "Attribute",
       "expression": "bridge.compact_selected"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 18,
+      "line": 19,
       "kind": "import",
       "expression": "from .compaction_boundary import CompactionBoundary"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 27,
+      "line": 29,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 30,
       "kind": "import",
       "expression": "from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 40,
+      "line": 43,
       "kind": "ClassDef",
       "expression": "class OwnerCompactionCommit:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 49,
+      "line": 76,
       "kind": "AsyncFunctionDef",
       "expression": "async def compact_selected(self, owner: Thread, owner_generation: int, persistent: PersistentPiSession, source: SelectedSource, selected: SelectedModel, settings: PiCompactionDecision, *, purpose: type[CompactionReason]=ThresholdCompactionReason, instructions: str | None=None, pending_input_keys: tuple[str, ...]=(), on_admission: Callable[[SelectedSummaryAdmission], None] | None=None, on_event: Callable[[AgentEvent], Awaitable[None]] | None=None, reason: str='adaptive') -> CompactionResult:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 119,
+      "line": 148,
       "kind": "FunctionDef",
       "expression": "def capture_source(self, owner: Thread, owner_generation: int, witness: NativeWitness, *, pending_input_keys: tuple[str, ...]=(), settings_paths: tuple[str, ...] | None=None) -> CompactionSource:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 140,
+      "line": 169,
       "kind": "FunctionDef",
       "expression": "def prepare_source(self, owner: Thread, owner_generation: int, *, prepared: NativePreparation, settings: PiCompactionSettings, context_window: int, pending_input_keys: tuple[str, ...]=(), settings_paths: tuple[str, ...] | None=None) -> tuple[NativePreparation, CompactionSource]:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 177,
+      "line": 206,
       "kind": "FunctionDef",
       "expression": "def require_source_current(self, owner: Thread, owner_generation: int, source: CompactionSource) -> None:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 186,
+      "line": 215,
       "kind": "FunctionDef",
       "expression": "def reconcile_interrupted_summaries(self, owner: Thread, owner_generation: int, witness: NativeWitness) -> None:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 204,
+      "line": 233,
       "kind": "FunctionDef",
       "expression": "def settle_selected_refusal(self, owner: Thread, owner_generation: int, source: CompactionSource, declined: SummaryDeclinedData) -> None:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 332,
+      "line": 361,
       "kind": "FunctionDef",
       "expression": "def reconcile(self, owner: Thread, owner_generation: int, commit_id: str, *, timeout: float=5) -> CompactionOperation:"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 46,
+      "line": 61,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 51,
       "kind": "Name",
       "expression": "CompactionBoundary"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 123,
+      "line": 152,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 158,
+      "line": 187,
       "kind": "Attribute",
       "expression": "self.reconcile_interrupted_summaries"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 159,
+      "line": 188,
       "kind": "Attribute",
       "expression": "self.capture_source"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 174,
+      "line": 203,
       "kind": "Attribute",
       "expression": "self.require_source_current"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 187,
+      "line": 216,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 242,
+      "line": 271,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 133,
+      "line": 46,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "native_reader"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 162,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 138,
+      "line": 167,
       "kind": "Attribute",
       "expression": "held.capture"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 179,
+      "line": 208,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 194,
+      "line": 223,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 213,
+      "line": 242,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 255,
+      "line": 284,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 293,
+      "line": 322,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 317,
+      "line": 346,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 340,
+      "line": 369,
       "kind": "Attribute",
       "expression": "self.boundary.hold"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 108,
+      "line": 69,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 135,
       "kind": "Attribute",
       "expression": "self.settle_selected_refusal"
     },
     {
       "path": "src/agent_comms/owner_compaction_commit.py",
-      "line": 169,
+      "line": 198,
       "kind": "Name",
       "expression": "prepare_native_source"
     },
     {
       "path": "src/agent_comms/owner_compaction_manual.py",
-      "line": 18,
+      "line": 17,
       "kind": "import",
       "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/owner_compaction_manual.py",
-      "line": 36,
+      "line": 35,
       "kind": "FunctionDef",
       "expression": "def admit_original(self, bridge, owner, owner_generation, operation, source):"
     },
     {
       "path": "src/agent_comms/owner_compaction_manual.py",
-      "line": 54,
+      "line": 53,
       "kind": "Attribute",
       "expression": "RegistryOwner.capture"
     },
     {
       "path": "src/agent_comms/owner_compaction_manual.py",
-      "line": 64,
+      "line": 62,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/owner_compaction_manual.py",
-      "line": 79,
+      "line": 78,
       "kind": "Attribute",
       "expression": "bridge.compact_selected"
     },
     {
       "path": "src/agent_comms/owner_compaction_prepare.py",
-      "line": 37,
+      "line": 38,
       "kind": "ClassDef",
       "expression": "@dataclass(frozen=True)"
     },
     {
       "path": "src/agent_comms/owner_compaction_prepare.py",
-      "line": 144,
+      "line": 145,
       "kind": "FunctionDef",
       "expression": "def prepare_native_source(package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int, retained_text: str='') -> NativePreparationResult:"
     },
     {
       "path": "src/agent_comms/owner_compaction_prepare.py",
-      "line": 54,
-      "kind": "FunctionDef",
-      "expression": "def retained_task_facts(self):"
+      "line": 30,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
     },
     {
       "path": "src/agent_comms/owner_compaction_prepare.py",
-      "line": 102,
+      "line": 55,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, reader: NativeEvidenceRead | None=None):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 56,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 103,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "src/agent_comms/owner_compaction_prepare.py",
-      "line": 57,
-      "kind": "Attribute",
-      "expression": "NativeEntry.open_evidence"
+      "line": 55,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
     },
     {
       "path": "src/agent_comms/owner_compaction_prepare.py",
       "line": 58,
       "kind": "Attribute",
+      "expression": "NativeEvidenceRead.borrow"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 59,
+      "kind": "Attribute",
       "expression": "evidence.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 58,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
     },
     {
       "path": "src/agent_comms/owner_compaction_provider.py",
@@ -1346,87 +1424,87 @@
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 18,
+      "line": 20,
       "kind": "import",
       "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 19,
+      "line": 21,
       "kind": "import",
       "expression": "from .owner_compaction_prepare import NativePreparation, prepare_native_source"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 154,
+      "line": 160,
       "kind": "AsyncFunctionDef",
       "expression": "async def _commit_native_summary(bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, persistent: PersistentPiSession, prepared: NativePreparation, source: CompactionSource, result: NativeSummary) -> CompactionOperation:"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 36,
-      "kind": "FunctionDef",
-      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission:"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 73,
-      "kind": "FunctionDef",
-      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission:"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 87,
-      "kind": "Name",
-      "expression": "OwnerCompactionCommit"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 155,
-      "kind": "Name",
-      "expression": "OwnerCompactionCommit"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_runtime.py",
       "line": 38,
-      "kind": "Name",
-      "expression": "OwnerCompactionCommit"
+      "kind": "FunctionDef",
+      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission:"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
       "line": 75,
+      "kind": "FunctionDef",
+      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 89,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 108,
+      "line": 161,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 40,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 110,
       "kind": "Name",
       "expression": "prepare_native_source"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 117,
+      "line": 119,
       "kind": "Attribute",
       "expression": "bridge.prepare_source"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 140,
-      "kind": "Attribute",
-      "expression": "result.admit_original"
-    },
-    {
-      "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 131,
+      "line": 134,
       "kind": "Attribute",
       "expression": "bridge.require_source_current"
     },
     {
       "path": "src/agent_comms/owner_compaction_runtime.py",
-      "line": 135,
+      "line": 139,
       "kind": "Name",
       "expression": "_commit_native_summary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 145,
+      "kind": "Attribute",
+      "expression": "result.admit_original"
     },
     {
       "path": "src/agent_comms/owner_launch.py",
@@ -1844,15 +1922,15 @@
     },
     {
       "path": "src/agent_comms/selected_session.py",
-      "line": 226,
-      "kind": "Attribute",
-      "expression": "bridge.compact_selected"
+      "line": 218,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
     },
     {
       "path": "src/agent_comms/selected_session.py",
-      "line": 219,
-      "kind": "Name",
-      "expression": "OwnerCompactionCommit"
+      "line": 226,
+      "kind": "Attribute",
+      "expression": "bridge.compact_selected"
     },
     {
       "path": "src/agent_comms/selected_source.py",
@@ -3692,219 +3770,255 @@
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 31,
+      "line": 33,
       "kind": "import",
       "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 32,
+      "line": 34,
       "kind": "import",
       "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 64,
+      "line": 68,
       "kind": "Name",
       "expression": "NativeWitness"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 79,
+      "line": 83,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 81,
+      "line": 85,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 120,
+      "line": 115,
+      "kind": "Attribute",
+      "expression": "bridge.boundary.native_reader"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 162,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 178,
+      "line": 220,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 219,
+      "line": 261,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 262,
+      "line": 304,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 299,
+      "line": 341,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 438,
+      "line": 480,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 463,
+      "line": 505,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 701,
+      "line": 743,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 129,
+      "line": 171,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 179,
+      "line": 221,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 240,
+      "line": 282,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 276,
+      "line": 318,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 308,
+      "line": 350,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 381,
+      "line": 423,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 415,
+      "line": 457,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 437,
+      "line": 479,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 442,
+      "line": 484,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 487,
+      "line": 529,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 503,
+      "line": 545,
       "kind": "Attribute",
       "expression": "bridge.capture_source"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 890,
+      "line": 932,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 1071,
+      "line": 1113,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 70,
+      "line": 74,
       "kind": "Attribute",
       "expression": "ProcessIdentity.capture"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 475,
+      "line": 97,
       "kind": "Name",
       "expression": "OwnerCompactionCommit"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 255,
+      "line": 517,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 101,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 113,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 297,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 291,
+      "line": 333,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 346,
+      "line": 388,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 556,
+      "line": 598,
       "kind": "Attribute",
       "expression": "bridge.boundary.hold"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 745,
+      "line": 787,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 762,
+      "line": 804,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 816,
+      "line": 858,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
     },
     {
       "path": "tests/test_owner_compaction_commit.py",
-      "line": 822,
+      "line": 864,
       "kind": "Attribute",
       "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
     },
     {
       "path": "tests/test_owner_compaction_gate.py",
