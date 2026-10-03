@@ -101,12 +101,12 @@ async def main(args):
         receipt['native_process'] = FieldCodec.encode(child.identity)
         receipt['prepared_child_alive'] = child.alive()
         if args.reuse_preparation:
-            original = owner.turns.persistent_backends[name].custody.idle().child
+            original_child = owner.turns.persistent_backends[name].custody.idle().child
             reuse_begin_ns = time.monotonic_ns()
             await owner.turns.prepare_selected_session(name, thread)
             reuse_end_ns = time.monotonic_ns()
             retained = owner.turns.persistent_backends[name].custody.idle().child
-            if retained is not original or not child.alive():
+            if retained is not original_child or not child.alive():
                 raise AssertionError('Unchanged preparation replaced original acquired child')
             receipt['launch_preparation'] = {
                 'cold_begin_ns': preparation_begin_ns, 'cold_end_ns': preparation_end_ns,

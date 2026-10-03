@@ -528,7 +528,10 @@ class NativePiRpcLaunch:
         cli = package / "dist" / "cli.js"
         return cls._build(cli, arguments, cwd, env, session, package, RestartEnvironment.inherit(env))
 
-    def retained_managed(self, command, arguments, *, worktree, environment, session_file):
+    def retained_managed(
+        self, command: str, arguments: tuple[str, ...], *, worktree: Path,
+        environment: dict[str, str] | None, session_file: str | None,
+    ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
         Only original child custody may consume it after comparing the complete

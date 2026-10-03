@@ -23,6 +23,7 @@ import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, AsyncExitStack, aclosing, contextmanager, nullcontext
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -49,6 +50,7 @@ from .native_custody import (
     RetainedNative,
 )
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .coordinator import Coordination
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
@@ -216,22 +218,20 @@ async def stream_agent_events(
     try:
         async with persistent_session.lock if persistent_session is not None else nullcontext():
             try:
-                launch = await asyncio.to_thread(
+                launch = await Coordination.run_worker(partial(
                     (persistent_session.custody if persistent_session is not None else EmptyNative()).managed_launch,
                     agent_bin,
                     tuple(agent_args),
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,
-                )
+                ))
             except (OSError, ValueError, NativePiUnavailable) as error:
                 yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
                 return
             from .session_fence import session_writer_fence
 
-            async with (
-                session_writer_fence(launch.session.session_file),
-            ):
+            async with session_writer_fence(launch.session.session_file):
                 try:
                     async with aclosing(
                         TurnSession(
