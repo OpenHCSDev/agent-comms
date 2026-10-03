@@ -29,6 +29,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_compaction_writer import CompactionTransportUnknownError
+from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.private_path import FileRevision
@@ -119,7 +120,7 @@ async def test_acquired_native_source_survives_commit_and_refuses_rewritten_pref
         fresh_stat = replace(committed, native=replace(
             committed.native, revision=FileRevision.from_stat(session.stat())
         ))
-        with pytest.raises(ValueError, match="original prefix changed"):
+        with pytest.raises(NativePiUnavailable, match="original prefix changed"):
             await Coordination.run_worker(partial(
                 bridge.require_source_current, owner, generation, fresh_stat
             ))
