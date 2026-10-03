@@ -70,8 +70,8 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 
     def captured(name):
         current = comms.registry.require(name)
-        with comms.bus.log.locked():
-            facts = comms.bus.log.retained_task_facts_unlocked(current.incarnation)
+        with comms.bus.log.certified_read() as source:
+            facts = tuple(source.retained_task_facts(current.incarnation))
         return RetainedTaskFacts(facts).for_owner(current, comms.registry.snapshot())
 
     retained = captured(owner.name)
@@ -141,8 +141,8 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
                                             change=CorrectionTaskChange(pin.reference))
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
-    with comms.bus.log.locked():
-        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
+    with comms.bus.log.certified_read() as source:
+        facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts)
     current_owner = comms.registry.require(owner.name)
     assert retained.current_authored_sources(current_owner, comms.registry.snapshot()) == ()
@@ -186,8 +186,8 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         "text": "Keep UNKNOWN; preserve /artifacts/approved instead.", "to": "#team",
         "change": {"kind": "correction", "original": result["reference"]}})
     rows = comms.bus.log.full_history()
-    with comms.bus.log.locked():
-        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
+    with comms.bus.log.certified_read() as source:
+        facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (rows[1],)
     assert next(f.source for f in retained.facts if isinstance(f, CurrentConstraintTaskFact)) == rows[1]
@@ -200,8 +200,8 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     invoke_tool(comms, "comms_constraint", {
         "text": "A later peer cannot overwrite the human supersession.", "to": "#team",
         "change": {"kind": "correction", "original": corrected["reference"]}})
-    with comms.bus.log.locked():
-        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
+    with comms.bus.log.certified_read() as source:
+        facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (human,)
     retained.require_summary(retained.text + "\n\nOptional narrative")
@@ -235,10 +235,8 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
-    with comms.bus.log.locked():
-        facts = comms.bus.log.retained_task_facts_unlocked(
-            alpha.incarnation
-        )
+    with comms.bus.log.certified_read() as source:
+        facts = tuple(source.retained_task_facts(alpha.incarnation))
     retained = RetainedTaskFacts(facts)
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(
         row.reference for row in rows
@@ -299,9 +297,8 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
         "change": {"kind": "correction", "original": first["reference"]},
     })
     snapshot = comms.registry.snapshot()
-    with comms.bus.log.locked():
-        facts = comms.bus.log.retained_task_facts_unlocked(
-            renamed.incarnation)
+    with comms.bus.log.certified_read() as source:
+        facts = tuple(source.retained_task_facts(renamed.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
     rows = comms.bus.log.full_history()
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(row.reference for row in rows)
@@ -388,9 +385,8 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
         "change": {"kind": "correction", "original": first["reference"]},
     })
     snapshot = comms.registry.snapshot()
-    with comms.bus.log.locked():
-        facts = comms.bus.log.retained_task_facts_unlocked(
-            owner.incarnation)
+    with comms.bus.log.certified_read() as source:
+        facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
     assert len(retained.facts) == 3
     assert retained.current_authored_sources(owner, snapshot) == (corrected,)
