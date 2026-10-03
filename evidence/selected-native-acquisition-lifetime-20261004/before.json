@@ -1,0 +1,2561 @@
+{
+  "head": "db620680bf6f52133157209b2a7b557eaef988a1",
+  "method": "existing refactor-audit Package.load AST; lexical evidence, not dynamic resolution",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "parsed": 362,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "unparsed": []
+    }
+  ],
+  "boundary": "Python launch/evidence owners plus all tracked Python production/test/tool callers. Native verifier is unchanged; JS import/build authority belongs to Sch608. Dynamic callback targets require semantic reading.",
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 62,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 410,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 52,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 289,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 37,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 43,
+      "kind": "import",
+      "source": "from .native_pi import _private_session_dir, _trusted_package"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 64,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 210,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 16,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 34,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 36,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 87,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 33,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 68,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 15,
+      "kind": "import",
+      "source": "from .native_entries import NativeEntry, NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 33,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 39,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 20,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch, _private_session_dir, _trusted_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 31,
+      "kind": "ClassDef",
+      "name": "SelectedExecution",
+      "source": "class SelectedExecution:\n    root: Path\n    wire_root_id: str\n    owner_name: str\n    native_package: Path\n    opt_in: bool = True\n    after_seq: int = 0\n    session_file: Path | None = None\n    fresh_private_enrollment: bool = False\n    selected_thinking_level: str | None = None\n    selected_existing_file_write: SelectedExistingFileWrite | None = None\n    selected_tool_intent: SelectedToolIntent | None = None\n    write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePla"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 45,
+      "kind": "Name",
+      "name": "_native_launch",
+      "source": "_native_launch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 49,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 45,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 61,
+      "kind": "Attribute",
+      "name": "_native_launch",
+      "source": "self._native_launch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 62,
+      "kind": "Attribute",
+      "name": "_native_launch",
+      "source": "self._native_launch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 58,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 59,
+      "kind": "Attribute",
+      "name": "_native_launch",
+      "source": "self._native_launch"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 21,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 15,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 32,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 97,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 198,
+      "kind": "ClassDef",
+      "name": "NativeEvidenceRead",
+      "source": "class NativeEvidenceRead:\n    \"\"\"Decoded original entries live only inside the acquired file resource.\n\n    Every observation verifies all previously read bytes before decoding the\n    append. No context proof, disposition or owner authority is retained here.\n    \"\"\"\n\n    def __init__(self, source):\n        self.source = source\n        self.entries: tuple[NativeEntry, ...] = ()\n\n    def require_path(self, session_file):\n        from .native_pi import NativePiUnavailable\n\n        if self.source.p"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 362,
+      "kind": "ClassDef",
+      "name": "NativeInputEvidenceRead",
+      "source": "class NativeInputEvidenceRead(NativeEvidenceRead):\n    \"\"\"Verify every source byte; decode only the header and original input records.\n\n    The inherited descriptor, append and refusal lifetime is unchanged. This is\n    an acquired input-proof projection, not a history index or another store.\n    \"\"\"\n\n    def decode_rows(self, rows):\n        for index, row in enumerate(rows):\n            # The first physical record must remain the original session header.\n            entry = (NativeEntry.from_ev"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 125,
+      "kind": "FunctionDef",
+      "name": "open_input_evidence",
+      "source": "def open_input_evidence(cls, session_file):\n        with NativeInputEvidenceRead.open(session_file) as evidence:\n            yield evidence"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 362,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 404,
+      "kind": "Name",
+      "name": "NativeInputEvidenceRead",
+      "source": "NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 231,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 388,
+      "kind": "Name",
+      "name": "NativeInputEvidenceRead",
+      "source": "NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 120,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 126,
+      "kind": "Name",
+      "name": "NativeInputEvidenceRead",
+      "source": "NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 408,
+      "kind": "Name",
+      "name": "NativeInputEvidenceRead",
+      "source": "NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 33,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 35,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 28,
+      "kind": "import",
+      "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 394,
+      "kind": "ClassDef",
+      "name": "NativePiRpcLaunch",
+      "source": "class NativePiRpcLaunch:\n    \"\"\"Verified native Pi subprocess launch, not an authorization to send input.\"\"\"\n\n    argv: tuple[str, ...]\n    cwd: Path\n    env: dict[str, str]\n    session: SelectedSession\n    package: Path\n\n    configuration: RestartEnvironment = field(kw_only=True)\n\n    @classmethod\n    def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):\n        \"\"\"Encode the held launch configuration at the native process boundary.\"\"\"\n        try:\n           "
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 742,
+      "kind": "FunctionDef",
+      "name": "_trusted_package",
+      "source": "def _trusted_package(package: Path) -> Path:\n    package = package.absolute()  # lexical: resolve() would hide a symlink component\n    if \"..\" in package.parts:\n        raise NativePiUnavailable(\"Pinned native Pi package path is not lexical\")\n    if package.parts[-3:] != (\n        \"node_modules\",\n        \"@earendil-works\",\n        \"pi-coding-agent\",\n    ):\n        raise NativePiUnavailable(\"Canonical native Pi package layout is required\")\n    for ancestor in (package, *package.parents):\n        "
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 839,
+      "kind": "import",
+      "source": "from .native_entries import NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 318,
+      "kind": "import",
+      "source": "from .native_entries import NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 491,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 554,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 527,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 100,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 574,
+      "kind": "Name",
+      "name": "acquired_launch",
+      "source": "acquired_launch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 834,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 855,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 299,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 313,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 479,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 553,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 575,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 841,
+      "kind": "Name",
+      "name": "NativeInputEvidenceRead",
+      "source": "NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 861,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 320,
+      "kind": "Name",
+      "name": "NativeInputEvidenceRead",
+      "source": "NativeInputEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 577,
+      "kind": "Name",
+      "name": "acquired_launch",
+      "source": "acquired_launch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 579,
+      "kind": "Name",
+      "name": "acquired_launch",
+      "source": "acquired_launch"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 237,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 21,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 71,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 30,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 33,
+      "kind": "import",
+      "source": "from .native_pi import _private_session_dir, _trusted_package"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 96,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 59,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 29,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 30,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 48,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 63,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 72,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 30,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 56,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 55,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 58,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 293,
+      "kind": "import",
+      "source": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 298,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 38,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 142,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 129,
+      "kind": "Attribute",
+      "name": "open_input_evidence",
+      "source": "NativeEntry.open_input_evidence"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 34,
+      "kind": "import",
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 90,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 25,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 119,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 25,
+      "kind": "import",
+      "source": "from .native_pi import (\n    NativeContextProof,\n    NativePiPromptRejected,\n    NativePiRpcLaunch,\n    NativePiTerminalFailure,\n    NativePiUnavailable,\n    NativeTurnResult,\n    _verify_context,\n)"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 50,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 414,
+      "kind": "AsyncFunctionDef",
+      "name": "committed_input",
+      "source": "async def committed_input(self, event: pi.InputCommitted) -> None:\n        if event.input_id == self.command.input_id:\n            self.input_commit = self.input_commit.capture(event)\n            self.evidence = self.custody.enter_context(\n                NativeEntry.open_input_evidence(self.active_session_file)\n            )\n            await asyncio.to_thread(self.evidence.observe)"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 456,
+      "kind": "AsyncFunctionDef",
+      "name": "context_proof",
+      "source": "async def context_proof(self) -> NativeContextProof:\n        if not self.admission.acknowledged:\n            raise NativePiUnavailable(\"Native Pi did not commit a tracked model context\")\n        # The original event consumer serializes observations. Cancellation\n        # joins this read before the acquired evidence/custody can close.\n        return await Coordination.run_worker(partial(_verify_context,\n            self.active_session_file,\n            self.command.input_id,\n            self.nat"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 200,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 474,
+      "kind": "Attribute",
+      "name": "context_proof",
+      "source": "self.context_proof"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 418,
+      "kind": "Attribute",
+      "name": "open_input_evidence",
+      "source": "NativeEntry.open_input_evidence"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 491,
+      "kind": "Attribute",
+      "name": "context_proof",
+      "source": "self.context_proof"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 217,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 54,
+      "kind": "import",
+      "source": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 477,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 61,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 63,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 92,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 82,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 65,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 78,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 77,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 88,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 10,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 30,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 31,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 67,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 68,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 16,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 22,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 98,
+      "kind": "Attribute",
+      "name": "open_input_evidence",
+      "source": "NativeEntry.open_input_evidence"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 156,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 168,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 19,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 17,
+      "kind": "import",
+      "source": "from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 146,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 215,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 225,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 247,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 519,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 800,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 25,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "cohort_foreground._trusted_package"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 26,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "coordinated_runtime._trusted_package"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 56,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 810,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 64,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 842,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 19,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 34,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 53,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 14,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 31,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 41,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2061,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 324,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 351,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 456,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 487,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 548,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 683,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 818,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 841,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 887,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1227,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1248,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1324,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1801,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1881,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1922,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2002,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2027,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 366,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 402,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 606,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 645,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 719,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 966,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 986,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1024,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1051,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1086,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1124,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1154,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1162,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1201,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1275,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1298,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1351,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1370,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1397,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1448,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1527,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1555,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1598,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1644,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1782,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1816,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1820,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1905,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1939,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1972,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1992,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2107,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2123,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 783,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1438,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1517,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1695,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1712,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1744,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 16,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiUnavailable, _read_private_file, _trusted_package"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 183,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 257,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 23,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 134,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 154,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 62,
+      "kind": "Attribute",
+      "name": "NativePiRpcLaunch",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 73,
+      "kind": "Attribute",
+      "name": "NativePiRpcLaunch",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 76,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 21,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 75,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 13,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 167,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 13,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 32,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 489,
+      "kind": "import",
+      "source": "from agent_comms.native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 56,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 248,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 511,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 104,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 326,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 427,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 91,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 503,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 515,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 526,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 527,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 549,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 550,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 10,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 124,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 105,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 35,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "runtime._trusted_package"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 68,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 13,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 48,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 120,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 46,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 70,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 7,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 22,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 31,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 34,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 41,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 62,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 12,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 23,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import (\n    CAPABILITY,\n    NativeContextProof,\n    NativePiPromptRejected,\n    NativePiRpcLaunch,\n    NativePiTerminalFailure,\n    NativePiUnavailable,\n    _trusted_package,\n)"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 881,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1156,
+      "kind": "Name",
+      "name": "committed_input",
+      "source": "committed_input"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 268,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 274,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 331,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 532,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 801,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1226,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 233,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 521,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "native._trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 524,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "native._trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 802,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 820,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1160,
+      "kind": "Name",
+      "name": "committed_input",
+      "source": "committed_input"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1162,
+      "kind": "Name",
+      "name": "committed_input",
+      "source": "committed_input"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 28,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 243,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 292,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 303,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 332,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 432,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 458,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 511,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 530,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 545,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 568,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 121,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 150,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 325,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 380,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 411,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 598,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 623,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 647,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 668,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 716,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 737,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 772,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 792,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 21,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 151,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 258,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 397,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 594,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 283,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 90,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 100,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 120,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 129,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 153,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 178,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 43,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 79,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 128,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 163,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 181,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 199,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 247,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 295,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 145,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 37,
+      "kind": "Attribute",
+      "name": "_trusted_package",
+      "source": "runtime._trusted_package"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 142,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 300,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 50,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 277,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 318,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 251,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 511,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 18,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 98,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 86,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 100,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 132,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 154,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 121,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 19,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 21,
+      "kind": "import",
+      "source": "from agent_comms.native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 109,
+      "kind": "Attribute",
+      "name": "context_proof",
+      "source": "TrackedTurnSession.context_proof"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 108,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 146,
+      "kind": "Name",
+      "name": "NativeEvidenceRead",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 153,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 171,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 15,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 208,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 19,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 61,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 272,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 295,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 25,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 513,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 532,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1001,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1019,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 168,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 24,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 267,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 221,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 20,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "kind": "Name",
+      "name": "NativePiRpcLaunch",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 47,
+      "kind": "Attribute",
+      "name": "NativePiRpcLaunch",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 54,
+      "kind": "Attribute",
+      "name": "NativePiRpcLaunch",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 65,
+      "kind": "Attribute",
+      "name": "NativePiRpcLaunch",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 69,
+      "kind": "Attribute",
+      "name": "NativePiRpcLaunch",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 169,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 204,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 265,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 114,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 142,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 232,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 240,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 304,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 312,
+      "kind": "Attribute",
+      "name": "SelectedExecution",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 15,
+      "kind": "import",
+      "source": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 138,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 195,
+      "kind": "Name",
+      "name": "SelectedExecution",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 26,
+      "kind": "import",
+      "source": "from agent_comms.native_pi import _trusted_package"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 43,
+      "kind": "Name",
+      "name": "_trusted_package",
+      "source": "_trusted_package"
+    }
+  ]
+}
