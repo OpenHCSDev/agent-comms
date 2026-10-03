@@ -277,23 +277,28 @@ class BusPresentation:
         """Local display projection; underlying channel history remains target-owned."""
         if not is_channel_target(target):
             raise ValueError(f"{target!r} is not a channel target.")
-        with _store_lock(self._wire_lock_path, shared=True), DisplaySelection.reading(
-            self.registry, self.catalog, self.bus.reads, viewer
-        ) as basis:
-            scope = basis.scope(target)
-        # Identity capture does not grant custody over page preparation. Both
-        # DM and channel pages use the original bounded reader and log cut.
-        page = MessagePageRequest.capture(
-            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-        ).read(self.bus.log)
-        if viewer is not None:
-            scope = replace(
-                scope,
-                displayed=self.bus.reads.capture(
-                    viewer, page.messages, basis.registry, self.bus.log.path
-                ),
-            )
-        return replace(page, display_scope=scope)
+        with ExitStack() as resources:
+            with _store_lock(self._wire_lock_path, shared=True):
+                marker, _, source, stream, records = resources.enter_context(
+                    self.bus.log.page_snapshot()
+                )
+                with DisplaySelection.reading(
+                    self.registry, self.catalog, self.bus.reads, viewer
+                ) as basis:
+                    scope = basis.scope(target)
+            # Identity capture does not grant custody over page preparation. Both
+            # DM and channel pages borrow the same original reader and source cut.
+            page = MessagePageRequest.capture(
+                scope, before=before, after=after, limit=limit, max_bytes=max_bytes
+            ).read_opened(self.bus.log, marker, source, stream, records)
+            if viewer is not None:
+                scope = replace(
+                    scope,
+                    displayed=self.bus.reads.capture(
+                        viewer, page.messages, basis.registry, self.bus.log.path
+                    ),
+                )
+            return replace(page, display_scope=scope)
 
     def mark_channel_read(
         self,

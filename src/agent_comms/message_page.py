@@ -10,7 +10,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .bus_page_index import BusPageIndex, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope
 
@@ -79,10 +79,10 @@ class PageTraversal(ABC):
     def for_source(self, current: bool) -> PageTraversal: ...
 
     @abstractmethod
-    def offsets(self, index: BusPageIndex, targets): ...
+    def offsets(self, index: BusPageIndex, targets, boundary): ...
 
     @abstractmethod
-    def opposite_offsets(self, index: BusPageIndex, targets): ...
+    def opposite_offsets(self, index: BusPageIndex, targets, boundary): ...
 
     @abstractmethod
     def append(self, window: PageWindow, message: Message, size: int) -> None: ...
@@ -104,14 +104,17 @@ class OlderTraversal(PageTraversal):
     def for_source(self, current):
         return self if current else OlderTraversal()
 
-    def offsets(self, index, targets):
-        return index.offsets(lower=None, upper=self.cursor, descending=True, targets=targets)
+    def offsets(self, index, targets, boundary):
+        return index.offsets(lower=None, upper=self.cursor, descending=True,
+                             targets=targets, before_offset=boundary)
 
-    def opposite_offsets(self, index, targets):
+    def opposite_offsets(self, index, targets, boundary):
         if self.cursor is None:
-            return index.offsets(lower=0, upper=0, descending=True, targets=targets)
+            return index.offsets(lower=0, upper=0, descending=True,
+                                 targets=targets, before_offset=boundary)
         return index.offsets(
-            lower=self.cursor - 1, upper=None, descending=True, targets=targets
+            lower=self.cursor - 1, upper=None, descending=True,
+            targets=targets, before_offset=boundary,
         )
 
     def append(self, window, message, size):
@@ -149,11 +152,13 @@ class NewerTraversal(PageTraversal):
     def for_source(self, current):
         return self if current else NewerTraversal(0)
 
-    def offsets(self, index, targets):
-        return index.offsets(lower=self.cursor, upper=None, descending=False, targets=targets)
+    def offsets(self, index, targets, boundary):
+        return index.offsets(lower=self.cursor, upper=None, descending=False,
+                             targets=targets, before_offset=boundary)
 
-    def opposite_offsets(self, index, targets):
-        return index.offsets(lower=None, upper=self.cursor + 1, descending=True, targets=targets)
+    def opposite_offsets(self, index, targets, boundary):
+        return index.offsets(lower=None, upper=self.cursor + 1, descending=True,
+                             targets=targets, before_offset=boundary)
 
     def append(self, window, message, size):
         window.rows.append((message, size))
@@ -224,39 +229,51 @@ class MessagePageRequest:
         return self.traversal.collect(self, records)
 
     def read(self, log) -> MessagePage:
-        with log.locked():
-            access = log.read_metadata_unlocked().access
-            try:
-                with access.open_page_index(log.path) as index:
-                    if access.prepare_page_index(index):
-                        return self.indexed(index, log)
-            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
-                # A disposable index cannot replace the durable wire authority.
-                pass
-        # A missing derived index does not grant a reader the writer's lock for
-        # a full scan. The canonical log owns the opened inode and byte bound.
-        with log._record_snapshot(need_sequence=False) as (_, records):
-            return self.collect(records)
+        with log.page_snapshot() as (marker, _, source, stream, records):
+            return self.read_opened(log, marker, source, stream, records)
 
-    def indexed(self, index, log) -> MessagePage:
+    def read_opened(self, log, marker, source, stream, records) -> MessagePage:
+        """Both readers consume the exact cut opened before scope capture."""
+        if stream is not None:
+            with log.locked():
+                access = marker.access
+                try:
+                    with access.open_page_index(log.path) as index:
+                        if access.prepare_page_index(index):
+                            # Pin original source coverage and offsets in one
+                            # SQLite read transaction; later rebuilds cannot mix.
+                            index.connection.execute("BEGIN")
+                            saved = BusPageSource.one(index.connection, singleton=1)
+                            if saved is not None and saved.covers(stream, source):
+                                return self.indexed(index, log, marker, source, stream)
+                except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
+                    # A disposable index cannot replace the original wire cut.
+                    pass
+            stream.seek(0)
+        # Full scans borrow that SAME cut after publication custody closes.
+        return self.collect(records)
+
+    def indexed(self, index, log, marker, source, stream) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)
-        marker = log._private_marker_unlocked()
         targets = self.scope.index_targets
         opposite = more = False
-        with log.path.open("rb") as stream:
-            with closing(self.traversal.opposite_offsets(index, targets)) as rows:
-                for row in rows:
-                    (message, _), = log._public_page_records(*index.record(stream, row), marker)
-                    if self.scope.includes(message):
-                        opposite = True
-                        break
-            with closing(self.traversal.offsets(index, targets)) as rows:
-                for row in rows:
-                    (message, size), = log._public_page_records(*index.record(stream, row), marker)
-                    if not self.scope.includes(message):
-                        continue
-                    if window.full_with(size):
-                        more = True
-                        break
-                    self.traversal.append(window, message, size)
+        with closing(self.traversal.opposite_offsets(index, targets, source.size)) as rows:
+            for row in rows:
+                (message, _), = log._public_page_records(
+                    *index.record(stream, row, max_bytes=source.size - row.offset), marker
+                )
+                if self.scope.includes(message):
+                    opposite = True
+                    break
+        with closing(self.traversal.offsets(index, targets, source.size)) as rows:
+            for row in rows:
+                (message, size), = log._public_page_records(
+                    *index.record(stream, row, max_bytes=source.size - row.offset), marker
+                )
+                if not self.scope.includes(message):
+                    continue
+                if window.full_with(size):
+                    more = True
+                    break
+                self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)

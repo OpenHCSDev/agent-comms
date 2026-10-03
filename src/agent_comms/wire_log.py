@@ -457,11 +457,11 @@ class WireLog:
             yield scan.read(raw)
 
     @contextmanager
-    def _record_snapshot(
-        self, *, need_sequence: bool = True
-    ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
-        """Public page accounting borrows the one original opened byte boundary."""
-        with self._opened_wire_snapshot(need_sequence=need_sequence) as (metadata, through, stream, boundary, _):
+    def page_snapshot(self, *, need_sequence: bool = False):
+        """Lend the original opened cut to indexed and sequential page readers."""
+        with self._opened_wire_snapshot(need_sequence=need_sequence) as (
+            metadata, through, stream, boundary, revision,
+        ):
             records = (
                 (
                     page_row
@@ -473,6 +473,16 @@ class WireLog:
                 if stream is not None
                 else iter(())
             )
+            yield metadata, through, revision, stream, records
+
+    @contextmanager
+    def _record_snapshot(
+        self, *, need_sequence: bool = True
+    ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
+        """Public page accounting borrows the one original opened byte boundary."""
+        with self.page_snapshot(need_sequence=need_sequence) as (
+            _, through, _, _, records,
+        ):
             yield through, records
 
     @contextmanager
