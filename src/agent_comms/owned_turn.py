@@ -153,15 +153,12 @@ class OwnedTurn:
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
-        self.registry_owner = self.runner.comms.agents.begin_turn(
-            self.thread_name, self.turn_id, self.task[:80], self.routing
-        )
         self.lease_custody = AsyncExitStack()
-        self.lease_custody.push_async_callback(
-            self.runner.settle_turn,
-            self.session_id, self.thread_name, self.turn_id, self.turn_lease,
-        )
         resources.push_async_callback(self.lease_custody.aclose)
+        self.registry_owner = self.runner.acquire_turn(
+            self.lease_custody, self.session_id, self.thread_name,
+            self.turn_id, self.task[:80], self.routing,
+        )
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with _store_lock(self.runner.comms._wire_lock_path):

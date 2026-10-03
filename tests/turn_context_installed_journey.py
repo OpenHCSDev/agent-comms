@@ -11,6 +11,66 @@ from pathlib import Path
 import agent_comms
 
 
+async def configured_terminal(owner, thread, output, receipt):
+    """One installed stdio ACP attachment on the existing configured SDK fork."""
+    from acp import spawn_agent_process
+    from acp.schema import TextContentBlock
+    from agent_comms.coordinator import Coordination
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    from agent_comms.threads import Thread
+    from explicit_private_owner_installed_journey import Subscriber
+
+    service = owner._comms
+    subscriber = Subscriber()
+    marker = '597_CONFIGURED_ORIGINAL_TERMINAL_ONCE'
+    text = ('Bounded acceptance only. Do not resume inherited tasks or goals, use tools, '
+            f'or change files. Reply exactly {marker}, then stop.')
+    started = time.monotonic()
+    async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
+        cwd=thread.worktree, env=dict(os.environ)) as (connection, process):
+        receipt['acp_pid'] = process.pid
+        await connection.initialize(protocol_version=1)
+        await connection.load_session(cwd=thread.worktree, session_id=thread.name, mcp_servers=[])
+        receipt['state'] = 'ONE_DISTINCT_CONFIGURED_ACP_PROMPT_NO_RETRY'
+        (output.parent / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        pending = asyncio.create_task(connection.prompt(thread.name,
+            [TextContentBlock(type='text', text=text)]))
+        async with asyncio.timeout(300):
+            while not service.registry.require(thread.name).executing:
+                if pending.done():
+                    await pending
+                    raise AssertionError('Original turn completed before waiter custody capture')
+                await asyncio.sleep(.02)
+            lease = service.registry.require(thread.name).turn_lease
+
+            def wait_on_original():
+                service.registry.declare(Thread('terminal-waiter', frozenset(), thread.worktree))
+                goal = service.goals.update_goal('terminal-waiter', SetGoalAction(text='Wait for the original configured turn'))
+                service.goals.update_goal('terminal-waiter', StandbyGoalAction(
+                    expect=GoalPrecondition(goal_id=goal.id), wait_for=(thread.name,)))
+                return goal.id
+
+            waiter_goal = await Coordination.run_worker(wait_on_original)
+            response = await pending
+        state = service.registry.require(thread.name).turn_state
+        assert not state.busy and state.finished_turn_id == lease.turn_id
+        assert service.goals.goal_wait('terminal-waiter') is None
+        assert service.registry.require('terminal-waiter').goal.state.active
+        assert response.stop_reason == 'end_turn'
+        assert any(marker in str(update) for update in subscriber.updates)
+        child = owner.turns.persistent_backends[thread.name].custody.idle().child
+        receipt.update(original_lease=FieldCodec.encode(lease), terminal_state=FieldCodec.encode(state),
+            original_waiter_goal=waiter_goal, waiter_released=True,
+            acp_response=response.model_dump(by_alias=True, exclude_none=True),
+            native_process=FieldCodec.encode(child.proc.identity),
+            prompt_through_return_seconds=time.monotonic() - started)
+        (output / 'original-acp-updates.json').write_text(json.dumps(subscriber.updates, indent=2))
+    assert process.returncode is not None
+    receipt['acp_exited'] = True
+    return marker, child
+
+
 async def run(root, receiving_only=False, authored_operations_only=False):
     from pytest import MonkeyPatch
     from test_backend_native_lifecycle import native_backend
@@ -101,7 +161,7 @@ async def run_configured(options):
             AGENT_COMMS_AGENT_BIN=str(runtime / 'pi-comms-native'),
             PATH=str(runtime) + os.pathsep + environment.get('PATH', os.defpath),
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
-            XDG_DATA_HOME=str(root / 'data'))
+            XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_DEBUG_LOG=str(root / 'owner-debug.log'))
         for name in ('PYTHONPATH', 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY',
             'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID'):
             environment.pop(name, None)
@@ -118,9 +178,31 @@ async def run_configured(options):
             thinking_level=source.thinking_level,
             task='Bounded acceptance only. Do not resume inherited work or use tools.')
         service.registry.declare(thread)
+        if options.terminal_only:
+            # The original stopped-source owner populates private participant
+            # membership before this controller acquires its own process.
+            service.threads.restore_stopped(service.registry.snapshot(), (thread.name,))
+            thread = service.owners.acquire_thread(thread.name, owner_pid=os.getpid())
         await owner._runtime.start()
         await owner.load_session(str(project), thread.name)
         assert thread.name not in owner.turns.persistent_backends
+
+        if options.terminal_only:
+            token, child = await configured_terminal(owner, thread, output, receipt)
+            stored = InputDispositions(service.root / InputDispositions.filename).read()
+            original, = stored.rows.values()
+            assert original.has_started
+            with NativeEntry.open_evidence(Path(identity.session_file)) as reader:
+                _, entries = reader.observe()
+            user, = (entry for entry in entries if entry.input_id == original.native_id)
+            replies = tuple(entry for entry in entries[entries.index(user) + 1:] if entry.final_reply)
+            assert replies[-1].message.authoritative_text.strip() == token
+            assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
+            receipt.update(state='SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS',
+                original_input=FieldCodec.encode(original), original_native_user=user.id,
+                original_native_reply=replies[-1].id, source_unchanged=True,
+                private_root=str(service.root), fork_file=identity.session_file)
+            return
 
         async def query(*arguments):
             child = await asyncio.create_subprocess_exec(sys.executable, '-m',
@@ -193,7 +275,7 @@ async def run_configured(options):
             receipt['original_dispositions'] = FieldCodec.encode(
                 InputDispositions(owner._comms.root / InputDispositions.filename).read())
             await owner.shutdown()
-            if options.context_only and 'child' in locals():
+            if (options.context_only or options.terminal_only) and 'child' in locals():
                 receipt['native_child_retired'] = child.proc.retired
                 receipt['native_child_exited'] = not child.proc.alive()
                 assert child.proc.retired and not child.proc.alive()
@@ -375,6 +457,7 @@ if __name__ == "__main__":
     parser.add_argument('--original-python', type=Path)
     parser.add_argument('--configured-source-name', default='nra-architecture')
     parser.add_argument('--context-only', action='store_true')
+    parser.add_argument('--terminal-only', action='store_true')
     parser.add_argument('--complete-goal-controls', action='store_true')
     parser.add_argument('--complete-history-controls', action='store_true')
     journey = parser.add_mutually_exclusive_group()
@@ -383,6 +466,8 @@ if __name__ == "__main__":
     options = parser.parse_args()
     if options.context_only and not options.configured_source_root:
         parser.error('Context-only requires the original configured saved source')
+    if options.terminal_only and (not options.configured_source_root or options.context_only):
+        parser.error('Terminal-only requires a distinct configured saved fork')
     if options.authored_operations_only and (options.configured_source_root or options.complete_goal_controls):
         parser.error('Authored operations use only the original private localhost fixture')
     if "site-packages" not in Path(agent_comms.__file__).parts:
