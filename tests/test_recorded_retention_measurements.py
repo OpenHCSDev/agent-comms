@@ -21,6 +21,7 @@ from agent_comms.native_entries import MessageEntry, NativeEntry
 from agent_comms.native_pi import NativeContextRecord
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
+from agent_comms.native_tools import ReadTool, WriteTool
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.request_progress import RequestProgress
@@ -133,7 +134,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         observation = question.executed_action(original)
         self.assertTrue(observation['evaluated'])
         self.assertTrue(observation['successful'])
-        self.assertEqual(observation['call']['arguments'], call.arguments)
+        self.assertIs(observation['call'], call)
         self.assertFalse(observation['proposal_alignment']['evaluated'])
         public = question.public()
         self.assertNotIn('action_source', public)
@@ -393,6 +394,55 @@ class RecordedMeasurementTests(unittest.TestCase):
                          ['declared_alternative']['evaluated'])
         with self.assertRaisesRegex(ValueError, 'contradicts'):
             replace(question, expected='replay-unknown').proposed_action('replay-unknown', original)
+
+    def test_frozen_invocation_binds_original_scoped_decision_and_tool_request(self):
+        # Prevent labels, another tool/path or failed execution from becoming
+        # successful intended action. Unknown prose permissions stay unknown.
+        comms = Comms(self.root / 'bound-actions')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = admit(comms, 'agent')
+        decision = Decision(chosen='inspect-source', rejected=('open-ticket',),
+            scope=owner.task_scope, source_turn=owner.turn_identity,
+            source_turn_id=TurnId(owner.active_turn.id))
+        message = comms.messaging.send_message(owner.name, '#team', decision.text, task=decision)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        cut = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('binding-scope.json', comms.registry.store.read()))
+        summary = manual_summary_record(self.session, incarnation=owner.incarnation, retained=retained)
+        attempt = SelectedSummaryAttempt('operation', str(self.session), summary.journal_json(), summary, ReservedSummary())
+        # These oracle arguments are authored independently of the request.
+        question = Question('action', 'Which action?', 'inspect-source', 'frozen-oracle',
+            measurement=Measurement.ACTION, decision_source=message.reference,
+            action_source=JournalProvenance(self.identity.session_file, ('request', 'result')),
+            expected_tool=ReadTool({'path': '/source'}))
+        original = {'scoped_facts': cut.scoped_facts(attempt)}
+        call = ToolCallContent(id='native-id', name='read', arguments={'path': '/source'})
+        request = MessageEntry(id='request', message=AssistantMessage(content=(call,), stop_reason='toolUse'))
+        result = MessageEntry(id='result', message=ToolResultMessage(
+            tool_call_id=call.id, tool_name=call.name, content=()))
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        original['tool_steps'] = probe.tool_steps((request, result))
+        report = question.proposed_action('inspect-source', original)
+        self.assertTrue(report['execution']['successful'])
+        self.assertTrue(report['execution']['proposal_alignment']['matches'])
+        self.assertEqual(report['execution']['proposal_alignment']['decision_source'], message.reference)
+        self.assertFalse(report['constraint_validity']['evaluated'])
+        self.assertNotIn('expected_tool', question.public())
+        self.assertEqual(FieldCodec.decode(Question, FieldCodec.encode(question)), question)
+        for other in (replace(call, name='write'), replace(call, arguments={'path': '/other'}),
+                      replace(call, arguments={'path': '/source', 'offset': 2})):
+            self.assertFalse(question.bind_execution(other, original)['matches'])
+        self.assertTrue(question.bind_execution(replace(call, id='another-native-id'), original)['matches'])
+        self.assertFalse(replace(question, expected_tool=None).bind_execution(call, original)['evaluated'])
+        self.assertFalse(replace(question, decision_source=None).bind_execution(call, original)['evaluated'])
+        failed = replace(result, message=replace(result.message, is_error=True))
+        original['tool_steps'] = probe.tool_steps((request, failed))
+        failure = question.executed_action(original)
+        self.assertFalse(failure['successful'])
+        self.assertTrue(failure['proposal_alignment']['matches'])
+        self.assertFalse(WriteTool({'path': '/source', 'content': 'x'}).matches_request(call))
+        with self.assertRaises(ValueError):
+            replace(question, measurement=Measurement.RECALL)
 
     def test_absent_evidence_is_not_zero_or_three_cuts(self):
         scenario = coding_scenario()
