@@ -285,7 +285,7 @@ class RecordedNativeProbe:
     sdk_segment_bytes: FileProvenance | None = None
     submitted_inputs: FileProvenance | None = None
     # Controls without a summary still need the SDK's original fork record.
-    fork_journal: Annotated[Path, PathText] | None = None
+    fork_journal: Annotated[Path | None, PathText] = None
     # Original diagnostic publication, not a reconstructed request or budget.
     request_observations: FileProvenance | None = None
 

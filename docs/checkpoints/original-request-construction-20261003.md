@@ -16,8 +16,9 @@ transport/callback observations. Provider adapters run payload hooks before
 final transformed-input admission. A hook's payload is therefore not proof of
 the admitted or dispatched body.
 
-The original observer presently captures SDK segments and route/prefix hashes.
-It does not retain the model capacity, final budget or final HTTP body.
+The original observer captures SDK segments and route/prefix hashes. This change
+adds original model capacity and budget observations. It does not retain the
+final HTTP body.
 Completion selection and captured registry configuration answer different
 questions. None supplies those missing historical request facts.
 
@@ -119,10 +120,63 @@ and driver import were corrected. No environment or package was created.
 
 [Native source sanity](../../evidence/original-request-construction-20261003/native-source-sanity.json)
 
-This remains draft, not installed or live-qualified. The next receiving step needs
-a matching native artifact through Sch's existing builder. The actual installed
-context→budget→diagnostic→scorer path must then be exercised once. No new paid
-comparative study or historical input replay is proposed.
+## Installed configured receiving closure
+
+Sch's matching compiled artifact is manifest
+`51bff517be67ae98213760beebd2c070591e5df61cb2c9ebbf87cacbf9f039ab`, tree
+`e74115621526343102e3f7074a1ddfda406c2db4d1fe94029030cdc09f47e68d`.
+It was merged normally at `701843fd`; native915 and the public installation were
+not modified. [Artifact source and build](../../evidence/original-request-construction573-native-20261003/artifact/README.md).
+
+One normal wheel was installed in this owner's released `.artifacts/s523-runtime`;
+all 311 installed Python sources equal the receiving checkout. There is no new
+environment or dependency installation. [Installed source equality](../../evidence/original-request-construction-20261003/installed-source-equality.json).
+
+The existing configured saved-agent journey borrowed the original 42,580,611-byte
+session and retained its Sol/HIGH configuration, auth and automatic extensions.
+One distinct isolated input returned the exact marker through ordinary ACP
+`end_turn`. Original SDK segments, the native context manifest, Started InputDoc
+and canonical request diagnostics were recorded. The original session/proof bytes
+are unchanged; native and observer children are closed. The receiving run took
+30.113 seconds, including artifact reading and cleanup; this is not a latency fix.
+
+Two raw driver failures remain intact. `installed01` failed before native launch
+because the in-process fixture declared registry owners without registering their
+coordination participants; its input is Not sent and it made no provider request.
+The shared fixture now calls the existing ParticipantStore registration used by
+OwnerLifecycle. `installed02` completed ACP/model processing and measurement, then
+failed serializing the probe's optional Path field. Its existing PathText annotation
+now encloses the nullable value, as the existing codec contract requires. The same
+original probe/artifacts were serialized and scored after that correction; there
+was no second provider input or input replay. The original failed receipt is not
+rewritten or represented as a successful whole-driver exit.
+
+The exact request ID links the original manifest to one budget observation:
+272,000 context window, 137,202 estimated input tokens and 134,798 available tokens.
+Requested/admitted output allowance is absent in this original record, not zero.
+Journal source membership is measured: 94 included entries out of 9,588 historical
+message entries. Complete-history coverage is false. This qualifies the installed
+context→budget→diagnostic→scorer relation, not full-history capacity, provider token
+counts, final HTTP bytes, action validity, model recall or an experimental condition.
+
+[Sanitized installed closure](../../evidence/original-request-construction-20261003/installed-configured-receipt.json).
+
+Receiving command (one configured input; not to be replayed):
+
+```sh
+PYTHONPATH=tests:tools/cutover .artifacts/s523-runtime/bin/python \
+  tests/three_cut_retention_configured_journey.py \
+  .artifacts/request-construction573-installed02 \
+  /home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent \
+  /home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/bin/python \
+  --request-construction
+```
+
+The compiled artifact introduces new native event/manifest metadata. Core decoders,
+owners and clients must receive the matching artifact together; an older strict
+decoder cannot consume the new fields. Existing historical observations lacking
+these optional facts remain unavailable. No SQL, source, proof or input format
+changed; no reset or historical reconstruction is required.
 
 Actual experimental source selection and full-history eligibility are still not
 supplied by labels, the admitted current-context estimate or journal membership.
