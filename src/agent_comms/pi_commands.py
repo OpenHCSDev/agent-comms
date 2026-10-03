@@ -21,7 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
-from .owner_compaction_prepare import NativeWitness
+from .owner_compaction_prepare import NativeWitness, PrepareCompactionHelper
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
     CompactionData,
@@ -267,11 +267,14 @@ class NativeQuery(PiCommand):
             channel.pending.discard(type(command), command.id)
             future.cancel()
 
-    async def exchange(self, channel: PiRpcChannel, writer: asyncio.StreamWriter) -> Response:
+    async def exchange(
+        self, channel: PiRpcChannel, writer: asyncio.StreamWriter, *,
+        strict: bool = False, max_bytes: int | None = None,
+    ) -> Response:
         from .pi_events import Response
         async with self.pending_response(channel,writer) as future:
             while not future.done():
-                event = await channel.receive()
+                event = await channel.receive(strict=strict, max_bytes=max_bytes)
                 if event is None:
                     raise EOFError("Pi RPC ended before the requested response")
                 if isinstance(event,Response):
@@ -435,9 +438,11 @@ class AgentCommsSummarizeCompaction(PiCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentCommsCompactionSettings(PiCommand):
+class AgentCommsCompactionSettings(NativeQuery):
     response_payload = CompactionSettingsData
     strict_response = True
+    observation_timeout_seconds: ClassVar[float] = 5
+    default_observation_timeout_seconds: ClassVar[float] = 3
     version: int = 2
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
@@ -450,6 +455,9 @@ class AgentCommsCompactionSettings(PiCommand):
 class AgentCommsPrepareCompaction(NativeQuery):
     response_payload = CompactionPreparationData
     strict_response = True
+    # Preparing the whole history retains the original preparation operation's
+    # budget. It is not the inexpensive selected-settings observation.
+    observation_timeout_seconds: ClassVar[float] = PrepareCompactionHelper.timeout_seconds
     version: int = 1
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
