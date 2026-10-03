@@ -1,0 +1,33 @@
+{
+  "declared_roots": [
+    "src/agent_comms/selected_claimed_write.mjs",
+    "src/agent_comms/channel_coding_tools.mjs",
+    "extensions/pi-project-sync/index.ts"
+  ],
+  "parser": "Existing Node bundled Acorn/acorn-walk",
+  "sites": [
+    {
+      "file": "src/agent_comms/selected_claimed_write.mjs",
+      "line": 37,
+      "kind": "Identifier",
+      "name": "createConnection",
+      "sha": "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1a845"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.mjs",
+      "line": 16,
+      "kind": "Identifier",
+      "name": "createConnection",
+      "sha": "ded899df0e911d7ef39245d9fe5e54d39b7f43570867638795237dde67e95fa2"
+    }
+  ],
+  "omissions": [
+    {
+      "file": "extensions/pi-project-sync/index.ts",
+      "sha": "1cceb41fe65f2d58d1f9838f9314e800906a0959173beee2a21892caf2e33d69",
+      "reason": "Unexpected token (6:12)",
+      "semantic_read": "TypeScript type-only imports/annotations are outside bundled Acorn. Read complete unchanged file: project() consumes env socket in node:net createConnection; no directory/filepath interpretation or allocator."
+    }
+  ],
+  "native_edits": 0
+}

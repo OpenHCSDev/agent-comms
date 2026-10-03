@@ -1,5 +1,5 @@
 {
-  "sha": "5c794843",
+  "sha": "8cafad042311fb5cb528825d35490dba85ac53dd",
   "roots": [
     "src",
     "tests",
@@ -149,33 +149,63 @@
     },
     {
       "file": "src/agent_comms/native_custody.py",
-      "line": 23,
+      "line": 17,
+      "kind": "ImportFrom",
+      "source": "from .private_path import PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 24,
       "kind": "ClassDef",
       "source": "@dataclass"
     },
     {
       "file": "src/agent_comms/native_custody.py",
-      "line": 150,
+      "line": 161,
       "kind": "Name",
       "source": "PiSessionChild"
     },
     {
       "file": "src/agent_comms/native_custody.py",
-      "line": 172,
+      "line": 183,
       "kind": "Name",
       "source": "PiSessionChild"
     },
     {
       "file": "src/agent_comms/native_custody.py",
-      "line": 201,
+      "line": 212,
       "kind": "Name",
       "source": "PiSessionChild"
     },
     {
       "file": "src/agent_comms/native_custody.py",
-      "line": 85,
+      "line": 96,
       "kind": "Name",
       "source": "PiSessionChild"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 42,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 45,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 42,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 42,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
     },
     {
       "file": "src/agent_comms/owned_turn.py",
@@ -185,9 +215,15 @@
     },
     {
       "file": "src/agent_comms/private_path.py",
-      "line": 92,
+      "line": 97,
       "kind": "ClassDef",
       "source": "class PrivateSocketRole(PrivateRole):"
+    },
+    {
+      "file": "src/agent_comms/private_path.py",
+      "line": 106,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
     },
     {
       "file": "src/agent_comms/private_send_admission.py",
@@ -197,15 +233,33 @@
     },
     {
       "file": "src/agent_comms/recovery_gateway.py",
-      "line": 188,
+      "line": 38,
+      "kind": "ImportFrom",
+      "source": "from .private_path import PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 189,
       "kind": "ClassDef",
       "source": "class RecoveryGateway:"
     },
     {
       "file": "src/agent_comms/recovery_gateway.py",
-      "line": 240,
+      "line": 241,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 239,
       "kind": "Attribute",
       "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 241,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
     },
     {
       "file": "src/agent_comms/recovery_gateway.py",
@@ -215,9 +269,45 @@
     },
     {
       "file": "src/agent_comms/recovery_gateway.py",
-      "line": 289,
+      "line": 241,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 242,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 290,
       "kind": "Attribute",
       "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 272,
+      "kind": "Name",
+      "source": "address"
     },
     {
       "file": "src/agent_comms/recovery_gateway_client.py",
@@ -227,63 +317,141 @@
     },
     {
       "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 110,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
       "line": 62,
       "kind": "Name",
       "source": "PrivateSocketRole"
     },
     {
       "file": "src/agent_comms/recovery_gateway_client.py",
-      "line": 111,
+      "line": 110,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 110,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 112,
       "kind": "Attribute",
       "source": "asyncio.open_unix_connection"
     },
     {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 112,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
       "file": "src/agent_comms/runtime.py",
-      "line": 32,
+      "line": 28,
+      "kind": "ImportFrom",
+      "source": "from .private_path import PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 31,
       "kind": "FunctionDef",
       "source": "def socket_path(root: Path, pid: int) -> Path:"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 149,
+      "line": 143,
       "kind": "ClassDef",
       "source": "class RuntimeServer:"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 283,
+      "line": 284,
       "kind": "ClassDef",
       "source": "class RuntimeConnection:"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 376,
+      "line": 378,
       "kind": "Name",
       "source": "RuntimeConnection"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 159,
+      "line": 153,
       "kind": "Name",
       "source": "socket_path"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 332,
+      "line": 169,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 333,
       "kind": "Name",
       "source": "socket_path"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 173,
+      "line": 169,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 170,
       "kind": "Attribute",
       "source": "asyncio.start_unix_server"
     },
     {
       "file": "src/agent_comms/runtime.py",
-      "line": 337,
+      "line": 338,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 169,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 171,
+      "kind": "Name",
+      "source": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 338,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 338,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 339,
       "kind": "Attribute",
       "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 339,
+      "kind": "Name",
+      "source": "address"
     },
     {
       "file": "src/agent_comms/runtime_requests.py",
@@ -323,31 +491,25 @@
     },
     {
       "file": "src/agent_comms/selected_tool_broker.py",
-      "line": 349,
+      "line": 39,
+      "kind": "ImportFrom",
+      "source": "from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 350,
       "kind": "ClassDef",
       "source": "class OwnerToolSocket(ABC, Generic[Call]):"
     },
     {
       "file": "src/agent_comms/selected_tool_broker.py",
-      "line": 496,
+      "line": 498,
       "kind": "ClassDef",
       "source": "class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):"
     },
     {
       "file": "src/agent_comms/selected_tool_broker.py",
-      "line": 90,
-      "kind": "Name",
-      "source": "OwnerToolSocket"
-    },
-    {
-      "file": "src/agent_comms/selected_tool_broker.py",
-      "line": 113,
-      "kind": "Name",
-      "source": "OwnerToolSocket"
-    },
-    {
-      "file": "src/agent_comms/selected_tool_broker.py",
-      "line": 496,
+      "line": 91,
       "kind": "Name",
       "source": "OwnerToolSocket"
     },
@@ -355,13 +517,49 @@
       "file": "src/agent_comms/selected_tool_broker.py",
       "line": 114,
       "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 498,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 115,
+      "kind": "Name",
       "source": "SelectedToolSocket"
     },
     {
       "file": "src/agent_comms/selected_tool_broker.py",
-      "line": 439,
+      "line": 440,
+      "kind": "Attribute",
+      "source": "self.address"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 440,
+      "kind": "Attribute",
+      "source": "PrivateSocketRole.address"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 441,
       "kind": "Attribute",
       "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 440,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 442,
+      "kind": "Attribute",
+      "source": "self.address"
     },
     {
       "file": "src/agent_comms/session_lifecycle.py",
@@ -404,6 +602,12 @@
       "line": 171,
       "kind": "Name",
       "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 300,
+      "kind": "Attribute",
+      "source": "self.tool_socket.address"
     },
     {
       "file": "src/agent_comms/transcript_updates.py",
@@ -935,87 +1139,51 @@
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 82,
+      "line": 71,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 122,
+      "line": 111,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 136,
+      "line": 125,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 168,
+      "line": 157,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 177,
+      "line": 166,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 195,
+      "line": 184,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 215,
+      "line": 204,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 233,
+      "line": 222,
       "kind": "Name",
       "source": "RecoveryGateway"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 247,
-      "kind": "Name",
-      "source": "RecoveryGateway"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 279,
-      "kind": "Name",
-      "source": "RecoveryGateway"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 296,
-      "kind": "Name",
-      "source": "RecoveryGateway"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 337,
-      "kind": "Name",
-      "source": "RecoveryGateway"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 382,
-      "kind": "Name",
-      "source": "RecoveryGateway"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 55,
-      "kind": "Attribute",
-      "source": "asyncio.open_unix_connection"
     },
     {
       "file": "tests/test_recovery_gateway.py",
@@ -1025,61 +1193,97 @@
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 244,
-      "kind": "Attribute",
-      "source": "socket.AF_UNIX"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 254,
-      "kind": "Attribute",
-      "source": "socket.AF_UNIX"
-    },
-    {
-      "file": "tests/test_recovery_gateway.py",
-      "line": 258,
+      "line": 268,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 323,
+      "line": 285,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 141,
+      "line": 326,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 361,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 377,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 44,
       "kind": "Attribute",
       "source": "asyncio.open_unix_connection"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 265,
+      "line": 225,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 373,
+      "line": 233,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 243,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 247,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 438,
+      "line": 312,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 363,
+      "line": 130,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 254,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway.py",
-      "line": 379,
+      "line": 433,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 352,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 374,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
@@ -1091,13 +1295,13 @@
     },
     {
       "file": "tests/test_recovery_gateway_client.py",
-      "line": 50,
+      "line": 46,
       "kind": "Name",
       "source": "RecoveryGateway"
     },
     {
       "file": "tests/test_recovery_gateway_client.py",
-      "line": 102,
+      "line": 98,
       "kind": "Attribute",
       "source": "asyncio.start_unix_server"
     },
@@ -1337,7 +1541,7 @@
     },
     {
       "file": "tests/test_selected_tool_broker.py",
-      "line": 327,
+      "line": 329,
       "kind": "Attribute",
       "source": "broker.SelectedToolSocket"
     },
@@ -1352,6 +1556,12 @@
       "line": 301,
       "kind": "Attribute",
       "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 354,
+      "kind": "Attribute",
+      "source": "socket.address"
     },
     {
       "file": "tests/test_stack_goal_cancel_resume.py",
