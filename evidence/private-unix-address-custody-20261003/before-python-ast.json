@@ -1,0 +1,1165 @@
+{
+  "sha": "5c7948436cf4aaa96ad3a233d10caa9ba05a6190",
+  "roots": [
+    "src",
+    "tests",
+    "tools"
+  ],
+  "modules": 726,
+  "omissions": [],
+  "lexical_dynamic_ambiguity": "AST reference evidence does not resolve dynamic methods or native environment consumers",
+  "sites": [
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 68,
+      "kind": "ImportFrom",
+      "source": "from .runtime import UNBOUND_CONTROLLER, RuntimeProxy, RuntimeServer, socket_path"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 127,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 149,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 29,
+      "kind": "ImportFrom",
+      "source": "from .selected_tool_broker import NativeToolMode, OwnerToolSocket, consume_selected_slot, record_selected_terminal, verify_sent_full_input"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 155,
+      "kind": "ClassDef",
+      "source": "class CodingToolSocket(OwnerToolSocket[CodingCall]):"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 148,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 155,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 149,
+      "kind": "Name",
+      "source": "CodingToolSocket"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 761,
+      "kind": "ImportFrom",
+      "source": "from .runtime import RuntimeConnection, socket_path"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 788,
+      "kind": "Name",
+      "source": "RuntimeConnection"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 788,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 34,
+      "kind": "ImportFrom",
+      "source": "from .runtime import RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 192,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 30,
+      "kind": "ImportFrom",
+      "source": "from .runtime import RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 60,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 47,
+      "kind": "ImportFrom",
+      "source": "from .runtime import UNBOUND_CONTROLLER, RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 68,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/private_path.py",
+      "line": 92,
+      "kind": "ClassDef",
+      "source": "class PrivateSocketRole(PrivateRole):"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 188,
+      "kind": "ClassDef",
+      "source": "class RecoveryGateway:"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 240,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 269,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 289,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .private_path import PrivateDirectoryRole, PrivateSocketRole, TrustedAncestorRole"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 62,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 111,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 32,
+      "kind": "FunctionDef",
+      "source": "def socket_path(root: Path, pid: int) -> Path:"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 149,
+      "kind": "ClassDef",
+      "source": "class RuntimeServer:"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 283,
+      "kind": "ClassDef",
+      "source": "class RuntimeConnection:"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 376,
+      "kind": "Name",
+      "source": "RuntimeConnection"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 159,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 332,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 173,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 337,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "source": "from .runtime import RuntimeServer, SocketClient"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 28,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 99,
+      "kind": "ImportFrom",
+      "source": "from .runtime import socket_path"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 64,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 102,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 349,
+      "kind": "ClassDef",
+      "source": "class OwnerToolSocket(ABC, Generic[Call]):"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 496,
+      "kind": "ClassDef",
+      "source": "class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 90,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 113,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 496,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 114,
+      "kind": "Name",
+      "source": "SelectedToolSocket"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 439,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 34,
+      "kind": "ImportFrom",
+      "source": "from .runtime import RuntimeProxy, RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 48,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 44,
+      "kind": "ImportFrom",
+      "source": "from .selected_tool_broker import NativeToolMode, OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 171,
+      "kind": "Name",
+      "source": "OwnerToolSocket"
+    },
+    {
+      "file": "src/agent_comms/transcript_updates.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "source": "from .runtime import RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/transcript_updates.py",
+      "line": 45,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 37,
+      "kind": "ImportFrom",
+      "source": "from .runtime import ACP_PERMISSION_TIMEOUT_SECONDS, RuntimeServer, SocketClient"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 98,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "tests/config_option_authority_installed_pilot.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/config_option_authority_installed_pilot.py",
+      "line": 30,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/config_option_authority_installed_pilot.py",
+      "line": 31,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/config_option_authority_installed_pilot.py",
+      "line": 27,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/explicit_private_owner_installed_journey.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/explicit_private_owner_installed_journey.py",
+      "line": 112,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/native_request_wait_installed_journey.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/native_request_wait_installed_journey.py",
+      "line": 127,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/native_request_wait_installed_journey.py",
+      "line": 127,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 892,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 893,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 889,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 51,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1203,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1157,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_acp_input_disposition.py",
+      "line": 24,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_acp_input_disposition.py",
+      "line": 144,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_channel_coding_tools.py",
+      "line": 10,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.channel_coding_tools import CodingCall, CodingToolSocket"
+    },
+    {
+      "file": "tests/test_channel_coding_tools.py",
+      "line": 90,
+      "kind": "Name",
+      "source": "CodingToolSocket"
+    },
+    {
+      "file": "tests/test_command_families.py",
+      "line": 17,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, RuntimeServer"
+    },
+    {
+      "file": "tests/test_command_families.py",
+      "line": 155,
+      "kind": "Name",
+      "source": "RuntimeServer"
+    },
+    {
+      "file": "tests/test_command_families.py",
+      "line": 170,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_coordination_nominal.py",
+      "line": 270,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_end_to_end.py",
+      "line": 80,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_end_to_end.py",
+      "line": 119,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_goal_failure_native.py",
+      "line": 31,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_goal_failure_native.py",
+      "line": 316,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_goal_ui_creation.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_goal_ui_creation.py",
+      "line": 40,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_image_inputs.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_image_inputs.py",
+      "line": 157,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_input_delivery_history.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_input_delivery_history.py",
+      "line": 104,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_l0_goal_input_closure.py",
+      "line": 28,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_l0_goal_input_closure.py",
+      "line": 180,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeConnection, socket_path"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 45,
+      "kind": "Name",
+      "source": "RuntimeConnection"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 46,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_native_only_execution.py",
+      "line": 148,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_native_only_execution.py",
+      "line": 189,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_native_project_observation.py",
+      "line": 32,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_native_tool_lifecycle.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.channel_coding_tools import CodingToolSocket"
+    },
+    {
+      "file": "tests/test_native_tool_lifecycle.py",
+      "line": 280,
+      "kind": "Name",
+      "source": "CodingToolSocket"
+    },
+    {
+      "file": "tests/test_native_tool_lifecycle.py",
+      "line": 36,
+      "kind": "Attribute",
+      "source": "broker.SelectedToolSocket"
+    },
+    {
+      "file": "tests/test_native_tool_lifecycle.py",
+      "line": 38,
+      "kind": "Name",
+      "source": "CodingToolSocket"
+    },
+    {
+      "file": "tests/test_native_tool_lifecycle.py",
+      "line": 261,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 17,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 35,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 161,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 225,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 238,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "line": 239,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_private_path.py",
+      "line": 9,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.private_path import FileIdentity, FileRevision, PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole, TrustedAncestorRole"
+    },
+    {
+      "file": "tests/test_private_path.py",
+      "line": 26,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "tests/test_private_path.py",
+      "line": 38,
+      "kind": "Name",
+      "source": "PrivateSocketRole"
+    },
+    {
+      "file": "tests/test_project.py",
+      "line": 168,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_project.py",
+      "line": 189,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 20,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.recovery_gateway import GatewayUnavailableError, RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 82,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 122,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 136,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 168,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 177,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 195,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 215,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 233,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 247,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 279,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 296,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 337,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 382,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 55,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 236,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 244,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 254,
+      "kind": "Attribute",
+      "source": "socket.AF_UNIX"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 258,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 323,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 141,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 265,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 373,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 438,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 363,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway.py",
+      "line": 379,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway_client.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.recovery_gateway import RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway_client.py",
+      "line": 50,
+      "kind": "Name",
+      "source": "RecoveryGateway"
+    },
+    {
+      "file": "tests/test_recovery_gateway_client.py",
+      "line": 102,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_restart.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_restart.py",
+      "line": 33,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_restart_queue.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_restart_queue.py",
+      "line": 146,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, present_session, socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 144,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 204,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 205,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 323,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 324,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 87,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 240,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 345,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 346,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 385,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 491,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 98,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_runtime.py",
+      "line": 265,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_runtime_attachment_lifetime.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_runtime_attachment_lifetime.py",
+      "line": 78,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_attachment_lifetime.py",
+      "line": 25,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_attachment_lifetime.py",
+      "line": 100,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_runtime_cold_attachment.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_runtime_cold_attachment.py",
+      "line": 92,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_edit.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_edit.py",
+      "line": 37,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_retry_running.py",
+      "line": 30,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_retry_running.py",
+      "line": 131,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_retry_running.py",
+      "line": 230,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_snapshot.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_runtime_goal_snapshot.py",
+      "line": 37,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_owned_session_admission.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_runtime_owned_session_admission.py",
+      "line": 35,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_owned_session_admission.py",
+      "line": 66,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_subscription_handshake.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_runtime_subscription_handshake.py",
+      "line": 40,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_runtime_subscription_handshake.py",
+      "line": 61,
+      "kind": "Attribute",
+      "source": "asyncio.start_unix_server"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 327,
+      "kind": "Attribute",
+      "source": "broker.SelectedToolSocket"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 250,
+      "kind": "Attribute",
+      "source": "broker.SelectedToolSocket"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 301,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tests/test_stack_goal_cancel_resume.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_stack_goal_cancel_resume.py",
+      "line": 151,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_stack_persistent_compaction.py",
+      "line": 28,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_stack_persistent_compaction.py",
+      "line": 258,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_stack_retry_running.py",
+      "line": 20,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "file": "tests/test_stack_retry_running.py",
+      "line": 172,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tests/test_start.py",
+      "line": 33,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tests/test_start.py",
+      "line": 49,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.runtime import socket_path"
+    },
+    {
+      "file": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 101,
+      "kind": "Attribute",
+      "source": "asyncio.open_unix_connection"
+    },
+    {
+      "file": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 101,
+      "kind": "Name",
+      "source": "socket_path"
+    },
+    {
+      "file": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 98,
+      "kind": "Name",
+      "source": "socket_path"
+    }
+  ]
+}
