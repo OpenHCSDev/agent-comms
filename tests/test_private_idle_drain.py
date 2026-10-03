@@ -3,7 +3,7 @@
 import asyncio
 import os
 import threading
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import AsyncExitStack
 from dataclasses import replace
 
 import pytest
@@ -118,12 +118,8 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
     comms, agent, _root_id = _session(tmp_path)
     execution = OwnedTurn(agent.turns, "beta", "beta", "publication custody", reply_targets=("#team",))
     async with AsyncExitStack() as resources:
-        with ExitStack() as permits:
-            assert execution.admit(permits)
-            execution.begin(resources)
-            execution.prepare_prompt()
-            execution.open_stream(resources, permits)
-            resources.enter_context(permits.pop_all())
+        async with AsyncExitStack() as permits:
+            assert await execution.acquire(resources, permits)
             progress = execution.progress
             # Only native events are supplied. Registry, original input,
             # wire notices, diagnostic and final checkpoint use real owners.

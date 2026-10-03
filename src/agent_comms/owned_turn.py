@@ -103,8 +103,6 @@ class OwnedTurn:
         self.original_display = (
             None if self.autonomous_goal else (self.initial_display_text or self.task)
         )
-        self.owner_task = asyncio.current_task()
-        assert self.owner_task is not None
         self.registry_owner = RegistryOwner.capture_local(
             self.runner.comms.registry.snapshot(), self.thread_name
         )
@@ -142,11 +140,9 @@ class OwnedTurn:
             permits.callback(
                 self.goal_permit.retire_unverified, self.runner.goals.goal_store
             )
-        self.runner.sessions.bindings[self.session_id] = self.thread_name
         return True
 
     def begin(self, resources: AsyncExitStack):
-        self.runner.emitted_errors.pop(self.session_id, None)
         self.turn_id = uuid4().hex
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
@@ -188,6 +184,8 @@ class OwnedTurn:
             self.thread,
             self.runner.inputs.dispositions,
         )
+        self.prepare_prompt()
+        self.reserve_input()
 
     def prepare_prompt(self):
         self.worktree = (
@@ -241,21 +239,8 @@ class OwnedTurn:
                 )
             )
 
-    def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
-        self.backend_inbox = self.runner.inputs.bind_native_turn(
-            self.session_id, self.thread, self.turn_lease.admission_generation, self.turn_id
-        )
-        resources.push_async_callback(
-            self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox
-        )
-        self.finish_event = asyncio.Event()
-        self.controller = (
-            self.runner.inputs.queued_inputs[self.session_id][self.accepted_input_id].controller
-            if self.accepted_input_id is not None
-            else self.runner.runtime.controller.get()
-        )
-        if self.controller is UNBOUND_CONTROLLER:
-            self.controller = None  # Autonomous/channel/goal turns have no controller.
+    def reserve_input(self):
+        """Acquire the original durable input before opening loop capabilities."""
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.thread.goal)
         elif active_goal := self.thread.active_goal:
@@ -289,6 +274,22 @@ class OwnedTurn:
             self.turn_lease.admission_generation,
         )
         self.original_keys = self.original.keys
+
+    def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
+        self.backend_inbox = self.runner.inputs.bind_native_turn(
+            self.session_id, self.thread, self.turn_lease.admission_generation, self.turn_id
+        )
+        resources.push_async_callback(
+            self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox
+        )
+        self.finish_event = asyncio.Event()
+        self.controller = (
+            self.runner.inputs.queued_inputs[self.session_id][self.accepted_input_id].controller
+            if self.accepted_input_id is not None
+            else self.runner.runtime.controller.get()
+        )
+        if self.controller is UNBOUND_CONTROLLER:
+            self.controller = None  # Autonomous/channel/goal turns have no controller.
         self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(
             self.original_keys
         )
@@ -319,23 +320,25 @@ class OwnedTurn:
         )
         permits.callback(self.finish_goals)
         resources.push_async_callback(self.close_changed_project)
-        self.lease_custody.callback(self.continue_changed_project)
+        self.lease_custody.push_async_callback(self.continue_changed_project)
 
     def finish_goals(self) -> None:
         self.progress.goals.finish(self.progress.result)
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)
-        if self.runner.comms.registry.require(name).worktree != self.thread.worktree:
+        current = await Coordination.run_worker(partial(self.runner.comms.registry.require, name))
+        if current.worktree != self.thread.worktree:
             if persistent := self.runner.persistent_backends.get(self.session_id):
                 await persistent.close_idle()
 
-    def continue_changed_project(self) -> None:
+    async def continue_changed_project(self) -> None:
         if self.progress.result is not None:
             name = self.runner.sessions.bindings[self.session_id]
+            current = await Coordination.run_worker(partial(self.runner.comms.registry.require, name))
             self.runner.inputs.continue_in_project(
                 self.session_id, self.progress.result, self.thread.worktree,
-                self.runner.comms.registry.require(name).worktree,
+                current.worktree,
             )
 
     async def prepare_native(self):
@@ -439,20 +442,36 @@ class OwnedTurn:
         ):
             await self.progress.consume(event)
 
+    async def acquire(self, resources: AsyncExitStack, permit_custody: AsyncExitStack) -> bool:
+        """Join source acquisition before exposing this turn's loop capabilities."""
+        self.owner_task = asyncio.current_task()
+        assert self.owner_task is not None
+        permits = ExitStack()
+        permit_custody.push_async_callback(Coordination.run_worker, permits.close)
+        if not await Coordination.run_worker(partial(self.admit, permits)):
+            return False
+        self.runner.sessions.bindings[self.session_id] = self.thread_name
+        self.runner.emitted_errors.pop(self.session_id, None)
+        await Coordination.run_worker(partial(self.begin, resources))
+        self.open_stream(resources, permits)
+        # Early failures close claims before inbox/lease retirement. Once all
+        # stream capabilities exist, goal settlement belongs above those resources.
+        resources.push_async_callback(permit_custody.pop_all().aclose)
+        resources.push_async_callback(backend.terminate_task_process, self.owner_task)
+        return True
+
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
-            with ExitStack() as permits:
-                if not self.admit(permits):
+            async with AsyncExitStack() as permit_custody:
+                if not await self.acquire(resources, permit_custody):
                     return
-                self.begin(resources)
-                self.prepare_prompt()
-                self.open_stream(resources, permits)
-                # Early failures close the local claim scope. Once every stream
-                # capability is acquired, transfer its callbacks above the inbox
-                # and lease, so goal settlement precedes their retirement.
-                resources.enter_context(permits.pop_all())
-                resources.push_async_callback(backend.terminate_task_process, self.owner_task)
                 await self.run_native()
+
+    def settle_unbound(self):
+        """Close the actual input batch and observe its result under one wire cut."""
+        with _store_lock(self.runner.comms._wire_lock_path):
+            self.runner.inputs.dispositions.settle_unbound(self.original_keys)
+            return self.runner.inputs.dispositions.read().shared_state(self.original_keys)
 
     async def run_native(self) -> None:
         try:
@@ -464,16 +483,13 @@ class OwnedTurn:
         except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await backend.terminate_task_process(self.owner_task)
-            with _store_lock(self.runner.comms._wire_lock_path):
-                self.runner.inputs.dispositions.settle_unbound(self.original_keys)
-                state = self.runner.inputs.dispositions.read().shared_state(self.original_keys)
+            state = await Coordination.run_worker(self.settle_unbound)
             await self.runner.effects._emit_event(
                 self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
             )
             raise
         except Exception as error:
-            with _store_lock(self.runner.comms._wire_lock_path):
-                self.runner.inputs.dispositions.settle_unbound(self.original_keys)
+            await Coordination.run_worker(self.settle_unbound)
             await self.progress.report_failure(error)
             failure = self.runner.emitted_errors.get(self.session_id)
             if failure is not None:

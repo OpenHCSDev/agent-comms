@@ -540,6 +540,12 @@ class InputDrain(FutureInputQueue):
         if continuation := terminal.project_continuation(current_project):
             self.pending_turns.setdefault(session_id, []).append(continuation)
 
+    def finish_original_inputs(self, session_id: str) -> None:
+        """The joined retirement owns the original notice and its wire cut."""
+        with _store_lock(self.comms._wire_lock_path):
+            original = self.original_sources.pop(session_id, None)
+            self.dispositions.settle_unbound(original.notice_keys if original else ())
+
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]
     ) -> None:
@@ -550,24 +556,28 @@ class InputDrain(FutureInputQueue):
             pending = inbox.get_nowait()
             if isinstance(pending, str):
                 self.pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
-        with _store_lock(self.comms._wire_lock_path):
-            original = self.original_sources.pop(session_id, None)
-            self.dispositions.settle_unbound(original.notice_keys if original else ())
-        self.following_sources.pop(session_id, None)
-        self.turn_input_keys.pop(session_id, None)
-        admission = self.selected_summary_admissions.pop(session_id, None)
-        if admission is not None:
-            admission.invalidate()
+        try:
+            await Coordination.run_worker(partial(self.finish_original_inputs, session_id))
+        finally:
+            # Cancellation joins the original notice write before retiring loop
+            # capabilities. No callback delivery is required to burn a grant or
+            # retain accepted queued input for the next distinct turn.
+            self.following_sources.pop(session_id, None)
+            self.turn_input_keys.pop(session_id, None)
+            admission = self.selected_summary_admissions.pop(session_id, None)
+            if admission is not None:
+                admission.invalidate()
+            remaining = self.queued_inputs.pop(session_id, {})
+            if remaining:
+                self.restored_inputs.setdefault(session_id, {}).update(
+                    {
+                        key: restored
+                        for key, item in remaining.items()
+                        if (restored := item.restore_after_turn()) is not None
+                    }
+                )
         await self.emit_input_delivery_changed(session_id)
-        remaining = self.queued_inputs.pop(session_id, {})
         if remaining:
-            self.restored_inputs.setdefault(session_id, {}).update(
-                {
-                    key: restored
-                    for key, item in remaining.items()
-                    if (restored := item.restore_after_turn()) is not None
-                }
-            )
             await self.emit_queue_state(session_id)
 
     async def run_owned_input(

@@ -22,3 +22,7 @@ Sch artifact, SessionContext or #598 private fixture edits. Before/after NRA AST
 and semantic reading precede production edits. Checks come after the complete
 source batch and address cancellation/resource custody; no unchanged provider
 wave. Changed actual-path qualification needs a released existing holder.
+
+Related retirement consumer: InputDrain.finish_turn_inputs for original owned and
+selected turns. Its original wire-locked notice settlement joins before loop
+capabilities retire; cancellation cannot skip queue/grant cleanup after the write.
