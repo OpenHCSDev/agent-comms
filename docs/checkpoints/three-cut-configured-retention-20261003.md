@@ -182,3 +182,37 @@ owns resource/lifecycle disposition, now with parent-authorized owned private
 resource teardown. The actual launcher is tool exec handle89747; no caller-held
 ParentedProcess object is available to fabricate. No DB edit, fd release or
 signal has been performed by this measurement worker.
+
+## Explicit retirement and distinct third-cut continuation
+
+Tristan selected Option2. Mendel retired the exact private original turn through
+AgentActivity.finish_turn and Registration/RegistryDocument CAS after native
+final, STARTED input/context and two-group teardown corroboration. The lease is
+idle; the original ACP outcome remains UNCONFIRMED and its InputDocument remains
+STARTED. No receipt, cursor, proof, journal, goal or wire publication was repaired.
+`option2-retirement.json` pins Mendel's exact receipt and field changes.
+
+RecordedNativeProbes now owns measurement continuation validation. It reads each
+original managed commit, STARTED binding, SDK request and answer ancestry, rejects
+unrecorded inputs/work, and returns the original enrolled fork. The configured
+resource delegates this work instead of assuming an empty input document and a
+compaction leaf. Normal registry idle/process/configuration checks and production
+admission still own the new turn. No new runtime type, lifecycle store or replay
+permission is introduced. The initial committed-cut continuation uses this same
+owner with an unprobed checkpoint.
+
+The two completed rounds are skipped entirely. Their originals are pinned in a
+new continuation measurement file; the old run and failed receipts remain intact.
+The last original RetainedTaskFacts lineage selects the beta correction being
+dropped in cut3, rather than selecting a message by body/time. Cut3 alone will
+publish the authorized drop, compact, and submit a distinct probe. Its receipt is
+separate from the original two failed/blocked run receipts.
+
+Main was integrated normally. Production bytes are identical to the existing
+Core563 receiving runtime (4c30bd2); original native de166 is borrowed unchanged.
+Read-only continuation validation corroborated both original STARTED inputs,
+completed cuts/answers and idle private owner. Three scorer controls passed in one
+final batch. Previous SDK objects/scopes remain readable, but their missing
+original serialized strings keep prompt-presence unavailable. No reconstructed
+bytes earn credit. Actual third-cut completion remains pending, and neither full
+S4 nor the 30-pair comparative study is claimed.

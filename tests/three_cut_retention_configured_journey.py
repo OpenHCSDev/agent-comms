@@ -8,6 +8,7 @@ later. No public input, original replay, policy activation or comparative study.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -22,6 +23,7 @@ from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.message_reference import MessageReference
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
 from agent_comms.turn_context import FileProvenance, NativeProvenance
@@ -70,7 +72,45 @@ def committed_checkpoint(stage):
     checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity, attempt.state.commit_id,
                                          FileProvenance(str(scope), digest(scope)), service.root / 'bus.jsonl')
     checkpoint.inspect()
-    return checkpoint
+    return RecordedNativeProbes({}, {'cut-1': checkpoint})
+
+
+def completed_continuation(stage):
+    """Read the two original answers without consuming their ACP outcome."""
+    from agent_comms.comms import Comms
+    service = Comms(stage / 'wire')
+    scenario = RecallScenario.read(stage / 'frozen-oracle.private.json')
+    recorded = FieldCodec.decode(RecordedNativeProbes,
+                                json.loads((stage / 'original-run.private.json').read_text()))
+    document = InputDispositions(service.root / InputDispositions.filename).read()
+    submitted = record(stage / 'continuation-original-inputs.private.json', document)
+    probes = {identity: replace(probe, submitted_inputs=submitted)
+              for identity, probe in recorded.rounds.items()}
+    session_file = service.registry.require('source529').require_saved_session()
+    with NativeEntry.open_evidence(Path(session_file)) as evidence:
+        header, _ = evidence.observe()
+        session = NativeSessionIdentity(header.id, session_file)
+        for round_ in scenario.rounds[:2]:
+            if round_.identity in probes:
+                continue
+            checkpoint = FieldCodec.decode(RecordedNativeCheckpoint,
+                json.loads((stage / f'{round_.identity}-checkpoint.private.json').read_text()))
+            row, = (row for row in document.rows.values() if row.source_text == round_.probe_text())
+            assert row.has_started
+            context = NativeContextProof.read_evidence(Path(session_file), row.native_id, evidence=evidence)
+            answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
+            sdk = stage / 'sdk-contexts' / f'context-{context.llm_context_digest}.json'
+            provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
+            manifest, = (manifest for manifest in service.bus.log.context_manifests('source529', service.registry)
+                if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
+            probes[round_.identity] = RecordedNativeProbe(session, row.native_id, answer.id, checkpoint,
+                FileProvenance(str(sdk), digest(sdk)),
+                record(stage / f'{round_.identity}-original-manifest.private.json', manifest),
+                submitted_inputs=submitted)
+    resumed = RecordedNativeProbes(probes)
+    resumed.observe(scenario.rounds)
+    record(stage / 'continuation-original-run.private.json', resumed)
+    return resumed
 
 
 async def run(stage, package, original_python, *, continuation=None):
@@ -125,8 +165,23 @@ async def run(stage, package, original_python, *, continuation=None):
                 with service.bus.log.certified_read() as source:
                     original, = source.references((reference,))
                     archive = original.message
-            probes = {}
+            probes = {} if continuation is None else dict(continuation.rounds)
+            if probes:
+                # The original retained fact owner resolves the correction; a
+                # current body/time lookup cannot select the dropped subject.
+                checkpoint = probes[scenario.rounds[len(probes)-1].identity].checkpoint
+                with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
+                    attempt, _, _ = checkpoint.capture(session, evidence)
+                snapshot = checkpoint.read_record(checkpoint.registry_scope, RegistryDocument).snapshot()
+                captured_owner = snapshot.require_active(attempt.request.source.incarnation.name)
+                _, archive = next((root, current) for root, current in
+                    attempt.request.retained.current_authored_lineages(captured_owner, snapshot)
+                    if root.reference == reference)
             for number, round_ in enumerate(scenario.rounds, 1):
+                if round_.identity in probes:
+                    receipt['completed_rounds'].append(round_.identity)
+                    print(f'{round_.identity}: recorded original answer; no summary or input replay', flush=True)
+                    continue
                 if number == 2:
                     archive = pin('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',
                                   change=CorrectionTaskChange(archive.reference))
@@ -135,8 +190,8 @@ async def run(stage, package, original_python, *, continuation=None):
                         'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',
                         worktree=owner.worktree, task=UserTaskDrop(CorrectionTaskChange(archive.reference)))
 
-                if continuation is not None and number == 1:
-                    checkpoint = continuation
+                if continuation is not None and round_.identity in continuation.checkpoints:
+                    checkpoint = continuation.checkpoints[round_.identity]
                     print(f'{round_.identity}: original committed cut, no summary replay', flush=True)
                 else:
                     scope = record(stage / f'{round_.identity}-registry.private.json', service.registry.store.read())
@@ -173,7 +228,8 @@ async def run(stage, package, original_python, *, continuation=None):
                     FileProvenance(str(contexts / f'segments-{context.llm_context_digest}.json'),
                                    digest(contexts / f'segments-{context.llm_context_digest}.json')),
                     record(stage / f'{round_.identity}-inputs.private.json', inputs.read()))
-                record(stage / 'original-run.private.json', RecordedNativeProbes(dict(probes)))
+                record(stage / ('original-run.private.json' if continuation is None else
+                                'continued-run.private.json'), RecordedNativeProbes(dict(probes)))
                 receipt['completed_rounds'].append(round_.identity)
                 assert service.registry.require(owner.name).active_turn is None
 
@@ -182,18 +238,24 @@ async def run(stage, package, original_python, *, continuation=None):
             record(stage / 'original-measurements.private.json', report)
             assert report['three_original_cuts_observed']
             assert all(value['evaluated'] for value in report['canonical_availability'].values())
-            assert all(value['evaluated'] and value['exact_envelope_present']
-                       for value in report['provider_prompt_presence'].values())
+            measured = report['provider_prompt_presence']
+            # Previously captured SDK objects cannot supply missing original
+            # serialization. Keep that metric unavailable, not zero or credit.
+            assert all(value['exact_envelope_present'] for value in measured.values() if value['evaluated'])
+            assert measured['cut-3']['evaluated']
             for cut in ('cut-2', 'cut-3'):
                 revision = report['checkpoints'][cut]['revision_mass']
                 assert revision['evaluated'] and revision['constraints']['unauthorized'] == 0
             receipt.update(complete=True, three_cuts_observed=True, actual_probe_count=len(probes),
                            recall=report['correct'], questions=report['questions'], stale=report['stale'],
                            missing=report['missing'], measurements=report['measurements'],
-                           original_scope_and_sdk_captures=True)
+                           original_scope_and_sdk_captures=True,
+                           prompt_presence_unavailable=[key for key,value in measured.items() if not value['evaluated']],
+                           prior_ACP_outcome='UNCONFIRMED' if continuation is not None and continuation.rounds else 'not applicable')
 
 
 if __name__ == '__main__':
     stage = Path(sys.argv[1]).absolute()
-    continuation = committed_checkpoint(stage) if sys.argv[4:] == ['--continue-committed'] else None
+    modes = {'--continue-committed': committed_checkpoint, '--continue-completed': completed_continuation}
+    continuation = modes[sys.argv[4]](stage) if sys.argv[4:] else None
     asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))

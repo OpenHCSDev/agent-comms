@@ -76,17 +76,7 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
             cwd=Path(original.worktree), env=dict(launch.environment))
         root_id = service.messaging.initialize_private_initial_protocol()
     else:
-        from agent_comms.compaction_records import NativeForkCreation
-        from agent_comms.native_entries import NativeEntry
-        # Explicitly continue a completed measured cut, never an uncertain input.
-        # The normal production writer still owns every subsequent admission.
-        assert continuation.journal == journal.path
-        assert InputDispositions(service.root/InputDispositions.filename).read().rows == {}
-        with journal.transaction() as db:
-            fork = NativeForkCreation.one(db, session_file=continuation.reference.session_file)
-        with NativeEntry.open_evidence(fork.path) as evidence:
-            _, entry, _ = continuation.capture(fork, evidence)
-            assert evidence.entries[-1].id == entry.id
+        fork = continuation.resume_fork(journal, InputDispositions(service.root/InputDispositions.filename))
         with service.bus.log.certified_read() as source:
             root_id = source.witness.root_id
     service.owners.pin_private_nk_launch(service.root, root_id, package)
@@ -111,6 +101,8 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
             prior = service.registry.require(name)
             prior.require_idle()
             assert not prior.process_alive
+            assert (prior.model, prior.thinking_level, prior.worktree) == (
+                original.model, original.thinking_level, original.worktree)
             service.registry.register(replace(prior, process_identity=identity), new_owner=True)
     owner = service.registry.require('source529')
     environment.update(owner.native_environment(service.root, service.registry.snapshot(), owner.worktree))
@@ -135,7 +127,8 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
         receipt.update(elapsed_seconds=time.monotonic()-started,
             original_source_unchanged=all(digest(path)==expected for path,expected in originals.items()),
             native_children_closed=all(child.returncode is not None for child in children))
-        result = stage/('receipt.json' if continuation is None else 'continuation-receipt.json')
+        result = stage/('receipt.json' if continuation is None else
+                       f'continuation-{len(continuation.rounds)}-receipt.json')
         result.write_text(json.dumps(receipt,indent=2)+'\n')
         result.chmod(0o600)
         print(json.dumps(receipt),flush=True)
