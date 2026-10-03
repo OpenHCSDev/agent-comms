@@ -47,6 +47,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def native(tmp_path):
+    Comms(tmp_path).messaging.initialize_private_initial_protocol()
     script = """
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
