@@ -36,7 +36,7 @@ from selected_summary_cases import manual_source
 
 
 @asynccontextmanager
-async def native_failure_owner(tmp_path, status):
+async def native_summary_owner(tmp_path, status, *, observe_launch=None):
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
         pytest.skip("Set PI_COMPACTION_TEST_PACKAGE to the matched native candidate")
@@ -51,6 +51,23 @@ async def native_failure_owner(tmp_path, status):
             if status is None:
                 release.wait(15)
                 self.close_connection = True
+                return
+            if status == 200:
+                packets = [
+                    {"id": "original-local-summary", "choices": [{"index": 0,
+                     "delta": {"role": "assistant", "content": "Original generated narrative."},
+                     "finish_reason": None}]},
+                    {"id": "original-local-summary", "choices": [{"index": 0,
+                     "delta": {}, "finish_reason": "stop"}],
+                     "usage": {"prompt_tokens": 100, "completion_tokens": 8, "total_tokens": 108}},
+                ]
+                body = ("".join("data: " + json.dumps(packet) + "\n\n" for packet in packets)
+                        + "data: [DONE]\n\n").encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
                 return
             body = json.dumps(
                 {"error": {"message": "Local selected summary refused", "type": "fixture"}}
@@ -178,14 +195,7 @@ async def native_failure_owner(tmp_path, status):
         "NODE_DISABLE_COMPILE_CACHE": "1",
         "NO_COLOR": "1",
     }
-    command = (
-        "node",
-        "--no-global-search-paths",
-        "--import",
-        str(package / "dist/agent-comms-import-fence.mjs"),
-        "--import",
-        str(package / "dist/agent-comms-project-bootstrap.mjs"),
-        str(package / "dist/cli.js"),
+    arguments = (
         "--mode",
         "rpc",
         "--provider",
@@ -204,7 +214,13 @@ async def native_failure_owner(tmp_path, status):
     children = {}
 
     async def launch():
-        child = await AttachedChild.start(command, cwd=str(tmp_path), env=env)
+        environment = dict(env)
+        if observe_launch is not None:
+            observe_launch(environment)
+        command, environment = NativePiRpcLaunch.bootstrap(
+            package / "dist/cli.js", arguments, tmp_path, environment,
+            RestartEnvironment.inherit(environment))
+        child = await AttachedChild.start(command, cwd=str(tmp_path), env=environment)
         errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
         children[child] = errors
         reader = PiRpcChannel(child.stdout)
@@ -259,9 +275,60 @@ def selected_owner(child, reader, package, session, preparation, errors):
     )
 
 
+async def test_original_summary_assembly_inspector(tmp_path):
+    """Actual selected RPC generation with a local provider, never a live input.
+
+    This qualifies the observation source. No canonical commit, configured
+    provider study, submitted bounded control or recall credit is claimed.
+    """
+    from dataclasses import replace
+    from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+    from agent_comms.pi_summary_payloads import SummarySummarizedData
+    from agent_comms.turn_context import FileProvenance
+    from retained_native_fixture import RecordedNativeCheckpoint, RecordedSummaryAssembly
+    from summary_prefix_configured_installed_journey import observe_native_requests
+    import hashlib
+
+    pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+    summaries = tmp_path / "summary-assemblies"
+    summaries.mkdir(mode=0o700)
+    observation = tmp_path / "original-observations.jsonl"
+    with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
+        async with native_summary_owner(tmp_path, 200, observe_launch=observe_launch) as fixture:
+            package, session, original, preparation, selected, settings, calls, _, launch = fixture
+            child, _, exchange, errors = await launch()
+            command = AgentCommsSummarizeCompaction(
+                id="original-source-capture", version=1, operation_id=uuid4().hex,
+                witness=preparation.witness, selected=selected, settings=settings,
+                retained_text="Original exact injected task envelope.")
+            _, reply = await exchange(FieldCodec.encode(command))
+            assert reply["success"], reply
+            result = FieldCodec.decode(SummarySummarizedData, reply["data"])
+            path = summaries / f"summary-{command.operation_id}.json"
+            capture = RecordedNativeCheckpoint.read_record(
+                FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest()),
+                RecordedSummaryAssembly)
+            assert capture.request == command
+            assert capture.generated_parts and capture.inherited_summary is None
+            assert capture.summary.startswith("Original generated narrative.")
+            assert result.result.summary.startswith(command.retained_text + "\n\n")
+            assert not capture.summary.startswith(command.retained_text)
+            assert capture.observe()["evaluated"]
+            assert not replace(capture, inherited_summary=result.result.summary).observe()["evaluated"]
+            assert not replace(capture, generated_parts=()).observe()["evaluated"]
+            assert session.read_bytes() == original
+            records = [json.loads(row) for row in observation.read_text().splitlines()]
+            assert not any(row.get("observerFailed") for row in records), records
+            assert len([row for row in records if row.get("stage") == "summary-assembly"]) == 1
+            assert calls and child.returncode is None
+            child.stdin.close()
+            await child.wait()
+            assert not await errors
+
+
 @pytest.mark.parametrize("status", [400, 429])
 async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_path, status):
-    async with native_failure_owner(tmp_path, status) as fixture:
+    async with native_summary_owner(tmp_path, status) as fixture:
         package, session, original, preparation, selected, settings, calls, _, launch = fixture
         child, reader, exchange, errors = await launch()
         persistent, journal, slot = selected_owner(
@@ -307,7 +374,7 @@ async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_pat
 
 
 async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
-    async with native_failure_owner(tmp_path, None) as fixture:
+    async with native_summary_owner(tmp_path, None) as fixture:
         package, session, original, preparation, selected, settings, calls, started, launch = (
             fixture
         )
@@ -355,7 +422,7 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
 async def test_actual_summary_slot_denies_mutation_and_joins_cancellation(tmp_path):
     from agent_comms.pi_commands import AgentCommsSummarizeCompaction
 
-    async with native_failure_owner(tmp_path, None) as fixture:
+    async with native_summary_owner(tmp_path, None) as fixture:
         package, session, original, preparation, selected, settings, calls, started, launch = fixture
         child, _, exchange, _ = await launch()
         operation = "d" * 32

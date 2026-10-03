@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 from collections import Counter
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -16,6 +16,8 @@ from agent_comms.input_disposition import InputDocument
 from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
+from agent_comms.native_compaction_request import NativeIntent
+from agent_comms.pi_commands import AgentCommsSummarizeCompaction
 
 from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
@@ -37,6 +39,43 @@ from agent_comms.wire_log import WireLog
 
 
 @dataclass(frozen=True)
+class RecordedSummaryAssembly:
+    """Original private inspector observation, not a native result or authority.
+
+    Native result/commit records retain packed text. This distinct observation
+    retains the original assembly before packing and its actual generated and
+    inherited components; it cannot be recovered by stripping a commit.
+    """
+
+    strict_fields = True
+    request: AgentCommsSummarizeCompaction
+    summary: str
+    generated_parts: tuple[str, ...]
+    inherited_summary: str | None
+
+    def require_original(self, attempt, operation):
+        expected = replace(self.request, version=1, operation_id=attempt.operation_id,
+                           witness=NativeIntent.read(operation).witness,
+                           selected=attempt.request.selected,
+                           settings=attempt.request.settings,
+                           retained_text=attempt.request.retained.text)
+        if self.request != expected:
+            raise ValueError("Summary assembly belongs to another original selected source")
+
+    def observe(self):
+        if self.inherited_summary:
+            return {"evaluated": False,
+                    "reason": "Original assembly carries a previous packed summary; narrative-only control unavailable"}
+        if not self.generated_parts:
+            return {"evaluated": False, "reason": "No original generated narrative component"}
+        return {"evaluated": True,
+                "sha256": hashlib.sha256(self.summary.encode()).hexdigest(),
+                "utf8_bytes": len(self.summary.encode()),
+                "generated_part_count": len(self.generated_parts),
+                "scope": "Original pre-pack assembly; not packed-budget admission, submitted context, HTTP bytes or recall"}
+
+
+@dataclass(frozen=True)
 class RecordedNativeCheckpoint:
     """References to original measured evidence, never a replacement checkpoint."""
 
@@ -47,6 +86,15 @@ class RecordedNativeCheckpoint:
     # missing original capture cannot be reconstructed from today's registry.
     registry_scope: FileProvenance | None = None
     wire: Annotated[Path | None, PathText] = None
+    summary_assembly: FileProvenance | None = None
+
+    def capture_summary_observation(self, directory: Path):
+        """Pin the optional original inspector artifact without reconstructing it."""
+        path = directory / f"summary-{self.reference.operation_id}.json"
+        if not path.is_file():
+            return self
+        return replace(self, summary_assembly=FileProvenance(
+            str(path), hashlib.sha256(path.read_bytes()).hexdigest()))
 
     @staticmethod
     def read_bytes(reference: FileProvenance):
@@ -104,7 +152,11 @@ class RecordedNativeCheckpoint:
             branch = evidence.branch(entry.id, entries)
             covered = operation.covered_prefix(entry, evidence, branch)
             attempt.request.retained.require_summary(entry.summary)
-            return attempt, entry, covered
+            assembly = None
+            if self.summary_assembly is not None:
+                assembly = self.read_record(self.summary_assembly, RecordedSummaryAssembly)
+                assembly.require_original(attempt, operation)
+            return attempt, entry, covered, assembly
 
         original = CompactionJournal.observe_readonly(self.journal, read, absent=None)
         if original is None:
@@ -112,7 +164,7 @@ class RecordedNativeCheckpoint:
         return original
 
     def _report(self, attempt: SelectedSummaryAttempt, entry: ManagedCompactionEntry,
-               covered: frozenset[str]):
+               covered: frozenset[str], assembly: RecordedSummaryAssembly | None):
         # Membership comes from the original declared fact family. These counts
         # describe the corroborated envelope, not inferred summary prose.
         membership = Counter(fact.declared_name for fact in attempt.request.retained.facts)
@@ -124,6 +176,8 @@ class RecordedNativeCheckpoint:
             "selected_model": FieldCodec.encode(attempt.request.selected),
             "settings": FieldCodec.encode(attempt.request.settings),
             "summary_usage": self.summary_usage(entry),
+            "summary_narrative": assembly.observe() if assembly is not None else {
+                "evaluated": False, "reason": "Original pre-pack summary assembly not captured"},
             "revision_mass": {
                 "evaluated": False,
                 "reason": "An original scope and authorized correction evidence are required, not content differences",
@@ -154,10 +208,10 @@ class RecordedNativeCheckpoint:
         with NativeEntry.open_evidence(Path(self.reference.session_file)) as evidence:
             header, _ = evidence.observe()
             session = NativeSessionIdentity(header.id, str(evidence.source.path))
-            current_attempt, current_entry, covered = self.capture(session, evidence)
-            report = self._report(current_attempt, current_entry, covered)
+            current_attempt, current_entry, covered, assembly = self.capture(session, evidence)
+            report = self._report(current_attempt, current_entry, covered, assembly)
             if previous is not None:
-                previous_attempt, previous_entry, _ = previous.capture(session, evidence)
+                previous_attempt, previous_entry, _, _ = previous.capture(session, evidence)
                 branch = evidence.branch(current_entry.id, evidence.entries)
                 if previous_entry.id == current_entry.id or previous_entry not in branch:
                     raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
@@ -619,8 +673,8 @@ class RecordedNativeProbe:
         tools = self.tool_steps(branch)
         prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
-            attempt, entry, covered = self.checkpoint.capture(self.session, evidence)
-            checkpoint = self.checkpoint._report(attempt, entry, covered)
+            attempt, entry, covered, assembly = self.checkpoint.capture(self.session, evidence)
+            checkpoint = self.checkpoint._report(attempt, entry, covered, assembly)
             retained = attempt.request.retained
             scoped = self.checkpoint.scoped_facts(attempt)
             if user.parent_id != checkpoint["native_entry_id"]:
