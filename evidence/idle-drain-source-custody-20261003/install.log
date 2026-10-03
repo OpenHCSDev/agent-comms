@@ -1,0 +1,10 @@
+Using Python 3.14.2 environment at: /home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001
+Resolved 3 packages in 16ms
+Prepared 1 package in 16ms
+Uninstalled 1 package in 13ms
+Installed 1 package in 6ms
+ - agent-comms==0.1.0 (from file:///home/ts/.cache/agent-scratch/mendel-scoped-owner-drain554-20261003/wheels/agent_comms-0.1.0-py3-none-any.whl)
+ + agent-comms==0.1.0 (from file:///home/ts/.cache/agent-scratch/mendel-idle-source558-20261003/wheels/agent_comms-0.1.0-py3-none-any.whl)
+Using Python 3.14.2 environment at: /home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001
+Checked 69 packages in 1ms
+All installed packages are compatible

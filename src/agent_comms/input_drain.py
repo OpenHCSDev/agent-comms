@@ -277,7 +277,7 @@ class InputDrain(FutureInputQueue):
             return await self.drain_owned_inbox(session_id)
 
     def _private_observation_revision(
-        self, session_id: str, root_id: str, store: Coordination,
+        self, session_id: str, root_id: str, wire: tuple, store: Coordination,
     ) -> tuple:
         """Original owner/work observations, never delivery or replay authority.
 
@@ -286,14 +286,6 @@ class InputDrain(FutureInputQueue):
         physical replacement still can. Silent context records consume bytes,
         not the message cut used to select delivery.
         """
-        with self.comms.bus.log.certified_read(blocking=False) as source:
-            if source.marker.root_id != root_id:
-                raise IdentityConflict("private drain original root changed")
-            wire = (
-                source.witness.source_identity,
-                source.committed_sequence(),
-                source.marker.admission_after_seq,
-            )
         registry = self.comms.registry.snapshot()
         thread = registry.require(self.sessions.require(session_id))
         owner = RegistryOwner(
@@ -327,12 +319,30 @@ class InputDrain(FutureInputQueue):
             (original.st_dev, original.st_ino),
         )
 
+    async def _observe_private_revision(self, session_id: str, root_id: str) -> tuple:
+        # Pending acquisition is not an inbox failure or a completed read.
+        # Cancellation retires only this observation's waiting descriptor.
+        def wire_revision(source):
+            if source.marker.root_id != root_id:
+                raise IdentityConflict("private drain original root changed")
+            return (
+                source.witness.source_identity,
+                source.committed_sequence(),
+                source.marker.admission_after_seq,
+            )
+        wire = await self.comms.bus.log.read_certified_async(wire_revision)
+        # No physical bus custody survives into registry/SQL consumer work.
+        # The original coordinator owns its bounded read acquisition policy;
+        # the observation must not replace it with a zero-wait failure.
+        return await Coordination.run_async(
+            self.comms.root / "coordination.sqlite3",
+            partial(self._private_observation_revision, session_id, root_id, wire),
+        )
+
     async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
         # The caller still validates the current private marker each time. The
         # ordinary loop still synchronizes configuration and schedules goals.
-        observe = partial(self._private_observation_revision, session_id, root_id)
-        path = self.comms.root / "coordination.sqlite3"
-        before = await Coordination.run_async(path, observe, lock_timeout=0)
+        before = await self._observe_private_revision(session_id, root_id)
         if self._idle_private_revisions.get(session_id) == before:
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
@@ -340,7 +350,7 @@ class InputDrain(FutureInputQueue):
         result = await self.effects._drain_private_nk(session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.
-        if result == 0 and before == await Coordination.run_async(path, observe, lock_timeout=0):
+        if result == 0 and before == await self._observe_private_revision(session_id, root_id):
             self._idle_private_revisions[session_id] = before
         return result
 
