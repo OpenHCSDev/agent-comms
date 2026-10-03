@@ -1,0 +1,1389 @@
+{
+  "head": "17b9ba96b384fc9d04392b9f263904f5ab37a41a",
+  "modules": 725,
+  "omissions": [],
+  "names": [
+    "ArchivedAccess",
+    "AssignedTranscriptSource",
+    "BusPageIndex",
+    "CertifiedSourceRead",
+    "HistorySource",
+    "MessagePageRequest",
+    "PrefixCertificate",
+    "ReadLedger",
+    "WireAccess",
+    "WritableAccess",
+    "_saved",
+    "context_manifests",
+    "conversation_sources",
+    "copy_actual_history",
+    "indexed_context_manifests",
+    "open_checkpoint",
+    "open_page_index",
+    "opened_claim_source_unlocked",
+    "opened_private_checkpoint_unlocked",
+    "prepare_page_index",
+    "projection_snapshot",
+    "read_indexed",
+    "read_original",
+    "read_page",
+    "read_witness",
+    "reference_actual_history",
+    "verified_snapshot",
+    "verify_before_read_unlocked",
+    "verify_checkpoint"
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/__init__.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .historical_views import HistoricalDisplay, HistoricalMessage, HistoricalThread, HistoryCursor, HistorySource"
+    },
+    {
+      "path": "src/agent_comms/__init__.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "line": 44,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 51,
+      "kind": "ClassDef",
+      "source": "class BusPageIndex:\n\n    def __init__(self, bus_path: Path, *, readonly: bool=False):\n        self.bus_path = bus_path\n        self.path = bus_path.with_name('bus_page_index.sqlite3')\n        self.connection = sqlite3.connect(self.path.as_uri() + '?mode=ro' if readonly else self.path, uri=readonly, timeout=30)\n        self.connection.execute('PRAGMA query_only=ON' if readonly else 'PRAGMA synchronous=FULL')\n        try:\n            with self.connection:\n                if not readonly:\n                    self.connection.execute('BEGIN IMMEDIATE')\n                actual = SQLiteSchemaObject.read(self.connection.execute(\"SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'\"))\n                schema = {name: sql for table in TypedTable.members_with(PageIndexTable) for name, sql in table.schema_objects().items()}\n                if not actual and (not readonly):\n                    for statement in schema.values():\n                        self.connection.execute(statement)\n                elif {row.name: row.sql for row in actual} != schema:\n                    raise StaleBusPageIndexError('Bus page index requires the quiet runtime reset')\n        except BaseException:\n            self.connection.close()\n            raise\n\n    def __enter__(self) -> BusPageIndex:\n        return self\n\n    def __exit__(self, *_error: object) -> None:\n        self.connection.close()\n\n    @staticmethod\n    def _tail(stream: BinaryIO, offset: int) -> str:\n        start = max(0, offset - 4096)\n        stream.seek(start)\n        return sha256(stream.read(offset - start)).hexdigest()\n\n    def sync(self) -> bool:\n        \"\"\"Return false for an unfinished tail, which the caller scans normally.\"\"\"\n        try:\n            stream = self.bus_path.open('rb')\n        except FileNotFoundError:\n            return False\n        with stream:\n            stat = os.fstat(stream.fileno())\n            size = stat.st_size\n            if size:\n                stream.seek(size - 1)\n                if stream.read(1) != b'\\n':\n                    return False\n            identity = (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns)\n            try:\n                saved = BusPageSource.one(self.connection, singleton=1)\n            except (ValueError, TypeError):\n                saved = None\n            offset = saved.offset if saved is not None else 0\n            valid = saved is not None and 0 <= offset <= size and (saved.identity[:2] == identity[:2]) and (offset != size or saved.identity[2:] == identity[2:]) and (saved.tail == self._tail(stream, offset))\n            if not valid:\n                offset = 0\n            if valid and offset == size:\n                return True\n            with self.connection:\n                if not valid:\n                    self.connection.execute(f'DELETE FROM {BusPageRow.declared_name}')\n                    last_sequence = None\n                else:\n                    last_rows = BusPageRow.read(self.connection.execute(f'SELECT {BusPageRow._column_list(BusPageRow.columns())} FROM {BusPageRow.declared_name} ORDER BY id DESC LIMIT 1'))\n                    last_sequence = last_rows[0].seq if last_rows else None\n                stream.seek(offset)\n                while stream.tell() < size:\n                    row_offset = stream.tell()\n                    raw = stream.readline()\n                    if not raw.endswith(b'\\n'):\n                        return False\n                    if not raw.strip():\n                        continue\n                    record = json.loads(raw)\n                    if not isinstance(record, Mapping):\n                        raise ValueError('JSONL bus row must be an object.')\n                    from .wire_record import WireRecord\n                    for message in WireRecord.public_from_wire(record).messages():\n                        if last_sequence is not None and message.seq <= last_sequence:\n                            raise StaleBusPageIndexError('Wire sequences are not increasing.')\n                        BusPageRow(message.seq, row_offset, message.sender, message.target).insert(self.connection)\n                        last_sequence = message.seq\n                BusPageSource(identity, size, self._tail(stream, size)).upsert(self.connection)\n            return True\n\n    def current(self) -> bool:\n        \"\"\"Read-only warm-cache check; never rebuild the bus on a wake.\"\"\"\n        try:\n            with self.bus_path.open('rb') as stream:\n                stat = os.fstat(stream.fileno())\n                size = stat.st_size\n                if size:\n                    stream.seek(size - 1)\n                    if stream.read(1) != b'\\n':\n                        return False\n                saved = BusPageSource.one(self.connection, singleton=1)\n                return saved is not None and saved == BusPageSource((stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns), size, self._tail(stream, size))\n        except (OSError, ValueError, TypeError, sqlite3.DatabaseError):\n            return False\n\n    def offsets(self, *, lower: int | None, upper: int | None, descending: bool, targets: frozenset[str] | None) -> Generator[BusPageRow, None, None]:\n        clauses: list[str] = []\n        params: list[object] = []\n        if lower is not None:\n            clauses.append('seq > ?')\n            params.append(lower)\n        if upper is not None:\n            clauses.append('seq < ?')\n            params.append(upper)\n        if targets is not None:\n            if not targets:\n                return\n            clauses.append('target IN (' + ','.join(('?' for _ in targets)) + ')')\n            params.extend(sorted(targets))\n        where = ' WHERE ' + ' AND '.join(clauses) if clauses else ''\n        direction = 'DESC' if descending else 'ASC'\n        query = f'SELECT {BusPageRow._column_list(BusPageRow.columns())} FROM {BusPageRow.declared_name}' + where + f' ORDER BY seq {direction}, id {direction}'\n        rows = iter(BusPageRow.iterate(self.connection.execute(query, params)))\n        while True:\n            try:\n                row = next(rows)\n            except StopIteration:\n                return\n            except (ValueError, TypeError) as error:\n                raise StaleBusPageIndexError('Indexed row has invalid fields') from error\n            yield row\n\n    @staticmethod\n    def record(stream: BinaryIO, row: BusPageRow, *, max_bytes: int | None=None) -> tuple[Mapping, int]:\n        stream.seek(row.offset)\n        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)\n        if max_bytes is not None and len(raw) > max_bytes:\n            raise OversizedIndexedBusRowError('Indexed bus row exceeds advisory byte budget.')\n        try:\n            record = json.loads(raw)\n        except ValueError as error:\n            raise StaleBusPageIndexError('Indexed bus row is invalid.') from error\n        if not isinstance(record, Mapping) or int(record.get('seq', 0)) != row.seq or record.get('from') != row.sender or (record.get('to') != row.target):\n            raise StaleBusPageIndexError('Indexed bus row changed.')\n        return (record, len(raw))"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 84,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 765,
+      "kind": "Attribute",
+      "source": "ctx.bus.log.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest, PageTraversal"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 24,
+      "kind": "ImportFrom",
+      "source": "from .wire_metadata import ArchivedAccess"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 140,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass HistorySource:\n    \"\"\"An immutable bus/registry snapshot attached by the destination MessageBus.\"\"\"\n    root: str\n    original_root: str\n    wire_root_id: str\n    bus_identity: tuple[int, int]\n    size: int\n    snapshot_bus_revision: tuple[int, int, int, int]\n    snapshot_registry_revision: tuple[int, int, int, int]\n    provenance: RegistryProvenance\n\n    @property\n    def key(self) -> str:\n        return self.root\n\n    def validate(self) -> None:\n        root = Path(self.root)\n        if file_revision(root / 'bus.jsonl') != self.snapshot_bus_revision or file_revision(root / 'registry.json') != self.snapshot_registry_revision:\n            raise ValueError('Historical snapshot changed; restore it before browsing')"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 167,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 233,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 239,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 255,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 297,
+      "kind": "ImportFrom",
+      "source": "from .historical_views import HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 285,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 174,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 278,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 350,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 401,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 263,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 283,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 336,
+      "kind": "Name",
+      "source": "ArchivedAccess"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 354,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 352,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 263,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 127,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 46,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 48,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 102,
+      "kind": "Attribute",
+      "source": "self.log.projection_snapshot"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 214,
+      "kind": "Attribute",
+      "source": "self.log.projection_snapshot"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 48,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 373,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex, StaleBusPageIndexError"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 205,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)\nclass MessagePageRequest:\n    \"\"\"Captured membership, direction and bounds for both authoritative readers.\"\"\"\n    scope: MessageDisplayScope\n    traversal: PageTraversal\n    limit: int = 100\n    max_bytes: int = 256 * 1024\n\n    def __post_init__(self):\n        if self.limit <= 0:\n            raise ValueError('History page limit must be positive.')\n        if self.max_bytes <= 0:\n            raise ValueError('History page byte budget must be positive.')\n\n    @classmethod\n    def capture(cls, scope, *, before=None, after=None, limit=100, max_bytes=256 * 1024):\n        return cls(scope, PageTraversal.capture(before, after), limit, max_bytes)\n\n    def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:\n        return self.traversal.collect(self, records)\n\n    def read(self, log) -> MessagePage:\n        with log.locked():\n            access = log.read_metadata_unlocked().access\n            try:\n                with access.open_page_index(log.path) as index:\n                    if access.prepare_page_index(index):\n                        return self.indexed(index, log)\n            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):\n                pass\n        with log._record_snapshot(need_sequence=False) as (_, records):\n            return self.collect(records)\n\n    def indexed(self, index, log) -> MessagePage:\n        window = PageWindow(self.limit, self.max_bytes)\n        marker = log._private_marker_unlocked()\n        targets = self.scope.index_targets\n        opposite = more = False\n        with log.path.open('rb') as stream:\n            with closing(self.traversal.opposite_offsets(index, targets)) as rows:\n                for row in rows:\n                    (message, _), = log._public_page_records(*index.record(stream, row), marker)\n                    if self.scope.includes(message):\n                        opposite = True\n                        break\n            with closing(self.traversal.offsets(index, targets)) as rows:\n                for row in rows:\n                    (message, size), = log._public_page_records(*index.record(stream, row), marker)\n                    if not self.scope.includes(message):\n                        continue\n                    if window.full_with(size):\n                        more = True\n                        break\n                    self.traversal.append(window, message, size)\n        return self.traversal.result(window, more, opposite)"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 82,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 85,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 94,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 230,
+      "kind": "Attribute",
+      "source": "access.open_page_index"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 231,
+      "kind": "Attribute",
+      "source": "access.prepare_page_index"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 25,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 41,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 141,
+      "kind": "ImportFrom",
+      "source": "from .transcript_receipts import AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 107,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 176,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 107,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 143,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 282,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 89,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass CertifiedSourceRead:\n    \"\"\"Opened resources borrowed from one canonical durability barrier.\"\"\"\n    path: Path\n    marker: WireMetadata\n    connection: sqlite3.Connection\n    stream: BinaryIO\n    witness: PrefixWitness\n\n    def require_marker(self, marker: WireMetadata) -> None:\n        if self.marker != marker:\n            raise RelationViolationError('Original source marker changed within its lock.')\n\n    def require_current(self) -> None:\n        self.require_open_prefix()\n        self.witness.require_marker(self.marker)\n\n    def require_open_prefix(self) -> None:\n        \"\"\"Validate the acquired committed bytes independently of reservations.\n\n        Acquisition already checked root and that the sealed sequence does not\n        exceed the marker. A marker may reserve a later sequence before append;\n        that reservation cannot change this original committed prefix.\n        \"\"\"\n        if self.stream.closed:\n            raise RelationViolationError('Certified source read has left its lock lifetime.')\n        self.marker.seal.check_final(self.witness, _path(self.path))\n        if file_revision(os.fstat(self.stream.fileno())) != self.witness.revision or file_revision(self.path.stat()) != self.witness.revision:\n            raise RelationViolationError('Conversation source needs a current certificate.')\n\n    def committed_sequence(self) -> int:\n        \"\"\"Global committed high-water; silent observations allocate no sequence.\"\"\"\n        self.require_open_prefix()\n        return self.witness.through_seq\n\n    def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:\n        \"\"\"Lend bounded original bytes, not this lock/connection, to decoding.\n\n        The returned iterator owns only the original pointers, copied bytes and\n        root selected by this certificate. It is a read snapshot, never a\n        current publication/admission permit. Capture must finish in custody;\n        decoding can finish after that custody has closed.\n        \"\"\"\n        self.require_current()\n        captured = tuple(((row, row.read_bytes(self.stream)) for row in rows))\n        root_id = self.witness.root_id\n        self.require_current()\n        return (row.decode_bytes(raw, root_id) for row, raw in captured)\n\n    def references(self, references) -> Iterator[CommittedDelivery]:\n        \"\"\"Capture exact seq/id originals through the existing sealed pointers.\"\"\"\n        marks = ','.join(('?' for _ in references))\n        self.require_current()\n        rows = DeliverySources.select(self.connection, where=f'seq IN ({marks})', parameters=tuple((ref.seq for ref in references)))\n        by_sequence = {row.seq: row for row in rows}\n        ordered = []\n        for reference in references:\n            row = by_sequence.get(reference.seq)\n            if row is None or row.reference != reference:\n                raise RelationViolationError('Notification reference is not its original source')\n            ordered.append(row)\n        return self.capture_sources(tuple(ordered))\n\n    def delivery(self, seq: int) -> CommittedDelivery:\n        \"\"\"Resolve an exact source sequence through this original opened proof.\"\"\"\n        self.require_current()\n        row = DeliverySources.one(self.connection, seq=seq)\n        if row is None:\n            raise RelationViolationError('No committed initial sideband for this wire sequence.')\n        original, = self.capture_sources((row,))\n        self.require_current()\n        return original\n\n    def addressed_page(self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None=None):\n        \"\"\"Read a bounded original addressed window through this one certificate.\n\n        The query carries no input/ACK authority. Capture resolves the page and\n        addressed high-water through one current seal. Its decoder lends only\n        the bounded original bytes; no connection or stream survives capture.\n        \"\"\"\n        self.require_current()\n        self.require_marker(bus._private_marker_unlocked())\n        db, witness = (self.connection, self.witness)\n        window = witness if prefix is None else prefix\n        witness.require_read_window(window)\n        try:\n            rows = DeliverySources.read(db.execute(f\"SELECT {','.join(('i.' + column for column in DeliverySources.columns()))} FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq WHERE a.lookup=? AND i.seq>? AND i.seq<=? ORDER BY i.seq LIMIT ?\", (request.lookup, request.after_seq, window.through_seq, request.limit + 1)))\n            last = DeliverySources.read(db.execute(f'SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1'))\n            latest = last[0].seq if last else 0\n            if not 0 <= latest <= witness.through_seq:\n                raise RelationViolationError('Certified initial high-water is invalid.')\n            captured = self.capture_sources(tuple(rows[:request.limit]))\n            self.require_current()\n            self.require_marker(bus._private_marker_unlocked())\n\n            def decoded():\n                for original in captured:\n                    if not any((r.recipient_lookup == request.lookup for r in original.audience.recipients)):\n                        raise RelationViolationError('Certified initial lookup differs from bus row.')\n                    yield original\n            return (replace(witness, latest_source_seq=latest), decoded(), len(rows) > request.limit)\n        except RelationViolationError:\n            raise\n        except (sqlite3.Error, OSError, ValueError, TypeError) as error:\n            raise RelationViolationError('Certified initial page is unavailable.') from error\n\n    def conversation_sources(self, lookup: str, predicate: str, parameters: tuple, *, limit: int, ascending: bool):\n        \"\"\"Read a bounded conversation from the existing certified source index.\n\n        Sender and recipients come from the original frozen audience, never today's\n        name binding. Capture holds the bus lock; decoding owns its bounded original bytes.\n        This read cannot install or repair\n        a checkpoint, grant delivery, or advance any native-input cursor.\n        \"\"\"\n        self.require_current()\n        db = self.connection\n        rows = DeliverySources.read(db.execute(f\"SELECT w.* FROM {DeliverySources.declared_name} w JOIN (SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w WHERE w.sender_lookup=? AND ({predicate}) ORDER BY w.seq {('ASC' if ascending else 'DESC')} LIMIT ?) UNION SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} w ON w.seq=a.seq WHERE a.lookup=? AND ({predicate}) ORDER BY a.seq {('ASC' if ascending else 'DESC')} LIMIT ?)) membership ON membership.seq=w.seq ORDER BY w.seq {('ASC' if ascending else 'DESC')} LIMIT ?\", (lookup, *parameters, limit, lookup, *parameters, limit, limit)))\n        captured = self.capture_sources(tuple(rows))\n\n        def decoded():\n            for original in captured:\n                if original.audience.sender_lookup != lookup and (not any((recipient.recipient_lookup == lookup for recipient in original.audience.recipients))):\n                    raise RelationViolationError('Conversation index differs from frozen membership.')\n                yield original\n        return decoded()\n\n    def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:\n        return self.marker.access.context_manifests(self, incarnation, snapshot)\n\n    def indexed_context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:\n        \"\"\"Capture only original observations of this recorded incarnation.\n\n        The index stores byte ranges and original owner identity, never manifest\n        contents. Retained aliases select the same birth; a reused name cannot\n        import another incarnation's observations. Wire order owns diff order.\n        \"\"\"\n        self.require_current()\n        storage = SqlStorage.for_type(ThreadIncarnation)\n        parameters = tuple((storage.to_sql(FieldCodec.encode(recorded)) for recorded in incarnation.recorded_names(snapshot)))\n        rows = tuple(ContextManifestSources.select(self.connection, where='thread IN (' + ','.join(('?' for _ in parameters)) + ')', parameters=parameters, order_by=('offset',)))\n        captured = self.capture_sources(rows)\n\n        def decoded():\n            for manifest in captured:\n                if manifest.thread.resolved(snapshot) != incarnation:\n                    raise RelationViolationError('Context source differs from recorded owner.')\n                yield manifest\n        return decoded()\n\n    def keyed_receipt(self, intent: PublicationIntents) -> Message | None:\n        \"\"\"The sealed key index filters absence; an original row proves presence.\"\"\"\n        self.require_current()\n        if ResponseKeys.one(self.connection, key=intent.publication_key) is None:\n            return None\n        cursor = self.connection.execute(f'SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC', (intent.expected_message_id,))\n        for row in DeliverySources.iterate(cursor):\n            original = row.delivery(self.stream, self.witness.root_id)\n            receipt = original.receipt\n            if receipt is not None and receipt.publication_key == intent.publication_key:\n                if receipt.execution_id != intent.execution_id:\n                    raise RelationViolationError('Response publication identity conflicts.')\n                if not intent.matches_publication(original.message):\n                    raise RelationViolationError('Response publication intent conflicts.')\n                self.require_current()\n                return original.message\n        raise RelationViolationError('Certified response key has no original source row.')"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 403,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass PrefixCertificate(CheckpointTable, TypedTable):\n    \"\"\"The existing SQLite row, decoded once at its persistence boundary.\"\"\"\n    singleton: Literal[1] = field(metadata={'sql': Column(primary_key=True)})\n    version: Literal[2]\n    root_id: str\n    device: int\n    inode: int\n    offset: int\n    through_seq: int\n    digest: str\n    tail: str\n    mtime_ns: int\n    ctime_ns: int\n\n    @classmethod\n    def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:\n        \"\"\"Decode the original certificate through its own declaration.\n\n        Derived index membership belongs to the mutable writer. An immutable\n        archive retains this same certificate and its original sealed sidecar.\n        \"\"\"\n        actual = SQLiteSchemaObject.read(db.execute('SELECT name,sql FROM sqlite_master WHERE name=?', (cls.declared_name,)))\n        if {row.name: row.sql for row in actual} != cls.schema_objects():\n            raise RelationViolationError('Private bus prefix certificate schema is unavailable.')\n        try:\n            row = cls.one(db, singleton=1)\n            if row is None:\n                raise RelationViolationError('Private bus checkpoint certificate is missing.')\n            return row.witness()\n        except (TypeError, ValueError) as error:\n            raise RelationViolationError('Private bus checkpoint identity is malformed.') from error\n\n    def witness(self) -> PrefixWitness:\n        return PrefixWitness(self.root_id, (self.device, self.inode, self.offset, self.mtime_ns, self.ctime_ns), self.through_seq, self.digest, self.tail)\n\n    @classmethod\n    def capture(cls, root_id: str, info: os.stat_result, seq: int, digest: bytes, tail: str) -> PrefixCertificate:\n        return cls(1, 2, root_id, info.st_dev, info.st_ino, info.st_size, seq, digest.hex(), tail, info.st_mtime_ns, info.st_ctime_ns)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 507,
+      "kind": "FunctionDef",
+      "source": "def _saved(db: sqlite3.Connection) -> PrefixWitness:\n    schema = {name: sql for table in TypedTable.members_with(CheckpointTable) for name, sql in table.schema_objects().items()}\n    actual = SQLiteSchemaObject.read(db.execute('SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL'))\n    if {row.name: row.sql for row in actual} != schema:\n        raise RelationViolationError('Private bus checkpoint schema is unavailable.')\n    return PrefixCertificate.read_witness(db)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 767,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):\n    \"\"\"Keep only this canonical lock's verified source/index resources open.\"\"\"\n    path = _path(bus.path)\n    with ExitStack() as resources:\n        try:\n            db = resources.enter_context(closing(marker.access.open_checkpoint(path)))\n            stream = resources.enter_context(bus.path.open('rb'))\n            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path)\n            db.execute('PRAGMA query_only=ON')\n        except (sqlite3.Error, OSError) as error:\n            raise RelationViolationError('Private bus checkpoint verification is unavailable.') from error\n        yield CertifiedSourceRead(bus.path, marker, db, stream, saved)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 784,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):\n    \"\"\"The existing claim durability owner supplies this lock's opened source.\"\"\"\n    with ExitStack() as resources:\n        try:\n            flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)\n            try:\n                descriptor = os.open(bus.path, flags)\n            except FileNotFoundError:\n                descriptor = None\n            if descriptor is None and (certificate_enabled(bus.path) or private_marker.requires_checkpoint):\n                raise RelationViolationError('Private checkpoint bus inode is missing.')\n            source = None\n            if descriptor is not None:\n                stream = resources.enter_context(os.fdopen(descriptor, 'rb'))\n                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):\n                    raise RelationViolationError('Claim bus is not a regular file.')\n                os.fsync(stream.fileno())\n                if certificate_enabled(bus.path) or private_marker.requires_checkpoint:\n                    private_marker = bus._private_marker_unlocked()\n                    private_marker.seal\n                    directory_fd = os.open(bus.path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))\n                    try:\n                        os.fsync(directory_fd)\n                    finally:\n                        os.close(directory_fd)\n                    source = resources.enter_context(opened_private_checkpoint_unlocked(bus, private_marker))\n                else:\n                    scan = WireScan(private_marker)\n                    while (line := stream.readline(scan.max_row_bytes + 1)):\n                        scan.read(line)\n            if source is None:\n                directory_fd = os.open(bus.path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))\n                try:\n                    os.fsync(directory_fd)\n                finally:\n                    os.close(directory_fd)\n        except OSError as error:\n            raise RelationViolationError('Claim bus durability is UNKNOWN.') from error\n        yield source"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 210,
+      "kind": "FunctionDef",
+      "source": "def conversation_sources(self, lookup: str, predicate: str, parameters: tuple, *, limit: int, ascending: bool):\n    \"\"\"Read a bounded conversation from the existing certified source index.\n\n        Sender and recipients come from the original frozen audience, never today's\n        name binding. Capture holds the bus lock; decoding owns its bounded original bytes.\n        This read cannot install or repair\n        a checkpoint, grant delivery, or advance any native-input cursor.\n        \"\"\"\n    self.require_current()\n    db = self.connection\n    rows = DeliverySources.read(db.execute(f\"SELECT w.* FROM {DeliverySources.declared_name} w JOIN (SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w WHERE w.sender_lookup=? AND ({predicate}) ORDER BY w.seq {('ASC' if ascending else 'DESC')} LIMIT ?) UNION SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} w ON w.seq=a.seq WHERE a.lookup=? AND ({predicate}) ORDER BY a.seq {('ASC' if ascending else 'DESC')} LIMIT ?)) membership ON membership.seq=w.seq ORDER BY w.seq {('ASC' if ascending else 'DESC')} LIMIT ?\", (lookup, *parameters, limit, lookup, *parameters, limit, limit)))\n    captured = self.capture_sources(tuple(rows))\n\n    def decoded():\n        for original in captured:\n            if original.audience.sender_lookup != lookup and (not any((recipient.recipient_lookup == lookup for recipient in original.audience.recipients))):\n                raise RelationViolationError('Conversation index differs from frozen membership.')\n            yield original\n    return decoded()"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 255,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:\n    return self.marker.access.context_manifests(self, incarnation, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 258,
+      "kind": "FunctionDef",
+      "source": "def indexed_context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:\n    \"\"\"Capture only original observations of this recorded incarnation.\n\n        The index stores byte ranges and original owner identity, never manifest\n        contents. Retained aliases select the same birth; a reused name cannot\n        import another incarnation's observations. Wire order owns diff order.\n        \"\"\"\n    self.require_current()\n    storage = SqlStorage.for_type(ThreadIncarnation)\n    parameters = tuple((storage.to_sql(FieldCodec.encode(recorded)) for recorded in incarnation.recorded_names(snapshot)))\n    rows = tuple(ContextManifestSources.select(self.connection, where='thread IN (' + ','.join(('?' for _ in parameters)) + ')', parameters=parameters, order_by=('offset',)))\n    captured = self.capture_sources(rows)\n\n    def decoded():\n        for manifest in captured:\n            if manifest.thread.resolved(snapshot) != incarnation:\n                raise RelationViolationError('Context source differs from recorded owner.')\n            yield manifest\n    return decoded()"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 419,
+      "kind": "FunctionDef",
+      "source": "@classmethod\ndef read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:\n    \"\"\"Decode the original certificate through its own declaration.\n\n        Derived index membership belongs to the mutable writer. An immutable\n        archive retains this same certificate and its original sealed sidecar.\n        \"\"\"\n    actual = SQLiteSchemaObject.read(db.execute('SELECT name,sql FROM sqlite_master WHERE name=?', (cls.declared_name,)))\n    if {row.name: row.sql for row in actual} != cls.schema_objects():\n        raise RelationViolationError('Private bus prefix certificate schema is unavailable.')\n    try:\n        row = cls.one(db, singleton=1)\n        if row is None:\n            raise RelationViolationError('Private bus checkpoint certificate is missing.')\n        return row.witness()\n    except (TypeError, ValueError) as error:\n        raise RelationViolationError('Private bus checkpoint identity is malformed.') from error"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 450,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 518,
+      "kind": "Attribute",
+      "source": "PrefixCertificate.read_witness"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 679,
+      "kind": "Name",
+      "source": "_saved"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 763,
+      "kind": "Name",
+      "source": "_saved"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 256,
+      "kind": "Attribute",
+      "source": "self.marker.access.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 390,
+      "kind": "Attribute",
+      "source": "record.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 518,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 839,
+      "kind": "Name",
+      "source": "opened_private_checkpoint_unlocked"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 897,
+      "kind": "Name",
+      "source": "_saved"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 774,
+      "kind": "Attribute",
+      "source": "marker.access.verify_checkpoint"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 780,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 853,
+      "kind": "Name",
+      "source": "_saved"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 880,
+      "kind": "Name",
+      "source": "_saved"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 599,
+      "kind": "Name",
+      "source": "_saved"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 668,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 757,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 772,
+      "kind": "Attribute",
+      "source": "marker.access.open_checkpoint"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 816,
+      "kind": "Name",
+      "source": "opened_private_checkpoint_unlocked"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 874,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 594,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 54,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 119,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 36,
+      "kind": "ClassDef",
+      "source": "class ReadLedger(Sealed, LockedStore[ReadDocument]):\n    filename = 'read_ledger.json'\n\n    @property\n    def record_type(self) -> type[ReadDocument]:\n        return ReadDocument\n\n    def empty(self) -> ReadDocument:\n        return ReadDocument()\n\n    @staticmethod\n    def human(role: ThreadRole) -> bool:\n        return not role.executable\n\n    @staticmethod\n    def bus_identity(path: Path) -> tuple[int, int] | None:\n        try:\n            info = path.stat()\n        except FileNotFoundError:\n            return None\n        return (info.st_dev, info.st_ino)\n\n    @staticmethod\n    def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:\n        from .channel_targets import BuiltinChannel, is_channel_target\n        builtin = BuiltinChannel.lookup(message.target)\n        if builtin is not None or is_channel_target(message.target):\n            return Conversation(target=builtin.value if builtin is not None else message.target)\n        names = sorted({snapshot.aliases.get(name, name) for name in (message.sender, message.target)})\n        return Conversation(participants=tuple((ThreadIncarnation(name, snapshot.threads[name].created_at if name in snapshot.threads else -1.0) for name in names)))\n\n    @staticmethod\n    def _key(viewer: str, created_at: float, conversation: Conversation) -> str:\n        return json.dumps([viewer, created_at, conversation.to_wire()], separators=(',', ':'))\n\n    def capture(self, viewer: str, messages: Iterable[Message], snapshot: RegistrySnapshot, bus_path: Path, *, conversation_snapshot: RegistryProvenance | None=None) -> DisplayBasis:\n        viewer = snapshot.aliases.get(viewer, viewer)\n        grouped: dict[Conversation, list[int]] = {}\n        for message in messages:\n            conversation = self.conversation(message, conversation_snapshot or snapshot)\n            grouped.setdefault(conversation, []).append(message.seq)\n        return DisplayBasis(viewer, snapshot.threads[viewer].created_at, tuple((DisplayedConversation(conversation, tuple(sorted(set(sequences)))) for conversation, sequences in grouped.items())), self.bus_identity(bus_path))\n\n    def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:\n        if displayed.bus_identity != self.bus_identity(self.path.with_name('bus.jsonl')):\n            raise ValueError('Display bus changed; refresh the displayed page.')\n        if viewer != displayed.viewer:\n            raise ValueError('Display belongs to a different viewer.')\n\n        def advance(document: ReadDocument) -> ReadDocument:\n            messages = dict(document.messages) if document.bus_identity == displayed.bus_identity else {}\n            for item in displayed.conversations:\n                key = self._key(viewer, displayed.viewer_created_at, item.conversation)\n                messages[key] = tuple(sorted(set(messages.get(key, ())) | set(item.sequences)))\n            return replace(document, messages=messages, bus_identity=displayed.bus_identity) if messages != document.messages or document.bus_identity != displayed.bus_identity else document\n        self.update(advance)\n\n    def seen_sequences(self, viewer: str, snapshot: RegistrySnapshot, *, document: ReadDocument | None=None) -> frozenset[int]:\n        viewer = snapshot.aliases.get(viewer, viewer)\n        thread = snapshot.threads[viewer]\n        seen: set[int] = set()\n        document = self.read() if document is None else document\n        if document.bus_identity != self.bus_identity(self.path.with_name('bus.jsonl')):\n            return frozenset()\n        for key, sequences in document.messages.items():\n            name, created, raw = json.loads(key)\n            if snapshot.aliases.get(name, name) == viewer and created == thread.created_at:\n                conversation = Conversation.from_wire(raw)\n                if conversation.current(snapshot):\n                    seen.update(sequences)\n        return frozenset(seen)\n\n    def displayed_recipient(self, message, recipient, snapshot, *, document=None):\n        \"\"\"Return recorded human display evidence for this exact frozen recipient.\n\n        Processing, assignment acceptance and a reply cannot grant this fact.\n        A reused name with a different creation identity cannot inherit it.\n        \"\"\"\n        from .bus_publication import stable_thread_lookup\n        for thread in snapshot.threads.values():\n            if self.human(thread.role) and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup and (message.seq in self.seen_sequences(thread.name, snapshot, document=document)):\n                return (thread.incarnation,)\n        return ()\n\n    @staticmethod\n    def _transcript_key(viewer: str, source: str, inode: int) -> str:\n        return json.dumps([viewer, str(Path(source).resolve()), inode])\n\n    def transcript_seen(self, viewer: str, source: str, inode: int, *, document: ReadDocument | None=None) -> int:\n        document = self.read() if document is None else document\n        return document.transcripts.get(self._transcript_key(viewer, source, inode), 0)\n\n    def mark_transcript(self, viewer: str, source: str, inode: int, through: int, size: int) -> None:\n        key = self._transcript_key(viewer, source, inode)\n\n        def advance(document: ReadDocument) -> ReadDocument:\n            previous = document.transcripts.get(key, 0)\n            if previous <= size and previous >= through:\n                return document\n            return replace(document, transcripts={**document.transcripts, key: through})\n        self.update(advance)"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 70,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 68,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 98,
+      "kind": "Attribute",
+      "source": "WireLog(store_path).verify_before_read_unlocked"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 129,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 149,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 219,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass AssignedTranscriptSource:\n    root: Path\n    recipient: ThreadIncarnation\n    log: WireLog\n\n    @classmethod\n    def for_thread(cls, root, thread, log):\n        return cls(root, thread.incarnation, log)\n\n    def rows(self, predicate='1', parameters=(), *, limit=1, ascending=False):\n        return self.log.conversation_sources(stable_thread_lookup(self.recipient.created_at), predicate, parameters, limit=limit, ascending=ascending)\n\n    @property\n    def frontier(self):\n        return self.window()[0]\n\n    def window(self, *, limit=1):\n        \"\"\"One certified original window owns both rows and its frontier.\"\"\"\n        rows = self.rows(limit=limit)\n        return (AssignedSourceCursor(str(self.root), self.recipient, rows[0].message.seq if rows else 0), rows)\n\n    def page_rows(self, traversal, sequence, through, *, limit):\n        predicate, parameters = traversal.predicate(sequence, through)\n        return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)\n\n    def native_records(self, fragments, routes, reader):\n        \"\"\"One original SQL read per bounded fragment, closed before wire/render.\"\"\"\n        from .native_runtime_input import NativeRuntimeInput\n        lookup = stable_thread_lookup(self.recipient.created_at)\n        for fragment in fragments:\n            with NativeRuntimeInput._publication_read(self.root) as db:\n                capture = partial(NativeRuntimeInput.transcript_projection, db, reader, owner_lookup=lookup)\n                originals = tuple(((record, record.project(capture)) for record in fragment))\n            for record, projection in originals:\n                yield (record, record.project(lambda record: self.native_events(record, routes, *projection)))\n\n    def native_events(self, record, routes, project_events, references):\n        from .native_entries import TranscriptProjection\n        entry = record.entry\n        published = False\n        routing = routes.get(entry.id)\n        lookup = stable_thread_lookup(self.recipient.created_at)\n        events = project_events(TranscriptProjection(routing, routes.input_display(entry.input_id)))\n        if entry.final_reply:\n            if routing is not None and routing.publications:\n                marks = ','.join(('?' for _ in routing.publications))\n                originals = self.rows(f'w.seq IN ({marks})', tuple((ref.seq for ref in routing.publications)), limit=len(routing.publications))\n                published = all((any((original.message.reference == ref and original.audience.sender_lookup == lookup for original in originals)) for ref in routing.publications))\n            if not published and references:\n                marks = ','.join(('?' for _ in references))\n                originals = self.rows(f'w.seq IN ({marks})', tuple((ref.seq for ref in references)), limit=len(references))\n                published = all((any((original.message.reference == ref and original.audience.sender_lookup == lookup for original in originals)) for ref in references))\n        result = []\n        for event in events:\n            if published and isinstance(event, AssistantTranscript):\n                continue\n            if isinstance(event, UserTranscript) and event.routed:\n                requests = event.routing.requests\n                marks = ','.join(('?' for _ in requests))\n                originals = self.rows(f'w.seq IN ({marks})', tuple((reference.seq for reference in requests)), limit=len(requests))\n                remaining = tuple((reference for reference in requests if not any((original.message.reference == reference for original in originals))))\n                if not remaining:\n                    continue\n                event = replace(event, routing=TurnRouting(remaining, event.routing.reply))\n            result.append(event)\n        return tuple(result)\n\n    def events(self, original):\n        message = original.message\n        if original.audience.sender_lookup == stable_thread_lookup(self.recipient.created_at):\n            return (SentTranscript(message.body, timestamp=message.timestamp, source=message.reference, routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,)))),)\n        return (IncomingTranscript(message.body, timestamp=message.timestamp, source=message.reference, route=MessageRoute(message.sender, (message.target,)), routing=TurnRouting((message.reference,))),)"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 229,
+      "kind": "Attribute",
+      "source": "self.log.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 244,
+      "kind": "Attribute",
+      "source": "source.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 292,
+      "kind": "ImportFrom",
+      "source": "from .transcript_receipts import AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 425,
+      "kind": "ImportFrom",
+      "source": "from .transcript_receipts import AssignedTranscriptSource, EarlierTranscript, LaterTranscript"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 478,
+      "kind": "ImportFrom",
+      "source": "from .transcript_receipts import AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 437,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 294,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 490,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "source": "from .read_ledger import ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 92,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 91,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 110,
+      "kind": "FunctionDef",
+      "source": "def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):\n    \"\"\"Read an original window through its existing canonical barrier.\"\"\"\n    with _store_lock(self.path) as lock:\n        if not self.path.exists():\n            return ()\n        marker = self._private_marker_unlocked()\n        source = lock.certified_read()\n        source.require_marker(marker)\n        originals = source.conversation_sources(lookup, predicate, parameters, limit=limit, ascending=ascending)\n        source.require_current()\n    return tuple(originals)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 162,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self, name: str, registry):\n    \"\"\"Capture original source and rename membership before decoding.\n\n        The original wire -> bus -> registry order selects the read snapshot;\n        neither physical publication lock survives into its decoder.\n        \"\"\"\n    with _store_lock(self.path.parent / 'wire'):\n        with self.certified_read() as source:\n            snapshot = registry.snapshot()\n            incarnation = snapshot.require(name).incarnation\n            captured = source.context_manifests(incarnation, snapshot)\n    return tuple(captured)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 453,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:\n    \"\"\"Run the original strict WireScan after releasing publication custody.\n\n        Uncertified streams retain the same complete validation algorithm.\n        This resource is a fixed read, not a current append/admission permit.\n        \"\"\"\n    with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):\n        yield self._snapshot_records(metadata, stream, boundary)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 463,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef projection_snapshot(self):\n    \"\"\"Lend one opened source cut to disposable indexes after bus release.\n\n        The index may seek this stream within its original revision. If index\n        acquisition fails, the strict record iterator reads that SAME cut.\n        Its stream remains owned here; no projection acquires bus authority.\n        \"\"\"\n    with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, revision):\n        yield (metadata, revision, stream, self._snapshot_records(metadata, stream, boundary))"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 570,
+      "kind": "FunctionDef",
+      "source": "@contextmanager\ndef verify_before_read_unlocked(self):\n    \"\"\"Make every visible opt-in bus row durable before ANY bus-lock reader sees it.\n\n        The marker is fsynced before the first claim send. A failed bus append may\n        leave a complete, visible row: another cooperating process must fsync the\n        opened inode and its directory, then reject incomplete/corrupt rows, before\n        treating either the announcement or the claim as committed. This hook is\n        entered by the shared bus lock, including ordinary inbox/history readers.\n        \"\"\"\n    if not self.claim_gate_enabled():\n        yield None\n        return\n    private_marker = self.read_metadata_unlocked()\n    marker = self.metadata_path\n    marker_info = marker.lstat()\n    if os.name != 'posix' or not stat.S_ISREG(marker_info.st_mode) or marker_info.st_uid != os.geteuid() or (stat.S_IMODE(marker_info.st_mode) != 384):\n        raise RelationViolationError('Claim bus read barrier is not durable and private.')\n    from .private_bus_checkpoint import opened_claim_source_unlocked\n    with opened_claim_source_unlocked(self, private_marker) as source:\n        yield source"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 385,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import opened_private_checkpoint_unlocked"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 406,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import opened_private_checkpoint_unlocked"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 592,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import opened_claim_source_unlocked"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 118,
+      "kind": "Attribute",
+      "source": "source.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 144,
+      "kind": "Attribute",
+      "source": "self.verified_snapshot"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 150,
+      "kind": "Attribute",
+      "source": "self.verified_snapshot"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 390,
+      "kind": "Name",
+      "source": "opened_private_checkpoint_unlocked"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 408,
+      "kind": "Name",
+      "source": "opened_private_checkpoint_unlocked"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 530,
+      "kind": "Attribute",
+      "source": "self.verified_snapshot"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 594,
+      "kind": "Name",
+      "source": "opened_claim_source_unlocked"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 172,
+      "kind": "Attribute",
+      "source": "source.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 44,
+      "kind": "ClassDef",
+      "source": "class WireAccess(DeclaredFamily, affix='Access'):\n\n    @abstractmethod\n    def require_append(self) -> None:\n        ...\n\n    @abstractmethod\n    def open_checkpoint(self, path: Path) -> sqlite3.Connection:\n        ...\n\n    @abstractmethod\n    def verify_checkpoint(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection, stream: BinaryIO, path: Path) -> PrefixWitness:\n        ...\n\n    @abstractmethod\n    def open_page_index(self, path: Path) -> BusPageIndex:\n        ...\n\n    @abstractmethod\n    def prepare_page_index(self, index: BusPageIndex) -> bool:\n        ...\n\n    @abstractmethod\n    def context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> Iterator[ContextManifest]:\n        ..."
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 67,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass WritableAccess(WireAccess):\n\n    def require_append(self) -> None:\n        pass\n\n    def open_checkpoint(self, path):\n        from .private_bus_checkpoint import _connect\n        return _connect(path)\n\n    def verify_checkpoint(self, bus, marker, db, stream, path):\n        from .private_bus_checkpoint import _verify_open_checkpoint_unlocked\n        return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)\n\n    def open_page_index(self, path):\n        from .bus_page_index import BusPageIndex\n        return BusPageIndex(path)\n\n    def prepare_page_index(self, index):\n        return index.sync()\n\n    def context_manifests(self, source, incarnation, snapshot):\n        return source.indexed_context_manifests(incarnation, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 94,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)\nclass ArchivedAccess(WireAccess):\n\n    def require_append(self) -> None:\n        raise RelationViolationError('Archived history is read-only.')\n\n    def open_checkpoint(self, path):\n        from .private_bus_checkpoint import _connect\n        return _connect(path, readonly=True)\n\n    def verify_checkpoint(self, bus, marker, db, stream, path):\n        from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail\n        saved = PrefixCertificate.read_witness(db)\n        CertifiedSourceRead(bus.path, marker, db, stream, saved).require_current()\n        if _tail(stream, saved.offset) != saved.tail:\n            raise RelationViolationError('Archived source prefix tail changed.')\n        return saved\n\n    def open_page_index(self, path):\n        from .bus_page_index import BusPageIndex\n        return BusPageIndex(path, readonly=True)\n\n    def prepare_page_index(self, index):\n        return index.current()\n\n    def context_manifests(self, source, incarnation, snapshot):\n        from .wire_log import WireLog\n        source.require_current()\n        source.stream.seek(0)\n        manifests = tuple((manifest for record in WireLog._snapshot_records(source.marker, source.stream, source.witness.offset) for manifest in record.context_manifests() if manifest.thread.resolved(snapshot) == incarnation))\n        source.require_current()\n        return iter(manifests)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import CertifiedSourceRead, PrefixWitness"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 49,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod\ndef open_checkpoint(self, path: Path) -> sqlite3.Connection:\n    ..."
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 52,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod\ndef verify_checkpoint(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection, stream: BinaryIO, path: Path) -> PrefixWitness:\n    ..."
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 56,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod\ndef open_page_index(self, path: Path) -> BusPageIndex:\n    ..."
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod\ndef prepare_page_index(self, index: BusPageIndex) -> bool:\n    ..."
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 62,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod\ndef context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> Iterator[ContextManifest]:\n    ..."
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 67,
+      "kind": "Name",
+      "source": "WireAccess"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 71,
+      "kind": "FunctionDef",
+      "source": "def open_checkpoint(self, path):\n    from .private_bus_checkpoint import _connect\n    return _connect(path)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 76,
+      "kind": "FunctionDef",
+      "source": "def verify_checkpoint(self, bus, marker, db, stream, path):\n    from .private_bus_checkpoint import _verify_open_checkpoint_unlocked\n    return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 81,
+      "kind": "FunctionDef",
+      "source": "def open_page_index(self, path):\n    from .bus_page_index import BusPageIndex\n    return BusPageIndex(path)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 86,
+      "kind": "FunctionDef",
+      "source": "def prepare_page_index(self, index):\n    return index.sync()"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 89,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self, source, incarnation, snapshot):\n    return source.indexed_context_manifests(incarnation, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 94,
+      "kind": "Name",
+      "source": "WireAccess"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 98,
+      "kind": "FunctionDef",
+      "source": "def open_checkpoint(self, path):\n    from .private_bus_checkpoint import _connect\n    return _connect(path, readonly=True)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 103,
+      "kind": "FunctionDef",
+      "source": "def verify_checkpoint(self, bus, marker, db, stream, path):\n    from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail\n    saved = PrefixCertificate.read_witness(db)\n    CertifiedSourceRead(bus.path, marker, db, stream, saved).require_current()\n    if _tail(stream, saved.offset) != saved.tail:\n        raise RelationViolationError('Archived source prefix tail changed.')\n    return saved"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 115,
+      "kind": "FunctionDef",
+      "source": "def open_page_index(self, path):\n    from .bus_page_index import BusPageIndex\n    return BusPageIndex(path, readonly=True)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 120,
+      "kind": "FunctionDef",
+      "source": "def prepare_page_index(self, index):\n    return index.current()"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 123,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self, source, incarnation, snapshot):\n    from .wire_log import WireLog\n    source.require_current()\n    source.stream.seek(0)\n    manifests = tuple((manifest for record in WireLog._snapshot_records(source.marker, source.stream, source.witness.offset) for manifest in record.context_manifests() if manifest.thread.resolved(snapshot) == incarnation))\n    source.require_current()\n    return iter(manifests)"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 56,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 82,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 104,
+      "kind": "ImportFrom",
+      "source": "from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 116,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 146,
+      "kind": "Name",
+      "source": "WireAccess"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 59,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 62,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 84,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 90,
+      "kind": "Attribute",
+      "source": "source.indexed_context_manifests"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 109,
+      "kind": "Attribute",
+      "source": "PrefixCertificate.read_witness"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 118,
+      "kind": "Name",
+      "source": "BusPageIndex"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 146,
+      "kind": "Name",
+      "source": "WritableAccess"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 109,
+      "kind": "Name",
+      "source": "PrefixCertificate"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 110,
+      "kind": "Name",
+      "source": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 135,
+      "kind": "Attribute",
+      "source": "record.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 54,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self):\n    return ()"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 99,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod\ndef context_manifests(self):\n    ..."
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 112,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self):\n    return (self.manifest,)"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 125,
+      "kind": "FunctionDef",
+      "source": "def context_manifests(self):\n    return self.observation.context_manifests()"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 126,
+      "kind": "Attribute",
+      "source": "self.observation.context_manifests"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 33,
+      "kind": "ImportFrom",
+      "source": "from retained_history_cutover_pilot import reference_actual_history"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 37,
+      "kind": "ImportFrom",
+      "source": "from retained_history_cutover_pilot import reference_actual_history"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 50,
+      "kind": "Name",
+      "source": "reference_actual_history"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 72,
+      "kind": "Name",
+      "source": "reference_actual_history"
+    },
+    {
+      "path": "tests/certified_sequence_channel_installed_journey.py",
+      "line": 62,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.read_ledger import ReadLedger"
+    },
+    {
+      "path": "tests/certified_sequence_channel_installed_journey.py",
+      "line": 79,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "tests/guards/test_sealed_mechanisms.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.read_ledger import ReadLedger"
+    },
+    {
+      "path": "tests/guards/test_sealed_mechanisms.py",
+      "line": 22,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "tests/guards/test_source_proof_ownership.py",
+      "line": 94,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.historical_views import HistorySource, HistoricalThread"
+    },
+    {
+      "path": "tests/guards/test_source_proof_ownership.py",
+      "line": 100,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tests/guards/test_source_proof_ownership.py",
+      "line": 97,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.historical_views import ChannelHistory, HistorySource"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 17,
+      "kind": "FunctionDef",
+      "source": "def reference_actual_history(destination, live):\n    \"\"\"Borrow the original immutable sources, including their exact seals.\"\"\"\n    sources = tuple((FieldCodec.decode(HistorySource, raw) for raw in json.loads((live / 'history_sources.json').read_text())))\n    originals = {}\n    for source in sources:\n        source.validate()\n        original = Path(source.root)\n        originals[original] = (original, (original / 'bus.jsonl').read_bytes(), (original / 'private_bus_checkpoint.sqlite3').read_bytes())\n    (destination / 'history_sources.json').write_text(json.dumps([FieldCodec.encode(s) for s in sources]))\n    return originals"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 54,
+      "kind": "Name",
+      "source": "reference_actual_history"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 19,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 33,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tests/test_bus_page_index.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.wire_metadata import ArchivedAccess"
+    },
+    {
+      "path": "tests/test_bus_page_index.py",
+      "line": 27,
+      "kind": "Name",
+      "source": "ArchivedAccess"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.message_page import MessagePageRequest"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 39,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 51,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.message_page import MessagePageRequest"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 119,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.read_ledger import ReadLedger"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 98,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 98,
+      "kind": "Name",
+      "source": "ReadLedger"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 5,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.message_page import MessagePageRequest"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 15,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 9,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.message_page import MessagePageRequest"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 60,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 68,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 35,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 45,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 69,
+      "kind": "Name",
+      "source": "MessagePageRequest"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 66,
+      "kind": "Attribute",
+      "source": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 228,
+      "kind": "Attribute",
+      "source": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 236,
+      "kind": "Attribute",
+      "source": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 180,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.transcript_receipts import AssignedTranscriptSource"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 337,
+      "kind": "Attribute",
+      "source": "WireLog.verify_before_read_unlocked"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 380,
+      "kind": "Attribute",
+      "source": "WireLog.verify_before_read_unlocked"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 416,
+      "kind": "Attribute",
+      "source": "checkpoint._saved"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 184,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 233,
+      "kind": "Attribute",
+      "source": "reopened.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 235,
+      "kind": "Attribute",
+      "source": "reopened.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 248,
+      "kind": "Attribute",
+      "source": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 269,
+      "kind": "Attribute",
+      "source": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 285,
+      "kind": "Attribute",
+      "source": "Comms(comms.root).bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 294,
+      "kind": "Attribute",
+      "source": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 140,
+      "kind": "Attribute",
+      "source": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 141,
+      "kind": "Attribute",
+      "source": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 65,
+      "kind": "Attribute",
+      "source": "original.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 155,
+      "kind": "Attribute",
+      "source": "service.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 243,
+      "kind": "Attribute",
+      "source": "service.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 329,
+      "kind": "Attribute",
+      "source": "reopened.bus.log.context_manifests"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 17,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.historical_views import HistorySource"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 46,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 25,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.historical_views import HistoryArchive, HistorySource"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 182,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 355,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 301,
+      "kind": "Name",
+      "source": "HistorySource"
+    },
+    {
+      "path": "tools/cutover/read_original_task_preimage.py",
+      "line": 21,
+      "kind": "FunctionDef",
+      "source": "def read_original(root):\n    bus = WireLog(Path(root) / 'bus.jsonl')\n    with bus.certified_read() as source:\n        return capture_original(bus, source)"
+    },
+    {
+      "path": "tools/cutover/read_original_task_preimage.py",
+      "line": 28,
+      "kind": "Name",
+      "source": "read_original"
+    },
+    {
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.transcript_receipts import AssignedTranscriptSource"
+    },
+    {
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 47,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    },
+    {
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 50,
+      "kind": "Name",
+      "source": "AssignedTranscriptSource"
+    }
+  ],
+  "limits": "Existing NRA Package parser across declared production/tests/tools. Names/attribute candidates do not prove dynamic dispatch. Frontend API unchanged; no frontend source edits."
+}

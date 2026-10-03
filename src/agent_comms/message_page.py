@@ -225,9 +225,10 @@ class MessagePageRequest:
 
     def read(self, log) -> MessagePage:
         with log.locked():
+            access = log.read_metadata_unlocked().access
             try:
-                with BusPageIndex(log.path) as index:
-                    if index.sync():
+                with access.open_page_index(log.path) as index:
+                    if access.prepare_page_index(index):
                         return self.indexed(index, log)
             except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
                 # A disposable index cannot replace the durable wire authority.
