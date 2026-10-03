@@ -190,6 +190,9 @@ export class TurnContext {
         // Match SDK Context member order for recorded-input byte comparisons.
         return {systemPrompt:provider.systemPrompt,messages:provider.messages,tools:provider.tools};
     }
-    manifest() { return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest())}; }
+    manifest(requestId) {
+        return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest()),
+            ...(requestId === undefined ? {} : {requestId})};
+    }
     full() { return {identity:this.identity,counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.full())}; }
 }
