@@ -1,0 +1,253 @@
+{
+  "parsed": 3,
+  "omissions": [],
+  "sites": [
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 523,
+      "node": "MethodDefinition",
+      "name": "setSessionFile"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 523,
+      "node": "Identifier",
+      "name": "setSessionFile"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 781,
+      "node": "MethodDefinition",
+      "name": "reloadCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 781,
+      "node": "Identifier",
+      "name": "reloadCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 786,
+      "node": "MemberExpression",
+      "name": "setSessionFile"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 786,
+      "node": "Identifier",
+      "name": "setSessionFile"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 787,
+      "node": "MemberExpression",
+      "name": "reconcileCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 787,
+      "node": "Identifier",
+      "name": "reconcileCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 796,
+      "node": "MethodDefinition",
+      "name": "reconcileCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/session-manager.js",
+      "line": 796,
+      "node": "Identifier",
+      "name": "reconcileCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1807,
+      "node": "MethodDefinition",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1807,
+      "node": "Identifier",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1814,
+      "node": "MethodDefinition",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1814,
+      "node": "Identifier",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1825,
+      "node": "MethodDefinition",
+      "name": "restoreCompaction"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1825,
+      "node": "Identifier",
+      "name": "restoreCompaction"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1826,
+      "node": "MemberExpression",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1826,
+      "node": "Identifier",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1830,
+      "node": "MemberExpression",
+      "name": "reloadCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1830,
+      "node": "Identifier",
+      "name": "reloadCompactionCommit"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1831,
+      "node": "MemberExpression",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1831,
+      "node": "Identifier",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1918,
+      "node": "MemberExpression",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 1918,
+      "node": "Identifier",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 2194,
+      "node": "MemberExpression",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": ".artifacts/known-runtime-source593/agent-session.js",
+      "line": 2194,
+      "node": "Identifier",
+      "name": "_restoreCompactionContext"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 38,
+      "node": "FunctionDeclaration",
+      "name": "acSelectedIdleSettings"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 38,
+      "node": "Identifier",
+      "name": "acSelectedIdleSettings"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 39,
+      "node": "MemberExpression",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 39,
+      "node": "Identifier",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 53,
+      "node": "Identifier",
+      "name": "acSelectedIdleSettings"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 63,
+      "node": "Identifier",
+      "name": "acSelectedIdleSettings"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 139,
+      "node": "FunctionDeclaration",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 139,
+      "node": "Identifier",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 140,
+      "node": "MemberExpression",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 140,
+      "node": "Identifier",
+      "name": "isIdleForCompaction"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 226,
+      "node": "Identifier",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 244,
+      "node": "Identifier",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 359,
+      "node": "Identifier",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 369,
+      "node": "Identifier",
+      "name": "acSummaryCurrent"
+    },
+    {
+      "path": "stack/native-compaction-selected-summary.mjs",
+      "line": 378,
+      "node": "Identifier",
+      "name": "acSummaryCurrent"
+    }
+  ],
+  "limits": "Changed source projections only; before inventory covers all268distJS. Dynamic extension hooks and injected Python strings not resolved."
+}
