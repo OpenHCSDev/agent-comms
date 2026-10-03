@@ -172,7 +172,9 @@ def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history
     assert warm == cold
     assert [message.seq for message in warm.messages] == [150, 200]
     assert decoded == 3  # two returned rows and the earlier-match boundary
-    assert cold_decoded == len(rows) + decoded  # canonical cold validation remains
+    # The archive's creation owner already prepared its certified offsets;
+    # both first and subsequent browsing consume only the selected originals.
+    assert cold_decoded == decoded
     assert captured == 1
     narrowed_decodes = decoded
     decoded = 0
