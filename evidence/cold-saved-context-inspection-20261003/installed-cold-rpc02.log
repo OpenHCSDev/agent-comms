@@ -1,0 +1,3 @@
+cold_context_runtime {"pid": 550868, "source": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-rpc02/test_original_context_query_pr0/sessions/enrolled-d6b8cfac0afa4304b8614bc8b471673e.jsonl", "cold_acquisition": true, "provider_requests": 0, "new_inputs": 0, "repeat_source_unchanged": true, "original_source_prefix_preserved": true, "child_exited": true}
+.
+1 passed in 4.06s
