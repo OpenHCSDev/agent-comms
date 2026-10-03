@@ -31,7 +31,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
             "receiver", "stopped-reviewer", "unstarted-reviewer"
         }
         cursor = await _accept_visible_deliveries(
-            comms.bus, root_id, store, lookup, 0, owner_name=receiver.name
+            comms.bus, root_id, store.session.path, lookup, 0, owner_name=receiver.name
         )
         assert cursor == message.seq
         assignments = sealed_cohort_assignments(store, lookup)
@@ -41,7 +41,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
                        for r in initial.audience.recipients)
         again = comms.messaging.send_message("sender", "#team", "Second @receiver")
         assert await _accept_visible_deliveries(
-            comms.bus, root_id, store, lookup, cursor, owner_name=receiver.name
+            comms.bus, root_id, store.session.path, lookup, cursor, owner_name=receiver.name
         ) == again.seq
         assert tuple(store.participants.get(r.recipient_lookup)
                      for r in initial.audience.recipients) == before

@@ -23,7 +23,9 @@ import os
 import re
 import sys
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
@@ -250,7 +252,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         text = self._prompt_text(prompt)
         if (
-            self.turns.active_backend_inbox(session_id) is not None
+            await self.turns.active_backend_inbox(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
             return await self.inputs.accept_followup(
@@ -366,10 +368,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 "private N/K ACP requires an explicit matching root and native package"
             )
         thread_name = await self.sessions.sync_identity(session_id)
+        snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
+        owner = snapshot.require(thread_name)
         if (
             self.inputs.background_wakes_disabled
-            or self._comms.registry.status(thread_name).stopped
-            or self.turns.session_busy(session_id)
+            or snapshot.status(thread_name).stopped
+            or session_id in self.turns.turn_tasks
+            or owner.turn_state.busy
             or session_id in self.inputs.backend_inboxes
         ):
             # Admission changes still invalidate the client while this owner
@@ -377,7 +382,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # acceptance/selection, instead of verifying history before it too.
             await self.cursors.publish(session_id, thread_name)
             return 0
-        owner = self._comms.registry.require(thread_name)
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         if owner.turn_state.busy:
@@ -385,23 +389,22 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
-        with bus.log.locked():
-            admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
-        with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-            await _accept_visible_deliveries(
-                bus,
-                wire_root_id,
-                store,
-                stable_thread_lookup(owner.created_at),
-                0,
-                owner_name=owner.name,
-                native_package=package,
-            )
+        def read_admission():
+            with bus.log.locked():
+                return bus.log._private_marker_unlocked().admission_after_seq
+        admission_after_seq = await Coordination.run_worker(read_admission)
+        store_path = self._comms.root / "coordination.sqlite3"
+        await _accept_visible_deliveries(
+            bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
+            owner_name=owner.name, native_package=package,
+        )
+        def select(store):
             participant = store.participants.get(stable_thread_lookup(owner.created_at))
             candidate = next_sealed_assignment(
-                store, participant.lookup, owner.name, after_seq=admission_after_seq
+                store, participant.lookup, owner.name, after_seq=admission_after_seq,
             )
-            runnable = candidate is not None and participant.pointer.execution_id is None
+            return candidate is not None and participant.pointer.execution_id is None
+        runnable = await Coordination.run_async(store_path, select)
         result = None
         if runnable:
             execution = SelectedExecution(
@@ -436,11 +439,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
-        await self.inputs.stop_wakes()
-        await self.sessions.close_proxies()
-        await self.turns.close()
-        await self.inputs.close()
-        await self.sessions.release_owned()
+        async with AsyncExitStack() as retirement:
+            retirement.push_async_callback(self.sessions.release_owned)
+            retirement.push_async_callback(self.turns.close)
+            retirement.push_async_callback(self.sessions.close_proxies)
+            retirement.push_async_callback(self.inputs.close)
 
     async def _emit_text(
         self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None

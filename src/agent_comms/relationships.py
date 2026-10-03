@@ -489,7 +489,7 @@ class ThreadRelationships:
             if not first.role.executable:
                 raise ValueError("Collaborations relate agent threads")
             registry = self.registry.snapshot()
-            peer = registry.aliases.get(peer, peer)
+            peer = registry.canonical_name(peer)
             result = None
 
             def change(document: RelationshipDocument) -> RelationshipDocument:
@@ -561,7 +561,7 @@ class ThreadRelationships:
         messages, limited = self._recent_messages()
 
         def canonical(name: str) -> str:
-            return registry.aliases.get(name, name)
+            return registry.canonical_name(name)
 
         def entry(
             name: str, *, message: Message | None = None, detail: str = ""

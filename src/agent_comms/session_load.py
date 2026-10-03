@@ -1,6 +1,7 @@
 """Declaration-owned owner admission at the external ACP load boundary."""
 from abc import abstractmethod
-import asyncio
+from functools import partial
+from .coordinator import Coordination
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -40,10 +41,10 @@ class SessionLoadAdmission(DeclaredFamily, affix="SessionLoadAdmission"):
 @dataclass(frozen=True, slots=True)
 class EnsuringSessionLoadAdmission(SessionLoadAdmission):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        return await asyncio.to_thread(
+        return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
             agent_bin=lifecycle.agent_bin, agent_args=list(lifecycle.agent_args.argv),
-        )
+        ))
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +62,7 @@ class ExistingSessionLoadAdmission(WitnessedSessionLoadAdmission):
     binding: LiveThreadOwnerBinding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        snapshot = await asyncio.to_thread(lifecycle.comms.registry.snapshot)
+        snapshot = await Coordination.run_worker(lifecycle.comms.registry.snapshot)
         if thread.incarnation != self.binding.owner.incarnation:
             raise RelationViolationError("Read-only attachment targets a different thread incarnation")
         snapshot.require_owner_process(self.binding.owner, self.binding.process)

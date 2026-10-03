@@ -172,7 +172,7 @@ class Goals:
         """
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            canonical = snapshot.aliases.get(name, name)
+            canonical = snapshot.canonical_name(name)
             owner = snapshot.threads.get(canonical)
             if owner is None or owner.executing:
                 return ()
@@ -223,9 +223,7 @@ class Goals:
             return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            canonical = snapshot.aliases.get(
-                fence.identity.incarnation.name, fence.identity.incarnation.name
-            )
+            canonical = snapshot.canonical_name(fence.identity.incarnation.name)
             source = snapshot.threads.get(canonical)
             observed = (
                 source.observed_turn(snapshot.admission_generations.get(canonical, 0))
@@ -252,7 +250,7 @@ class Goals:
                     or wait.owner_created_at != owner.created_at
                     or wait.revision > goal.revision
                     or not any(
-                        snapshot.aliases.get(target.name, target.name) == canonical
+                        snapshot.canonical_name(target.name) == canonical
                         and target.created_at == fence.identity.incarnation.created_at
                         and (generation := wait.target_turn_generations[index]) is not None
                         and 0 < generation <= fence.identity.generation
@@ -315,7 +313,7 @@ class Goals:
 
     def _goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
         snapshot = self.registry.snapshot()
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
         return goal, GoalWaits.execution(
             goal,

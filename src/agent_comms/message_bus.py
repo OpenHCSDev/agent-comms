@@ -121,7 +121,7 @@ class MessageBus:
 
     def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None) -> DeliveryScope:
         snapshot = snapshot or self._registry.snapshot()
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         thread = snapshot.threads[canonical]
@@ -167,7 +167,7 @@ class MessageBus:
         """Capture one registry/read snapshot and sync the route index once."""
         snapshot = self._registry.snapshot()
         catalog = self._channels.read()
-        actors = {name: snapshot.aliases.get(name, name) for name in names}
+        actors = {name: snapshot.canonical_name(name) for name in names}
         deliveries = {}
         channel_members: dict[str, set[str]] = {}
         for actor in set(actors.values()):
@@ -202,7 +202,7 @@ class MessageBus:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
 
         def recipients(target: str):
-            direct = snapshot.aliases.get(target, target)
+            direct = snapshot.canonical_name(target)
             return channel_members.get(target, {direct} if direct in deliveries else set())
 
         def add(actor: str, sender: str, target: str, count: int):

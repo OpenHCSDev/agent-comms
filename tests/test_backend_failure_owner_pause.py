@@ -93,7 +93,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None
         with pytest.raises(UnresolvedAttemptError):
             agent.turns.goals.goal_store.resume(goal.id, generation.number)
-        agent.turns.goals.schedule_goal("project")
+        await agent.turns.goals.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
         diagnostics = list((wired.root / "diagnostics").glob("*.json"))
         assert len(diagnostics) == 1

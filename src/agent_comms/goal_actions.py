@@ -258,7 +258,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         snapshot = ctx.goals.registry.snapshot()
         if not any(
             GoalWaits.target_has_active_turn(target, snapshot)
-            and snapshot.threads[snapshot.aliases.get(target.name, target.name)].process_alive
+            and snapshot.threads[snapshot.canonical_name(target.name)].process_alive
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.name}" for target in wait_targets)
@@ -307,7 +307,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 target_turn_generations=tuple(
                     (
                         snapshot.threads[
-                            snapshot.aliases.get(target.name, target.name)
+                            snapshot.canonical_name(target.name)
                         ].turn_generation
                         if GoalWaits.target_has_active_turn(target, snapshot)
                         else None

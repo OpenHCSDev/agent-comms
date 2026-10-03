@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .thread_provenance import ThreadProvenance
 
 
+class RegistryNames:
+    """Shared resolution behavior for live and recorded registry namespaces."""
+
+    __slots__ = ()
+
+    aliases: Mapping[str, str]
+
+    def canonical_name(self, name: str) -> str:
+        """Resolve this namespace without requiring current membership."""
+        return self.aliases.get(name, name)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
-class RegistryProvenance:
+class RegistryProvenance(RegistryNames):
     threads: dict[str, ThreadProvenance]
     aliases: dict[str, str]
 
@@ -28,7 +41,7 @@ class RegistryProvenance:
         )
 
     def require(self, name: str) -> ThreadProvenance:
-        canonical = self.aliases.get(name, name)
+        canonical = self.canonical_name(name)
         try:
             return self.threads[canonical]
         except KeyError as error:

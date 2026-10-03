@@ -157,7 +157,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ProviderUsage)
     async def provider_usage(self, event: events.ProviderUsage) -> None:
-        self.goals.provider_usage(event)
+        await Coordination.run_worker(partial(self.goals.provider_usage, event))
 
     @handles(events.CompactionStart, events.CompactionEnd)
     async def invalidate_context(self, event: events.CompactionEvent) -> None:
@@ -192,11 +192,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        unknown_attempts = not self.inputs.dispositions.read().all_started(
+        document = await Coordination.run_worker(self.inputs.dispositions.read)
+        unknown_attempts = not document.all_started(
             self.inputs.turn_input_keys.get(self.session_id, set())
         )
         if event.ok is True and (
-            self.inputs.pending_followups(self.session_id) or unknown_attempts
+            self.inputs.pending_followups(self.session_id, document) or unknown_attempts
         ):
             # A final assistant stop can prove the original turn,
             # not an ACKed follow-up lacking its own user start.
@@ -208,7 +209,7 @@ class TurnProgress(events.AgentEventConsumer):
         if self.result is not None:
             event = replace(event, ok=False, text="Duplicate native terminal result")
         self.result = event
-        self.goals.done(event)
+        await Coordination.run_worker(partial(self.goals.done, event))
         return event
 
     @handles(events.InputStarted)
@@ -237,7 +238,7 @@ class TurnProgress(events.AgentEventConsumer):
     @handles(events.ToolEnd)
     async def tool_ended(self, event: events.ToolEnd) -> None:
         await self.sessions.sync_identity(self.session_id)
-        self.goals.tool_ended(event)
+        await Coordination.run_worker(partial(self.goals.tool_ended, event))
 
     async def transition(self, phase) -> None:
         states = await Coordination.run_worker(partial(

@@ -40,10 +40,10 @@ class ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
         if self.created_at == -1.0 or not self.current(snapshot):
             return self
-        return snapshot.threads[snapshot.aliases.get(self.name, self.name)].incarnation
+        return snapshot.threads[snapshot.canonical_name(self.name)].incarnation
 
     def current(self, snapshot: RegistryProvenance) -> bool:
-        thread = snapshot.threads.get(snapshot.aliases.get(self.name, self.name))
+        thread = snapshot.threads.get(snapshot.canonical_name(self.name))
         return (
             thread is None
             if self.created_at == -1.0
@@ -56,7 +56,7 @@ class ThreadIncarnation:
         The registry owns aliases and birth. A stored name does not supply or
         manufacture either fact, including after a name is reused.
         """
-        thread = snapshot.threads.get(snapshot.aliases.get(name, name))
+        thread = snapshot.threads.get(snapshot.canonical_name(name))
         return thread is not None and self.resolved(snapshot) == thread.incarnation
 
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:

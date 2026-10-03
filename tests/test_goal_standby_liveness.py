@@ -507,7 +507,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
         assert comms.goals.release_waits_after_terminal_turn(fence) == (owner,)
         assert comms.registry.require(owner).goal.state.active
         assert comms.goals.goal_wait(owner) is None
-        agent.turns.goals.schedule_goal(owner)
+        await agent.turns.goals.schedule_goal(owner)
         assert wakes == [owner]
         assert [turn.goal_id for turn in agent.inputs.pending_turns[owner]] == [goal.id]
     finally:

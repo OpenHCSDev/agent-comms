@@ -252,7 +252,7 @@ asyncio.run(main())
         try:
             assert await owner.inputs.drain_inbox("beta") == 0
             assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
-            assert owner.inputs.awaiting_input_keys("beta") == frozenset()
+            assert await owner.inputs.awaiting_input_keys("beta") == frozenset()
         finally:
             await owner.shutdown()
 

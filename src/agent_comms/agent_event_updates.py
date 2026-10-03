@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from .store_files import _store_lock
-
 from typing import TYPE_CHECKING, Any, cast
+from functools import partial
+from .coordinator import Coordination
 
 from acp.schema import (
     AgentMessageChunk,
@@ -136,7 +136,7 @@ class AcpEventConsumer(MroDispatch):
         session_id = self.session_id
         client = self.client
         turn_id = self.turn_id
-        if not turn_id or not self.agent.turns.owns_turn(session_id, turn_id):
+        if not turn_id or not await Coordination.run_worker(partial(self.agent.turns.owns_turn, session_id, turn_id)):
             return
         await client.session_update(
             session_id=session_id,
@@ -187,15 +187,13 @@ class AcpEventConsumer(MroDispatch):
         original_keys = original.notice_keys if original else ()
         from dataclasses import replace
 
-        failure = replace(
-            failure,
-            input_state=self.agent.inputs.dispositions.read().shared_state(original_keys),
-        )
+        document = await Coordination.run_worker(self.agent.inputs.dispositions.read)
+        failure = replace(failure, input_state=document.shared_state(original_keys))
         if self.agent.turns.emitted_errors.get(session_id) == failure:
             return
         failed_input = None
         input_text = original.notice_text if original else None
-        if input_text and not self.agent.inputs.dispositions.read().all_started(original_keys):
+        if input_text and not document.all_started(original_keys):
             failed_input = InputFailedUpdate(input_text, failure)
         await client.session_update(
             session_id=session_id,
@@ -226,9 +224,6 @@ class AcpEventConsumer(MroDispatch):
     async def on_done(self, event: events.Done) -> None:
         session_id = self.session_id
         client = self.client
-        with _store_lock(self.agent._comms._wire_lock_path):
-            original = self.agent.inputs.original_sources.get(session_id)
-            self.agent.inputs.dispositions.settle_unbound(original.notice_keys if original else ())
         if not event.ok and event.text:
             # The existing emission owner deduplicates full typed evidence,
             # including a terminal not-sent transition with unchanged text.

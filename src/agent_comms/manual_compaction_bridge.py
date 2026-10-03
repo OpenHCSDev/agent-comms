@@ -47,12 +47,12 @@ async def compact_context(
         return RefusedCompactionResult("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
     lock = runner.turn_locks.setdefault(session_id, asyncio.Lock())
-    if lock.locked() or runner.session_busy(session_id):
+    if lock.locked() or await Coordination.run_worker(partial(runner.session_busy, session_id)):
         return RefusedCompactionResult("Wait for the current response before compacting.")
     async with lock:
-        if runner.session_busy(session_id):
+        if await Coordination.run_worker(partial(runner.session_busy, session_id)):
             return RefusedCompactionResult("Wait for the current response before compacting.")
-        runner.effects._private_nk_marker()
+        await Coordination.run_worker(runner.effects._private_nk_marker)
         thread = await Coordination.run_worker(partial(runner.comms.registry.require, thread_name))
         if not thread.session_file:
             return RefusedCompactionResult("This thread has no saved session to compact.")

@@ -84,7 +84,7 @@ class Publisher:
         def canonical(name: str) -> str:
             if registry_snapshot is None:
                 return self._registry.canonical_name(name)
-            return registry_snapshot.aliases.get(name, name)
+            return registry_snapshot.canonical_name(name)
 
         def exists(name: str) -> bool:
             if registry_snapshot is None:
@@ -124,7 +124,7 @@ class Publisher:
         message.require_task_publication(sender, snapshot, original_source)
 
         def resolve_mention(name: str) -> str | None:
-            canonical = snapshot.aliases.get(name, name)
+            canonical = snapshot.canonical_name(name)
             thread = snapshot.threads.get(canonical)
             if (
                 thread is not None
@@ -343,7 +343,7 @@ class Publisher:
             before_revisions = tuple(file_revision(path) for path in source_paths)
             snapshot = self._registry.snapshot()
             snapshot.require_unambiguous_ownership()
-            sender = snapshot.aliases.get(message.sender, message.sender)
+            sender = snapshot.canonical_name(message.sender)
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
                 raise RelationViolationError("Initial sender must be visible and registered.")
@@ -365,7 +365,7 @@ class Publisher:
             if not is_channel_target(target):
                 # Bind the alias in this guarded publication snapshot. The
                 # envelope and frozen audience carry its canonical incarnation.
-                target = snapshot.aliases.get(target, target)
+                target = snapshot.canonical_name(target)
                 recipient = snapshot.threads.get(target)
                 if recipient is None or not snapshot.statuses[target].visible:
                     raise RelationViolationError("Initial direct target must be visible.")

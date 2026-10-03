@@ -131,7 +131,7 @@ class GoalLaunchOwner(RegistryOwner):
     check_type = RegistryIdentityCheck
 
     def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> None:
-        name = snapshot.aliases.get(self.thread.name, self.thread.name)
+        name = snapshot.canonical_name(self.thread.name)
         canonical = replace(self, thread=replace(self.thread, name=name))
         canonical.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(name)

@@ -1,5 +1,7 @@
 """Goal polling and owner actions use a real socket without launching a provider."""
 
+from unittest.mock import AsyncMock
+
 import json
 import os
 from dataclasses import asdict, replace
@@ -7,6 +9,7 @@ from dataclasses import asdict, replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.acp_extension import TurnChangedUpdate, encode_updates
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -36,7 +39,7 @@ async def goal_owner(tmp_path, monkeypatch):
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     scheduled = []
-    monkeypatch.setattr(owner.turns.goals, "schedule_goal", scheduled.append)
+    monkeypatch.setattr(owner.turns.goals, "schedule_goal", AsyncMock(side_effect=scheduled.append))
     try:
         yield comms, owner, proxy, session, scheduled
     finally:
@@ -46,7 +49,10 @@ async def goal_owner(tmp_path, monkeypatch):
 
 async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(goal_owner):
     comms, owner, proxy, session, scheduled = goal_owner
-    assert await proxy.request("goal_snapshot") == {"goal": None, "goalExecution": None}
+    assert await proxy.request("goal_snapshot") == {
+        "goal": None, "goalExecution": None,
+        "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
+    }
     comms.registry.declare(Thread("child", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("child", "child-work-in-flight")
     goal = comms.goals.update_goal(session, SetGoalAction(text="Review child output"))
@@ -60,6 +66,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
         assert result == {
             "goal": json.loads(json.dumps(expected_goal.to_wire())),
             "goalExecution": json.loads(json.dumps(asdict(expected_execution))),
+            "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
         }
         assert result["goalExecution"]["state"] == "standby"
     assert {p: p.read_bytes() for p in comms.root.rglob("*") if p.is_file()} == before
@@ -108,7 +115,10 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         status="clear",
         goal_id=goal.id,
         expected_revision=resumed["goal"]["revision"],
-    ) == {"goal": None, "goalExecution": None}
+    ) == {
+        "goal": None, "goalExecution": None,
+        "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
+    }
     assert scheduled == [session]
     assert owner.turns.goals.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()
 

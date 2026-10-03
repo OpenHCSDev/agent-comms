@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .channel_input_batch import InputBatch, SingleInputBatch
+from .channel_input_batch import InputBatch
 from .messages import Message
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
@@ -128,7 +129,8 @@ class OriginalTurnInput(TurnInputSource):
         return self.keys if session_file is not None else ()
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int
+        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int,
+        *, custody: ExitStack,
     ) -> OriginalTurnInput:
         """Every original uses the same durable input authority before native preparation.
 
@@ -137,8 +139,10 @@ class OriginalTurnInput(TurnInputSource):
         """
         if self.keys:
             return self
-        key = dispositions.reserve_turn(owner.name, turn, admission, self.prompt)
-        return replace(self, batch=SingleInputBatch(dispositions.read().originals((key,))))
+        batch = dispositions.reserve_turn(
+            owner.name, turn, admission, self.prompt, custody=custody,
+        )
+        return replace(self, batch=batch)
 
     def selected_admission(self, inputs: InputDrain, session_id: str):
         return inputs.selected_summary_admissions.get(session_id)

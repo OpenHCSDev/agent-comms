@@ -1,6 +1,6 @@
 """Original begin/attachment ownership with real registry and callback resources."""
 
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import AsyncExitStack
 import os
 
 import pytest
@@ -23,16 +23,13 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
         process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
     turn = OwnedTurn(agent.turns, "owner-session", "owner", "new original input")
-    with ExitStack() as permits:
-        async with AsyncExitStack() as resources:
-            assert turn.admit(permits)
-            assert turn.thread.turn_lease is None
-            turn.begin(resources)
+    async with AsyncExitStack() as resources:
+        async with AsyncExitStack() as permits:
+            assert comms.registry.require("owner").turn_lease is None
+            assert await turn.acquire(resources, permits)
             initial = turn.registry_owner
             assert isinstance(initial, RegistryOwner)
             assert initial.turn_lease == comms.registry.require("owner").turn_lease
-            turn.prepare_prompt()
-            turn.open_stream(resources, permits)
             assert turn.progress.turn is turn
             comms.agents.transition_turn(turn.turn_lease, PreparingPhase("changed detail"))
             saved = str(tmp_path / "observed-native.jsonl")

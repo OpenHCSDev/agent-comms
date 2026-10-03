@@ -7,6 +7,8 @@ incarnation birth and admission; the registry resolves its name before compariso
 from __future__ import annotations
 
 import os
+from contextlib import ExitStack
+from functools import partial
 from dataclasses import dataclass, fields, replace
 from typing import TYPE_CHECKING, Any
 
@@ -16,7 +18,8 @@ from .goals import Goal
 from .image_inputs import ImageInput
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import InputOrigin, UnattributedInputOrigin
-from .store_files import _store_lock
+from .store_files import _async_store_lock
+from .coordinator import Coordination
 from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput
 from .thread_identity import AdmissionIdentity
@@ -95,12 +98,13 @@ class QueuedInput:
         echo: bool,
         images: tuple[ImageInput, ...],
         controller: Any,
+        custody: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[QueuedInput, Thread]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(
             owner,
@@ -123,7 +127,7 @@ class QueuedInput:
             admission=context.admission.admission_generation,
             target=canonical,
             text=item.text,
-            origin=origin,
+            origin=origin, custody=custody,
         ):
             raise RelationViolationError("Input reservation already exists")
         return item, owner
@@ -147,16 +151,16 @@ class QueuedInput:
         """Transfer this live acceptance under current authority; never recover disk work."""
         inputs = turns.inputs
         try:
-            with _store_lock(inputs.comms._wire_lock_path):
+            async with _async_store_lock(inputs.comms._wire_lock_path):
                 self.require_live_source(inputs, session_id)
-                snapshot = inputs.comms.registry.snapshot()
-                canonical = snapshot.aliases.get(name, name)
-                self.require_handoff(
-                    snapshot,
-                    canonical,
-                    inputs.dispositions.read().lookup(self.key),
-                    self.input_id,
-                )
+                def require_handoff():
+                    snapshot = inputs.comms.registry.snapshot()
+                    canonical = snapshot.canonical_name(name)
+                    self.require_handoff(
+                        snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
+                    )
+                    return canonical
+                canonical = await Coordination.run_worker(require_handoff)
         except RelationViolationError as error:
             raise InputHandoffRefused(str(error)) from error
         await turns.run_agent_turn(

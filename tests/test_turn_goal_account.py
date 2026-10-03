@@ -1,5 +1,8 @@
 """Goal settlement reuses the real SQLite grants and nominal state hierarchy."""
 
+import asyncio
+from threading import Event
+
 import pytest
 
 from agent_comms import agent_events as events
@@ -14,6 +17,7 @@ from agent_comms.goals import Goal
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.input_attempt import NotSentInput
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_input_source import OriginalTurnInput
 from test_s1_event_behavior import owner_turn as owner_turn
@@ -71,7 +75,7 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "goal_retirement"])
+@pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
 async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     comms, tmp_path, monkeypatch, failure
 ):
@@ -95,9 +99,18 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         "begin": (comms.agents, "begin_turn"),
         "prepare": (OwnedTurn, "prepare_prompt"),
         "reserve": (OriginalTurnInput, "reserve"),
+        "receipt_capture": (OriginalTurnInput, "reserve"),
         "goal_retirement": (TurnGoalAccount, "finish"),
     }
     target, method = targets[failure]
+    if failure == "receipt_capture":
+        reserve = target.reserve
+
+        def fail(*args, **kwargs):
+            original = reserve(*args, **kwargs)
+            assert original.batch.originals
+            raise RuntimeError("injected acquired resource failure")
+
     monkeypatch.setattr(target, method, fail)
     if failure == "goal_retirement":
         async def native_preparation_failure():
@@ -112,7 +125,66 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         assert session.session_id not in owner.inputs.original_sources
         assert session.session_id not in owner.inputs.turn_input_keys
         assert tuple(owner.inputs.pending_turns.get(session.session_id, ())) == pending_before
+        if failure == "receipt_capture":
+            originals = tuple(owner.inputs.dispositions.read().rows.values())
+            assert len(originals) == 1
+            assert isinstance(originals[0], NotSentInput)
         with pytest.raises(GoalAttemptError):
             store.ready_grant(goal.id, store.snapshot(goal.id).number)
     finally:
+        await owner.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("worker_fails", [False, True])
+async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
+    comms, tmp_path, monkeypatch, worker_fails,
+):
+    """Cancellation cannot leave a recorded input after suppressing worker delivery."""
+    owner = CommsAgent(
+        comms, agent_bin="unused", auto_wake=False,
+        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+        private_nk_native_package=tmp_path,
+    )
+    session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+    name = owner.sessions.bindings[session.session_id]
+    execution = OwnedTurn(owner.turns, session.session_id, name, "cancel before native",
+                          original_owner_input=True)
+    captured, release = Event(), Event()
+    reserve = OriginalTurnInput.reserve
+
+    def paused_reservation(*args, **kwargs):
+        original = reserve(*args, **kwargs)
+        captured.set()
+        assert release.wait(5), "Original reservation worker was not released"
+        if worker_fails:
+            raise RuntimeError("Original reservation worker failed after cancellation")
+        return original
+
+    monkeypatch.setattr(OriginalTurnInput, "reserve", paused_reservation)
+    running = asyncio.create_task(execution.run())
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(captured.wait, 5), 6)
+        running.cancel()
+        await asyncio.sleep(0)
+        assert not running.done(), "Cancellation escaped the original reservation worker"
+        release.set()
+        with pytest.raises(asyncio.CancelledError) as cancelled:
+            await asyncio.wait_for(running, 6)
+        if worker_fails:
+            assert isinstance(cancelled.value.__cause__, RuntimeError)
+            assert str(cancelled.value.__cause__) == (
+                "Original reservation worker failed after cancellation"
+            )
+        original, = owner.inputs.dispositions.read().rows.values()
+        assert isinstance(original, NotSentInput)
+        assert comms.registry.require(name).turn_lease is None
+        assert session.session_id not in owner.inputs.original_sources
+        assert session.session_id not in owner.inputs.backend_inboxes
+        assert not owner.turns.persistent_backends
+    finally:
+        release.set()
+        if not running.done():
+            running.cancel()
+            await asyncio.gather(running, return_exceptions=True)
         await owner.shutdown()

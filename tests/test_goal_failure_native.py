@@ -151,7 +151,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
 
                 monkeypatch.setattr(TurnRunner, "prepare_selected_session", queue_before_prepare)
             agent.inputs.auto_wake = True
-            agent.turns.goals.schedule_goal(sid)
+            await agent.turns.goals.schedule_goal(sid)
             await agent.inputs.wake_tasks[sid]
             agent.inputs.auto_wake = False
             assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
@@ -296,7 +296,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert store.path.read_bytes() == before
             with pytest.raises(UnresolvedAttemptError):
                 GoalAttemptStore(store.root).resume(goal.id, 1)
-            agent.turns.goals.schedule_goal(sid)
+            await agent.turns.goals.schedule_goal(sid)
             assert not agent.inputs.pending_turns.get(sid)
             assert len(native.saved_inputs()) == 3
             if owner_pauses:

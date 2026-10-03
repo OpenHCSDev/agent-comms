@@ -155,7 +155,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             None,
         )
         assert store.ready_grant(goal.id, 2)
-        owner.turns.goals.schedule_goal(session)
+        await owner.turns.goals.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
             fact.goal.state.active
@@ -167,7 +167,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             await proxy.request("cancel")
             assert (await turn)["stopReason"] == "cancelled"
             assert comms.registry.require(session).goal.state.declared_name == "paused"
-            owner.turns.goals.schedule_goal(session)
+            await owner.turns.goals.schedule_goal(session)
             assert not owner.inputs.pending_turns.get(session) and len(calls) == 1
             assert store.snapshot(goal.id) == generation
         else:
@@ -177,7 +177,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             assert (
                 session not in owner.turns.active_turns and session in owner.inputs.backend_inboxes
             )
-            owner.turns.goals.schedule_goal(session)
+            await owner.turns.goals.schedule_goal(session)
             assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
             finish.set()
             if outcome == "exception":

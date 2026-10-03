@@ -43,7 +43,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
             WakeCandidateIndex(reopened.bus).maintain(rebuild=True)
             assert (
                 await _accept_visible_deliveries(
-                    reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
+                    reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
                 )
                 == old.seq
             )
@@ -62,7 +62,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
             assert reopened.bus.log._private_marker_unlocked().admission_after_seq == old.seq
         for _ in range(2):
             await _accept_visible_deliveries(
-                reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
+                reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
             )
         assignments = sealed_cohort_assignments(store, lookups["bob"])
         assert [assignment.wire_seq for assignment in assignments] == [fresh.seq]

@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from unittest.mock import AsyncMock
+
 import asyncio
 import json
 import os
@@ -645,7 +647,7 @@ class TestAgentTurn:
             )
         assert secret not in result.progress
         assert "proj" not in agent.turns.emitted_errors
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
 
     async def test_error_dedup_is_scoped_to_one_turn_and_cancel_clears_it(
@@ -711,7 +713,7 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         agent.turns.agent_bin = "pi"
-        monkeypatch.setattr(agent.turns.goals, "schedule_goal", lambda _session: None)
+        monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         goal = await agent.turns.goals.set_goal("proj", "Ship the release")
         await agent.turns.run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
@@ -754,7 +756,7 @@ class TestAgentTurn:
         assert goal.state.declared_name == "blocked"
         assert "without assistant output or tool activity" in goal.progress
         assert "paused to avoid a continuation loop" not in goal.progress
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
 
     @pytest.mark.parametrize("outcome", ["failed", "missing_done"])
@@ -815,7 +817,7 @@ class TestAgentTurn:
         else:
             assert goal.state.declared_name == "blocked"
             assert goal.progress.startswith("independently verified newer progress\n\n")
-            agent.turns.goals.schedule_goal("proj")
+            await agent.turns.goals.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
 
     @pytest.mark.parametrize("transition", [PausedGoalAction, CompletedGoalAction, SetGoalAction])
@@ -910,7 +912,7 @@ class TestAgentTurn:
         assert goal.state.declared_name == "blocked"
         assert goal.progress.startswith("independently verified newer progress\n\n")
         assert "inspect local diagnostics" in goal.progress
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
 
     async def test_successful_goal_update_during_turn_is_not_auto_paused(
@@ -987,7 +989,7 @@ class TestAgentTurn:
             yield ae.Done(ok=True, text="done")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         assert wired.registry.require("proj").goal.state.declared_name == "completed"
         assert GoalAttemptStore(private).snapshot(goal.id).lifecycle == CompletedGeneration()
@@ -1037,7 +1039,7 @@ class TestAgentTurn:
         if owner_paused:
             assert goal.state.declared_name == "paused"
             assert wired.registry.require("proj").goal.state.pause_source.declared_name == "owner"
-            agent.turns.goals.schedule_goal("proj")
+            await agent.turns.goals.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")
         assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
@@ -1081,7 +1083,7 @@ class TestAgentTurn:
             yield ae.Done(ok=False, text="failed")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         try:
             assert wired.registry.require("proj").goal.state.declared_name == "blocked"
@@ -1118,7 +1120,7 @@ class TestAgentTurn:
         assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
         with pytest.raises(UnresolvedAttemptError):
             store.ready_grant(goal.id, 1)
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
         await agent.shutdown()
 
@@ -1218,7 +1220,7 @@ class TestAgentTurn:
     ):
         agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.turns.goals, "schedule_goal", lambda _session: None)
+        monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         updates = []
 
         class Client:
@@ -1292,7 +1294,7 @@ class TestAgentTurn:
                 yield
 
             monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_backend)
-            agent.turns.goals.schedule_goal(name)
+            await agent.turns.goals.schedule_goal(name)
             assert not agent.inputs.pending_turns.get(name)
             await agent.turns.run_agent_turn(name, name, "continue", autonomous_goal=True)
             assert GoalAttemptStore(private).snapshot(goal.id).attempt_id == reservation.attempt_id

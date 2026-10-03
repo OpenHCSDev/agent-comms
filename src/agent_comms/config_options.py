@@ -6,6 +6,7 @@ import asyncio
 import os
 from abc import abstractmethod
 from dataclasses import replace
+from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import uuid4
 
@@ -20,6 +21,7 @@ from acp.schema import (
 from .pi_vocabulary import ThinkingLevel
 from . import backend
 from .comms import Comms
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .native_arguments import NativeArguments
 from .owner_launch import RestartEnvironment
@@ -153,7 +155,7 @@ class ModelConfigOption(CatalogConfigOption):
         await owner.set_active_backend_option(
             session_id, SetModel(provider=provider, model_id=model), "Model change timed out"
         )
-        owner.comms.threads.set_thread_model(thread.name, value)
+        await Coordination.run_worker(partial(owner.comms.threads.set_thread_model, thread.name, value))
 
 
 class ThinkingLevelConfigOption(CatalogConfigOption):
@@ -180,7 +182,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         await owner.set_active_backend_option(
             session_id, SetThinkingLevel(level=value), "Thinking level change timed out"
         )
-        owner.comms.threads.set_thread_thinking_level(thread.name, value)
+        await Coordination.run_worker(partial(owner.comms.threads.set_thread_thinking_level, thread.name, value))
 
 
 class ConfigOptions:
@@ -212,7 +214,7 @@ class ConfigOptions:
         return sum(option.generation for option in self.catalogs.values())
 
     async def options(self, thread_name: str) -> list[Any]:
-        thread = self.comms.registry.require(thread_name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
         return [
             await self.catalog_for(member).describe(thread)
             for member in ConfigOption.members_with(CatalogConfigOption)
@@ -227,7 +229,7 @@ class ConfigOptions:
     async def session_options(self, session_id: str, thread_name: str) -> list[Any]:
         options = await self.options(thread_name)
         self.session_catalog_generation[session_id] = self.catalog_generation
-        thread = self.comms.registry.require(thread_name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
         self.session_config_signature[session_id] = self.signature(thread)
         return options
 
@@ -272,9 +274,8 @@ class ConfigOptions:
             )
             return SetSessionConfigOptionResponse.model_validate(result)
         name = await self.sessions.sync_identity(session_id)
-        await self.catalog_for(member).change(
-            self, session_id, self.comms.registry.require(name), value
-        )
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        await self.catalog_for(member).change(self, session_id, thread, value)
         await self.effects.turns.close_idle_backend(session_id)
         options = await self.options(name)
         await self.publish(session_id, options)
@@ -286,7 +287,7 @@ class ConfigOptions:
         command: SettingCommand,
         timeout_message: str,
     ) -> None:
-        inbox = self.effects.turns.active_backend_inbox(session_id)
+        inbox = await self.effects.turns.active_backend_inbox(session_id)
         if inbox is None:
             return
         request_id = uuid4().hex
@@ -305,7 +306,7 @@ class ConfigOptions:
         await self.publish_configuration(session_id, name)
 
     async def publish_configuration(self, session_id: str, thread_name: str) -> None:
-        thread = self.comms.registry.require(thread_name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
         signature = self.signature(thread)
         if self.session_config_signature.get(session_id) == signature:
             return
