@@ -1,0 +1,168 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-cleanup-live-integration-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 18 items / 2 deselected / 16 selected
+
+tests/test_message_page_request.py ...                                   [ 18%]
+tests/test_channel_display.py .....F.FF...F                              [100%]
+
+=================================== FAILURES ===================================
+_______________ test_fixed_opened_boundary_excludes_later_append _______________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/display592-final-checks-20261003/test_fixed_opened_boundary_exc0')
+
+    def test_fixed_opened_boundary_excludes_later_append(tmp_path):
+        comms = populated(tmp_path)
+        comms.messaging.send("alice", "bob", "within boundary")
+        comms.channels.set_channel_any_mode("#api", True)
+        original = comms.bus.log._record_snapshot
+        started, finished = Event(), Event()
+    
+        def append():
+            started.set()
+            comms.messaging.send("alice", "bob", "outside boundary")
+            finished.set()
+    
+        @contextmanager
+        def with_append(*, need_sequence=True):
+            with original(need_sequence=need_sequence) as snapshot:
+                writer = WorkerThread(target=append, daemon=True)
+                writer.start()
+                assert started.wait(timeout=3) and not finished.is_set()
+                try:
+                    yield snapshot
+                finally:
+                    writer.join(timeout=3)
+                    assert finished.is_set()
+    
+        with patch.object(comms.bus.log, "_record_snapshot", side_effect=with_append):
+            assert bodies(comms.views.channel_display_page("#api")) == ["within boundary"]
+>       assert bodies(comms.views.channel_display_page("#api")) == [
+            "within boundary",
+            "outside boundary",
+        ]
+E       AssertionError: assert ['within boundary'] == ['within boun...ide boundary']
+E         
+E         Right contains one more item: 'outside boundary'
+E         Use -v to get more diff
+
+tests/test_channel_display.py:256: AssertionError
+________ test_public_retag_and_send_cannot_leak_new_nonmember_into_page ________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/display592-final-checks-20261003/test_public_retag_and_send_can0')
+
+    def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
+        comms = populated(tmp_path)
+        comms.channels.set_channel_any_mode("#api", True)
+        comms.messaging.send("alice", "bob", "before retag")
+        original = comms.bus.log._record_snapshot
+        started, finished = Event(), Event()
+    
+        def retag_and_send():
+            started.set()
+            comms.channels.update_tags("alice", remove=frozenset({"api"}), add=frozenset({"ui"}))
+            comms.messaging.send("alice", "bob", "late nonmember")
+            finished.set()
+    
+        @contextmanager
+        def concurrent_public_change(*, need_sequence=True):
+            with original(need_sequence=need_sequence) as snapshot:
+                writer = WorkerThread(target=retag_and_send, daemon=True)
+                writer.start()
+                assert started.wait(timeout=3) and not finished.is_set()
+                try:
+                    yield snapshot
+                finally:
+                    writer.join(timeout=3)
+                    assert finished.is_set()
+    
+        with patch.object(comms.bus.log, "_record_snapshot", side_effect=concurrent_public_change):
+            assert bodies(comms.views.channel_display_page("#api")) == ["before retag"]
+        later = comms.views.channel_display_page("#api")
+        assert "late nonmember" not in bodies(later)
+>       assert all(message.target == "#api" for message in later.messages)
+E       assert False
+E        +  where False = all(<generator object test_public_retag_and_send_cannot_leak_new_nonmember_into_page.<locals>.<genexpr> at 0x7f5647d992f0>)
+
+tests/test_channel_display.py:307: AssertionError
+__________ test_direct_retag_and_send_between_basis_and_open_retries ___________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/display592-final-checks-20261003/test_direct_retag_and_send_bet0')
+
+    def test_direct_retag_and_send_between_basis_and_open_retries(tmp_path):
+        comms = populated(tmp_path)
+        comms.channels.set_channel_any_mode("#api", True)
+        original = comms.bus.log._record_snapshot
+        changed = False
+    
+        @contextmanager
+        def mutate_before_open(*, need_sequence=True):
+            nonlocal changed
+            if not changed:
+                changed = True
+                alice = comms.registry.require("alice")
+                comms.registry.register(replace(alice, tags=frozenset({"ui"})))
+                comms.bus.publisher.publish_ordinary(
+                    Message("alice", "bob", "late direct", MessageType.INFO)
+                )
+            with original(need_sequence=need_sequence) as snapshot:
+                yield snapshot
+    
+        with patch.object(comms.bus.log, "_record_snapshot", side_effect=mutate_before_open):
+>           assert bodies(comms.views.channel_display_page("#api")) == []
+E           AssertionError: assert ['late direct'] == []
+E             
+E             Left contains one more item: 'late direct'
+E             Use -v to get more diff
+
+tests/test_channel_display.py:331: AssertionError
+___________ test_new_channel_during_boundary_is_not_falsely_unknown ____________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/display592-final-checks-20261003/test_new_channel_during_bounda0')
+
+    def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
+        comms = populated(tmp_path)
+        original = comms.bus.log._record_snapshot
+        added = False
+    
+        @contextmanager
+        def register_before_open(*, need_sequence=True):
+            nonlocal added
+            if not added:
+                added = True
+                comms.registry.register(Thread("late", frozenset({"new"}), str(tmp_path)))
+            with original(need_sequence=need_sequence) as snapshot:
+                yield snapshot
+    
+        with patch.object(comms.bus.log, "_record_snapshot", side_effect=register_before_open):
+>           assert bodies(comms.views.channel_display_page("#new")) == []
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_channel_display.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:173: in channel_display_page
+    return self.presentation.channel_page(
+src/agent_comms/presentation.py:283: in channel_page
+    scope = basis.scope(target)
+            ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DisplaySelection(registry=RegistrySnapshot(threads={'alice': Thread(name='alice', tags=frozenset({'api'}), worktree='/...eads=frozenset())}, saved_views={}, list_order=<ChannelSort.NAME: 'name'>), viewer=None, seen=frozenset(), notice=None)
+target = '#new'
+
+    def scope(self, target: str) -> ChannelDisplayScope:
+        channel = self.channels.get(target)
+        if channel is None:
+>           raise ValueError(f"Unknown channel: {target!r}")
+E           ValueError: Unknown channel: '#new'
+
+src/agent_comms/presentation.py:227: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_channel_display.py::test_fixed_opened_boundary_excludes_later_append
+FAILED tests/test_channel_display.py::test_public_retag_and_send_cannot_leak_new_nonmember_into_page
+FAILED tests/test_channel_display.py::test_direct_retag_and_send_between_basis_and_open_retries
+FAILED tests/test_channel_display.py::test_new_channel_during_boundary_is_not_falsely_unknown
+================== 4 failed, 12 passed, 2 deselected in 6.25s ==================

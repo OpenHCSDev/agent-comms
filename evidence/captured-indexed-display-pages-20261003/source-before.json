@@ -1,0 +1,406 @@
+{
+  "coverage": [
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "revision": "5025c4ba",
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "revision": "deeafa32",
+      "root": "src/toad",
+      "parsed": 289,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 51,
+      "kind": "ClassDef",
+      "source": "class BusPageIndex:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest, PageTraversal"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 27,
+      "kind": "ImportFrom",
+      "source": "from .presentation import BusPresentation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 117,
+      "kind": "ImportFrom",
+      "source": "from .read_basis import DMDisplayBasis"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 78,
+      "kind": "Call",
+      "source": "presentation.bus.channel_history_page(self.target, **paging)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 122,
+      "kind": "Call",
+      "source": "DMDisplayBasis.fetch_page(bus, presentation.registry, bus.log.path.parent, self.first, self.second, worktree=self.worktree, **paging)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 350,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 401,
+      "kind": "Call",
+      "source": "MessagePageRequest(view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 352,
+      "kind": "Call",
+      "source": "BusPageIndex(archived.path)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 46,
+      "kind": "ImportFrom",
+      "source": "from .read_basis import ChannelDisplayScope, DMDisplayBasis"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 195,
+      "kind": "FunctionDef",
+      "source": "def channel_history_page(self, target: str, *, before: int | HistoryCursor | None=None, after: int | HistoryCursor | None=None, limit: int=100, max_bytes: int=256 * 1024) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 69,
+      "kind": "ImportFrom",
+      "source": "from .presentation import BusPresentation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 82,
+      "kind": "Call",
+      "source": "BusPresentation(bus, registry, channels.catalog)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 173,
+      "kind": "Call",
+      "source": "self.presentation.channel_page(target, viewer=viewer, before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 342,
+      "kind": "FunctionDef",
+      "source": "def channel_history_page(self, target: str, *, before: int | None=None, after: int | None=None, limit: int=100, max_bytes: int=256 * 1024) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 363,
+      "kind": "FunctionDef",
+      "source": "def display_page(self, scope: MessageDisplayScope, *, before: int | None=None, after: int | None=None, limit: int=100, max_bytes: int=256 * 1024) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 322,
+      "kind": "Call",
+      "source": "self.display_page(delivery, after=after, limit=limit)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 338,
+      "kind": "Call",
+      "source": "self.display_page(scope, before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 355,
+      "kind": "Call",
+      "source": "self.display_page(ChannelDisplayScope(target, targets), before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 391,
+      "kind": "Call",
+      "source": "self.display_page(ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets), before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "self.log._record_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 102,
+      "kind": "Call",
+      "source": "self.log.projection_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 214,
+      "kind": "Call",
+      "source": "self.log.projection_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex, StaleBusPageIndexError"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 205,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 241,
+      "kind": "FunctionDef",
+      "source": "def indexed(self, index, log) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 238,
+      "kind": "Call",
+      "source": "log._record_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 231,
+      "kind": "Call",
+      "source": "access.prepare_page_index(index)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 232,
+      "kind": "Call",
+      "source": "self.indexed(index, log)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 166,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 213,
+      "kind": "ClassDef",
+      "source": "class BusPresentation:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 254,
+      "kind": "FunctionDef",
+      "source": "def channel_page(self, target: str, *, viewer: str | None=None, before: int | None=None, after: int | None=None, limit: int=100, max_bytes: int=256 * 1024) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 238,
+      "kind": "Call",
+      "source": "self.bus.log._record_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 118,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 139,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 274,
+      "kind": "FunctionDef",
+      "source": "def validate_identity(self, snapshot: RegistrySnapshot, bus_identity: tuple[int, int] | None) -> None:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 171,
+      "kind": "Call",
+      "source": "bus.display_page(scope, before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 272,
+      "kind": "Call",
+      "source": "self.validate_identity(snapshot, bus_identity)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 198,
+      "kind": "Call",
+      "source": "basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 177,
+      "kind": "Call",
+      "source": "bus.log._record_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 438,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 460,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 481,
+      "kind": "Call",
+      "source": "self._record_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 86,
+      "kind": "FunctionDef",
+      "source": "def prepare_page_index(self, index):"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 120,
+      "kind": "FunctionDef",
+      "source": "def prepare_page_index(self, index):"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 82,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 116,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 84,
+      "kind": "Call",
+      "source": "BusPageIndex(path)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 118,
+      "kind": "Call",
+      "source": "BusPageIndex(path, readonly=True)"
+    }
+  ],
+  "limits": "Syntactic identities; aliases/MRO/dynamic dispatch require semantic reading."
+}
