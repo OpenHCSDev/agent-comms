@@ -7,6 +7,7 @@ replace state, protocol, source checks or provider responses. No public input.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import json
 import os
@@ -47,9 +48,10 @@ def ordinary_source():
     return original, RetainedOwnerLaunch.capture(original, snapshot)
 
 
-async def run(stage, package, source_file, *, capture_source=ordinary_source,
-              observe_launch=unchanged_launch,
-              probe_marker='SOURCE529_DISTINCT_AFTER_COMMIT'):
+@asynccontextmanager
+async def configured_saved_agent(stage, package, source_file, receiver, receipt, *,
+                                 capture_source=ordinary_source, observe_launch=unchanged_launch):
+    """Acquire one configured saved fork and close its original child on every exit."""
     import agent_comms
     installed = Path(agent_comms.__file__).resolve().parent
     checkout = Path(__file__).resolve().parents[1]
@@ -58,10 +60,10 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
         assert path.read_bytes() == (installed/path.relative_to(checkout/'src/agent_comms')).read_bytes()
     stage.mkdir(mode=0o700, exist_ok=False)
     started = time.monotonic()
-    receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
-               'installed_UI': False, 'acceptance_scope': 'configured SDK/ACP/native saved-source compaction and distinct input'}
     original, launch = capture_source()
-    original_hash = digest(source_file)
+    originals = {path: digest(path) for path in
+                 (source_file, Path(str(source_file) + ".input-proof")) if path.exists()}
+    original_hash = originals[source_file]
     verify_native_package(package)
     service = Comms(stage/'wire')
     from agent_comms.compaction_journal import CompactionJournal
@@ -93,6 +95,32 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
     agent = CommsAgent(service, agent_bin=str(binary), agent_args=list(launch.arguments or ()),
         runtime_enabled=True, auto_wake=False, private_nk_native_package=package,
         private_nk_wire_root_id=root_id)
+    agent.on_connect(receiver)
+    try:
+        await agent.sessions.bind_owned(owner, owner.name)
+        receipt.update(model=original.model, thinking=ThinkingLevel.optional_name(original.thinking_level),
+            source_bytes=source_file.stat().st_size, original_sha256=original_hash,
+            fork_bytes=Path(fork.session_file).stat().st_size)
+        yield agent, owner, fork
+    except BaseException as error:
+        receipt['error']={'type':type(error).__name__,'detail':str(error)}
+        raise
+    finally:
+        children = [backend.custody.child.proc for backend in agent.turns.persistent_backends.values() if backend.available]
+        await agent.shutdown()
+        receipt.update(elapsed_seconds=time.monotonic()-started,
+            original_source_unchanged=all(digest(path)==expected for path,expected in originals.items()),
+            native_children_closed=all(child.returncode is not None for child in children))
+        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        (stage/'receipt.json').chmod(0o600)
+        print(json.dumps(receipt),flush=True)
+
+
+async def run(stage, package, source_file, *, capture_source=ordinary_source,
+              observe_launch=unchanged_launch,
+              probe_marker='SOURCE529_DISTINCT_AFTER_COMMIT'):
+    receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
+               'installed_UI': False, 'acceptance_scope': 'configured SDK/ACP/native saved-source compaction and distinct input'}
     peer_publications = []
     text_chunks = []
     class Receiver:
@@ -106,13 +134,10 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
                     print('PEER_PUBLISHED_DURING_SUMMARY', flush=True)
             if update.session_update=='agent_message_chunk' and update.content.type=='text':
                 text_chunks.append(update.content.text)
-    agent.on_connect(Receiver())
-    try:
-        await agent.sessions.bind_owned(owner, owner.name)
+    async with configured_saved_agent(stage,package,source_file,Receiver(),receipt,
+            capture_source=capture_source,observe_launch=observe_launch) as (agent,owner,fork):
+        service=agent._comms
         router = build_agent_router(agent)
-        receipt.update(model=original.model, thinking=ThinkingLevel.optional_name(original.thinking_level),
-            source_bytes=source_file.stat().st_size, original_sha256=original_hash,
-            fork_bytes=Path(fork.session_file).stat().st_size)
         print('CONFIGURED_SAVED_COMPACTION_STARTED', flush=True)
         await router('session/prompt', {'sessionId':owner.name,
             'prompt':[{'type':'text','text':' '}], '_meta':encode_request(CompactRequest(
@@ -139,18 +164,6 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
         receipt.update(complete=True, manual_commit=operation.commit_id,
             peer_messages_during_summary=len(peer_publications), original_inputs_before_new_prompt=0,
             distinct_input_started_once=True, distinct_answer=True)
-    except BaseException as error:
-        receipt['error']={'type':type(error).__name__,'detail':str(error)}
-        raise
-    finally:
-        children = [backend.custody.child.proc for backend in agent.turns.persistent_backends.values() if backend.available]
-        await agent.shutdown()
-        receipt.update(elapsed_seconds=time.monotonic()-started,
-            original_source_unchanged=digest(source_file)==original_hash,
-            native_children_closed=all(child.returncode is not None for child in children))
-        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-        (stage/'receipt.json').chmod(0o600)
-        print(json.dumps(receipt),flush=True)
 
 
 if __name__=='__main__':

@@ -4,7 +4,7 @@
  */
 import { appendFileSync } from 'node:fs';
 
-const [, , port, packageRoot, output] = process.argv;
+const [, , port, packageRoot, output, contexts] = process.argv;
 if (output && packageRoot) {
     // External inspection preserves the native import fence. Read only original
     // frames from this owned private child's loopback debugger; no code overlay.
@@ -61,11 +61,33 @@ if (output && packageRoot) {
         url: pathToFileURL(rpc).href,
         lineNumber: line(rpcLines, 'const selectedStream = (model, context, options) => {') + 2,
     });
+    const contextPoint = contexts && await post('Debugger.setBreakpointByUrl', {
+        url: pathToFileURL(`${packageRoot}/dist/core/turn-context.js`).href,
+        lineNumber: line(source.readFileSync(`${packageRoot}/dist/core/turn-context.js`, 'utf8').split('\n'),
+            "manifest() { return {counter:'pi.estimateTokens'"),
+    });
     appendFileSync(output, JSON.stringify({ stage: 'observer-ready' }) + '\n', { mode: 0o600 });
     async function paused(params) {
         try {
             if (!params.hitBreakpoints.length) return;
             const frame = params.callFrames[0];
+            if (contextPoint && params.hitBreakpoints.includes(contextPoint.breakpointId)) {
+                // Read the original TurnContext object at its manifest publication.
+                // Do not ask for a later preview or reconstruct provider context.
+                const original = await post('Debugger.evaluateOnCallFrame', {
+                    callFrameId: frame.callFrameId, expression: 'this.full()', returnByValue: true,
+                });
+                if (original.exceptionDetails) throw new Error('Original SDK capture unavailable');
+                const data = original.result.value;
+                const [provenance] = data.segments[0].provenance.filter(value => value.kind === 'native');
+                if (!provenance) throw new Error('SDK capture is a preview, not a committed request');
+                const path = `${contexts}/context-${provenance.context_digest}.json`;
+                source.writeFileSync(path, JSON.stringify(data), { mode: 0o600, flag: 'wx' });
+                appendFileSync(output, JSON.stringify({stage:'source-context', path,
+                    request_generation:provenance.request_generation,
+                    context_digest:provenance.context_digest}) + '\n', {mode:0o600});
+                return;
+            }
             const stage = params.hitBreakpoints.includes(routePoint.breakpointId) ? 'route' : 'selected-request';
             const expression = `(() => {
                 const hash = value => process.getBuiltinModule('node:crypto').createHash('sha256')
