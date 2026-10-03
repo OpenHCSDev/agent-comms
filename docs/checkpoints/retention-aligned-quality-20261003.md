@@ -12,7 +12,7 @@ not a second experiment registry or lifecycle store.
 
 The batch closes three related reporting mistakes: a condition label is not
 construction evidence; tool-assisted answers cannot enter unassisted recall
- denominators; a correct proposed-action string is not an executed valid action.
+denominators; a correct proposed-action string is not an executed valid action.
 Original Decision alternatives and scoped authored sources can corroborate a
 proposal only when explicitly referenced. Missing source evidence remains
 unevaluated. Authored fixtures remain controls rather than model results.
@@ -78,8 +78,10 @@ The installed Core563 scorer consumed the same completed original three-cut run,
 without a native launch or provider call. Final output remains9/9, stale0,
 missing0, with3/3 unassisted and6/6 tool-assisted answers. Original three cuts and
 five model steps remain recorded; zero eligible Decisions is not a perfect
-Decision/action result. Native, journal, proof, wire, input and original capture
-hashes are preserved in the evidence receipt. The earlier metadata export and
+Decision/action result. The evidence receipt checks original recorded capture
+hashes, the five-completion export and prior input rows. Original native, journal,
+proof and wire are borrowed read-only; this checkpoint does not claim a new whole-file
+before/after hash proof for all of them. The earlier metadata export and
 failed control observations remain retained. The original ACP_UNCONFIRMED/Started
 attempt is unchanged.
 
@@ -89,3 +91,10 @@ constraint-backed executed actions, paired study/margins and timing activation.
 These are explicit missing source/evaluation inputs, not a claimed quality result.
 The runnable source comparison and denominator batch is independently reviewable;
 no provider study or optional policy was started.
+
+Published source: `221627d5`; final evidence: [recorded-quality.json](../../evidence/retention-aligned-quality-20261003/recorded-quality.json)
+and [source-consumers.json](../../evidence/retention-aligned-quality-20261003/source-consumers.json).
+
+Deleted 53 lines across the four measurement/control files: stored outcome copies,
+repeated native report assembly and manifest validation, and ambiguous synthetic
+labeling. Existing runtime owners, configured launch helpers and frozen oracle are unchanged.

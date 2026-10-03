@@ -36,8 +36,10 @@ remaining features in the order below.
    for S2 retained classes, then integrates RetainedSegment and authored operations.
 4. S3 can investigate selected-route capability and external cache behavior
    independently, but request native execution changes from its current owner.
-5. S4 runs store/native controls first, then authorized matched-model evaluation
-   of the combined candidate. Do not label fixture tests as recall validation.
+5. S4 traces original measurement facts to their existing owners, implements the
+   coherent owner and consumer change, then batches sanity checks and exercises
+   the affected installed path. A matched-model study follows only with its
+   model/sample/spend approval. Do not label authored controls as model recall.
 
 ## Crossings and existing PRs
 
