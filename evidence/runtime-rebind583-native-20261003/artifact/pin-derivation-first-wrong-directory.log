@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-rebind583-native-20261003/derive_pins.py", line 14, in <module>
+    assert root.is_dir() and old.is_dir(), (root,old)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/original-request-construction573-native-20261003/fresh-unverified/node_modules/@earendil-works/pi-coding-agent'), PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent'))

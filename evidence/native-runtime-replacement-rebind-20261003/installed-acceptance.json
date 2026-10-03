@@ -1,0 +1,53 @@
+{
+  "installed_source_head": "c68a00e8077e8faf9ddc95cb6a1c4f60ae944d4b",
+  "native_manifest": "2bfb6ba8fd3b3b3bc03dd122e0a67cb69fdc7cef86704a706396024b1561c292",
+  "log_sha256": "de1963c037879cb1b189f317161f4b3887df2b9d009e50a47e2e0649d7110a34",
+  "result": "2 passed in 6.68s",
+  "provider_requests": 0,
+  "new_native_inputs": 0,
+  "donor": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/retained-native581-controls/test_external_write_failure_re0/sessions/enrolled-a96a74b256144af284e329ed3fe66de9.jsonl",
+  "donor_bytes": 1424,
+  "donor_sha256": "ef33a91135a4a6550aa0a7dfb5a8a806d1625d608ffd0fc2a73d5ee12b1b0cb7",
+  "sdk_observations": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-rebind583-control06/test_actual_native_replacement1/project/replacement-events.jsonl",
+      "events": [
+        {
+          "event": "session_start",
+          "reason": "startup",
+          "sessionId": "01a1018a-d03f-7735-a198-f6197e236759"
+        },
+        {
+          "event": "session_start",
+          "reason": "resume",
+          "sessionId": "01a1018a-d03f-7735-a198-f6197e236759"
+        },
+        {
+          "event": "session_start",
+          "reason": "fork",
+          "sessionId": "01a1018a-d86a-72a3-87c2-a826ff8c1d54"
+        },
+        {
+          "event": "session_start",
+          "reason": "fork",
+          "sessionId": "01a1018a-d888-72a3-87c2-a8289afe6ac9"
+        },
+        {
+          "event": "session_start",
+          "reason": "new",
+          "sessionId": "01a1018a-d896-72a3-87c2-a82bb4e24542"
+        }
+      ]
+    }
+  ],
+  "routes": [
+    "immutable CLI through NativePiRpcLaunch.managed, import fence and PiRpcChannel",
+    "SDK createAgentSessionRuntime inline extensionFactories through same compiled runRpcMode and PiRpcChannel"
+  ],
+  "retirement": "BoundedRun scope joined; both original native child alive() false and returncode present; stderr reader joined empty. Assertions passed, not inferred from recorder exit.",
+  "limits": [
+    "SDK inline observer is supported SDK test host, not production CLI discovery",
+    "No configured provider latency or whole historical user workflow claim",
+    "Original trust-refusal and fixture-operand failures retained"
+  ]
+}

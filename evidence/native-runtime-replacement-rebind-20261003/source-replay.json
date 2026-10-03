@@ -1,0 +1,10 @@
+{
+  "source_before": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+  "before_sha256": "e7ec33c5659d9033aa16aba7ae4896900b3736f370dca7a58eb5d8d26529e5b3",
+  "projected_after_sha256": "488a9b07f84c96758826b0a0c64030c727077c03bd1d2b80fa9d0469377cffeb",
+  "production_lines_deleted": 12,
+  "production_lines_added": 0,
+  "scope": "Existing original RPC source projection only,12 exact consumer lines removed; zero-fuzz storage patch reverse/changed replay and node syntax pass. No runnable package/installed/native acceptance or full stock recipe claim. Original immutable51b unchanged.",
+  "before_AST": "../retained-native-commit-reload-20261003/native-owner-consumers.json",
+  "source_recipe_initial_negative": "Original native-input patch standalone RPC stock projection failed unchanged get_state trailing context. Source fork was discarded and subsequent projection came from authenticated original51b with existing storage diff reversed. Builder must own original normal recipe qualification."
+}
