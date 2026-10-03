@@ -31,7 +31,7 @@ const kept=manager.appendMessage({role:'user',content:[
     {type:'text',text:'Original kept question π 🙂'},
     {type:'image',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',mimeType:'image/png'},
 ],timestamp:3});
-manager.appendCompaction('Original source summary.',kept,100);
+const compaction=manager.appendCompaction('Original source summary.',kept,100);
 if (process.argv.includes('--retained-history'))
     manager.appendMessage({role:'user',content:'Representative retained native history. '.repeat(3000),timestamp:4});
 manager.appendCustomMessageEntry('source-contract','Original injected delivery',true);
@@ -94,11 +94,37 @@ try {
             assert(observed.manifest.segments.every(segment=>segment.provenance.some(source=>source.kind==='preview')));
         }
         assert.equal(conditions.bounded.evaluated, false);
+        // This authored SDK construction control is not a recorded model
+        // response. Production measurement input comes only from the original
+        // corroborated RecordedNativeCheckpoint.condition_source consumer.
+        const source={evaluated:true,session:full.identity,native_entry_id:compaction,
+            summary:'Authored uncombined narrative only.',
+            source:{kind:'file',path:new URL(import.meta.url).pathname,
+                sha256:hash(readFileSync(new URL(import.meta.url)))}};
+        const constructed=await constructNativeConditions(session,pkg,source);
+        const bounded=constructed.bounded;
+        assert.equal(bounded.evaluated,true);
+        assert(JSON.stringify(bounded.context).includes(source.summary));
+        assert(!JSON.stringify(bounded.context).includes('Original source summary.'));
+        assert(!JSON.stringify(bounded.context).includes('Original prior question'));
+        assert(JSON.stringify(bounded.context).includes('Original kept question'));
+        assert.deepEqual(bounded.context.systemPrompt,provider.systemPrompt);
+        assert.deepEqual(bounded.context.tools,provider.tools);
+        assert.deepEqual(bounded.manifest.identity,full.identity);
+        assert.deepEqual(bounded.narrative_source,source.source);
+        assert.deepEqual((await constructNativeConditions(session,pkg,
+            {evaluated:false,reason:'Original narrative unavailable'})).bounded,
+            {evaluated:false,reason:'Original narrative unavailable'});
+        await assert.rejects(constructNativeConditions(session,pkg,
+            {...source,session:{...source.session,sessionId:'another'}}),/another original native session/);
+        await assert.rejects(constructNativeConditions(session,pkg,
+            {...source,native_entry_id:old}),/not the selected native compaction/);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);
     }
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
         provider_bytes_identical:true,journal_bytes_unchanged:true,
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
-        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions}));
+        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions,
+        bounded_construction_scope:conditions ? 'Authored SDK construction control; not an original captured model baseline' : undefined}));
 } finally {session.dispose();}

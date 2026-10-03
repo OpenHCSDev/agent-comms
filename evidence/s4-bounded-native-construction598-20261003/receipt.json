@@ -1,0 +1,60 @@
+{
+  "source_head": "24ef15ce7ac29828aacc92825ec8dbf44e3c6a3d",
+  "scope": "Private bounded SDK preview construction, original checkpoint source export, shared borrowed read; no production change or context submission",
+  "sdk": {
+    "result": "PASS",
+    "native_manifest": "89b56aea0bb128c4bf3e2c979de8a5afa79ac88b1f51a74c49cc1cab46da60d2",
+    "native_tree": "4b7f66f396a342e523d631c753686789b61313c34c30d894ddf24b5a861caa26",
+    "authored_construction_only": true,
+    "raw_log": ".artifacts/s4-bounded598/sdk01.log",
+    "original_provider_context_equal": true,
+    "journal_bytes_unchanged": true,
+    "bounded_assertions": "supplied narrative present; packed summary/old ancestry absent; kept text, system, tools and identity preserved; unavailable source preserved; foreign session/stale compaction refused",
+    "source_scope": "Authored SDK construction control; not an original captured model baseline",
+    "provider_calls": 0
+  },
+  "batched_sanity": {
+    "result": "PASS",
+    "tests": 27,
+    "subtests": 19,
+    "elapsed_s": 2.15
+  },
+  "original_cli": {
+    "evaluated": false,
+    "reason": "Original pre-pack summary assembly not captured"
+  },
+  "protected_originals_sha256": {
+    "continuation-2-receipt.json": "c5e9be6ee35edc66c8833f47f230e63b85d9d53a6319b4a59273690a901e5808",
+    "continued-run.private.json": "d6951db5ba27f522491e4fa0dc7fae0483f7256d1e5a790c17f36a873e0c8e89",
+    "original-measurements.private.json": "49ead4b4f790d8deba1b69a228458d76dd25419d0d678825cb3489c73264fe4f",
+    "cut-3-checkpoint.private.json": "682af599361a028ec1b9e03941940376cd07d26c032b38c8685a6d5eb0897ee7",
+    "cut-3-registry.private.json": "464a532f07003c4f69dfb65f3dfe605fdd6040baa5a56d5bbc50a34377c79ac7",
+    "cut-3-manifest.private.json": "bf56925cc401ac3c6c1df849c9f8ada2a018006803f4171eaa028031d84cb55b",
+    "cut-3-inputs.private.json": "dafdf25398fb8a2c0e3c4e01b33b34e4111e9101bd4ec4aae1f461ae158e8d69"
+  },
+  "previous_score_preserved": "3/3 unassisted + 6/6 assisted; not newly recomputed in this construction gate",
+  "ast": {
+    "python_parse_omissions": [],
+    "python_declarations_before_after": [
+      20,
+      20
+    ],
+    "python_references_before_after": [
+      213,
+      214
+    ],
+    "javascript_parse_omissions": [],
+    "javascript_units": 9,
+    "scope": "Changed private sources and original imported native owners; lexical references, dynamic SDK calls read semantically"
+  },
+  "remaining": [
+    "No original record has both a captured uncombined narrative and corroborated commit in this retained set",
+    "No bounded condition installed/submitted; no HTTP, returned-model or comparative recall/capacity qualification",
+    "A new SDK fork cannot reuse the old session identity; original fork authority must own that application relation"
+  ],
+  "public_effects": false,
+  "configured_provider_calls": 0,
+  "unknown_replays": 0,
+  "new_environments": 0,
+  "new_native_artifacts": 0
+}
