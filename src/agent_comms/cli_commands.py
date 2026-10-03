@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .command import Command
+from .field_codec import FieldCodec
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .exporting import (
@@ -83,10 +84,12 @@ def option(
     wire_name: str | None = None,
     parser_default: Any = MISSING,
     parser_default_factory: Any = MISSING,
+    multiline: bool = False,
     **parser_options: Any,
 ) -> Any:
     """One field owns both its CLI projection and JSON boundary conversion."""
     metadata = {
+        "multiline": multiline,
         "flags": flags,
         "parser_options": parser_options,
         "group": group,
@@ -102,6 +105,107 @@ def option(
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     help: ClassVar[str]
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None) -> tuple[dict[str, object], ...]:
+        return ()
+
+    @classmethod
+    def channel_bindings(cls, comms, channel) -> tuple[dict[str, object], ...]:
+        return ()
+
+    @classmethod
+    def bindings(cls, comms: Comms, target: str, channel: str | None = None) -> tuple[dict[str, object], ...]:
+        from .channel_targets import is_channel_target
+        if is_channel_target(target):
+            return cls.channel_bindings(comms, comms.channels.catalog.read().resolve(target))
+        snapshot = comms.registry.snapshot()
+        thread = snapshot.require(target)
+        return cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel)
+
+    @classmethod
+    def target_catalog(cls, comms: Comms, target: str, channel: str | None = None, *, project: str) -> list[dict[str, object]]:
+        from .channel_targets import is_channel_target
+        if is_channel_target(target):
+            view = comms.channels.catalog.read().resolve(target)
+            bindings = ((member, member.channel_bindings(comms, view))
+                        for member in cls.members_with(cls))
+        else:
+            snapshot = comms.registry.snapshot()
+            thread = snapshot.require(target)
+            status = snapshot.status(thread.name)
+            bindings = ((member, member.thread_bindings(comms, thread,
+                        status, channel))
+                        for member in cls.members_with(cls))
+        return [member.describe(bound, comms, target, project)
+                for member, available in bindings for bound in available]
+
+    @classmethod
+    def describe(cls, bound: dict[str, object], comms: Comms, target: str, project: str) -> dict[str, object]:
+        schema = FieldCodec.record_schema(cls)
+        schema['properties'] = {key: value for key, value in schema['properties'].items()
+                                if key not in bound and key != cls.family_discriminator}
+        schema['required'] = [key for key in schema['required'] if key in schema['properties']]
+        defaults = cls.editor_defaults(comms, target, project)
+        for declared in fields(cls):
+            key = declared.metadata.get('wire_name', declared.name)
+            if key in schema['properties']:
+                schema['properties'][key]['multiline'] = declared.metadata['multiline']
+                schema['properties'][key]['editor_default'] = defaults.get(key, '')
+                schema['properties'][key]['description'] = declared.metadata['parser_options'].get(
+                    'help', key.replace('_', ' ').capitalize())
+        return {'command': cls.declared_name, 'label': cls.help, 'parameters': schema,
+                'confirmation': cls.confirmation(bound)}
+
+    @classmethod
+    def reconnect_targets(cls, result) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
+    def editor_defaults(cls, comms, target, project) -> dict[str, str]:
+        result = {}
+        for declared in fields(cls):
+            default = (declared.default if declared.default is not MISSING else
+                       declared.default_factory() if declared.default_factory is not MISSING else None)
+            result[declared.metadata.get('wire_name', declared.name)] = (
+                '' if default is None else default if isinstance(default, str) else json.dumps(FieldCodec.encode(default)))
+        return result
+
+    @classmethod
+    def editor_arguments(cls, values: dict[str, str]) -> dict[str, object]:
+        hints = get_type_hints(cls)
+        declared = {item.metadata.get('wire_name', item.name): item for item in fields(cls)}
+        result = {}
+        for key, text in values.items():
+            item = declared[key]
+            annotation = hints[item.name]
+            normalize = item.metadata['normalize']
+            if not text and type(None) in get_args(annotation):
+                result[key] = None
+            elif normalize is not None:
+                result[key] = normalize(text)
+            elif annotation is str or str in get_args(annotation):
+                result[key] = text
+            else:
+                result[key] = json.loads(text)
+        return result
+
+    @classmethod
+    def confirmation(cls, bound: dict[str, object]) -> str:
+        return ''
+
+    @classmethod
+    def execute_target(cls, comms: Comms, target: str, arguments: dict[str, object],
+                       *, confirmed: bool = False, channel: str | None = None) -> object:
+        bindings = cls.bindings(comms, target, channel)
+        if len(bindings) != 1:
+            raise ValueError('This action is no longer available for the target')
+        bound, = bindings
+        if bound.keys() & arguments.keys():
+            raise ValueError('Target-bound parameters cannot be overridden')
+        if cls.confirmation(bound) and not confirmed:
+            raise ValueError(cls.confirmation(bound))
+        return cls.from_payload({'kind': cls.declared_name, **bound, **arguments}).apply(comms)
 
     @classmethod
     def add_parser(cls, subparsers: Any) -> None:
@@ -610,6 +714,11 @@ class StopCliCommand(CliCommand):
     help = "Mark thread stopped"
     name: str = option("--name")
 
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        from .tools import CommsStopTool
+        return ({'name': thread.name},) if CommsStopTool.available_for_thread(thread, status) else ()
+
     def apply(self, ctx: Comms) -> Any:
         ctx.owners.stop(self.name)
         return {"stopped": self.name}
@@ -657,6 +766,11 @@ class ArchiveCliCommand(CliCommand):
     help = "Archive a stopped thread"
     name: str = option("--name")
 
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        from .tools import CommsArchiveTool
+        return ({'name': thread.name},) if CommsArchiveTool.available_for_thread(thread, status) else ()
+
     def apply(self, ctx: Comms) -> Any:
         ctx.threads.archive(self.name)
         return {"archived": self.name}
@@ -683,14 +797,25 @@ class ForkCliCommand(CliCommand):
     help = "Fork a child pi thread"
     name: str = option("--name")
     parent: str = option("--parent")
-    task: str = option("--task", default="")
+    task: str = option("--task", default="", multiline=True)
     tags: frozenset[str] | None = option(
         "--tags", default=None, normalize=lambda value: _tags(value) if value is not None else None
     )
-    prompt: str | None = option("--prompt", default=None)
+    prompt: str | None = option("--prompt", default=None, multiline=True)
     pi_bin: str = option(
         "--pi-bin", default_factory=lambda: os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
     )
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        from .tools import CommsForkTool
+        return ({'parent': thread.name},) if CommsForkTool.available_for_thread(thread, status) else ()
+
+    @classmethod
+    def editor_defaults(cls, comms, target, project):
+        result = super().editor_defaults(comms, target, project)
+        result['tags'] = ', '.join(sorted(comms.registry.require(target).tags))
+        return result
 
     def apply(self, ctx: Comms) -> Any:
         spec = ForkSpec(
@@ -814,3 +939,201 @@ class ContextCliCommand(CliCommand):
                 for segment, count in zip(context.segments, counts.counts, strict=True)
             ],
         }
+
+
+@dataclass(frozen=True, kw_only=True)
+class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
+    project: str = option('--project', default_factory=os.getcwd)
+    channel: str | None = option('--channel', default=None)
+    help = 'List applicable operations and their declared parameters'
+    target: str = option('--target')
+
+    def apply(self, ctx: Comms) -> Any:
+        return {'actions': CliCommand.target_catalog(ctx, self.target, self.channel, project=self.project)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class TargetActionCliCommand(CliCommand, declared_name='target-action'):
+    channel: str | None = option('--channel', default=None)
+    help = 'Execute a declared operation against its current target'
+    target: str = option('--target')
+    operation: str = option('--operation')
+    arguments: dict[str, Any] = option('--arguments', default_factory=dict,
+                                     parser_default='{}', normalize=_json_object)
+    confirmed: bool = option('--confirmed', default=False)
+
+    def apply(self, ctx: Comms) -> Any:
+        return CliCommand.decode(self.operation).execute_target(
+            ctx, self.target, self.arguments, confirmed=self.confirmed, channel=self.channel)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StartCliCommand(CliCommand):
+    help = 'Start thread'
+    name: str = option('--name')
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        from .tools import CommsStartTool
+        return ({'name': thread.name},) if CommsStartTool.available_for_thread(thread, status) else ()
+
+    @classmethod
+    def reconnect_targets(cls, result):
+        return (result['thread'],) if result['launched'] else ()
+
+    def apply(self, ctx: Comms) -> Any:
+        return asdict(ctx.owners.start(self.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadTagsCliCommand(CliCommand, declared_name='thread-tags'):
+    help = 'Edit thread tags'
+    name: str = option('--name')
+    tags: frozenset[str] = option('--tags', normalize=_tags,
+                                help='Complete tags, separated by commas')
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        return ({'name': thread.name},)
+
+    @classmethod
+    def editor_defaults(cls, comms, target, project):
+        return {'tags': ', '.join(sorted(comms.registry.require(target).tags))}
+
+    def apply(self, ctx: Comms) -> Any:
+        thread = ctx.channels.replace_tags(self.name, self.tags)
+        return {'thread': thread.name, 'tags': sorted(thread.tags)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExactTagCliCommand(CliCommand):
+    name: str = option('--name')
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return ({'name': channel.name.removeprefix('#')},) if channel.exact else ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
+    help = 'Rename channel tag'
+    new_name: str = option('--to', help='New tag name')
+
+    def apply(self, ctx: Comms) -> Any:
+        ctx.channels.rename_tag(self.name, self.new_name)
+        return {'renamed': self.name, 'name': self.new_name}
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
+    help = 'Delete channel tag'
+
+    @classmethod
+    def confirmation(cls, bound):
+        return f"Delete tag #{bound['name']} from all threads? Saved views referencing it must be removed first."
+
+    def apply(self, ctx: Comms) -> Any:
+        ctx.channels.delete_tag(self.name)
+        return {'deleted_tag': self.name}
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
+    help = 'Delete saved view'
+    name: str = option('--name')
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return ({'name': channel.view.name},) if channel.view is not None else ()
+
+    @classmethod
+    def confirmation(cls, bound):
+        return f"Delete saved view #{bound['name']}? Thread tags and messages are preserved."
+
+    def apply(self, ctx: Comms) -> Any:
+        ctx.channels.delete_saved_view(self.name)
+        return {'deleted_view': self.name}
+
+
+@dataclass(frozen=True, kw_only=True)
+class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
+    help = 'Set channel pin'
+    name: str = option('--name')
+    pinned: bool = option('--pinned', default=False)
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return ({'name': channel.name, 'pinned': not channel.pinned},) if channel.exact else ()
+
+    def apply(self, ctx: Comms) -> Any:
+        return ctx.channels.set_channel_pinned(self.name, self.pinned).to_wire()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ChannelActivityCliCommand(CliCommand, declared_name='channel-activity'):
+    help = 'Toggle member activity'
+    name: str = option('--name')
+    enabled: bool = option('--enabled', default=False)
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return ({'name': channel.name, 'enabled': not channel.any_mode},) if channel.exact else ()
+
+    def apply(self, ctx: Comms) -> Any:
+        return ctx.channels.set_channel_any_mode(self.name, self.enabled).to_wire()
+
+
+@dataclass(frozen=True, kw_only=True)
+class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
+    help = 'Execute a declared operation using its original CLI field parsers'
+
+    def apply(self, ctx: Comms) -> Any:
+        command = CliCommand.decode(self.operation)
+        arguments = command.editor_arguments(self.arguments)
+        return command.execute_target(ctx, self.target, arguments,
+                                      confirmed=self.confirmed, channel=self.channel)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
+    help = 'Mark view read'
+    target: str = option('--target')
+    worktree: str = option('--worktree', default_factory=os.getcwd)
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        return ({'target': thread.name},)
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return ({'target': channel.name},)
+
+    @classmethod
+    def editor_defaults(cls, comms, target, project):
+        return {'worktree': project}
+
+    def apply(self, ctx: Comms) -> Any:
+        ctx.views.mark_user_view_read(self.target, worktree=self.worktree)
+        return {'read': self.target}
+
+
+@dataclass(frozen=True, kw_only=True)
+class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
+    help = 'Toggle thread pin in channel'
+    name: str = option('--name')
+    channel: str = option('--channel')
+    pinned: bool = option('--pinned', default=False)
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None):
+        if channel is None:
+            return ()
+        document = comms.channels.catalog.read()
+        if not document.resolve(channel).matches(thread.tags):
+            return ()
+        return ({'name': thread.name, 'channel': channel,
+                 'pinned': thread.name not in document.pinned_threads(channel)},)
+
+    def apply(self, ctx: Comms) -> Any:
+        ctx.channels.set_thread_pinned(self.channel, self.name, self.pinned)
+        return {'thread': self.name, 'pinned': self.pinned}
