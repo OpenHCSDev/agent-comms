@@ -1,0 +1,1286 @@
+{
+  "roots": [
+    {
+      "path": "/home/ts/wt/comms-retained-human-main-20261001",
+      "root": "src/agent_comms",
+      "head": "809a2b0ce494621f297c7e2a0684dd988680d327",
+      "parsed": 311,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/catalog_document.py",
+          "line": 220,
+          "node": "FunctionDef",
+          "source": "def set_thread_pinned(self, channel: str, thread: str, pinned: bool) -> None:"
+        },
+        {
+          "path": "src/agent_comms/catalog_document.py",
+          "line": 235,
+          "node": "Attribute",
+          "source": "self.set_thread_pinned"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 42,
+          "node": "ClassDef",
+          "source": "class ChannelManagement:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 67,
+          "node": "FunctionDef",
+          "source": "def update_tags(self, name: str, *, add: frozenset[str]=frozenset(), remove: frozenset[str]=frozenset()) -> Thread:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 111,
+          "node": "FunctionDef",
+          "source": "def delete_saved_view(self, name: str) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 121,
+          "node": "FunctionDef",
+          "source": "def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 138,
+          "node": "FunctionDef",
+          "source": "def set_channel_pinned(self, name: str, pinned: bool) -> Channel:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 144,
+          "node": "FunctionDef",
+          "source": "def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 163,
+          "node": "FunctionDef",
+          "source": "def rename_tag(self, name: str, new_name: str) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 171,
+          "node": "FunctionDef",
+          "source": "def delete_tag(self, name: str) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 30,
+          "node": "Name",
+          "source": "ChannelManagement"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 36,
+          "node": "Attribute",
+          "source": "channels.rename_tag"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 38,
+          "node": "Attribute",
+          "source": "channels.delete_tag"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 161,
+          "node": "Attribute",
+          "source": "document.set_thread_pinned"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 44,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 44,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 53,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 103,
+          "node": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 170,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 180,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 191,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 231,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 249,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 262,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 304,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 321,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 338,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 350,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 369,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 378,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 387,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 395,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 413,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 450,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 510,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 518,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 527,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 539,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 569,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 579,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 597,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 609,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 619,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 646,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 656,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 668,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 682,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 704,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 721,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 730,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 749,
+          "node": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/comms.py",
+          "line": 37,
+          "node": "Name",
+          "source": "ChannelManagement"
+        },
+        {
+          "path": "src/agent_comms/history_views.py",
+          "line": 62,
+          "node": "Name",
+          "source": "ChannelManagement"
+        },
+        {
+          "path": "src/agent_comms/thread_management.py",
+          "line": 94,
+          "node": "Name",
+          "source": "ChannelManagement"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 89,
+          "node": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 102,
+          "node": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 105,
+          "node": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 210,
+          "node": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 215,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 229,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 250,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 285,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 299,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 315,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 336,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 352,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 370,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 390,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 401,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 412,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 438,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 457,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 506,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 539,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 564,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 576,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 586,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 606,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 634,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 644,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 662,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 747,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 796,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 834,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 847,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 868,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 885,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 897,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 909,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 922,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 976,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 242,
+          "node": "Attribute",
+          "source": "comms.channels.set_thread_pinned"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 327,
+          "node": "Attribute",
+          "source": "comms.channels.update_tags"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 396,
+          "node": "Attribute",
+          "source": "comms.channels.delete_saved_view"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 1017,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 994,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 225,
+          "node": "Attribute",
+          "source": "comms.channels.set_channel_pinned"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 994,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 999,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 1006,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 999,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 1022,
+          "node": "Attribute",
+          "source": "tool.context_bindings"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 126,
+          "node": "Attribute",
+          "source": "cls.context_bindings"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001",
+      "root": "src/toad",
+      "head": "7fa1b379dc2eb8dd9d2256c18d84b706ef6bed04",
+      "parsed": 288,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 18,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 24,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 25,
+          "node": "Name",
+          "source": "ThreadCommand"
+        },
+        {
+          "path": "src/toad/navigation_target.py",
+          "line": 51,
+          "node": "Name",
+          "source": "ThreadContext"
+        },
+        {
+          "path": "src/toad/navigation_target.py",
+          "line": 112,
+          "node": "Name",
+          "source": "ChannelContext"
+        },
+        {
+          "path": "src/toad/project_link.py",
+          "line": 155,
+          "node": "Name",
+          "source": "show_target_menu"
+        },
+        {
+          "path": "src/toad/slash_command.py",
+          "line": 48,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/slash_command.py",
+          "line": 51,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 41,
+          "node": "ClassDef",
+          "source": "@dataclass(frozen=True)"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 87,
+          "node": "ClassDef",
+          "source": "@dataclass(frozen=True)"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 122,
+          "node": "ClassDef",
+          "source": "class ChannelContext(TargetContext, declared_name='channel'):"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 216,
+          "node": "ClassDef",
+          "source": "@dataclass(frozen=True)"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 37,
+          "node": "FunctionDef",
+          "source": "@abstractmethod"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 71,
+          "node": "FunctionDef",
+          "source": "def command_choices(self):"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 87,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 115,
+          "node": "FunctionDef",
+          "source": "def toggle_pin(self) -> None:"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 122,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 141,
+          "node": "FunctionDef",
+          "source": "def toggle_pin(self) -> None:"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 149,
+          "node": "Name",
+          "source": "ChannelContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 153,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 170,
+          "node": "FunctionDef",
+          "source": "def toggle_pin(self) -> None:"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 49,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 102,
+          "node": "Name",
+          "source": "ThreadContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 129,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 200,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 290,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 329,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 217,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 65,
+          "node": "Attribute",
+          "source": "self.command_choices"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 66,
+          "node": "Name",
+          "source": "show_target_menu"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 100,
+          "node": "Attribute",
+          "source": "ThreadAction.available_menu"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 116,
+          "node": "Attribute",
+          "source": "self.comms.channels.set_thread_pinned"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 127,
+          "node": "Name",
+          "source": "ChannelAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 132,
+          "node": "Name",
+          "source": "ThreadContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 142,
+          "node": "Attribute",
+          "source": "self.comms.channels.set_channel_pinned"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 185,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 188,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 191,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 200,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 226,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 229,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 232,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 247,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 254,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 257,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 264,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 270,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 290,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 293,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 296,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 299,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 300,
+          "node": "Attribute",
+          "source": "ctx.toggle_pin"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 306,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 309,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 316,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 319,
+          "node": "Attribute",
+          "source": "ctx.comms.channels.set_channel_any_mode"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 55,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 57,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 93,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 100,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 96,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 126,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 156,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 177,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 180,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 219,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 58,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 107,
+          "node": "ClassDef",
+          "source": "class ChannelAction:"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 111,
+          "node": "ClassDef",
+          "source": "class ThreadAction(DeclaredFamily, Command, Generic[Result], affix='Action'):"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 130,
+          "node": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 200,
+          "node": "Name",
+          "source": "ChannelAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 149,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 173,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 212,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 46,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 79,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 114,
+          "node": "Name",
+          "source": "ToolRequest"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 123,
+          "node": "Attribute",
+          "source": "cls.tool.available_for_thread"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 126,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 130,
+          "node": "Name",
+          "source": "ThreadAction"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 240,
+          "node": "Name",
+          "source": "ForkDialog"
+        },
+        {
+          "path": "src/toad/widgets/comms_chat.py",
+          "line": 374,
+          "node": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/widgets/comms_fork_dialog.py",
+          "line": 14,
+          "node": "ClassDef",
+          "source": "class ForkDialog(ModalScreen[ForkSpec]):"
+        },
+        {
+          "path": "src/toad/widgets/comms_menu.py",
+          "line": 51,
+          "node": "ClassDef",
+          "source": "class ContextMenu(ModalScreen[str]):"
+        },
+        {
+          "path": "src/toad/widgets/comms_menu.py",
+          "line": 179,
+          "node": "FunctionDef",
+          "source": "def show_target_menu(screen, menu_offset: Offset, title: str, items: list[tuple[str, str]], actions: dict[str, Callable[[], None]]) -> None:"
+        },
+        {
+          "path": "src/toad/widgets/comms_menu.py",
+          "line": 193,
+          "node": "Name",
+          "source": "ContextMenu"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1656,
+          "node": "Name",
+          "source": "ThreadContext"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1143,
+          "node": "Name",
+          "source": "ContextMenu"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1223,
+          "node": "Name",
+          "source": "ContextMenu"
+        },
+        {
+          "path": "src/toad/widgets/session_sort.py",
+          "line": 74,
+          "node": "Name",
+          "source": "ContextMenu"
+        },
+        {
+          "path": "src/toad/widgets/side_bar.py",
+          "line": 330,
+          "node": "Name",
+          "source": "show_target_menu"
+        },
+        {
+          "path": "src/toad/widgets/thread_comms.py",
+          "line": 536,
+          "node": "Name",
+          "source": "show_target_menu"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/code/projects/openhcs",
+      "root": "openhcs",
+      "head": "2bc579ca9e5d3d70a130bec96ee6f001f3dd5c74",
+      "parsed": 687,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "openhcs/agent/services/function_catalog_service.py",
+          "line": 374,
+          "node": "FunctionDef",
+          "source": "def parameter_specs(self, func: Callable, contract: CallableContract | None=None) -> tuple[FunctionParameterSpec, ...]:"
+        },
+        {
+          "path": "openhcs/agent/services/function_catalog_service.py",
+          "line": 757,
+          "node": "Attribute",
+          "source": "PARAMETER_DOCUMENTATION_POLICY.parameter_specs"
+        },
+        {
+          "path": "openhcs/agent/services/function_catalog_service.py",
+          "line": 719,
+          "node": "Attribute",
+          "source": "PARAMETER_DOCUMENTATION_POLICY.parameter_specs"
+        },
+        {
+          "path": "openhcs/agent/services/pipeline_authoring_service.py",
+          "line": 397,
+          "node": "Attribute",
+          "source": "PARAMETER_DOCUMENTATION_POLICY.parameter_specs"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/debug_toolbar.py",
+          "line": 139,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/debug_session_projection.py",
+          "line": 30,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/debug_session_projection.py",
+          "line": 49,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/debug_session_projection.py",
+          "line": 48,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/debug_session_projection.py",
+          "line": 63,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/debug_session_projection.py",
+          "line": 94,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/pipeline_debug_actions.py",
+          "line": 47,
+          "node": "ClassDef",
+          "source": "class PipelineDebugActionDeclarationBase(ABC, metaclass=AutoRegisterMeta):"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/pipeline_debug_actions.py",
+          "line": 151,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/pipeline_debug_actions.py",
+          "line": 168,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        },
+        {
+          "path": "openhcs/pyqt_gui/widgets/shared/services/pipeline_editor_workflows.py",
+          "line": 241,
+          "node": "Name",
+          "source": "PipelineDebugActionDeclarationBase"
+        }
+      ]
+    }
+  ],
+  "dynamic_resolution": "AST references are lexical evidence. DeclaredFamily/MRO, callbacks and runtime names require semantic reading; not claimed statically resolved."
+}
