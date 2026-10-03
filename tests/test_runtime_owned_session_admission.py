@@ -11,7 +11,11 @@ from acp import RequestError
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.errors import UnregisteredThreadError
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
+from agent_comms.threads import Thread
 
 
 @pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")
@@ -49,6 +53,17 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.json").exists()
 
+        retired = Thread("retired-owner", frozenset(), str(project),
+                         process_identity=ProcessIdentity.capture(os.getpid()))
+        comms.registry.declare(retired)
+        await owner.sessions.bind_owned(retired, "retired-acp-session")
+        comms.registry.remove(retired.name)
+        snapshot = comms.registry.snapshot()
+        assert snapshot.canonical_name(retired.name) == retired.name
+        assert comms.registry.canonical_name(retired.name) == retired.name
+        with pytest.raises(UnregisteredThreadError):
+            GoalHistoryRuntimeRequest(thread=retired.name).require_owner(snapshot)
+
         # Use the original production publisher before another independent read.
         # The failed prompt is never resent or turned into a binding.
         await owner.sessions.bind_owned(thread, "original-acp-session")
@@ -56,7 +71,10 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         comms.registry.rename("registered", "renamed-owner")
         assert await proxy.request("goal_history") == {"history": []}
         assert owner.sessions.require_owned_session(comms.registry.require("renamed-owner"), comms.registry.snapshot()) == "original-acp-session"
-        assert owner.sessions.bindings == {"original-acp-session": "registered"}
+        assert owner.sessions.bindings == {
+            "retired-acp-session": "retired-owner",
+            "original-acp-session": "registered",
+        }
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.json").exists()
     finally:

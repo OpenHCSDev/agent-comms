@@ -174,7 +174,7 @@ class HistoricalMessage(Message):
         cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
     ) -> HistoricalMessage:
         def creation(name: str) -> float | None:
-            declaration = snapshot.threads.get(snapshot.aliases.get(name, name))
+            declaration = snapshot.threads.get(snapshot.canonical_name(name))
             # A later source declaration cannot certify a row from an earlier
             # incarnation. The original registry remains available for inspection.
             return (

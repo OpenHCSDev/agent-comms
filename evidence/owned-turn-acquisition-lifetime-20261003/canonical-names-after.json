@@ -1,0 +1,459 @@
+{
+  "source_base": "92708dcb350918a0aa257193c8b27523fbe32074",
+  "transition": "source family following927 before final qualification",
+  "parsed_modules": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 202,
+      "scope": "AgentActivity.finish_turn",
+      "call": "self.registry.canonical_name(lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 137,
+      "scope": "_selected_claim_boundary",
+      "call": "registry.canonical_name(owner_name)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 371,
+      "scope": "write_selected_claimed_file",
+      "call": "registry.canonical_name(owner_name)"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 261,
+      "scope": "StandbyGoalAction.before_publish",
+      "call": "snapshot.canonical_name(target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 310,
+      "scope": "StandbyGoalAction.before_publish",
+      "call": "snapshot.canonical_name(target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 316,
+      "scope": "Goals._goal_snapshot",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 175,
+      "scope": "Goals.recover_closed_goal_wait",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 226,
+      "scope": "Goals.release_waits_after_terminal_turn",
+      "call": "snapshot.canonical_name(fence.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 253,
+      "scope": "Goals.release_waits_after_terminal_turn",
+      "call": "snapshot.canonical_name(target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 148,
+      "scope": "GoalWaits.target_has_active_turn",
+      "call": "snapshot.canonical_name(target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 191,
+      "scope": "GoalWaits.closed_wait_group",
+      "call": "snapshot.canonical_name(target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 234,
+      "scope": "GoalWaits.execution",
+      "call": "snapshot.canonical_name(target.name)"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 177,
+      "scope": "HistoricalMessage.project.creation",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 219,
+      "scope": "HistoryViews.last_sent_timestamps",
+      "call": "snapshot.canonical_name(sender)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 304,
+      "scope": "HistoryViews.thread_presentation",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 346,
+      "scope": "HistoryViews.coordination_snapshot",
+      "call": "registry.canonical_name(actor)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 124,
+      "scope": "MessageBus._delivery_scope",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 170,
+      "scope": "MessageBus._pending_projection",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 205,
+      "scope": "MessageBus._pending_projection.recipients",
+      "call": "snapshot.canonical_name(target)"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 134,
+      "scope": "GoalLaunchOwner.require_ready",
+      "call": "snapshot.canonical_name(self.thread.name)"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 112,
+      "scope": "reserve_foreground_owner",
+      "call": "comms.registry.canonical_name(owner.name)"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 145,
+      "scope": "OwnedSendAdmission.__call__",
+      "call": "snapshot.canonical_name(self.thread.name)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 180,
+      "scope": "DisplaySelection.capture",
+      "call": "snapshot.canonical_name(viewer)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 87,
+      "scope": "Publisher._validate_publish_request.canonical",
+      "call": "registry_snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 127,
+      "scope": "Publisher._prepare_message_unlocked.resolve_mention",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 346,
+      "scope": "Publisher.publish_initial_cohort",
+      "call": "snapshot.canonical_name(message.sender)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 86,
+      "scope": "Publisher._validate_publish_request.canonical",
+      "call": "self._registry.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 368,
+      "scope": "Publisher.publish_initial_cohort",
+      "call": "snapshot.canonical_name(target)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 107,
+      "scope": "QueuedInput.capture",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 158,
+      "scope": "QueuedInput.dispatch.require_handoff",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 322,
+      "scope": "DMDisplayScope.names_for",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 162,
+      "scope": "DMDisplayBasis.fetch_page",
+      "call": "snapshot.canonical_name(viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 163,
+      "scope": "DMDisplayBasis.fetch_page",
+      "call": "snapshot.canonical_name(peer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 286,
+      "scope": "DMDisplayBasis.validate_identity",
+      "call": "snapshot.canonical_name(self.requested_peer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 334,
+      "scope": "DMDisplayScope.capture_human",
+      "call": "snapshot.canonical_name(viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 335,
+      "scope": "DMDisplayScope.capture_human",
+      "call": "snapshot.canonical_name(peer)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 90,
+      "scope": "ReadLedger.capture",
+      "call": "snapshot.canonical_name(viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 129,
+      "scope": "ReadLedger.seen_sequences",
+      "call": "snapshot.canonical_name(viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 66,
+      "scope": "ReadLedger.conversation",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 137,
+      "scope": "ReadLedger.seen_sequences",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 305,
+      "scope": "Registration.canonical_name",
+      "call": "document.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 309,
+      "scope": "Registration.aliases_for",
+      "call": "document.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 324,
+      "scope": "Registration.goal_history",
+      "call": "document.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 339,
+      "scope": "Registration.last_seen",
+      "call": "document.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 367,
+      "scope": "Registration.peers",
+      "call": "document.snapshot().canonical_name(exclude)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 372,
+      "scope": "Registration.__contains__",
+      "call": "document.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 101,
+      "scope": "RegistryDocument.prepare_declaration",
+      "call": "self.snapshot().canonical_name(thread.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 180,
+      "scope": "RegistryDocument.rename",
+      "call": "self.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 188,
+      "scope": "RegistryDocument.rename",
+      "call": "self.aliases.get(new_name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 233,
+      "scope": "RegistryDocument.unregister",
+      "call": "self.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 243,
+      "scope": "RegistryDocument.archive",
+      "call": "self.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 252,
+      "scope": "RegistryDocument.begin_delete",
+      "call": "self.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 260,
+      "scope": "RegistryDocument.remove",
+      "call": "self.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 278,
+      "scope": "RegistryDocument.heartbeat",
+      "call": "self.snapshot().canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 314,
+      "scope": "RegistryDocument.release_turn",
+      "call": "self.snapshot().canonical_name(lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 342,
+      "scope": "RegistryDocument._turn_effects",
+      "call": "self.snapshot().canonical_name(lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 379,
+      "scope": "RegistrySnapshot.status",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 399,
+      "scope": "RegistrySnapshot.require_active",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 413,
+      "scope": "RegistrySnapshot.owner_identity",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 417,
+      "scope": "RegistrySnapshot.admission_identity",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 421,
+      "scope": "RegistrySnapshot.owner_binding",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 32,
+      "scope": "RegistryProvenance.canonical_name",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 35,
+      "scope": "RegistryProvenance.require",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 492,
+      "scope": "ThreadRelationships.edit",
+      "call": "registry.canonical_name(peer)"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 564,
+      "scope": "ThreadRelationships.snapshot.canonical",
+      "call": "registry.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 178,
+      "scope": "DeliveryScope.selection",
+      "call": "snapshot.canonical_name(target)"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 186,
+      "scope": "DeliveryScope.canonical",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 76,
+      "scope": "RuntimeRequest.bind",
+      "call": "server.agent.sessions.require_owned_session(owner, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 123,
+      "scope": "SessionLifecycle.require_owned_session",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 46,
+      "scope": "ThreadIncarnation.current",
+      "call": "snapshot.canonical_name(self.name)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 59,
+      "scope": "ThreadIncarnation.matches_recorded_name",
+      "call": "snapshot.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 43,
+      "scope": "ThreadIncarnation.resolved",
+      "call": "snapshot.canonical_name(self.name)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 289,
+      "scope": "ThreadManagement.rename_managed_thread",
+      "call": "self.registry.canonical_name(new_name)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 336,
+      "scope": "ThreadManagement._rename_thread_unlocked",
+      "call": "self.registry.canonical_name(new_name)"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 131,
+      "scope": "TurnGoalAccount.thread_name",
+      "call": "snapshot.canonical_name(self.owner.name)"
+    }
+  ],
+  "limits": "AST call/owner syntax only; receiver and recorded provenance reviewed semantically. This is not runtime qualification."
+}

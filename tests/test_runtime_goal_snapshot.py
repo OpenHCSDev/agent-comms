@@ -1,5 +1,7 @@
 """Goal polling and owner actions use a real socket without launching a provider."""
 
+from unittest.mock import AsyncMock
+
 import json
 import os
 from dataclasses import asdict, replace
@@ -36,7 +38,7 @@ async def goal_owner(tmp_path, monkeypatch):
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     scheduled = []
-    monkeypatch.setattr(owner.turns.goals, "schedule_goal", scheduled.append)
+    monkeypatch.setattr(owner.turns.goals, "schedule_goal", AsyncMock(side_effect=scheduled.append))
     try:
         yield comms, owner, proxy, session, scheduled
     finally:

@@ -27,8 +27,12 @@ class RegistryProvenance:
             aliases=dict(snapshot.aliases),
         )
 
+    def canonical_name(self, name: str) -> str:
+        """Resolve this recorded namespace without requiring current membership."""
+        return self.aliases.get(name, name)
+
     def require(self, name: str) -> ThreadProvenance:
-        canonical = self.aliases.get(name, name)
+        canonical = self.canonical_name(name)
         try:
             return self.threads[canonical]
         except KeyError as error:

@@ -128,7 +128,7 @@ class TurnGoalAccount:
     @property
     def thread_name(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        return snapshot.aliases.get(self.owner.name, self.owner.name)
+        return snapshot.canonical_name(self.owner.name)
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal

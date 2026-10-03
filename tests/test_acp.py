@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from unittest.mock import AsyncMock
+
 import asyncio
 import json
 import os
@@ -711,7 +713,7 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         agent.turns.agent_bin = "pi"
-        monkeypatch.setattr(agent.turns.goals, "schedule_goal", lambda _session: None)
+        monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         goal = await agent.turns.goals.set_goal("proj", "Ship the release")
         await agent.turns.run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
@@ -1218,7 +1220,7 @@ class TestAgentTurn:
     ):
         agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.turns.goals, "schedule_goal", lambda _session: None)
+        monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         updates = []
 
         class Client:

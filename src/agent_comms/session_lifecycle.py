@@ -120,7 +120,7 @@ class SessionLifecycle:
     def require_owned_session(self, thread: Thread, snapshot: RegistrySnapshot) -> str:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, name in self.bindings.items():
-            if snapshot.require(name).name == thread.name:
+            if snapshot.canonical_name(name) == thread.name:
                 return session_id
         raise RequestError.invalid_params({
             "reason": f"Registered owner {thread.name!r} has no loaded ACP session. "

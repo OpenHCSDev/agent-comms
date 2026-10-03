@@ -302,11 +302,11 @@ class Registration:
 
     def canonical_name(self, name: str) -> str:
         with self.store.reading() as document:
-            return document.aliases.get(name, name)
+            return document.snapshot().canonical_name(name)
 
     def aliases_for(self, name: str) -> frozenset[str]:
         with self.store.reading() as document:
-            canonical = document.aliases.get(name, name)
+            canonical = document.snapshot().canonical_name(name)
             return frozenset(
                 {
                     canonical,
@@ -321,7 +321,7 @@ class Registration:
 
         with self.store.locked():
             document = self.store._read_unlocked()
-            canonical = document.aliases.get(name, name)
+            canonical = document.snapshot().canonical_name(name)
             thread = document.threads.get(canonical)
             if thread is None:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
@@ -336,7 +336,7 @@ class Registration:
 
     def last_seen(self, name: str) -> float:
         with self.store.reading() as document:
-            name = document.aliases.get(name, name)
+            name = document.snapshot().canonical_name(name)
             if name not in document.threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             return document.last_seen.get(name, 0.0)
@@ -364,10 +364,10 @@ class Registration:
 
     def peers(self, exclude: str) -> Sequence[str]:
         with self.store.reading() as document:
-            exclude = document.aliases.get(exclude, exclude)
+            exclude = document.snapshot().canonical_name(exclude)
             return [name for name in document.threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
         with self.store.reading() as document:
-            name = document.aliases.get(name, name)
+            name = document.snapshot().canonical_name(name)
             return name in document.threads

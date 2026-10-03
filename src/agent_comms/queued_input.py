@@ -104,7 +104,7 @@ class QueuedInput:
     ) -> tuple[QueuedInput, Thread]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(
             owner,
@@ -155,7 +155,7 @@ class QueuedInput:
                 self.require_live_source(inputs, session_id)
                 def require_handoff():
                     snapshot = inputs.comms.registry.snapshot()
-                    canonical = snapshot.aliases.get(name, name)
+                    canonical = snapshot.canonical_name(name)
                     self.require_handoff(
                         snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
                     )
