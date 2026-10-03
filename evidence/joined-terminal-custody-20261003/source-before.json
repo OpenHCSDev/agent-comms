@@ -1,0 +1,1422 @@
+{
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "compact_context"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 165,
+      "node": "FunctionDef",
+      "name": "begin_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 188,
+      "node": "FunctionDef",
+      "name": "finish_turn"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 235,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 814,
+      "node": "AsyncFunctionDef",
+      "name": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 887,
+      "node": "Name",
+      "name": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 899,
+      "node": "Name",
+      "name": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1204,
+      "node": "Name",
+      "name": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 152,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 30,
+      "node": "AsyncFunctionDef",
+      "name": "after_terminal"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 54,
+      "node": "AsyncFunctionDef",
+      "name": "after_terminal"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 13,
+      "node": "alias",
+      "name": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 25,
+      "node": "AsyncFunctionDef",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 33,
+      "node": "Name",
+      "name": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 47,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 215,
+      "node": "FunctionDef",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 19,
+      "node": "AsyncFunctionDef",
+      "name": "compact_context"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "after_terminal"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 75,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 28,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 156,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 161,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 198,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 204,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 138,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 150,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 216,
+      "node": "alias",
+      "name": "compact_context"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 219,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 114,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 206,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 117,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 205,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 186,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 461,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 180,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 255,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 341,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 402,
+      "node": "FunctionDef",
+      "name": "finish_turn_stream"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 412,
+      "node": "AsyncFunctionDef",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 410,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 428,
+      "node": "Attribute",
+      "name": "finish_turn_stream"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 155,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 432,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 223,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 249,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 259,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 170,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 185,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 149,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 171,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 48,
+      "node": "alias",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 202,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 222,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1988,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 31,
+      "node": "AsyncFunctionDef",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 55,
+      "node": "AsyncFunctionDef",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 84,
+      "node": "AsyncFunctionDef",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 110,
+      "node": "AsyncFunctionDef",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 38,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 62,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 88,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 113,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 742,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 753,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 106,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 131,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 156,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 34,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 36,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 37,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 237,
+      "node": "Attribute",
+      "name": "finish_turn_stream"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 233,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 240,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 215,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 58,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 117,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 423,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1776,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1800,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1692,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1632,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 530,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 62,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 357,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 387,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 34,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 92,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 252,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 253,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 302,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 303,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 304,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 310,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 345,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 346,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 122,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 151,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 227,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 280,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 325,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 344,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 368,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 77,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 146,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 152,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 167,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 171,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 180,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 189,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 191,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 200,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 222,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 227,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 254,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 275,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 290,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 316,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 334,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 337,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 363,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 365,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 370,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 383,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 388,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 400,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 401,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 413,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 418,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 425,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 506,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 548,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 501,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 507,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 547,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 554,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 42,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 62,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 117,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 87,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 88,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 94,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 81,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 47,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 75,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 104,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 326,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 427,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 91,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 100,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 522,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 463,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 393,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 303,
+      "node": "Attribute",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 100,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 103,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 106,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 112,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 125,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 78,
+      "node": "Name",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 78,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 86,
+      "node": "Name",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 170,
+      "node": "AsyncFunctionDef",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 174,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 361,
+      "node": "alias",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 273,
+      "node": "Attribute",
+      "name": "release_waits_after_terminal_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 255,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 264,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 413,
+      "node": "Name",
+      "name": "compact_context"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 52,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 383,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 49,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 585,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 104,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 648,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 201,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 95,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 98,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 99,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 101,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 102,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 186,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 230,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 166,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 36,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 40,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 46,
+      "node": "Attribute",
+      "name": "finish_turn"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 52,
+      "node": "Attribute",
+      "name": "begin_turn"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 57,
+      "node": "Attribute",
+      "name": "begin_turn"
+    }
+  ]
+}

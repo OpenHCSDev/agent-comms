@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -44,7 +45,7 @@ from .session_lifecycle import SessionLifecycle
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
-from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -246,17 +247,18 @@ class TurnRunner:
                 )
             else:
                 turn_id = uuid4().hex
-                owner = self.comms.agents.begin_turn(
-                    thread_name, turn_id, "Waiting for replies"
-                )
-                try:
+                async with AsyncExitStack() as resources:
+                    await Coordination.run_worker(partial(
+                        self.acquire_turn, resources, session_id, thread_name,
+                        turn_id, "Waiting for replies",
+                    ))
                     await self.effects._emit_event(
-                        session_id, self.current_turn_update(session_id)
+                        session_id, await Coordination.run_worker(partial(
+                            self.current_turn_update, session_id,
+                        )),
                     )
                     await self.inputs.drain_inbox(session_id)
                     await self.collect_replies(session_id, thread_name, sent_seq)
-                finally:
-                    await self.settle_turn(session_id, thread_name, turn_id, owner.turn_lease)
             self.effects._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -399,15 +401,31 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         return request.choice(selected)
 
-    def finish_turn_stream(
-        self,
-        session_id: str,
-        thread_name: str,
-        turn_id: str,
-        lease: TurnLeaseFence,
-    ) -> FinishedTurnFence | None:
-        """Clear only this turn; waiter release follows committed terminal output."""
-        return self.comms.agents.finish_turn(lease)
+    def acquire_turn(
+        self, resources: AsyncExitStack, session_id: str, thread_name: str,
+        turn_id: str, detail: str, routing=None, *, task=None,
+    ):
+        """Bind the exact installed lease to cleanup before worker delivery.
+
+        The joined worker may commit admission before its awaiting caller is
+        cancelled. Register on the caller's stack here, while it still owns
+        this operation; no delivered result is needed to retire that lease.
+        """
+        owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
+        resources.push_async_callback(
+            self.settle_turn, session_id, thread_name, turn_id, owner.turn_lease,
+            task=task,
+        )
+        return owner
+
+    def finish_turn(self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence):
+        """Release the original CAS lease and retain its waiter cleanup."""
+        terminal_fence = self.comms.agents.finish_turn(lease)
+        resources.push_async_callback(
+            Coordination.run_worker,
+            partial(self.comms.goals.release_waits_after_terminal_turn, terminal_fence),
+        )
+        return self.current_turn_update(session_id)
 
     async def settle_turn(
         self,
@@ -425,11 +443,11 @@ class TurnRunner:
         """
         if task is not None and self.turn_tasks.get(session_id) is task:
             self.turn_tasks.pop(session_id, None)
-        terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, lease)
-        try:
-            await self.effects._emit_event(session_id, self.current_turn_update(session_id))
-        finally:
-            self.comms.goals.release_waits_after_terminal_turn(terminal_fence)
+        async with AsyncExitStack() as resources:
+            update = await Coordination.run_worker(partial(
+                self.finish_turn, resources, session_id, lease,
+            ))
+            await self.effects._emit_event(session_id, update)
 
     def current_turn_update(self, session_id: str):
         return TurnTranscriptUpdate(state=self.turn_state(session_id))
