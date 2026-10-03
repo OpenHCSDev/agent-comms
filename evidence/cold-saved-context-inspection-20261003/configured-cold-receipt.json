@@ -1,0 +1,40 @@
+{
+  "state": "SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS",
+  "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "core": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02",
+  "public_inputs": 0,
+  "original_inputs_retried": 0,
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "original_name": "openhcs-audit-merged-runtime",
+  "original_worktree": "/home/ts/code/projects/openhcs",
+  "source_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl",
+  "source_bytes": 42376246,
+  "original_process": {
+    "pid": 275406,
+    "start_time": 51408968
+  },
+  "original_sha256": "b503439b38deb341d03cce064fe5e73b64366c3054836fe19c548db07e90e26c",
+  "priming_calls": 0,
+  "native_prompts": 0,
+  "provider_requests": 0,
+  "private_root": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02/wire",
+  "fork_file": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02/native-forks/2026-10-03T16-01-21-766Z_01a1027f-a366-77f8-8b39-0d4999995f4d.jsonl",
+  "fork_sha256": "659a4f3af42b124bac4a50ee2d44b1ef2c58dcf9f7d82def9426781d855a5002",
+  "source_unchanged": true,
+  "query_preserved_journal": true,
+  "repeated_same_child": true,
+  "native_process": {
+    "pid": 554843,
+    "start_time": 51893054
+  },
+  "context_segments": 4,
+  "original_dispositions": {
+    "rows": {},
+    "version": 1
+  },
+  "native_child_retired": true,
+  "native_child_exited": true,
+  "elapsed_seconds": 21.90832758898614
+}
