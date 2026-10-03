@@ -1,0 +1,15 @@
+{
+  "interpreter": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "python_modules": 311,
+  "source_changed": [],
+  "wheel_members": 342,
+  "wheel_changed": [],
+  "wheel_sha256": "136417d2822c16d595723a7b76495b660e4aaf8d0c16525c413b12a53534f334",
+  "native_pin_sha256": "044646789787e3d3bcc43391e62c214d94ddffeb528692235c9d35f0db7af968",
+  "source_pin_equal": true,
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-summary562-wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  }
+}

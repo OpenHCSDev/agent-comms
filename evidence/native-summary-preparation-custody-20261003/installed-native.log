@@ -1,0 +1,154 @@
+INSTALLED_MODULE /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/__init__.py
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/test_selected_summary_exchange.py::test_retained_native_summary_preserves_source_and_blocks_replay FAILED [ 33%]
+tests/test_selected_summary_exchange.py::test_actual_selected_mismatch_refuses_without_provider_or_replay[settings] FAILED [ 66%]
+tests/test_selected_summary_failure_native.py::test_actual_summary_slot_denies_mutation_and_joins_cancellation PASSED [100%]
+
+=================================== FAILURES ===================================
+_______ test_retained_native_summary_preserves_source_and_blocks_replay ________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f3698ec2a50>
+
+    async def test_retained_native_summary_preserves_source_and_blocks_replay(native_backend):
+        """The SDK owns saved entries, the native child owns summary metadata."""
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.comms import Comms
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.owner_compaction_prepare import prepare_native_source
+        from agent_comms.owner_compaction_settings import PiCompactionSettings
+        from agent_comms.pi_summary_payloads import SelectedModel, SummarySummarizedData
+        from agent_comms.selected_source import ManualSource
+        from agent_comms.thread_identity import TurnId
+        from agent_comms.threads import Thread
+    
+        native = native_backend
+        settings = PiCompactionSettings(2048, 1)
+        configured = json.loads((native.config / "settings.json").read_text())
+        configured["compaction"].update(reserveTokens=2048, keepRecentTokens=1)
+        (native.config / "settings.json").write_text(json.dumps(configured))
+        for text in ("Retained original first question", "Retained original second question"):
+            assert (await native.run(text))[-1].ok
+        before = native.session.read_bytes()
+        prior_inputs = native.saved_inputs()
+        child = native.persistent.custody.child
+        model = child.attestation.state.model
+        assert model is not None and model.provider and model.id and model.context_window
+        selected_model = SelectedModel(model.provider, model.id, model.context_window)
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+        preparation = (await asyncio.to_thread(
+            prepare_native_source,
+            package,
+            str(native.session),
+            settings=settings,
+            context_window=model.context_window,
+        )).require_ready()
+    
+        comms = Comms(native.root)
+        comms.registry.declare(
+            Thread(
+                "summary-owner",
+                frozenset(),
+                str(native.project),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                session_file=str(native.session),
+                model=model.display_name,
+            )
+        )
+        lease = comms.agents.begin_turn("summary-owner", "native-summary-exchange").turn_lease
+        owner = comms.registry.require("summary-owner")
+        source = ManualSource(
+            owner=owner.require_process(),
+            incarnation=owner.incarnation,
+            turn=TurnId(lease.turn_id),
+            reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
+        )
+        journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
+        slot = SelectedSummarySlot(owner.name, preparation.witness.session_id)
+        envelope = dict(
+            source=FieldCodec.encode(source),
+            selected=selected_model.to_wire(),
+            settings=FieldCodec.encode(settings),
+            retained=FieldCodec.encode(RetainedTaskFacts(())),
+        )
+        events = []
+    
+        async def observed(event):
+            events.append(event)
+    
+        try:
+            async with asyncio.timeout(35):
+>               result = await slot.run_selected_summary(
+                    native.persistent,
+                    journal,
+                    preparation.witness,
+                    envelope,
+                    expected_package=package,
+                    tokens_before=preparation.tokens_before,
+                    custom_instructions="Preserve the two original retained questions",
+                    idle_timeout_seconds=15,
+                    on_event=observed,
+                )
+E               TypeError: SelectedSummarySlot.run_selected_summary() missing 1 required keyword-only argument: 'owner'
+
+tests/test_selected_summary_exchange.py:534: TypeError
+__ test_actual_selected_mismatch_refuses_without_provider_or_replay[settings] __
+
+retained_summary = (<test_backend_native_lifecycle.NativeBackendFixture object at 0x7f36983d5f90>, NativePreparation(witness=NativeWitnes...action_journal.CompactionJournal object at 0x7f36980bcf50>, <function retained_summary.<locals>.run at 0x7f36980da2a0>)
+changed = 'settings'
+
+    @pytest.mark.parametrize("changed", ["model", "settings"])
+    async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
+        retained_summary, changed
+    ):
+        from agent_comms.compaction_records import SelectedSummarySource
+        from agent_comms.compaction_states import RetiredRefusalSummary
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.pi_summary_payloads import SummaryDeclinedData
+    
+        native, _, envelope, journal, run = retained_summary
+        original, inputs, calls = (
+            native.session.read_bytes(),
+            native.saved_inputs(),
+            native.provider.posts,
+        )
+        source = FieldCodec.decode(SelectedSummarySource, envelope)
+        source = (
+            replace(source, selected=replace(source.selected, model_id="unselected-model"))
+            if changed == "model"
+            else replace(source, settings=replace(source.settings, reserve_tokens=2049))
+        )
+>       result = await run(source=FieldCodec.encode(source))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_exchange.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = {'source': {'kind': 'manual', 'owner': {'pid': 2000550, 'start_time': 47452351}, 'incarnation': {'name': 'owner', 'cre...ure', 'contextWindow': 2000000}, 'settings': {'reserveTokens': 2049, 'keepRecentTokens': 1}, 'retained': {'facts': []}}
+expected_package = PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent')
+options = {}
+
+    async def run(*, source=envelope, expected_package=package, **options):
+>       return await slot.run_selected_summary(
+            native.persistent,
+            journal,
+            preparation.witness,
+            source,
+            expected_package=expected_package,
+            tokens_before=preparation.tokens_before,
+            **options,
+        )
+E       TypeError: SelectedSummarySlot.run_selected_summary() missing 1 required keyword-only argument: 'owner'
+
+tests/test_selected_summary_exchange.py:91: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_exchange.py::test_retained_native_summary_preserves_source_and_blocks_replay
+FAILED tests/test_selected_summary_exchange.py::test_actual_selected_mismatch_refuses_without_provider_or_replay[settings]
+========================= 2 failed, 1 passed in 22.94s =========================
