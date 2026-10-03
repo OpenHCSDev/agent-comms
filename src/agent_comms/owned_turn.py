@@ -344,7 +344,9 @@ class OwnedTurn:
     async def prepare_native(self):
         await self.runner.effects._emit_event(
             self.session_id,
-            self.runner.current_turn_update(self.session_id),
+            await Coordination.run_worker(partial(
+                self.runner.current_turn_update, self.session_id,
+            )),
         )
         await self.runner.inputs.emit_input_delivery_changed(self.session_id)
         # This turn already holds the session authority. Publish its cursor
@@ -355,7 +357,10 @@ class OwnedTurn:
         # Existing local ACP owner session only. If delivery is uncertain,
         # the keyed metadata remains pending; never invent a bus recipient.
         await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
-        for segment in self.runner.comms.bus.awareness_segments(self.thread):
+        awareness = await Coordination.run_worker(partial(
+            self.runner.comms.bus.awareness_segments, self.thread,
+        ))
+        for segment in awareness:
             self.context = self.context.append(segment)
         pending_keys = self.original.compaction_keys(self.thread.session_file)
         if pending_keys:
@@ -384,7 +389,8 @@ class OwnedTurn:
                 # A selected adaptive operation may already have paid or
                 # written. Preserve the failed original input outcome.
                 if self.goal_permit is not None:
-                    self.runner.comms.goals.block_goal_after_failed_turn(
+                    await Coordination.run_worker(partial(
+                        self.runner.comms.goals.block_goal_after_failed_turn,
                         self.thread_name,
                         started_goal=self.thread.goal,
                         expected_worktree=self.thread.worktree,
@@ -392,7 +398,7 @@ class OwnedTurn:
                             "Adaptive native compaction did not establish a "
                             "safe outcome; inspect the exact commit journal."
                         ),
-                    )
+                    ))
                 raise
             if self.committed:
                 # Local metadata-only outbox; uncertain subscriber delivery

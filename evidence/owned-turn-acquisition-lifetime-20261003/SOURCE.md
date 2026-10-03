@@ -1,6 +1,6 @@
 # Working source checkpoint, not Ready
 
-54 production lines deleted /80 added in two files. Four original consumer setups
+61 production lines deleted /94 added in three files. Four original consumer setups
 delete repeated admit/begin/prompt/open sequences and use OwnedTurn.acquire. This
 batch uses original Coordinator worker joins and stack lifetimes; no new class,
 registry, queue, cache, state declaration, provider policy or native method.
@@ -32,6 +32,14 @@ and failure consume the same original unbound-input transaction; its optional
 homogeneous-state projection is the existing InputDocument observation, not a new
 None lifecycle state. UNKNOWN remains uncertain and cannot grant input/replay.
 
+The subsequent pre-native stage also joins its original phase read and canonical
+awareness acquisition; awareness still owns opportunistic unavailable handling.
+Adaptive-compaction failure uses the same goal owner in a joined operation.
+TurnRunner.prepare_selected_session now acquires its registry-derived native
+environment in the worker, covering original context/manual/owned callers without
+changing NativeSessionPreparation or a native method. Its loop-owned persistent
+child remains in the original async preparation lifetime.
+
 InputDrain.finish_turn_inputs serves owned and selected turns. Its original notice
 is removed/settled under the same wire cut in a joined worker; finally retires
 remaining loop capabilities, burns selected admission and preserves queued inputs
@@ -52,7 +60,7 @@ S1 effect fixtures and channel awareness. The channel fixture now observes its
 actual rendered Context while original task intent remains unchanged; it no longer
 expects preparation to mutate that task or bypasses original stack retirement.
 
-All six changed Python files compile and git diff --check passes. No behavioral,
+All seven changed Python files compile and git diff --check passes. No behavioral,
 installed or provider qualification is claimed yet. Final controls must address
 cancellation after source/permit commitment and input cleanup before publication;
 affected configured path comes last on a released existing holder.534 is now

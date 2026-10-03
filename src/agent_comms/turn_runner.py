@@ -179,14 +179,15 @@ class TurnRunner:
 
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
+        environment = await Coordination.run_worker(lambda: thread.native_environment(
+            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        ))
         state = await NativeSessionPreparation.open(
             self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),
             self.agent_bin,
             self.native_arguments(thread),
             worktree=thread.worktree,
-            environment=thread.native_environment(
-                self.comms.root, self.comms.registry.snapshot(), thread.worktree
-            ),
+            environment=environment,
             session_file=thread.session_file,
         )
         state.model.require_selection(thread.model)

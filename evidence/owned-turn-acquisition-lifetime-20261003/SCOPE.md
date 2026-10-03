@@ -26,3 +26,6 @@ wave. Changed actual-path qualification needs a released existing holder.
 Related retirement consumer: InputDrain.finish_turn_inputs for original owned and
 selected turns. Its original wire-locked notice settlement joins before loop
 capabilities retire; cancellation cannot skip queue/grant cleanup after the write.
+Shared native-preparation boundary: TurnRunner.prepare_selected_session joins the
+original registry/environment acquisition for its existing context/manual/owned
+callers. NativeSessionPreparation and SessionContext methods stay unchanged.
