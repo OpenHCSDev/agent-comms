@@ -343,7 +343,6 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
     import json
 
     from agent_comms.manual_compaction_bridge import compact_context
-    from agent_comms.transcript_updates import StartedTranscriptUpdate
 
     native = native_backend
     await native.run(
@@ -373,8 +372,8 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
 
     async def observe(session_id, event, **kwargs):
         await emit(session_id, event, **kwargs)
-        observed.append(type(event))
-        if isinstance(event, StartedTranscriptUpdate):
+        observed.append(event)
+        if isinstance(event, TurnTranscriptUpdate) and event.state.busy and "waiting" not in comms.registry:
             comms.registry.declare(
                 Thread(
                     "waiting",
@@ -411,7 +410,11 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         assert comms.registry.require(name).active_turn is None
         assert comms.goals.goal_wait("waiting") is None
         assert comms.registry.require("waiting").goal.state.active
-        assert observed.index(ae.ManualCompactionEnd) < observed.index(ae.TurnSettled)
+        terminal = next(i for i, event in enumerate(observed)
+            if isinstance(event, TurnTranscriptUpdate) and not event.state.busy)
+        compaction_end = next(i for i, event in enumerate(observed)
+            if isinstance(event, ae.ManualCompactionEnd))
+        assert compaction_end < terminal
         assert len(native.saved_inputs()) == (3 if enabled else 2)  # No input replay.
     finally:
         await owner.shutdown()
@@ -449,7 +452,6 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
 ):
     from acp.schema import TextContentBlock
 
-    from agent_comms.transcript_updates import StartedTranscriptUpdate
 
     owner = CommsAgent(
         comms,
@@ -465,8 +467,8 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
 
     async def observed(session_id, event, **kwargs):
         await emit(session_id, event, **kwargs)
-        events.append(type(event))
-        if isinstance(event, StartedTranscriptUpdate):
+        events.append(event)
+        if isinstance(event, TurnTranscriptUpdate) and event.state.busy and "waiting" not in comms.registry:
             comms.registry.declare(
                 Thread(
                     "waiting",
@@ -480,7 +482,7 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
                 "waiting",
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
             )
-        if isinstance(event, ae.TurnSettled):
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             assert comms.goals.goal_wait("waiting") is not None
             assert comms.registry.require(name).active_turn is None
 
@@ -492,7 +494,8 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
             )
         assert comms.goals.goal_wait("waiting") is None
         assert comms.registry.require("waiting").goal.state.active
-        assert events.count(ae.TurnSettled) == 1
+        assert sum(isinstance(event, TurnTranscriptUpdate) and not event.state.busy
+            for event in events) == 1
         assert any(row.body == "relay body" for row in comms.bus.log.full_history())
     finally:
         await owner.shutdown()

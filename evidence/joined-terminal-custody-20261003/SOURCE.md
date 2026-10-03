@@ -43,3 +43,22 @@ Production delta against integrated main: three files103 added/69 deleted.
 The 13.562/13.696 inter-request and98/99-second provider spans are not attributed
 or claimed fixed by this change. Parent-owned AgentActivity itself remains the
 original source; this does not invent a fence when that owner fails to return one.
+
+## Installed closure
+
+Original595311-file witness/code/metadata archived by its storage owner; fresh
+borrower census zero and explicit534 code-only handback received. Release receipt:
+/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/released-holder-originals/runtime-scoped-input534-595-before-Mendel597/release-receipt.json
+
+Normal wheel+[acp] resolution reused534, nine dependencies, no new environment.
+All311 installed Python members equal source (`installed-source.json`). Installed
+controls explicitly unset PYTHONPATH and pytest's pythonpath: five passed .90s.
+Original private registry CAS and storage resources ran; client effects were
+observers. No native input/provider/UI run was needed or claimed for these
+cancellation/resource controls. Existing native89 and protected authentic root/
+source/fork/UNKNOWN plus583 control06 remain unchanged. Broader native admission,
+provider latency and public delivery are not claimed by this scoped checkpoint.
+
+Manual/relay terminal fixture consumers also use original TurnTranscriptUpdate
+state rather than retired TurnSettled/StartedTranscriptUpdate assumptions. They
+were migrated but their separate native/provider scenarios were not repeated.
