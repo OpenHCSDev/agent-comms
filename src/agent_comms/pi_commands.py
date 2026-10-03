@@ -14,6 +14,8 @@ from uuid import uuid4
 from .turn_phase import ShutdownPhase
 
 from .native_turn_context import NativeContextData
+from .native_compaction_request import ReconcileNativeRequest
+from .compaction_states import CommittedNativeOutcome
 from .pi_vocabulary import ThinkingLevel, CompactionReason, ThresholdCompactionReason
 from .message_reference import MessageReference
 from . import agent_events as events
@@ -472,3 +474,13 @@ class AgentCommsPrepareCompaction(NativeQuery):
 @dataclass(frozen=True, kw_only=True)
 class AgentCommsInspectContext(NativeQuery):
     response_payload = NativeContextData
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsRestoreCompaction(MutatesSession, NativeQuery):
+    """Install an already committed source, retaining its acquired SDK runtime."""
+    response_payload = EmptyData
+    strict_response = True
+    reconciliation: ReconcileNativeRequest
+    expected: CommittedNativeOutcome
+    reason: type[CompactionReason]

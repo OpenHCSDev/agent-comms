@@ -67,6 +67,25 @@ if (process.env.S1_REPLACEMENT_PROBE) {
     });
   });
 }
+if (process.env.S1_COMPACTION_PROBE) {
+  extensions.push((api) => {
+    let original;
+    const record = (event, ctx) => appendFileSync(process.env.S1_COMPACTION_PROBE,
+      JSON.stringify({event: event.type, sessionId: ctx.sessionManager.getSessionId(),
+        originalSessionId: original?.sessionManager.getSessionId(),
+        entryId: event.compactionEntry?.id, reason: event.reason}) + '\n');
+    api.on('session_start', (event, ctx) => { original = ctx; record(event, ctx); });
+    api.on('session_shutdown', record);
+    api.on('session_compact', async (event, ctx) => {
+      record(event, ctx);
+      if (process.env.S1_COMPACTION_RELEASE) {
+        while (!existsSync(process.env.S1_COMPACTION_RELEASE)) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+    });
+  });
+}
 // Tool declarations and output bounding remain owned by the Python CLI. The
 // fixture supplies only the SDK transport binding, not another tool catalog.
 const invoke = (args) => JSON.parse(execFileSync(process.env.S1_PYTHON,

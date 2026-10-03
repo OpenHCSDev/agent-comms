@@ -60,7 +60,16 @@ def main(path: Path) -> None:
                     }
                 })
                     .finally(() => { acOtherCommandInFlight--; });''')
-    source = replace_once(source, '''            case "get_state": {''', '''            case "agent_comms_compaction_settings": {
+    source = replace_once(source, '''            case "get_state": {''', '''            case "agent_comms_restore_compaction": {
+                // The existing command resource includes this invocation itself.
+                if (acSummarySlot !== null || acOtherCommandInFlight !== 1 ||
+                    !acExactObject(command, ["id", "type", "reconciliation", "expected", "reason"]) ||
+                    typeof command.reason !== "string" || !command.reason.length)
+                    return error(id, command.type, "Known compaction restoration conflicts with native work");
+                await session.restoreCompaction(command.reconciliation, command.expected, command.reason);
+                return success(id, command.type, {});
+            }
+            case "agent_comms_compaction_settings": {
                 if (!acValidCompactionSettingsRequest(command))
                     return error(id, command.type, "Invalid selected compaction settings request");
                 return success(id, command.type, acSelectedCompactionSettings(command, session,

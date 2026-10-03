@@ -36,11 +36,8 @@ function acValidCompactionPreparationRequest(command) {
         typeof command.retainedText === "string" && command.retainedText.isWellFormed();
 }
 function acSelectedIdleSettings(command, session, conflict) {
-    if (conflict || session.isCompacting || !session.isIdle || session.isStreaming || session.isRetrying ||
-        session._retryAttempt || session._nativeInterruptIds || session.pendingMessageCount ||
-        session.agent.steeringQueue.messages.length || session.agent.followUpQueue.messages.length ||
-        session._pendingNextTurnMessages.length || session._pendingCustomMessages.length ||
-        session._pendingBashMessages.length) throw Error("Selected compaction settings require an idle owner");
+    if (conflict || !session.isIdleForCompaction)
+        throw Error("Selected compaction settings require an idle owner");
     const model = session.model;
     if (command.sessionId !== session.sessionId || command.sessionFile !== session.sessionFile ||
         !model || command.selected.provider !== model.provider || command.selected.modelId !== model.id ||
@@ -140,11 +137,7 @@ function acSummaryCompatible(session, binding) {
             session.modelRuntime.getAvailableSnapshot() === binding.catalog));
 }
 function acSummaryCurrent(session, request, binding) {
-    if (session.isCompacting || session.isStreaming || !session.isIdle || session.isRetrying ||
-        session._retryAttempt || session._nativeInterruptIds ||
-        (binding && binding.host.session !== session) || session.pendingMessageCount || session.agent.steeringQueue.messages.length ||
-        session.agent.followUpQueue.messages.length || session._pendingNextTurnMessages.length ||
-        session._pendingCustomMessages.length || session._pendingBashMessages.length ||
+    if (!session.isIdleForCompaction || (binding && binding.host.session !== session) ||
         !acSummaryCompatible(session, binding)) return false;
     const model = session.model;
     if (!model || model.provider !== request.selected.provider || model.id !== request.selected.modelId ||

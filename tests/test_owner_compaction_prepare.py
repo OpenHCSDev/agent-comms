@@ -35,6 +35,7 @@ from agent_comms.owner_compaction_runtime import _commit_native_summary
 from agent_comms.owner_compaction_settings import PiCompactionSettings, PiSettingsEvidenceError
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
+from agent_comms.pi_vocabulary import ManualCompactionReason
 from delivery_owner_fixture import canonical_agent
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -655,6 +656,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
     with pytest.raises(RelationViolationError, match="source changed"):
         await _commit_native_summary(
             bridge, owner, owner_generation, persistent, prepared, captured, summary,
+            reason=ManualCompactionReason,
         )
     assert persistent.custody.session_file == str(session)
     assert session.read_bytes() == original
@@ -715,6 +717,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
             return await _commit_native_summary(
                 bridge, owner, owner_generation, persistent, prepared, captured,
                 await synthetic_summary(prepared, captured),
+                reason=ManualCompactionReason,
             )
 
     task = asyncio.create_task(owned_turn())
@@ -955,6 +958,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             operation = await _commit_native_summary(
                 bridge, owner, owner_generation, persistent, prepared, captured,
                 await synthetic_summary(prepared, captured),
+                reason=ManualCompactionReason,
             )
             assert operation.state.declared_name == "committed"
             commit_ids.append(operation.commit_id)
