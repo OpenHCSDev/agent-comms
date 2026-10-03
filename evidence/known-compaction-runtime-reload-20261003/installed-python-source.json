@@ -1,0 +1,21 @@
+{
+  "installed_package": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/known-runtime593-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "15d6a9f19805a58111c4179f12db46c3c8c1a11340220a5578cce8e728c0f6e2",
+  "wheel_members_source_equal": 311,
+  "changed": [
+    {
+      "path": "native_custody.py",
+      "sha256": "b54824aa39d2167abd389ab87a06a433faf1f3a78503331769dcc7302d6c3541"
+    },
+    {
+      "path": "owner_compaction_runtime.py",
+      "sha256": "6e22300b30f4d1b2ba19ab31973c974f4f0047e7daee66a337a960c5a4db9c04"
+    },
+    {
+      "path": "pi_commands.py",
+      "sha256": "9e8167b547c1ee45282fc0a82e3c1251c676b7c07137443aa000b3f75a76f72d"
+    }
+  ],
+  "limits": "Installed Python transport decode/worker controls only; matched immutable native build and changed real SDK commit/hook path pending."
+}

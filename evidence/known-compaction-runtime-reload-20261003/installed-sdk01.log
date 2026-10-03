@@ -1,0 +1,91 @@
+F
+=================================== FAILURES ===================================
+______ test_known_compaction_retains_original_sdk_context_and_next_input _______
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f49b9ed3620>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f49b9ef5940>
+
+    async def test_known_compaction_retains_original_sdk_context_and_next_input(native_backend, monkeypatch):
+        """One real saved SDK fork -> fenced commit -> hook -> distinct input."""
+        import hashlib
+        import os
+        from pathlib import Path
+    
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.compaction_journal import CompactionJournal
+        from agent_comms.goals import Goal
+        from agent_comms.native_fork import ForkSessionRequest
+        from agent_comms.native_session_prepare import NativeSessionPreparation
+        from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+        from agent_comms.owner_compaction_provider import NativeSummary
+        from agent_comms.owner_compaction_runtime import _commit_native_summary
+        from agent_comms.owner_compaction_settings import PiCompactionSettings
+        from agent_comms.pi_summary_payloads import SelectedModel
+        from agent_comms.pi_vocabulary import ManualCompactionReason
+        from agent_comms.registration import Registration
+        from agent_comms.selected_pi_route import prepare_selected_native_source
+        from agent_comms.threads import Thread
+        from native_event_host import install_event_host
+        from urllib.parse import urlsplit
+    
+        native = native_backend
+        name = os.environ.get("PI_WRITER_TEST_SOURCE")
+        if not name:
+            pytest.skip("PI_WRITER_TEST_SOURCE must name original saved native evidence")
+        donor = Path(name).resolve(strict=True)
+        original = hashlib.sha256(donor.read_bytes()).hexdigest()
+        created = await CompactionJournal(native.root / "compaction-commits.sqlite3").private_inputs.fork(
+            ForkSessionRequest(os.environ["PI_COMPACTION_TEST_PACKAGE"], str(donor),
+                str(native.project), directory=str(native.root / "native-sessions")),
+            cwd=native.project,
+        )
+        native.session = created.path
+        registry = Registration(native.root / "registry.json")
+        registry.register(Thread("owner", frozenset(), str(native.project),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=created.session_file, model="response-local/fixture",
+            goal=Goal("Keep original source and inputs", "known-commit-control")))
+        owner, generation = registry.live_owner_with_generation("owner")
+        owner, generation = registry.lease_live_turn_with_generation(
+            owner, "known-commit-control", expected_owner_generation=generation,
+        )
+        endpoint = urlsplit(json.loads((native.config / "models.json").read_text())[
+            "providers"]["response-local"]["baseUrl"])
+        probe = native.root / "native-compaction-hooks.jsonl"
+        command = "sdk-known-compaction-probe"
+>       install_event_host(monkeypatch, command, f"{endpoint.scheme}://{endpoint.netloc}",
+            compaction_probe=probe, native_settings={"compaction": {
+                "enabled": False, "reserveTokens": 2048, "keepRecentTokens": 1},
+                "retry": {"enabled": False}})
+
+tests/test_native_catalog_discovery.py:585: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/native_event_host.py:27: in install_event_host
+    verify_native_package(package)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent')
+
+    def verify_native_package(root: Path) -> None:
+        """Verify the entire copied package against the repository-owned commitment."""
+        pins = [
+            line[len(TREE_PREFIX) :]
+            for line in MANIFEST.read_text().splitlines()
+            if line.startswith(TREE_PREFIX)
+        ]
+        if len(pins) != 1 or len(pins[0]) != 64 or any(c not in "0123456789abcdef" for c in pins[0]):
+            raise NativePackageError("Pinned native package tree commitment unavailable")
+        if package_tree_digest(root) != pins[0]:
+>           raise NativePackageError("Native package tree differs from pinned artifact")
+E           agent_comms.native_package.NativePackageError: Native package tree differs from pinned artifact
+
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/native_package.py:126: NativePackageError
+=============================== warnings summary ===============================
+tests/test_native_catalog_discovery.py:237
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_native_catalog_discovery.py:237: PytestUnknownMarkWarning: Unknown pytest.mark.refactor_guard - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.refactor_guard
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../../dev::test_known_compaction_retains_original_sdk_context_and_next_input
+1 failed, 1 warning in 3.39s

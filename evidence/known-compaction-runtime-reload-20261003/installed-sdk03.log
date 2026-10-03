@@ -1,0 +1,9 @@
+known_compaction_runtime {"donor_sha256": "ef33a91135a4a6550aa0a7dfb5a8a806d1625d608ffd0fc2a73d5ee12b1b0cb7", "source_bytes": 1424, "fork": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/known-runtime593-sdk03/test_known_compaction_retains_0/wire/native-sessions/2026-10-03T15-35-08-320Z_01a10267-a121-758d-abfb-dbc703da050e.jsonl", "pid": 424395, "hooks": [{"event": "session_start", "sessionId": "01a10267-a121-758d-abfb-dbc703da050e", "originalSessionId": "01a10267-a121-758d-abfb-dbc703da050e", "reason": "startup"}, {"event": "session_compact", "sessionId": "01a10267-a121-758d-abfb-dbc703da050e", "originalSessionId": "01a10267-a121-758d-abfb-dbc703da050e", "entryId": "1965f65b", "reason": "manual"}], "commit": "dcadcd4223164d4d9357a593476501f7", "next_input_terminal": true, "provider_requests": 1, "child_retired": true}
+.
+=============================== warnings summary ===============================
+tests/test_native_catalog_discovery.py:237
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_native_catalog_discovery.py:237: PytestUnknownMarkWarning: Unknown pytest.mark.refactor_guard - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.refactor_guard
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 1 warning in 5.07s
