@@ -11,6 +11,34 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
+@pytest.mark.parametrize("failure", ["cancel", "stale"])
+async def test_external_write_failure_retires_original_child_without_new_input(native_backend, failure):
+    import asyncio
+    from agent_comms.native_custody import ReopenNative
+    from agent_comms.native_pi import NativePiUnavailable
+
+    owner = native_backend
+    assert (await owner.run("One original input before external writer custody"))[-1].ok
+    retained = owner.persistent.custody.idle()
+    child = retained.child.proc
+    before = owner.session.read_bytes()
+    expected = asyncio.CancelledError if failure == "cancel" else NativePiUnavailable
+    with pytest.raises(expected):
+        async with owner.persistent.external_write(retained.identity):
+            assert isinstance(owner.persistent.custody, ReopenNative)
+            assert not owner.persistent.available and child.alive()
+            if failure == "cancel":
+                raise asyncio.CancelledError
+            stat = owner.session.stat()
+            os.utime(owner.session, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1000000))
+            # An external write without a successful SDK reload cannot return
+            # the old in-memory manager to available custody.
+    assert isinstance(owner.persistent.custody, ReopenNative)
+    assert not child.alive() and not owner.persistent.lock.locked()
+    assert owner.provider.posts == len(owner.starts) == 1
+    assert owner.session.read_bytes() == before
+
+
 async def test_actual_native_attestation_refuses_foreign_expected_identity(native_backend):
     owner = native_backend
     first = await owner.run("Diagnostic input before attestation mismatch")
