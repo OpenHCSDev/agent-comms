@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { estimateTokens } from './compaction/compaction.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
+import { SessionContext } from './session-context.js';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const kind = declaration => declaration.name.replace(/Segment$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
@@ -130,7 +131,8 @@ class ToolCatalogSegment extends ContextSegment {
 
 export class TurnContext {
     constructor(identity, segments) { this.identity=identity; this.segments = segments; }
-    static async capture(session, context, source) {
+    static async capture(session, context, source,
+                         sourceEntries=session.sessionManager.buildContextEntries()) {
         const loader = session.resourceLoader;
         const identity = {sessionId:session.sessionId,sessionFile:session.sessionFile};
         const provenance = [source ? {kind:'native',identity,
@@ -147,7 +149,7 @@ export class TurnContext {
         for (const skill of loader.getSkills().skills)
             systemSources.push({kind:'resource', path:skill.filePath,
                 representation:'SDK skill prompt metadata',sha256:hash(JSON.stringify(skill))});
-        const entries = Array.from(session.sessionManager.buildContextEntries());
+        const entries = Array.from(sourceEntries);
         const journal = {kind:'journal', path:session.sessionFile ?? '', entries:entries.map(entry=>entry.id)};
         // SDK owns entry-to-context interpretation. Exact source equality permits
         // narrower coordinates; transformed messages retain the whole selected cut.
@@ -183,6 +185,21 @@ export class TurnContext {
         return this.capture(session,{systemPrompt:session.systemPrompt,
             messages:await session.agent.convertToLlm(Array.from(session.storedContext.messages(session.agent))),
             tools:session.agent.state.tools});
+    }
+    static async project(session, entries) {
+        // One captured entry set supplies both SDK conversion and attribution.
+        // This is a preview; no native input/context proof is minted.
+        const selected = Array.from(entries);
+        const context = await SessionContext.entryContext(session, selected.values());
+        return this.capture(session, context, undefined, selected);
+    }
+    static async fullSource(session) {
+        const manager=session.sessionManager;
+        return this.project(session, manager.entryStore.uncompactedEntries(manager.getLeafId()));
+    }
+    static async recentSource(session) {
+        const manager=session.sessionManager;
+        return this.project(session, manager.entryStore.keptEntries(manager.getLeafId()));
     }
     render() {
         const provider={messages:[]};
