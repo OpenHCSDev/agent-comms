@@ -33,3 +33,34 @@ is not the separately reported provider response model. A missing or uncorrobora
 request-to-terminal relation cannot grant a paired difference. All request matching
 and construction callers are migrated, including the CLI and recorded controls.
 This does not grant complete intervention, requested effort or HTTP equivalence.
+
+## Final scope and checks
+
+Deleted 64 fixture/scorer lines that encoded fact identity, repeated scope reads,
+rebuilt Decision alternatives or used summary configuration as request authority.
+The only production addition is Decision.contains_alternative (four read-only
+lines); no fields, codec, schema, native source, lifecycle or defaults change.
+Exact after-HEAD AST declarations are regenerated, including all four migrated
+owning methods; no parse omissions. Python AST does not claim dynamic or native
+resolution. The native selection producer was read and reviewed with Mendel.
+
+Six affected controls passed in 0.364s. One small normal wheel reused the released
+installation; no new environment or native copy. Product sources are byte-identical
+between its build head and the final fixture head. The existing configured573
+original request corroborates its admitted model against terminal8c0849f3. The
+original three-cut scorer retains 3/3 unassisted and 6/6 assisted answers; all
+previous measurement values are unchanged. Both adjacent constraint comparisons
+still have three eligible identities, zero unauthorized changes, and the original
+correction/drop. There are no eligible Decision identities or action questions
+in that original dataset. Both prior Started rows are unchanged. No new model
+input, capture or comparison study. Historical request observations remain absent;
+original serialized SDK bytes are available only for cut3, not reconstructed for
+cut1/2. Intermediate receipt and original sources remain preserved.
+
+Remaining implementation, distinct from the unapproved study: an actual applied
+condition recipe must be declared by native construction, and original execution
+needs an authored binding to the constraints/Decision it implements. Current
+selected-branch admission, measured provenance and tool results do not provide
+those relations. Full-context eligibility, intervention equivalence, requested
+effort, final HTTP bytes and all-constraint action validity are not qualified.
+No producer recipe or action predicate was fabricated to fill those gaps.
