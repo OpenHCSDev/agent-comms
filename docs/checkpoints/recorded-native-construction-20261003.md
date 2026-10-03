@@ -47,7 +47,7 @@ RecordedNativeProbes/RecordedNativeProbe methods; no scalar scoring path was cop
 The shared terminal selector's other consumers ignore its returned branch and
 remain bound to the same original successful answer.
 
-## Final validation so far
+## Validation
 
 One affected source batch:23 controls passed in1.894s. It checks lost completion
 metadata, unavailable-versus-configured values, changed comparison models, foreign
@@ -62,14 +62,55 @@ openai-codex/gpt-6.1-sol and openai-codex-responses. responseModel and
 providerThinkingLevel are absent in all five; no response model or native effort is
 inferred. The original response IDs remain in private evidence.
 
-The complete installed scorer has one concrete dependency: recent567 added
+The first installed scorer attempt found one concrete dependency: recent567 added
 NativeSessionIdentity.read(package,session_file). NativeForkCreation inherits it
 before TypedTable.read(cursor), so its original SQL lookup raises TypeError.
-Mendel owns the header-locator rename and every caller in569. No SQL wrapper,
+Mendel corrected the header-locator name and every caller in569. No SQL wrapper,
 compatibility alias, original-data conversion or provider repeat is needed.
-The failed scorer observation remains retained. Complete construction validation
-waits for that actual owner fix, not for study approval.
+The failed scorer observation remains retained. The owner fix was normally merged;
+the complete installed recorded scorer now exits0 on the same originals.
 
 Still unqualified: actual condition-specific intervention/construction, complete
 full-history eligibility/capacity, exact final transport content and model/effort
 receipts, executed-action validity and the matched study. No policy was activated.
+
+## Qualified checkpoint
+
+Normal dependency:569 `67f68f3a` (production `280e6948`), inherited through normal
+merges. This PR adds eight Python declaration lines and no native producer change
+beyond569's915 artifact. Its own source is `3fa44f1a`; final installed union was
+`25aa1d41`, with339 package source files byte equal. The later569 evidence merge
+has zero production/native difference. No new environment, native copy, model run
+or public package mutation was used. The installed target and wheel together use
+about8.4MiB in the existing owned artifact directory.
+
+[installed-construction.json](../../evidence/recorded-native-construction-20261003/installed-construction.json)
+records the complete installed scorer exit0, preserved seven original artifact hashes
+and two prior Started rows. The result stays9/9:3/3 unassisted and6/6 assisted;
+five original completions remain1/2/2. Each completion reports its selected
+openai-codex/gpt-6.1-sol and openai-codex-responses API. Provider-returned model
+and provider effort remain unavailable; native metadata is not replaced by registry
+HIGH or inherited gpt-6-sol history.
+
+All three original SDK layouts reference their own current managed checkpoint.
+Referenced message counts are33/19/9 against complete original branch message
+counts9588/9592/9596. These are original JournalProvenance coordinates; an
+unreferenced entry is not independently proven absent from transformed input bytes.
+All three fail complete-message-reference coverage, as expected for compacted
+history. This does not certify a full-context control, intervention policy or
+model capacity. The runner now exposes the actual construction evidence needed
+for those later condition checks instead of treating a label as their answer.
+
+[source-consumers.json](../../evidence/recorded-native-construction-20261003/source-consumers.json)
+contains the bounded existing audit Package before/after declaration and consumer
+output, with no parse omissions. Its lexical roots are src/tests/tools; dynamic
+codec/MRO effects were read semantically. Existing AssistantMessage and
+RecordedNativeProbe remain the only added-field and source-measurement owners;
+no duplicate decoder, source scanner, model carrier or condition registry was added.
+The measurement batch deletes eleven replaced lines, including premature ancestry
+truncation; configured-driver imports and selector callers were migrated together.
+
+Remaining S4 source work concerns actual condition construction/eligibility and
+executed-action evidence. The current recorded sample cannot supply missing
+transport/capacity/intervention observations. The comparative study remains
+unapproved; no optional runtime policy is activated by this checkpoint.
