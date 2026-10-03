@@ -21,7 +21,7 @@ from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.pi_payloads import StateData
+from agent_comms.pi_payloads import StateData, ToolResultMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_turn_context import NativeContextData
@@ -472,6 +472,38 @@ class RecordedNativeProbe:
             },
         } for entry in branch if entry.assistant_message)
 
+    def tool_steps(self, branch):
+        """Record attempts/results on this input's branch, not inferred actions.
+
+        Pi's decoded result owns exact call matching and successful artifact
+        interpretation. This local lookup only joins original journal entries;
+        it has no refresh, admission or execution authority. A missing result
+        stays unavailable, and an error result never becomes success.
+        """
+        pending = {}
+        measured = []
+        for entry in branch:
+            for call in entry.retained_tool_calls():
+                if call.id in pending:
+                    raise ValueError("Recorded probe repeats an outstanding SDK tool call")
+                observation = {"source": JournalProvenance(self.session.session_file, (entry.require_entry_id(),)),
+                    "call": FieldCodec.encode(call),
+                    "completion": {"evaluated": False, "reason": "No original SDK result on this probe branch"}}
+                measured.append(observation)
+                pending[call.id] = (entry, observation)
+            if isinstance(entry, MessageEntry) and isinstance(entry.message, ToolResultMessage):
+                message = entry.message
+                try:
+                    request, observation = pending.pop(message.tool_call_id)
+                except KeyError as error:
+                    raise ValueError("Recorded tool result lacks one preceding original request") from error
+                message.require_tool_request(request)
+                observation.update(source=JournalProvenance(self.session.session_file,
+                                      (request.require_entry_id(), entry.require_entry_id())),
+                    completion={"evaluated": True, "successful": not message.is_error,
+                                "artifacts": FieldCodec.encode(message.completed_artifacts())})
+        return tuple(measured)
+
     def read(self, evidence: NativeEvidenceRead):
         """Borrow the run owner's original source for every measurement."""
         evidence.require_path(Path(self.session.session_file))
@@ -493,7 +525,7 @@ class RecordedNativeProbe:
         if answer.id != original.id:
             raise ValueError("Recorded answer belongs to another original input")
         branch = source_branch[source_branch.index(user) + 1:]
-        calls = tuple(call for entry in branch for call in entry.retained_tool_calls())
+        tools = self.tool_steps(branch)
         prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
             attempt, entry, covered = self.checkpoint.capture(self.session, evidence)
@@ -525,11 +557,12 @@ class RecordedNativeProbe:
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
+            "tool_steps": tools,
             "construction": self.construction(evidence, source_branch, manifest, checkpoint),
             "scoped_facts": scoped,
             "answer_support": {
-                "tool_calls": len(calls), "tools": tuple(call.name for call in calls),
-                "unassisted_recall": not calls,
+                "tool_calls": len(tools), "tools": tuple(step["call"]["name"] for step in tools),
+                "unassisted_recall": not tools,
                 "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall",
             },
             "checkpoint": checkpoint,

@@ -10,7 +10,6 @@ from agent_comms.compaction_boundary import CompactionBoundary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import FutureInputQueue, InputDispositions
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_revision_text import NativeRevisionText
 from agent_comms.private_path import FileRevision
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_payloads import FileMutationToolDetails, NativeToolDetails
@@ -73,9 +72,8 @@ def test_original_file_operation_survives_later_file_change_and_branch_cut(comms
     saved.chmod(0o600)
     original_native = saved.read_bytes()
     witness = NativeWitness(header['id'],str(saved),'failed-result','user',
-        NativeRevisionText.encode(FileRevision.from_stat(saved.stat())))
-    assert witness.revision == SessionRevision.observe(str(saved)).require_available().native_stamp
-    assert NativeRevisionText.decode(witness.revision) == FileRevision.from_stat(saved.stat())
+        FileRevision.from_stat(saved.stat()))
+    assert witness.revision == SessionRevision.observe(str(saved)).require_available().native
     owner = admit(comms, 'artifact-owner')
     comms.registry.register(replace(owner,session_file=str(saved)))
     owner = comms.registry.require(owner.name)
@@ -88,7 +86,7 @@ def test_original_file_operation_survives_later_file_change_and_branch_cut(comms
     boundary = CompactionBoundary(comms.registry,
         InputDispositions(comms.root/InputDispositions.filename), EmptyFutureQueue())
     with boundary.hold(owner,generation,witness) as held:
-        source = held.capture(None,None)
+        source = held.capture((), None)
         source.require_current(held)
     facts = tuple(fact for fact in source.retained.facts if isinstance(fact,NativeArtifactTaskFact))
     assert tuple(fact.source.entries for fact in facts) == (
