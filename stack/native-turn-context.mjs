@@ -87,9 +87,10 @@ export class NativeInputClaim {
             // Extension transformations own their resulting value. A changed
             // range cannot claim byte-identical logical attribution or reject
             // an otherwise valid original native input.
-            return [new TransformedInputSegment(
+            const transformed=new TransformedInputSegment(
                 [...this.contributions.flatMap(source=>source.provenance),native,journal],
-                [message]).manifest()];
+                [message]);
+            return [{...transformed.manifest(),captured_text:[bytes.toString()]}];
         }
         return this.contributions.map(source=>source.observe(bytes,images,native,journal));
     }

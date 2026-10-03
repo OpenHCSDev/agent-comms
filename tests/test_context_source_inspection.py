@@ -147,3 +147,9 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     assert comms.bus.log.context_manifests(owner.name, comms.registry) == (captured,)
     assert comms.bus.log.full_history() == []
     assert comms.bus.log.latest_sequence() == 0
+    assert captured.public_text_recorded
+    assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
+        .public_text_recorded
+    from agent_comms.cli_commands import ContextCliCommand
+
+    assert ContextCliCommand(thread=owner.name, turn=2).apply(comms)["text_recorded"] is True

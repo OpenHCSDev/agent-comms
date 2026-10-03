@@ -232,6 +232,12 @@ class SegmentManifest:
             return "\n".join([await child.public_text(read_reference) for child in self.contributors])
         return await read_reference(self)
 
+    @property
+    def public_text_recorded(self) -> bool:
+        return bool(self.captured_text) or (
+            bool(self.contributors) and all(child.public_text_recorded for child in self.contributors)
+        )
+
 
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(DeclaredFamily, affix="Segment"):
@@ -588,6 +594,10 @@ class ContextManifest:
     # Original request-owner correlation, absent for previews and captures that
     # never observed dispatch. It grants neither admission nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+    @property
+    def public_text_recorded(self) -> bool:
+        return bool(self.segments) and all(segment.public_text_recorded for segment in self.segments)
 
     def require_request_id(self) -> str:
         if not self.request_id:

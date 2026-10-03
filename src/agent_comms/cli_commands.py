@@ -771,7 +771,8 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 return selected[-1].changed_from_history(manifests)
-            return {"manifests": FieldCodec.encode(selected), "text_recorded": False}
+            return {"manifests": FieldCodec.encode(selected),
+                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
         owner = ctx.registry.require(self.thread)
         launch = PrivateNkLaunch.from_environment(
             ctx.root, ctx.owners.restart_environment(os.environ)
