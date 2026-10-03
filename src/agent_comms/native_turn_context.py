@@ -81,13 +81,16 @@ class NativeContextData(PiResponseData):
 
     def recorded_public_text(self, expected: SegmentManifest) -> str:
         self.identity.require_same_session(expected.native_identity())
-        if len(self.segments) != 1:
-            raise ValueError("Recorded SDK source did not resolve one original value")
-        (segment,) = self.segments
-        if (segment.declared_name != expected.kind or segment.sha256 != expected.sha256
-                or segment.utf8_bytes != expected.utf8_bytes):
-            raise ValueError("Recorded SDK source differs from the original measured bytes")
-        return segment.public_text()
+        originals = {}
+        for original in expected.original_values():
+            originals.setdefault(original.sha256, []).append(original)
+        values = {}
+        for segment in self.segments:
+            if not any(segment.matches_recorded(original)
+                       for original in originals.get(segment.sha256, ())):
+                raise ValueError("Recorded SDK source is outside the selected original value")
+            values.setdefault(segment.sha256, []).append(segment)
+        return expected.recorded_public_text(values)
 
     def for_turn(self, owner, turn):
         return TurnContext(owner.incarnation, turn, self.segments)

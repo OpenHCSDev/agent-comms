@@ -228,15 +228,35 @@ class SegmentManifest:
     async def public_text(self, read_reference) -> str:
         if self.captured_text:
             return "\n".join(self.captured_text)
-        if self.contributors:
-            return "\n".join([await child.public_text(read_reference) for child in self.contributors])
         return await read_reference(self)
+
+    def recorded_public_text(self, values_by_digest) -> str:
+        """Render the one acquired SDK result alongside original captures.
+
+        The SDK reader owns complete source resolution. A returned whole value
+        takes precedence over its annotation children; otherwise the same result
+        contains all uncaptured message parts. No child opens another reader.
+        """
+        if self.captured_text:
+            return "\n".join(self.captured_text)
+        for value in values_by_digest.get(self.sha256, ()):
+            if value.matches_recorded(self):
+                return value.public_text()
+        if self.contributors:
+            return "\n".join(child.recorded_public_text(values_by_digest)
+                             for child in self.contributors)
+        raise ValueError("Recorded SDK source differs from the original measured bytes")
+
+    def original_values(self):
+        yield self
+        for contributor in self.contributors:
+            yield from contributor.original_values()
 
     @property
     def public_text_recorded(self) -> bool:
-        return bool(self.captured_text) or (
-            bool(self.contributors) and all(child.public_text_recorded for child in self.contributors)
-        )
+        # Contributor metadata can annotate only a range of a provider value.
+        # It cannot establish complete capture of its enclosing value.
+        return bool(self.captured_text)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -330,6 +350,10 @@ class MeasuredNativeSegment(ContextSegment):
         # The SDK measures/hashes its exact original JSON representation.
         return SegmentManifest(self.declared_name, self.provenance,
                                self.sha256, self.utf8_bytes, self.tokens, self.contributors)
+
+    def matches_recorded(self, original: SegmentManifest) -> bool:
+        return (self.declared_name == original.kind and self.sha256 == original.sha256
+                and self.utf8_bytes == original.utf8_bytes)
 
     def source_membership(self):
         yield from super().source_membership()

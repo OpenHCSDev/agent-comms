@@ -115,7 +115,10 @@ class ContextSegment {
         const manifest=this.manifest();
         return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
     }
-    matchingValues(expected) { return this.matches(expected) ? [this] : []; }
+    recordedValues() { return [this]; }
+    static recordedMembers(expected) {
+        throw new Error('Original recorded SDK value is unavailable: projected bytes differ');
+    }
 }
 class SystemLayerSegment extends ContextSegment {
     tokens() { return estimateTokens({role:'user', content:[{type:'text', text:this.value}], timestamp:0}); }
@@ -133,13 +136,16 @@ class NativeMessages extends ContextSegment {
     payload() { return {messages:this.value}; }
     render(provider) { provider.messages.push(...this.value); }
     publicationValues() { return this.unresolved.map(segment=>segment.full()); }
-    matchingValues(expected) {
-        const whole=super.matchingValues(expected);
-        if (whole.length) return whole;
-        return this.value.flatMap(message => {
-            const original=new this.constructor(this.provenance,[message]);
-            return original.matches(expected) ? [original] : [];
-        });
+    recordedValues() {
+        return [this,...this.value.map(message=>new this.constructor(this.provenance,[message]))];
+    }
+    static recordedMembers(expected) {
+        const members=expected.contributors ?? [];
+        // capture() declares one same-kind child per provider message. Logical
+        // input-range annotations are not a complete provider-value partition.
+        if (!members.length || members.some(member=>member.kind!==expected.kind))
+            return super.recordedMembers(expected);
+        return members;
     }
 }
 class TranscriptSegment extends NativeMessages {}
@@ -232,12 +238,31 @@ export class TurnContext {
         if (session.sessionId!==identity.sessionId || session.sessionFile!==identity.sessionFile)
             throw new Error('Original recorded context belongs to another native session');
         const projected=await this.project(session, entries);
-        const matches=projected.segments.flatMap(segment=>segment.matchingValues(expected));
-        if (!matches.length)
-            throw new Error('Original recorded SDK value is unavailable: projected bytes differ');
-        // Equal original JSON bytes answer the same public-value question even
-        // when the SDK entry contributes that value more than once.
-        return new this(projected.identity,[matches[0]]);
+        const whole=projected.segments.find(segment=>segment.matches(expected));
+        if (whole) return new this(projected.identity,[whole]);
+        // One acquired projection supplies a temporary lookup for mixed original
+        // groups. No per-message RPC, repeated conversion or retained cache.
+        const values=new Map(), owners=new Map();
+        for (const group of projected.segments) {
+            owners.set(kind(group.constructor),group.constructor);
+            for (const value of group.recordedValues()) {
+                const manifest=value.manifest();
+                const matches=values.get(manifest.sha256) ?? [];
+                matches.push({value,manifest}); values.set(manifest.sha256,matches);
+            }
+        }
+        const resolve=original=>{
+            if (original.captured_text?.length) return [];
+            const found=values.get(original.sha256)?.find(({manifest})=>
+                manifest.kind===original.kind && manifest.utf8_bytes===original.utf8_bytes);
+            // Identical original JSON bytes answer the same public-value
+            // question; this does not select another source or route.
+            if (found) return [found.value];
+            const owner=owners.get(original.kind);
+            if (!owner) throw new Error('Original recorded SDK value has no selected source owner');
+            return owner.recordedMembers(original).flatMap(resolve);
+        };
+        return new this(projected.identity,resolve(expected));
     }
     static async recentSource(session) {
         const manager=session.sessionManager;

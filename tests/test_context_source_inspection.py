@@ -127,13 +127,72 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     assert observed == [child]
     assert child.journal_entries() == ("original-entry",)
     with pytest.raises(ValueError, match="measured bytes"):
-        borrowed.recorded_public_text(root)
+        borrowed.recorded_public_text(replace(root, contributors=()))
     with pytest.raises(ValueError, match="selected contributor"):
         original.selected_segment(0, (2,))
     with pytest.raises(ValueError, match="absent or ambiguous"):
         ContextManifest.for_request((original,), original.turn, "request-other")
     with pytest.raises(ValueError, match="not captured"):
         replace(original, request_id=None).require_request_id()
+
+
+@pytest.mark.asyncio
+async def test_complete_recorded_root_uses_one_acquired_result(tmp_path):
+    native = identity(tmp_path)
+    provenance = (NativeProvenance(native, 1, "a" * 64),
+                  JournalProvenance(native.session_file, ("original-entry",)))
+    messages = tuple({"role": "user", "content": f"Original message {n}"} for n in range(1000))
+    raw = json.dumps(list(messages), separators=(",", ":")).encode()
+    value = TranscriptSegment(provenance=provenance, messages=messages, tokens=1000,
+                              sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw))
+    parts = []
+    for message in messages:
+        encoded = json.dumps([message], separators=(",", ":")).encode()
+        parts.append(replace(value, messages=(message,), tokens=1,
+                             sha256=hashlib.sha256(encoded).hexdigest(),
+                             utf8_bytes=len(encoded)).measured_manifest())
+    root = replace(value, contributors=tuple(parts)).measured_manifest()
+    acquired = NativeContextData("pi.estimateTokens", native, (value,))
+    reads = []
+
+    async def read_reference(expected):
+        reads.append(expected)
+        return acquired.recorded_public_text(expected)
+
+    assert await root.public_text(read_reference) == "\n".join(m["content"] for m in messages)
+    assert reads == [root]
+    # Range annotations alone never assert complete capture of the whole value.
+    assert not replace(root, contributors=tuple(replace(p, captured_text=("range",))
+                                               for p in parts)).public_text_recorded
+
+
+@pytest.mark.asyncio
+async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_path):
+    native = identity(tmp_path)
+    provenance = (NativeProvenance(native, 1, "a" * 64),
+                  JournalProvenance(native.session_file, ("original-entry",)))
+    message = {"role": "user", "content": "Original journal message"}
+    raw = json.dumps([message], separators=(",", ":")).encode()
+    value = TranscriptSegment(provenance=provenance, messages=(message,), tokens=1,
+                              sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw))
+    captured = replace(value.measured_manifest(), sha256="b" * 64,
+                       captured_text=("Original transformed message",))
+    root = replace(value.measured_manifest(), sha256="c" * 64,
+                   contributors=(captured, value.measured_manifest()))
+    acquired = NativeContextData("pi.estimateTokens", native, (value,))
+    reads = []
+
+    async def read_reference(expected):
+        reads.append(expected)
+        return acquired.recorded_public_text(expected)
+
+    assert await root.public_text(read_reference) == (
+        "Original transformed message\nOriginal journal message")
+    assert reads == [root]
+    with pytest.raises(ValueError, match="measured bytes"):
+        replace(acquired, segments=()).recorded_public_text(root)
+    with pytest.raises(ValueError, match="outside the selected"):
+        replace(acquired, segments=(replace(value, sha256="f" * 64),)).recorded_public_text(root)
 
 
 def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path):
