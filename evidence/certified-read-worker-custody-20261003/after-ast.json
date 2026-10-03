@@ -1,5 +1,5 @@
 {
-  "head": "85abe4276e91d52a72eec7411ed2314aaccc8c02",
+  "head": "4c30bd2336d841f9592ad443126e66d58257ec1a",
   "attribute_resolution": "Candidate name references; dynamic dispatch and partial closures require semantic reading.",
   "roots": [
     {
@@ -200,48 +200,75 @@
           "path": "src/agent_comms/turn_progress.py",
           "line": 179,
           "declaration": "committed_progress",
-          "body": "async def committed_progress(self, event: events.CommittedProgress) -> None:\n        if self.reply_targets:\n            progress = event.text\n            if progress and \"\".join(self.reply_parts) == progress:\n                # Pi committed this assistant message before tool work.\n                # Publish it once as visible, non-waking progress; the\n                # final reply contains only subsequent assistant text.\n                for target in self.reply_targets:\n                    self.comms.messaging.send(self.thread_name, target, progress, notice=True)\n                self.reply_parts.clear()"
+          "body": "async def committed_progress(self, event: events.CommittedProgress) -> None:\n        await Coordination.run_worker(partial(self.publish_progress, event.text))"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 275,
+          "line": 182,
+          "declaration": "publish_progress",
+          "body": "def publish_progress(self, progress: str) -> None:\n        \"\"\"Join the committed notice and consume its streamed text together.\"\"\"\n        if self.reply_targets:\n            if progress and \"\".join(self.reply_parts) == progress:\n                # Pi committed this assistant message before tool work.\n                # Publish it once as visible, non-waking progress; the\n                # final reply contains only subsequent assistant text.\n                for target in self.reply_targets:\n                    self.comms.messaging.send(self.thread_name, target, progress, notice=True)\n                self.reply_parts.clear()"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 278,
           "declaration": "publish_success",
           "body": "def publish_success(self) -> None:\n        \"\"\"Join each acquired original send before releasing the turn lease.\"\"\"\n        published: list[MessageReference] = []\n\n        def record_publication() -> None:\n            self.comms.transcripts.record_turn_publication(\n                lease=self.turn_lease,\n                checkpoint=self.checkpoint,\n                routing=self.routing,\n                published=tuple(published),\n            )\n\n        with ExitStack() as publications:\n            publications.callback(record_publication)\n            if self.reply_parts:\n                for target in self.reply_targets:\n                    message = self.comms.messaging.send_message(\n                        self.thread_name, target, \"\".join(self.reply_parts)\n                    )\n                    published.append(message.reference)"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 296,
+          "line": 299,
+          "declaration": "publish_checkpoint",
+          "body": "def publish_checkpoint(self):\n        \"\"\"Close terminal publication and its original read before ACP delivery.\"\"\"\n        if self.result is not None and self.result.ok:\n            self.publish_success()\n        else:\n            # Streamed chunks were provisional. A failed or missing terminal\n            # result cannot turn them into a completed wire reply. Keep the\n            # failure notice non-waking, including for human reply targets.\n            # Backend text may include stderr, secrets, or content from an\n            # unrelated session. Persist only structural facts for headless owners.\n            diagnostic_path = record_terminal_failure(\n                self.comms.root,\n                turn_id=self.turn_lease.turn_id,\n                thread=self.thread_name,\n                event=asdict(self.result) if self.result is not None else {},\n                sequences=tuple(origin.seq for origin in self.origins),\n            )\n            notice_targets = tuple(\n                dict.fromkeys(\n                    (*self.reply_targets,)\n                    + tuple(\n                        origin.target if is_channel_target(origin.target) else origin.sender\n                        for origin in self.origins\n                        if origin.sender != self.thread_name\n                    )\n                )\n            )\n            for target in notice_targets:\n                prefix = \"Request failed\" if target in self.reply_targets else \"Delivery failed\"\n                self.comms.messaging.send(\n                    self.thread_name,\n                    target,\n                    f\"{prefix}: backend turn did not complete. \"\n                    f\"[Open diagnostic]({diagnostic_path.as_uri()})\",\n                    MessageType.ALERT,\n                    notice=True,\n                )\n        return self.comms.transcripts.transcript_checkpoint(self.thread_name)"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 338,
           "declaration": "publish_result",
-          "body": "async def publish_result(self):\n        if self.result is not None and self.result.ok:\n            self.publish_success()\n        else:\n            # Streamed chunks were provisional. A failed or missing terminal\n            # result cannot turn them into a completed wire reply. Keep the\n            # failure notice non-waking, including for human reply targets.\n            # Backend text may include stderr, secrets, or content from an\n            # unrelated session. Persist only structural facts for headless owners.\n            diagnostic_path = record_terminal_failure(\n                self.comms.root,\n                turn_id=self.turn_lease.turn_id,\n                thread=self.thread_name,\n                event=asdict(self.result) if self.result is not None else {},\n                sequences=tuple(origin.seq for origin in self.origins),\n            )\n            notice_targets = tuple(\n                dict.fromkeys(\n                    (*self.reply_targets,)\n                    + tuple(\n                        origin.target if is_channel_target(origin.target) else origin.sender\n                        for origin in self.origins\n                        if origin.sender != self.thread_name\n                    )\n                )\n            )\n            for target in notice_targets:\n                prefix = \"Request failed\" if target in self.reply_targets else \"Delivery failed\"\n                self.comms.messaging.send(\n                    self.thread_name,\n                    target,\n                    f\"{prefix}: backend turn did not complete. \"\n                    f\"[Open diagnostic]({diagnostic_path.as_uri()})\",\n                    MessageType.ALERT,\n                    notice=True,\n                )\n        await self.runtime.session_update(\n            session_id=self.session_id,\n            update=AgentMessageChunk(\n                session_update=\"agent_message_chunk\",\n                content=TextContentBlock(type=\"text\", text=\"\"),\n                field_meta=encode_updates(\n                    TranscriptChangedUpdate(\n                        self.comms.transcripts.transcript_checkpoint(self.thread_name)\n                    )\n                ),\n            ),\n        )"
+          "body": "async def publish_result(self):\n        # Cancellation must join original sends, their annotation and the\n        # checkpoint before OwnedTurn can settle or release its lease.\n        checkpoint = await Coordination.run_worker(self.publish_checkpoint)\n        await self.runtime.session_update(\n            session_id=self.session_id,\n            update=AgentMessageChunk(\n                session_update=\"agent_message_chunk\",\n                content=TextContentBlock(type=\"text\", text=\"\"),\n                field_meta=encode_updates(\n                    TranscriptChangedUpdate(checkpoint)\n                ),\n            ),\n        )"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 240,
+          "line": 336,
+          "call": "self.comms.transcripts.transcript_checkpoint"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 180,
           "call": "Coordination.run_worker"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 252,
+          "line": 243,
           "call": "Coordination.run_worker"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 280,
+          "line": 255,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 283,
           "call": "self.comms.transcripts.record_turn_publication"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 298,
+          "line": 302,
           "call": "self.publish_success"
         },
         {
           "path": "src/agent_comms/turn_progress.py",
-          "line": 339,
-          "call": "self.comms.transcripts.transcript_checkpoint"
+          "line": 341,
+          "call": "Coordination.run_worker"
         },
         {
           "path": "src/agent_comms/turn_runner.py",
           "line": 155,
+          "call": "Coordination.run_worker"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 223,
           "call": "Coordination.run_worker"
         },
         {
@@ -253,27 +280,27 @@
           "path": "src/agent_comms/wire_log.py",
           "line": 77,
           "declaration": "read_certified_async",
-          "body": "async def read_certified_async(self, read: Callable):\n        \"\"\"Acquire cancellably, then consume the whole source in its worker.\n\n        Return detached observations only. Verification and the callback share\n        one resource thread; no SQLite connection crosses to the event loop.\n        Cancellation joins acquired work before the original descriptor closes.\n        \"\"\"\n        from .child_process import Platform\n        from .coordinator import Coordination\n\n        platform = Platform.current()\n        with _store_lock_file(self.path) as lock_file:\n            await StoreLockContention(math.inf).acquire_async(\n                lock_file.fileno(), platform, shared=False,\n            )\n            return await Coordination.run_worker(\n                partial(self._read_certified, lock_file, platform, read),\n            )"
+          "body": "async def read_certified_async(self, read: Callable):\n        \"\"\"Acquire cancellably, then consume the whole source in its worker.\n\n        Return detached observations only. Verification and the callback share\n        one resource thread; no SQLite connection crosses to the event loop.\n        The worker closes physical custody before returning its result; result\n        delivery must not keep a POSIX lock until the event loop resumes.\n        Cancellation joins acquired work before the original descriptor closes.\n        \"\"\"\n        from .child_process import Platform\n        from .coordinator import Coordination\n\n        platform = Platform.current()\n        with _store_lock_file(self.path) as lock_file:\n            await StoreLockContention(math.inf).acquire_async(\n                lock_file.fileno(), platform, shared=False,\n            )\n            return await Coordination.run_worker(\n                partial(self._read_certified, lock_file, platform, read),\n            )"
         },
         {
           "path": "src/agent_comms/wire_log.py",
-          "line": 96,
+          "line": 98,
           "declaration": "_read_certified",
-          "body": "def _read_certified(self, lock_file, platform, read):\n        with _held_store_source(self.path, lock_file, platform, None) as lock:\n            with self._certified_source(lock) as source:\n                return read(source)"
+          "body": "def _read_certified(self, lock_file, platform, read):\n        with lock_file, _held_store_source(self.path, lock_file, platform, None) as lock:\n            with self._certified_source(lock) as source:\n                return read(source)"
         },
         {
           "path": "src/agent_comms/wire_log.py",
-          "line": 88,
+          "line": 90,
           "call": "_store_lock_file"
         },
         {
           "path": "src/agent_comms/wire_log.py",
-          "line": 97,
+          "line": 99,
           "call": "_held_store_source"
         },
         {
           "path": "src/agent_comms/wire_log.py",
-          "line": 92,
+          "line": 94,
           "call": "Coordination.run_worker"
         }
       ]
@@ -285,13 +312,33 @@
       "sites": [
         {
           "path": "tests/test_private_idle_drain.py",
-          "line": 52,
+          "line": 55,
           "call": "log.read_certified_async"
         },
         {
           "path": "tests/test_private_idle_drain.py",
-          "line": 77,
+          "line": 86,
+          "call": "run_worker"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 90,
           "call": "log.read_certified_async"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 110,
+          "call": "log.read_certified_async"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 131,
+          "call": "progress.committed_progress"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 148,
+          "call": "progress.publish_result"
         },
         {
           "path": "tests/test_s1_event_behavior.py",
