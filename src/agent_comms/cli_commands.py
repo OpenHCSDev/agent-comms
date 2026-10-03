@@ -121,7 +121,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             return cls.channel_bindings(comms, comms.channels.catalog.read().resolve(target))
         snapshot = comms.registry.snapshot()
         thread = snapshot.require(target)
-        return cls.thread_bindings(comms, thread, snapshot.statuses[thread.name], channel)
+        return cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel)
 
     @classmethod
     def target_catalog(cls, comms: Comms, target: str, channel: str | None = None, *, project: str) -> list[dict[str, object]]:
@@ -133,8 +133,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         else:
             snapshot = comms.registry.snapshot()
             thread = snapshot.require(target)
+            status = snapshot.status(thread.name)
             bindings = ((member, member.thread_bindings(comms, thread,
-                        snapshot.statuses[thread.name], channel))
+                        status, channel))
                         for member in cls.members_with(cls))
         return [member.describe(bound, comms, target, project)
                 for member, available in bindings for bound in available]
