@@ -62,7 +62,9 @@ The original NativeContextData/ContextManifest declarations decode them. Segment
 bytes, manifests, native identity and NativeProvenance must match the original
 NativeContextProof. Exact retained-envelope presence measures the recorded SDK
 input only; final transport transformations remain unevaluated. Probe usage comes
-from the original assistant message. Question/ScoreView still own separate
+from every original assistant completion in the input-to-answer branch, including
+tool-call steps. RecordedNativeProbe owns this `model_steps` projection; the
+final-only answer_usage projection is deleted. Question/ScoreView still own separate
 recall, prohibition, alternative and action scores.
 
 ## Current S3 baseline

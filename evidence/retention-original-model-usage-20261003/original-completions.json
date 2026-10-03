@@ -1,0 +1,147 @@
+{
+  "configured_originals": "PR560 same completed configured Sol/HIGH three-cut native de166 run",
+  "model_calls": 0,
+  "native_launches": 0,
+  "runtime_changes": 0,
+  "new_package_or_environment": false,
+  "source_command": "PYTHONPATH=tests <borrowed Core563 runtime>/bin/python tests/compaction_retention_fixture.py --scenario-file <original frozen oracle> --recorded-run <original continued-run> --condition task-memory",
+  "correct": 9,
+  "questions": 9,
+  "stale": 0,
+  "missing": 0,
+  "steps": {
+    "cut-1": [
+      {
+        "entry_id": "2b0d4e1b",
+        "timestamp": "2026-10-03T02:25:42.737Z",
+        "usage": {
+          "evaluated": true,
+          "value": {
+            "input": 39800,
+            "output": 30,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 39830,
+            "cost": {
+              "input": 0.07959999999999999,
+              "output": 0.00030000000000000003,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0.07989999999999998
+            },
+            "reasoning": 0
+          }
+        }
+      }
+    ],
+    "cut-2": [
+      {
+        "entry_id": "b7c0d8dd",
+        "timestamp": "2026-10-03T02:28:44.199Z",
+        "usage": {
+          "evaluated": true,
+          "value": {
+            "input": 35055,
+            "output": 171,
+            "cacheRead": 7936,
+            "cacheWrite": 0,
+            "totalTokens": 43162,
+            "cost": {
+              "input": 0.07010999999999999,
+              "output": 0.0017100000000000001,
+              "cacheRead": 0.0007936000000000001,
+              "cacheWrite": 0,
+              "total": 0.0726136
+            },
+            "reasoning": 60
+          }
+        }
+      },
+      {
+        "entry_id": "b7807f3e",
+        "timestamp": "2026-10-03T02:28:47.018Z",
+        "usage": {
+          "evaluated": true,
+          "value": {
+            "input": 1408,
+            "output": 32,
+            "cacheRead": 42880,
+            "cacheWrite": 0,
+            "totalTokens": 44320,
+            "cost": {
+              "input": 0.002816,
+              "output": 0.00032,
+              "cacheRead": 0.004288,
+              "cacheWrite": 0,
+              "total": 0.007424
+            },
+            "reasoning": 0
+          }
+        }
+      }
+    ],
+    "cut-3": [
+      {
+        "entry_id": "2bc404ed",
+        "timestamp": "2026-10-03T03:56:40.799Z",
+        "usage": {
+          "evaluated": true,
+          "value": {
+            "input": 32326,
+            "output": 105,
+            "cacheRead": 7936,
+            "cacheWrite": 0,
+            "totalTokens": 40367,
+            "cost": {
+              "input": 0.064652,
+              "output": 0.0010500000000000002,
+              "cacheRead": 0.0007936000000000001,
+              "cacheWrite": 0,
+              "total": 0.0664956
+            },
+            "reasoning": 0
+          }
+        }
+      },
+      {
+        "entry_id": "10afd6a5",
+        "timestamp": "2026-10-03T03:56:44.142Z",
+        "usage": {
+          "evaluated": true,
+          "value": {
+            "input": 846,
+            "output": 23,
+            "cacheRead": 40064,
+            "cacheWrite": 0,
+            "totalTokens": 40933,
+            "cost": {
+              "input": 0.001692,
+              "output": 0.00023,
+              "cacheRead": 0.0040064,
+              "cacheWrite": 0,
+              "total": 0.0059284
+            },
+            "reasoning": 0
+          }
+        }
+      }
+    ]
+  },
+  "scope": "Original journaled assistant completions; not all provider attempts, billed spend or model latency",
+  "original_560_artifact_hashes_unchanged": true,
+  "original_output": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/model-step-measurements.private.json",
+    "sha256": "13f18a525b0b512bde6056d2f827c26b46039ebf2100c6f20cc49cb2a86fd72d"
+  },
+  "checks": {
+    "original3_controls_passed": 3,
+    "new_usage_control_passed": 1,
+    "new_control_corrected_expectation": "Original FieldCodec omits unavailable optional usage fields; first assertion expected an explicit null. Raw first batch failure is not a product failure."
+  },
+  "remaining": [
+    "recorded matched-run alignment/construction eligibility",
+    "separate unassisted/tool-assisted matched denominators",
+    "constraint-backed action validity; exact ACTION answer is not an executed action"
+  ],
+  "runtime_production_diff": []
+}
