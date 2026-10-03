@@ -1,0 +1,94 @@
+{
+  "provider_calls": 0,
+  "input_replays": 0,
+  "acp_second_publication": "blocked; not qualified",
+  "three_cuts_qualified": false,
+  "rounds": {
+    "cut-1": {
+      "input_id": "48f861fc41379d39e7111d206b9d8617",
+      "answer_entry_id": "2b0d4e1b",
+      "request_generation": 1,
+      "answer_support": {
+        "tool_calls": 0,
+        "tools": [],
+        "unassisted_recall": true,
+        "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+      },
+      "canonical_availability": {
+        "scope": "exact original selected-source envelope in its corroborated native commit",
+        "evaluated": true,
+        "reason": "Original envelope verified against committed payload",
+        "source_digest": "c516d0d95ac8bcd10e7d25735f4c6c573af7c8518df8c799bc9fc3e697e5d8ae",
+        "required": 6,
+        "available": 6,
+        "by_fact": {
+          "current_human_constraint": {
+            "required": 3,
+            "available": 3
+          },
+          "user_source": {
+            "required": 3,
+            "available": 3
+          }
+        },
+        "covered_native_entries": 9585
+      },
+      "provider_prompt_presence": {
+        "evaluated": false,
+        "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"
+      },
+      "score_refused": "Recorded native probe differs from the frozen held-out questions"
+    },
+    "cut-2": {
+      "input_id": "6c13198ae5958304e799129f371f44b7",
+      "answer_entry_id": "b7807f3e",
+      "request_generation": 3,
+      "answer_support": {
+        "tool_calls": 1,
+        "tools": [
+          "bash"
+        ],
+        "unassisted_recall": false,
+        "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+      },
+      "canonical_availability": {
+        "scope": "exact original selected-source envelope in its corroborated native commit",
+        "evaluated": true,
+        "reason": "Original envelope verified against committed payload",
+        "source_digest": "5f55c22b07a95ecd7539528f1c6e79eaa2b94b39ce68fb84aac3e4fae5e52ddb",
+        "required": 9,
+        "available": 9,
+        "by_fact": {
+          "current_human_constraint": {
+            "required": 3,
+            "available": 3
+          },
+          "historical_human_constraint": {
+            "required": 1,
+            "available": 1
+          },
+          "input": {
+            "required": 1,
+            "available": 1
+          },
+          "user_source": {
+            "required": 4,
+            "available": 4
+          }
+        },
+        "covered_native_entries": 9603
+      },
+      "provider_prompt_presence": {
+        "evaluated": false,
+        "reason": "Original SDK payload and matching context manifest not supplied"
+      },
+      "score_refused": "Recorded native probe differs from the frozen held-out questions"
+    }
+  },
+  "foreign_input_answer_refused": "Recorded answer belongs to another original input",
+  "source_unchanged": true,
+  "source_hashes": {
+    "2026-10-03T02-09-56-587Z_01a0ff86-736c-73a6-904d-43705c3b9d71.jsonl": "ce1bf0dc3ea13bb94ce5eb2967349b1a8d362f8b37a4d6eff1816ee4dc31c30c",
+    "2026-10-03T02-09-56-587Z_01a0ff86-736c-73a6-904d-43705c3b9d71.jsonl.input-proof": "d9a58ed57fa94a7c26fc867c0637b61f22227195c0a1598212d216bed2333364"
+  }
+}

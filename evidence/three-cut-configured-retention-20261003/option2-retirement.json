@@ -1,0 +1,42 @@
+{
+  "authority": "Explicit OPTION2 original private dead-controller lifecycle retirement",
+  "original_lease": {
+    "identity": {
+      "incarnation": {
+        "name": "source529",
+        "created_at": 1790993400.2543728
+      },
+      "generation": 4
+    },
+    "turn_id": "b4aa28174de24019ba3448e4d8e8f01f",
+    "admission_generation": 5
+  },
+  "native_final": "b7807f3e",
+  "native_context_proof": {
+    "inputId": "6c13198ae5958304e799129f371f44b7",
+    "sessionId": "01a0ff86-736c-73a6-904d-43705c3b9d71",
+    "sessionEntryId": "51b38543",
+    "requestGeneration": 3,
+    "llmContextDigest": "beb718715e0360b3bc1a888d468d3d5430bf923ee0c3fb37774d8fca713352f6"
+  },
+  "both_groups_absent": true,
+  "observer_absent": true,
+  "acp_disposition": "ACP_UNCONFIRMED",
+  "input_resolved": false,
+  "provider_calls": 0,
+  "replayed_inputs": 0,
+  "republished_messages": 0,
+  "lifecycle_retired": true,
+  "registry_changed_fields": [
+    "threads.source529.active_turn",
+    "threads.source529.last_finished_turn_id",
+    "last_seen.source529"
+  ],
+  "original_receipt": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/certified-read-worker-custody-20261003/original560-controller-retirement.json",
+    "sha256": "f58ebe0dfba6fe3f077c7a6bd4c0914ff4ff96be1aa85989880cb25db75c39fe"
+  },
+  "protected_hashes_unchanged": true,
+  "receiving_core": "4c30bd2336d841f9592ad443126e66d58257ec1a",
+  "native": "de16647979cbad28"
+}

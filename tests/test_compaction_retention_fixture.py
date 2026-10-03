@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import NativeEntry
+from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from retained_native_fixture import RecordedNativeProbe
 from test_backend_native_lifecycle import native_backend
@@ -204,9 +205,9 @@ async def test_recorded_native_recall_consumes_original_probe_and_preserves_sour
     completed = await owner.run(first.probe_text())
     assert completed[-1].ok and owner.provider.posts == 2
     header, entries = NativeEntry.read_evidence(owner.session)
-    original_user = NativeEntry.tracked_users(entries)[owner.starts[-1][1]]
-    answer, = (entry for entry in entries if entry.final_reply
-               and entry.parent_id == original_user.id)
+    with NativeEntry.open_evidence(owner.session) as evidence:
+        context = NativeContextProof.read_evidence(owner.session, owner.starts[-1][1], evidence=evidence)
+        answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
     reference = RecordedNativeProbes({first.identity: RecordedNativeProbe(
         NativeSessionIdentity(header.id, str(owner.session)), owner.starts[-1][1], answer.id
     )})

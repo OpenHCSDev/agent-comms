@@ -1,0 +1,58 @@
+{
+  "declarations": [
+    {
+      "file": "tools/cutover/original_owner_capture.py",
+      "line": 32,
+      "name": "OriginalTypedCapture",
+      "bases": [],
+      "methods": [
+        "observe",
+        "read"
+      ]
+    },
+    {
+      "file": "tools/cutover/original_owner_capture.py",
+      "line": 59,
+      "name": "CurrentTypedCapture",
+      "bases": [
+        "OriginalTypedCapture"
+      ],
+      "methods": []
+    }
+  ],
+  "imports": [
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 17,
+      "names": [
+        "CurrentTypedCapture"
+      ]
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 62,
+      "names": [
+        "CurrentTypedCapture"
+      ]
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 28,
+      "names": [
+        "CurrentTypedCapture"
+      ]
+    },
+    {
+      "file": "tools/cutover/original_owner_capture_installed_pilot.py",
+      "line": 11,
+      "names": [
+        "OriginalTypedCapture"
+      ]
+    }
+  ],
+  "parse_omissions": [],
+  "changed_owner": "OriginalTypedCapture.read",
+  "removed_decision": "root decoder interpreter must equal captured running launcher",
+  "retained_owner": "RetainedOwnerLaunch.capture verifies actual process identity, incarnation, launch and environment",
+  "dynamic_resolution": "AST lexical import/inheritance inventory; no claim to resolve external imports dynamically"
+}

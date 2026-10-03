@@ -12,6 +12,7 @@ from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.input_disposition import InputDocument
 from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
@@ -42,15 +43,20 @@ class RecordedNativeCheckpoint:
     # Optional external measurement evidence, not native lifecycle state. A
     # missing original capture cannot be reconstructed from today's registry.
     registry_scope: FileProvenance | None = None
-    wire: Annotated[Path, PathText] | None = None
+    wire: Annotated[Path | None, PathText] = None
 
     @staticmethod
-    def read_record(reference: FileProvenance, target):
-        """Decode one pinned original artifact through its existing declaration."""
+    def read_json(reference: FileProvenance):
+        """Read unchanged original bytes; their declared boundary owns decoding."""
         raw = Path(reference.path).read_bytes()
         if hashlib.sha256(raw).hexdigest() != reference.sha256:
             raise ValueError("Recorded measurement artifact changed")
-        return FieldCodec.decode(target, json.loads(raw, object_pairs_hook=unique_fields))
+        return json.loads(raw, object_pairs_hook=unique_fields)
+
+    @classmethod
+    def read_record(cls, reference: FileProvenance, target):
+        """Decode a pinned internal record through its existing declaration."""
+        return FieldCodec.decode(target, cls.read_json(reference))
 
     def summary_usage(self, entry):
         # capture() already verifies the original metadata digest, which covers
@@ -223,7 +229,7 @@ class RecordedNativeCheckpoint:
 
 @dataclass(frozen=True)
 class RecordedNativeProbe:
-    """One recorded tool-free probe, read through the original native owners."""
+    """One original probe and answer; tool-assisted answers are labelled separately."""
 
     session: NativeSessionIdentity
     input_id: Annotated[str, NativeInputIdText]
@@ -233,15 +239,65 @@ class RecordedNativeProbe:
     checkpoint: RecordedNativeCheckpoint | None = None
     sdk_context: FileProvenance | None = None
     context_manifest: FileProvenance | None = None
+    sdk_segment_bytes: FileProvenance | None = None
+    submitted_inputs: FileProvenance | None = None
 
-    def prompt_presence(self, context, retained):
+    def submitted_prompt(self, user):
+        """Bind an original submitted source to its exact recorded native write.
+
+        A direct-native control measures its native user text. An ACP capture
+        supplies the original InputDocument, whose STARTED member owns both
+        submitted and rendered text. This is measurement, never lease authority.
+        """
+        if self.submitted_inputs is None:
+            return user.message.text, {"scope": "original native user text"}
+        document = RecordedNativeCheckpoint.read_record(self.submitted_inputs, InputDocument)
+        row, = (row for row in document.rows.values()
+                if row.has_started and row.native_id == self.input_id)
+        if not row.matches_native(turn_id=row.turn_id, native_id=self.input_id, text=user.message.text):
+            raise ValueError("Original submitted input differs from the recorded native write")
+        return row.source_text, {"scope": "original STARTED InputDocument source and exact sent text",
+                                 "source": FieldCodec.encode(row.context_provenance()),
+                                 "turn_id": row.turn_id}
+
+    @staticmethod
+    def answer_for_input(evidence: NativeEvidenceRead, context):
+        """Resolve the terminal through original ancestry and its nearest input."""
+        _, entries = evidence.observe()
+        user, = (entry for entry in entries if entry.id == context.session_entry_id)
+        candidates = []
+        for answer in entries[entries.index(user) + 1:]:
+            if not answer.final_reply:
+                continue
+            branch = evidence.branch(answer.id, entries)
+            boundaries = tuple(entry for entry in branch if entry.input_boundary)
+            if boundaries and boundaries[-1].id == user.id:
+                candidates.append((answer, branch[branch.index(user) + 1:]))
+        answer, = candidates
+        return answer
+
+    def read_sdk_context(self):
+        """Decode the original external SDK capture at its Pi boundary once."""
+        if self.sdk_context is None:
+            return None
+        data = NativeContextData.from_wire(RecordedNativeCheckpoint.read_json(self.sdk_context))
+        self.session.require_same_session(data.identity)
+        return data
+
+    @staticmethod
+    def sdk_request(data):
+        """The captured native provenance selects its original request proof."""
+        source, = frozenset(provenance for segment in data.segments
+                            for provenance in segment.provenance
+                            if isinstance(provenance, NativeProvenance))
+        return source
+
+    def prompt_presence(self, context, retained, data):
         """Measure a recorded SDK payload, never reconstruct a provider prompt."""
-        if self.sdk_context is None or self.context_manifest is None:
+        if data is None or self.context_manifest is None:
             return {"evaluated": False,
                     "reason": "Original SDK payload and matching context manifest not supplied"}
-        data = RecordedNativeCheckpoint.read_record(self.sdk_context, NativeContextData)
         manifest = RecordedNativeCheckpoint.read_record(self.context_manifest, ContextManifest)
-        self.session.require_same_session(data.identity)
         if (data.counter != manifest.counter
                 or tuple(segment.measured_manifest() for segment in data.segments) != manifest.segments):
             raise ValueError("Recorded SDK payload differs from its original context manifest")
@@ -250,8 +306,14 @@ class RecordedNativeProbe:
         source = NativeProvenance(self.session, context.request_generation, context.llm_context_digest)
         if not data.segments or any(source not in segment.provenance for segment in data.segments):
             raise ValueError("Recorded SDK context is not this original probe request")
-        for segment in data.segments:
-            raw = segment.text().encode()
+        if self.sdk_segment_bytes is None:
+            return {"evaluated": False,
+                    "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"}
+        texts = FieldCodec.decode(tuple[str, ...], RecordedNativeCheckpoint.read_json(self.sdk_segment_bytes))
+        if len(texts) != len(data.segments):
+            raise ValueError("Recorded SDK serialized segments differ from their manifest")
+        for segment, text in zip(data.segments, texts):
+            raw = text.encode()
             if (len(raw) != segment.utf8_bytes
                     or hashlib.sha256(raw).hexdigest() != segment.sha256):
                 raise ValueError("Recorded SDK segment bytes differ from measured source")
@@ -261,7 +323,7 @@ class RecordedNativeProbe:
         # segments contain original provider JSON. This is byte presence, not
         # recall credit, semantic interpretation or final HTTP-body evidence.
         envelope = json.dumps(retained.text, ensure_ascii=False)[1:-1]
-        present = any(envelope in segment.text() for segment in data.segments)
+        present = any(envelope in text for text in texts)
         return {"evaluated": True, "stage": "recorded SDK provider input",
                 "final_transport_evaluated": False,
                 "context_digest": context.llm_context_digest,
@@ -276,8 +338,10 @@ class RecordedNativeProbe:
     def read(self, evidence: NativeEvidenceRead):
         """Borrow the run owner's original source for every measurement."""
         evidence.require_path(Path(self.session.session_file))
+        data = self.read_sdk_context()
         context = NativeContextProof.read_evidence(
-            Path(self.session.session_file), self.input_id, evidence=evidence
+            Path(self.session.session_file), self.input_id, evidence=evidence,
+            request_generation=self.sdk_request(data).request_generation if data is not None else None,
         )
         self.session.require_same_session(NativeSessionIdentity(
             context.session_id, str(context.session_file)
@@ -287,8 +351,11 @@ class RecordedNativeProbe:
         answer, = (row for row in entries if row.id == self.answer_entry_id)
         if not isinstance(answer, MessageEntry) or not answer.final_reply:
             raise ValueError("Recorded recall answer is not a successful native terminal")
-        if answer.parent_id != user.id:
-            raise ValueError("Recall requires a direct tool-free answer to its original probe")
+        original, branch = self.answer_for_input(evidence, context)
+        if answer.id != original.id:
+            raise ValueError("Recorded answer belongs to another original input")
+        calls = tuple(call for entry in branch for call in entry.retained_tool_calls())
+        prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
             attempt, entry, covered = self.checkpoint.capture(self.session, evidence)
             checkpoint = self.checkpoint._report(attempt, entry, covered)
@@ -311,14 +378,20 @@ class RecordedNativeProbe:
                 for item in fields(NativeContextRecord)
             }),
             "session": FieldCodec.encode(self.session),
-            "prompt": user.message.text,
+            "prompt": prompt,
+            "submitted_source": submitted,
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
             "answer_usage": {"evaluated": answer.message.usage is not None,
                              "usage": FieldCodec.encode(answer.message.usage)},
+            "answer_support": {
+                "tool_calls": len(calls), "tools": tuple(call.name for call in calls),
+                "unassisted_recall": not calls,
+                "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall",
+            },
             "checkpoint": checkpoint,
             "canonical_availability": checkpoint["canonical_availability"],
-            "provider_prompt_presence": self.prompt_presence(context, retained),
+            "provider_prompt_presence": self.prompt_presence(context, retained, data),
             "prompt_scope": "original native user and assembled-context proof, not final provider payload",
         }
 
