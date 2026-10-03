@@ -554,7 +554,7 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
 
             monkeypatch.setenv("AC_CAPACITY_PHASE", "identity-read")
             assert (
-                NativeSessionIdentity.read(package, str(session))
+                NativeSessionIdentity.locate(package, str(session))
                 == NativeSessionIdentity(fixture["session_id"], str(session))
             )
             receipt["phases"].append("identity-read")

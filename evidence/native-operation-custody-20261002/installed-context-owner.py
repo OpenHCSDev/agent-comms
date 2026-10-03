@@ -158,16 +158,17 @@ async def main(args):
         (evidence / 'owner-prepared.json').write_text(json.dumps(receipt, indent=2) + '\n')
         print(json.dumps(receipt), flush=True)
         # Local harness teardown; this line is never forwarded to native stdin.
-        control = asyncio.StreamReader()
-        transport, _ = await asyncio.get_running_loop().connect_read_pipe(
-            lambda: asyncio.StreamReaderProtocol(control), sys.stdin
-        )
-        try:
-            # The sole physical recorder bounds its run; its explicit cleanup
-            # releases this original local stdin lifetime. EOF also retires it.
-            await control.readline()
-        finally:
-            transport.close()
+        if not args.prepare_compaction:
+            control = asyncio.StreamReader()
+            transport, _ = await asyncio.get_running_loop().connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(control), sys.stdin
+            )
+            try:
+                # The sole physical recorder bounds its run; its explicit cleanup
+                # releases this original local stdin lifetime. EOF also retires it.
+                await control.readline()
+            finally:
+                transport.close()
         await owner.turns.persistent_backends[name].close_idle()
         if child.alive():
             raise AssertionError('Prepared native child survived owned retirement')

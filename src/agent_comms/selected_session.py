@@ -106,7 +106,7 @@ class SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.read(package, str(path)))
+            identity=NativeSessionIdentity.locate(package, str(path)))
 
     @classmethod
     async def prepare(
