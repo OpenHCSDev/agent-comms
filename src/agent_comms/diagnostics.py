@@ -125,11 +125,16 @@ def record_acquisition_progress(root, lease, input_id, measurements):
     })
 
 
+def request_observation_path(root, turn_id):
+    """Location of the original diagnostic publication, not another record."""
+    return root / "diagnostics" / f"{turn_id}.requests.jsonl"
+
+
 def _record_request_observation(root, lease, record):
     try:
-        directory = root / "diagnostics"
+        path = request_observation_path(root, lease.turn_id)
+        directory = path.parent
         directory.mkdir(mode=0o700, exist_ok=True)
-        path = directory / f"{lease.turn_id}.requests.jsonl"
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(descriptor, "w") as output:
             output.write(json.dumps(record) + "\n")

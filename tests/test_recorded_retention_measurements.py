@@ -23,6 +23,9 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
+from agent_comms.request_progress import RequestProgress
+from agent_comms.pi_payloads import ReportedModel
+from agent_comms.turn_lease import TurnLeaseFence
 from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
 from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDrop
 from agent_comms.thread_identity import TurnId, TurnIdentity
@@ -54,6 +57,42 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def test_admitted_budget_requires_original_request_and_turn_correlation(self):
+        # Prevent same-input/time guesses and historical capacity fabrication.
+        owner = Thread('original', frozenset(), str(self.root), created_at=12)
+        turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+        manifest = ContextManifest(owner.incarnation, turn, (), 'counter', request_id='request')
+        lease = TurnLeaseFence(turn.occurrence, turn.identity.value, 3)
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        observed = RequestProgress('request', self.identity.session_id, probe.input_id,
+            1, 2, '3', 1, 0, 0, 0, 'budget_admission',
+            model=ReportedModel(provider='original', id='model', context_window=100, max_tokens=20),
+            estimated_input_tokens=80, available_tokens=20, output_token_field='max_tokens',
+            requested_output_tokens=50, admitted_output_tokens=20, minimum_output_tokens=1)
+
+        def publication(progress, fence=lease):
+            return {'turn': FieldCodec.encode(fence), 'native': FieldCodec.encode(progress)}
+
+        def capture(records):
+            path = self.root / 'requests.jsonl'
+            raw = ''.join(json.dumps(item) + '\n' for item in records).encode()
+            path.write_bytes(raw)
+            return replace(probe, request_observations=FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
+
+        revised = replace(observed, requested_output_tokens=20, admitted_output_tokens=10)
+        selected = capture(({'acquisition': {}}, publication(replace(observed, request_id='other')),
+                            publication(observed), publication(revised)))
+        result = selected.request_budget(manifest)
+        self.assertTrue(result['evaluated'])
+        self.assertEqual(result['observations'], (observed, revised))
+        self.assertFalse(selected.request_budget(replace(manifest, request_id=None))['evaluated'])
+        self.assertFalse(probe.request_budget(manifest)['evaluated'])
+        for changed in (replace(observed, session_id='other'), replace(observed, input_id='b' * 32)):
+            with self.assertRaises(ValueError):
+                capture((publication(changed),)).request_budget(manifest)
+        with self.assertRaises(ValueError):
+            capture((publication(observed, replace(lease, turn_id='other')),)).request_budget(manifest)
 
     def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
         # Prevent final-answer-only accounting from hiding earlier tool-step

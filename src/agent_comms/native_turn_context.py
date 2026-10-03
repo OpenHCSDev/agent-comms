@@ -1,6 +1,6 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 
 from .pi_payloads import PiResponseData
@@ -13,9 +13,10 @@ class NativeContextManifestData(PiResponseData):
     strict_fields = True
     counter: str
     segments: tuple[SegmentManifest, ...]
+    request_id: str | None = field(default=None, metadata={"wire_name": "requestId", "wire_omit_default": True})
 
     def for_turn(self, thread, turn):
-        return ContextManifest(thread, turn, self.segments, self.counter)
+        return ContextManifest(thread, turn, self.segments, self.counter, request_id=self.request_id)
 
     async def record(self, log, thread, lease) -> None:
         """Publish the original SDK observation under its leased owner turn."""

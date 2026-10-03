@@ -21,7 +21,9 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactRequest, CompactionChangedUpdate, decode_updates, encode_request
 from agent_comms.agent_events import CompactionSummaryProgress
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms, wire
+from agent_comms.coordinator import Coordination
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
@@ -105,6 +107,13 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
                 original.model, original.thinking_level, original.worktree)
             service.registry.register(replace(prior, process_identity=identity), new_owner=True)
     owner = service.registry.require('source529')
+    # In-process fixture owners use the same participant store registration as
+    # OwnerLifecycle launch. Registry presence alone is not inbox membership.
+    with Coordination(str(service.root / 'coordination.sqlite3')) as store:
+        for name in ('source529', 'peer529'):
+            thread = service.registry.require(name)
+            store.participants.register(stable_thread_lookup(thread.created_at),
+                                        thread.name, thread.name, committed=True)
     environment.update(owner.native_environment(service.root, service.registry.snapshot(), owner.worktree))
     observe_launch(environment)
     os.environ.clear(); os.environ.update(environment)

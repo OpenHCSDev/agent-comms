@@ -1,4 +1,6 @@
 /** Diagnostic request coordinates. Not an admission or retry receipt. */
+import type { Api, Model } from "../types.js";
+
 export interface RequestObservationPoint {
     stage: string;
     detail?: string;
@@ -7,6 +9,13 @@ export interface RequestObservationPoint {
     status?: number;
     responseId?: string;
     callback?: string;
+    model?: Pick<Model<Api>, "provider" | "id" | "name" | "contextWindow" | "maxTokens">;
+    estimatedInputTokens?: number;
+    availableTokens?: number;
+    outputTokenField?: string;
+    requestedOutputTokens?: number;
+    admittedOutputTokens?: number;
+    minimumOutputTokens?: number;
 }
 export interface NativeRequestProgress extends RequestObservationPoint {
     requestId: string;

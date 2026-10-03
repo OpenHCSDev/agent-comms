@@ -26,10 +26,13 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.registry_document import RegistryDocument
+from agent_comms.request_progress import RequestProgress
+from agent_comms.turn_lease import TurnLeaseFence
+from agent_comms.thread_identity import TurnId
 from agent_comms.retained_task_facts import (
     ConstraintTaskFact, DecisionTaskFact, HumanConstraintTaskFact, RetainedTaskFacts,
 )
-from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance
+from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn
 from agent_comms.wire_log import WireLog
 
 
@@ -46,12 +49,21 @@ class RecordedNativeCheckpoint:
     wire: Annotated[Path | None, PathText] = None
 
     @staticmethod
-    def read_json(reference: FileProvenance):
-        """Read unchanged original bytes; their declared boundary owns decoding."""
+    def read_bytes(reference: FileProvenance):
+        """Read unchanged original bytes before their declared boundary decodes."""
         raw = Path(reference.path).read_bytes()
         if hashlib.sha256(raw).hexdigest() != reference.sha256:
             raise ValueError("Recorded measurement artifact changed")
-        return json.loads(raw, object_pairs_hook=unique_fields)
+        return raw
+
+    @classmethod
+    def read_json(cls, reference: FileProvenance):
+        return json.loads(cls.read_bytes(reference), object_pairs_hook=unique_fields)
+
+    @classmethod
+    def read_json_lines(cls, reference: FileProvenance):
+        return tuple(json.loads(line, object_pairs_hook=unique_fields)
+                     for line in cls.read_bytes(reference).splitlines())
 
     @classmethod
     def read_record(cls, reference: FileProvenance, target):
@@ -273,7 +285,9 @@ class RecordedNativeProbe:
     sdk_segment_bytes: FileProvenance | None = None
     submitted_inputs: FileProvenance | None = None
     # Controls without a summary still need the SDK's original fork record.
-    fork_journal: Annotated[Path, PathText] | None = None
+    fork_journal: Annotated[Path | None, PathText] = None
+    # Original diagnostic publication, not a reconstructed request or budget.
+    request_observations: FileProvenance | None = None
 
     def submitted_prompt(self, user):
         """Bind an original submitted source to its exact recorded native write.
@@ -374,6 +388,36 @@ class RecordedNativeProbe:
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
 
+    def request_budget(self, manifest):
+        """Bind admitted calculations through the original manifest request ID.
+
+        The manifest already owns the exact native generation/digest relation.
+        No same-input, time or present-day catalog join can replace this link.
+        Provider retries can produce more than one original admitted allowance;
+        preserve their order instead of manufacturing one final request value.
+        """
+        if manifest is None or manifest.request_id is None or self.request_observations is None:
+            return {"evaluated": False, "reason": "Original correlated request/manifest observations unavailable"}
+        admitted = []
+        for record in RecordedNativeCheckpoint.read_json_lines(self.request_observations):
+            # Existing diagnostic publications also include parent acquisition
+            # records. Only their native member is a RequestProgress boundary.
+            if "native" not in record:
+                continue
+            progress = RequestProgress.from_wire(record["native"])
+            if progress.request_id != manifest.request_id:
+                continue
+            lease = FieldCodec.decode(TurnLeaseFence, record["turn"])
+            if not manifest.turn.same_recording(RecordedContextTurn(TurnId(lease.turn_id), lease.identity)):
+                raise ValueError("Original request observation belongs to another recorded turn")
+            if progress.session_id != self.session.session_id or progress.input_id != self.input_id:
+                raise ValueError("Original request observation belongs to another native session/input")
+            if progress.stage == "budget_admission":
+                admitted.append(progress)
+        return {"evaluated": bool(admitted), "observations": tuple(admitted),
+                "scope": "Original ContextBudget admission after payload hooks; not provider token counts or HTTP bytes",
+                "reason": "Original admitted request calculations" if admitted else "No original budget admission observation"}
+
     def observe(self):
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
@@ -424,7 +468,7 @@ class RecordedNativeProbe:
                         "unreferenced_message_entries": tuple(identity for identity in messages if identity not in included),
                         "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages),
                         "full_context_capacity": {"evaluated": False,
-                            "reason": "Original request model capacity/final transport budget is not captured"}}
+                            "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}}
             if self.checkpoint is not None:
                 identity = checkpoint["native_entry_id"]
                 coverage["managed_checkpoint"] = {"entry_id": identity,
@@ -439,6 +483,7 @@ class RecordedNativeProbe:
                 "scope": "Historical branch metadata; not current request selection",
             },
             "sdk_manifest": FieldCodec.encode(manifest),
+            "request_budget": self.request_budget(manifest),
             "source_coverage": coverage,
             "condition_evaluated": False,
             "reason": "SDK assembly is recorded; a label does not prove full-history or truncation policy",

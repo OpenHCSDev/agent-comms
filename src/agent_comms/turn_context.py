@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -424,6 +424,9 @@ class ContextManifest:
     turn: ContextTurn
     segments: tuple[SegmentManifest, ...]
     counter: str
+    # Original request-owner correlation, absent for previews and captures that
+    # never observed dispatch. It grants neither admission nor replay.
+    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     def changed_from_history(self, history: tuple[ContextManifest, ...]) -> dict:
         """Compare with the previous original turn at this sealed wire position.

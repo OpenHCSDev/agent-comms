@@ -24,6 +24,8 @@ def main(package):
     try {
     // Apply context transform""", 1)
     function = function.replace("...config,\n        apiKey:", "...request.options(config),\n        apiKey:", 1)
+    function = function.replace("await config.onContextReady?.(llmContext);",
+                                "await config.onContextReady?.(llmContext, request.requestId);", 1)
     function = function.replace("    for await (const event of response) {",
                                 "    for await (const event of request.events(response)) {", 1)
     function = function.replace("await emit(", "await publish(")
@@ -99,7 +101,9 @@ def main(package):
         anchor = '    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;\n'
         if anchor not in source:
             raise ValueError(f"Native context declaration changed: {name}")
-        path.write_text(source.replace(anchor, anchor + declaration))
+        correlated = anchor.replace("assembledContext: import(\"@earendil-works/pi-ai\").Context)",
+                                    "assembledContext: import(\"@earendil-works/pi-ai\").Context, requestId: string)")
+        path.write_text(source.replace(anchor, correlated + declaration))
     path = package / "dist/core/agent-session.d.ts"
     replace_once(path, '    type: "context_committed";',
         '    type: "model_request_progress";\n    progress: import("../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress;\n} | {\n    type: "context_committed";')

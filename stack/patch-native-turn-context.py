@@ -67,9 +67,9 @@ def main(package):
     (core/'turn-context.d.ts').write_bytes(Path(__file__).with_name('native-turn-context.d.ts').read_bytes())
     session=core/'agent-session.js'
     replace_once(session, '        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);',
-        '''        this.agent.onContextReady = async (context) => {
+        '''        this.agent.onContextReady = async (context, requestId) => {
             const source = await this._commitNativeContext(context);
-            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).manifest()});
+            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).manifest(requestId)});
         };''')
     source=session.read_text()
     session.write_text('import { TurnContext, NativeInputClaim } from "./turn-context.js";\n'+source)

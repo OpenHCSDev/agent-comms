@@ -95,6 +95,12 @@ async function run(label, adapter, selectedModel, config = {}) {
     assert.equal(points.filter(p=>p.stage==='first_event').length,1,label);
     assert.equal(new Set(points.map(p=>p.requestId)).size,1);
     assert(points.every(p=>p.inputId==='private-control' && p.sessionId==='private-control'));
+    const budgets = points.filter(p=>p.stage==='budget_admission');
+    assert(budgets.length, label);
+    assert(budgets.every(p=>p.model.id===selectedModel.id
+        && p.model.contextWindow===selectedModel.contextWindow
+        && p.model.maxTokens===selectedModel.maxTokens
+        && p.availableTokens===selectedModel.contextWindow-p.estimatedInputTokens));
     if(label==='ordinary') {
         const headers = points.find(p=>p.stage==='headers');
         const first = points.find(p=>p.stage==='first_event');
@@ -106,6 +112,8 @@ async function run(label, adapter, selectedModel, config = {}) {
         assert.equal(record.posts,2); assert.deepEqual(selected.filter(p=>p.stage==='dispatch').map(p=>p.attempt),[0,0]);
         const sends = requests.slice(start); assert.equal(sends[0].messages,sends[1].messages);
         assert(sends[1].requested<sends[0].requested);
+        assert.deepEqual(budgets.map(p=>p.admittedOutputTokens),sends.map(p=>p.requested));
+        assert.equal(budgets[1].requestedOutputTokens,budgets[0].admittedOutputTokens);
     }
     if(label==='transient') assert.deepEqual(selected.filter(p=>p.stage==='dispatch').map(p=>p.attempt),[0,1]);
     controls.push(record);

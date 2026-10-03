@@ -64,7 +64,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     observations = tuple((thread, item) for thread in source_snapshot.threads.values()
         for item in original.bus.log.context_manifests(thread.name, original.registry))
     observed_owner, observed = observations[0]
-    data = NativeContextManifestData(observed.counter, observed.segments)
+    data = NativeContextManifestData(observed.counter, observed.segments, request_id=observed.request_id)
     comms, root_id = _root(tmp_path)
     comms.agents.set_agent_info('Bob', model=observed_owner.model)
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
