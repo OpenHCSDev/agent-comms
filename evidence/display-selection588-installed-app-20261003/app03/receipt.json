@@ -1,0 +1,211 @@
+{
+  "state": "FAIL",
+  "scope": "Installed real App/IRC/DM and canonical private messaging/painted ACK",
+  "publicEffects": 0,
+  "providerCalls": 0,
+  "mockProtocols": 0,
+  "continuationOf": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02/receipt.json",
+  "newMessages": 0,
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app02/wire",
+  "rootId": "2f37416949fe4150a76a749f189f23c2",
+  "startedAt": 1791033349.546505,
+  "frames": [
+    {
+      "label": "channel-live",
+      "at": 1791033353.3962061,
+      "selectedMode": "comms-1",
+      "svgSha256": "ccb3f1d502580d534a13abb957bfbee27d9d5e7077bd23f23078edba79cc0c37",
+      "rows": [
+        {
+          "id": "abca41b3da40",
+          "seq": 1,
+          "body": "588 channel 00"
+        },
+        {
+          "id": "ee407c4dfe84",
+          "seq": 2,
+          "body": "588 channel 01"
+        },
+        {
+          "id": "13535dd29daf",
+          "seq": 3,
+          "body": "588 channel 02"
+        },
+        {
+          "id": "df897f514a5c",
+          "seq": 4,
+          "body": "588 channel 03"
+        },
+        {
+          "id": "bcf1fa1a6c64",
+          "seq": 5,
+          "body": "588 channel 04"
+        },
+        {
+          "id": "2595313c5131",
+          "seq": 6,
+          "body": "588 channel 05"
+        },
+        {
+          "id": "c6ce174b2c4f",
+          "seq": 7,
+          "body": "588 channel 06"
+        },
+        {
+          "id": "fe52170add17",
+          "seq": 8,
+          "body": "588 channel 07"
+        },
+        {
+          "id": "8ec560e6a7c5",
+          "seq": 9,
+          "body": "588 channel 08"
+        },
+        {
+          "id": "1a9c9430c44e",
+          "seq": 10,
+          "body": "588 channel 09"
+        },
+        {
+          "id": "a25682cd73f6",
+          "seq": 11,
+          "body": "588 channel 10"
+        },
+        {
+          "id": "c2bdf226c425",
+          "seq": 12,
+          "body": "588 channel 11"
+        },
+        {
+          "id": "0d0b7d237c57",
+          "seq": 13,
+          "body": "588 channel 12"
+        },
+        {
+          "id": "427f7f9c14ce",
+          "seq": 14,
+          "body": "588 channel 13"
+        },
+        {
+          "id": "0c91aeb673c7",
+          "seq": 15,
+          "body": "588 channel 14"
+        },
+        {
+          "id": "01716a4d96ab",
+          "seq": 16,
+          "body": "588 channel 15"
+        },
+        {
+          "id": "ddc3c32ecaf7",
+          "seq": 17,
+          "body": "588 channel 16"
+        },
+        {
+          "id": "da48aa74f66e",
+          "seq": 18,
+          "body": "588 channel 17"
+        },
+        {
+          "id": "99007e99a62f",
+          "seq": 19,
+          "body": "588 channel 18"
+        },
+        {
+          "id": "034d5c360042",
+          "seq": 20,
+          "body": "588 channel 19"
+        }
+      ]
+    }
+  ],
+  "channelPublished": [
+    [
+      1,
+      "abca41b3da40"
+    ],
+    [
+      2,
+      "ee407c4dfe84"
+    ],
+    [
+      3,
+      "13535dd29daf"
+    ],
+    [
+      4,
+      "df897f514a5c"
+    ],
+    [
+      5,
+      "bcf1fa1a6c64"
+    ],
+    [
+      6,
+      "2595313c5131"
+    ],
+    [
+      7,
+      "c6ce174b2c4f"
+    ],
+    [
+      8,
+      "fe52170add17"
+    ],
+    [
+      9,
+      "8ec560e6a7c5"
+    ],
+    [
+      10,
+      "1a9c9430c44e"
+    ],
+    [
+      11,
+      "a25682cd73f6"
+    ],
+    [
+      12,
+      "c2bdf226c425"
+    ],
+    [
+      13,
+      "0d0b7d237c57"
+    ],
+    [
+      14,
+      "427f7f9c14ce"
+    ],
+    [
+      15,
+      "0c91aeb673c7"
+    ],
+    [
+      16,
+      "01716a4d96ab"
+    ],
+    [
+      17,
+      "ddc3c32ecaf7"
+    ],
+    [
+      18,
+      "da48aa74f66e"
+    ],
+    [
+      19,
+      "99007e99a62f"
+    ],
+    [
+      20,
+      "034d5c360042"
+    ]
+  ],
+  "channelViewerUnread": 0,
+  "finishedAt": 1791033382.3625903,
+  "error": "TimeoutError()",
+  "privateWorkerPids": [
+    4075916,
+    4075916
+  ]
+}

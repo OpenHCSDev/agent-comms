@@ -391,27 +391,53 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
 
 
-def test_perpetual_direct_mutation_fails_closed_after_bounded_retries(tmp_path):
+def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_path):
     comms = populated(tmp_path)
-    original = comms.bus.log._record_snapshot
-    attempts = 0
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.send("alice", viewer, "DM original")
+    started, finished = Event(), Event()
+    failures = []
 
-    @contextmanager
-    def continually_retag(*, need_sequence=True):
-        nonlocal attempts
-        attempts += 1
-        alice = comms.registry.require("alice")
-        tags = frozenset({"ui"}) if "api" in alice.tags else frozenset({"api"})
-        comms.registry.register(replace(alice, tags=tags))
-        with original(need_sequence=need_sequence) as snapshot:
-            yield snapshot
+    def burst():
+        other = wire(tmp_path)
+        try:
+            started.set()
+            for n in range(20):
+                other.registry.heartbeat("alice")
+                other.messaging.send("alice", "#api", f"burst {n}")
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            finished.set()
 
-    with (
-        patch.object(comms.bus.log, "_record_snapshot", side_effect=continually_retag),
-        pytest.raises(RuntimeError, match="Display scope changed during snapshot"),
-    ):
-        comms.views.channel_display_page("#api")
-    assert attempts == 3
+    writer = WorkerThread(target=burst, daemon=True)
+    writer.start()
+    assert started.wait(timeout=3)
+    try:
+        for _ in range(20):
+            page = comms.views.channel_display_page("#api", worktree=str(tmp_path))
+            if page.newest_seq is not None:
+                comms.views.mark_channel_view_read(
+                    "#api", worktree=str(tmp_path), through=page.newest_seq,
+                    expected_scope=page.display_scope,
+                )
+            dm = comms.views.dm_display_page("alice", worktree=str(tmp_path))
+            assert bodies(dm) == ["DM original"]
+            comms.views.mark_dm_view_read(
+                "alice", worktree=str(tmp_path), through=dm.newest_seq,
+                expected_display_basis=dm.display_basis,
+            )
+    finally:
+        writer.join(timeout=10)
+    assert finished.is_set() and not writer.is_alive() and not failures
+    page = comms.views.channel_display_page("#api", worktree=str(tmp_path))
+    assert bodies(page) == [f"burst {n}" for n in range(20)]
+    comms.registry.rename("alice", "renamed")
+    with pytest.raises(ValueError, match="incarnation changed"):
+        comms.views.mark_dm_view_read(
+            "alice", worktree=str(tmp_path), through=dm.newest_seq,
+            expected_display_basis=dm.display_basis,
+        )
 
 
 def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):

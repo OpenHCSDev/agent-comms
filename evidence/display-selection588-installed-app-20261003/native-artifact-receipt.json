@@ -1,0 +1,34 @@
+{
+  "source_checkpoint": "fd4731fc230fd71080b7d033e28312f0d120dd5c",
+  "builder_source": "fd4731fc230fd71080b7d033e28312f0d120dd5c",
+  "manifest": "2bfb6ba8fd3b3b3bc03dd122e0a67cb69fdc7cef86704a706396024b1561c292",
+  "tree": "419453f846ef43a7e847508475685ddd0075a42792f6731d6d5f65f3c60cf74c",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "e7ec33c5659d9033aa16aba7ae4896900b3736f370dca7a58eb5d8d26529e5b3",
+      "new_sha256": "488a9b07f84c96758826b0a0c64030c727077c03bd1d2b80fa9d0469377cffeb"
+    }
+  ],
+  "all_other_members_equal_native573_51b": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138412001,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": false,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; SDK replacement callback-once/cancel acceptance remains Mendel-owned, not Ready/live.",
+  "full_normal_recipe_verification": "PASS stack/bin/prepare-pi-native verified manifest/import/tree and reused canonical successor",
+  "successful_assembly_count": 1,
+  "failed_prerequisite_attempts": [
+    "build-first-missing-cache.log: original95cache operand omitted, npm offline ENOTCACHED after ordered patches; no artifact/public effects",
+    "pin-derivation-first-wrong-directory.log: copied helper still referenced previous573out; derive owner corrected to __file__ directory before any manifest/target write"
+  ],
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "original_51b_unchanged": true,
+  "total_stock_assembly_attempts": 2
+}

@@ -1423,13 +1423,31 @@ class ChildCommand(DeclaredFamily, affix="Command"):
     def argv(self) -> tuple[str, ...]:
         return (
             sys.executable,
-            "-m",
-            "agent_comms.child_process",
+            "-c",
+            "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),
         )
 
+    @classmethod
+    def main(cls) -> None:
+        FieldCodec.decode(cls, json.loads(sys.argv[1])).run()
+
     @abstractmethod
     def run(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class ControllingTerminalCommand(ChildCommand):
+    """Acquire stdin's PTY after exec, inside the acquired child's new session."""
+
+    command: tuple[str, ...]
+
+    def run(self) -> None:
+        import fcntl
+        import termios
+
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        os.execvpe(self.command[0], self.command, os.environ)
 
 
 @dataclass(frozen=True)
@@ -1469,7 +1487,3 @@ class WatchDeadlineCommand(ChildCommand):
         os.fstat(self.descriptor)
         print("armed", flush=True)
         platform.watch_deadline(self.descriptor, self.deadline)
-
-
-if __name__ == "__main__":
-    FieldCodec.decode(ChildCommand, json.loads(sys.argv[1])).run()

@@ -47,6 +47,7 @@ from .turn_context import InputContributionCoordinates
 
 
 if TYPE_CHECKING:
+    from .coordinated_runtime import SelectedExecution
     from .private_send_admission import PrivateSendAdmission
 
 
@@ -196,6 +197,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
         acquisition_measurements: PublicationMeasurements | None = None,
         request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
+        launch_owner: SelectedExecution | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -207,12 +209,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise ValueError("A model progress wait must be positive and finite")
         measurements = (acquisition_measurements if acquisition_measurements is not None
                         else PublicationMeasurements())
-        # This fresh child still acquires its own verified launch. Hashing and
-        # settings publication must not block the native event reader; joined
-        # cancellation completes that acquisition before returning to custody.
+        # Independent execution acquires a fresh artifact. A selected stage
+        # derives from its execution's actual acquired launch; source/config and
+        # child admission remain fresh. Join the whole construction before custody.
         with measurements.operation("native_launch_selection"):
             launch = await Coordination.run_worker(partial(
-                NativePiRpcLaunch.tracked,
+                NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,
                 package,
                 worktree=worktree,
                 session=session,

@@ -1,0 +1,420 @@
+{
+  "head": "b874851fc4c70fd2e3a68ae2698e13a2c8c3e50c",
+  "roots": [
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-regression-widget-cost-20261001",
+      "parsed": 289,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/catalog_store.py",
+      "line": 28,
+      "kind": "declaration",
+      "name": "revision"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 458,
+      "kind": "declaration",
+      "name": "revision"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 216,
+      "kind": "call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 273,
+      "kind": "call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 301,
+      "kind": "call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 307,
+      "kind": "call",
+      "source": "ThreadView.capture(thread, snapshot, self.agents.activity_of(thread.name, snapshot=snapshot), self.agents.runtime_info.read().get(thread.name), GoalWaits(self.root / GoalWaits.filename).read())"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 419,
+      "kind": "call",
+      "source": "self.presentation.mark_channel_read(target, viewer=self.messaging.user_identity(worktree).name, through=through, expected_scope=expected_scope)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 501,
+      "kind": "call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 292,
+      "kind": "call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 353,
+      "kind": "call",
+      "source": "self.presentation.snapshot(viewer=viewer)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 181,
+      "kind": "call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 75,
+      "kind": "declaration",
+      "name": "reading"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 81,
+      "kind": "call",
+      "source": "self.reading()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 165,
+      "kind": "declaration",
+      "name": "DisplaySelection"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 209,
+      "kind": "declaration",
+      "name": "BusPresentation"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 175,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 218,
+      "kind": "declaration",
+      "name": "revision"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 230,
+      "kind": "declaration",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 298,
+      "kind": "declaration",
+      "name": "mark_channel_read"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 463,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 99,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 178,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 206,
+      "kind": "call",
+      "source": "ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 352,
+      "kind": "call",
+      "source": "BusDisplayIndex(self._path, viewer).snapshot(bus_revision, semantics, initial, lambda record, metrics: semantics.observe_wire(record, metrics))"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 280,
+      "kind": "call",
+      "source": "self.snapshot(viewer=viewer, target=target)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 307,
+      "kind": "call",
+      "source": "self.revision()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 308,
+      "kind": "call",
+      "source": "DisplaySelection.capture(self.registry, self.catalog, self.bus.reads, viewer)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 190,
+      "kind": "call",
+      "source": "ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 315,
+      "kind": "call",
+      "source": "self.bus.reads.capture(viewer, messages, basis.registry, self.bus.log.path)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 496,
+      "kind": "call",
+      "source": "cls.capture(thread, snapshot, activities[name], runtime.get(name), waits)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 243,
+      "kind": "call",
+      "source": "self.revision()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 244,
+      "kind": "call",
+      "source": "DisplaySelection.capture(self.registry, self.catalog, self.bus.reads, viewer)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 282,
+      "kind": "call",
+      "source": "MessagePageRequest.capture(scope, before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 247,
+      "kind": "call",
+      "source": "self.revision()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 253,
+      "kind": "call",
+      "source": "self.revision()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 260,
+      "kind": "call",
+      "source": "self.revision()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 292,
+      "kind": "call",
+      "source": "self.bus.reads.capture(viewer, page.messages, basis.registry, self.bus.log.path)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 323,
+      "kind": "call",
+      "source": "self.revision()"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 140,
+      "kind": "declaration",
+      "name": "fetch_page"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 337,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 379,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 349,
+      "kind": "call",
+      "source": "cls.capture(first.name, second.name, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 163,
+      "kind": "call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 254,
+      "kind": "call",
+      "source": "registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 215,
+      "kind": "call",
+      "source": "bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 81,
+      "kind": "declaration",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 358,
+      "kind": "declaration",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 211,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 212,
+      "kind": "call",
+      "source": "document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 218,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 250,
+      "kind": "call",
+      "source": "edit.document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 280,
+      "kind": "call",
+      "source": "self.store._read_unlocked().snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 304,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 308,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 334,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 338,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 348,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 355,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 360,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 361,
+      "kind": "call",
+      "source": "document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 364,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 370,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 375,
+      "kind": "call",
+      "source": "self.store.reading()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 219,
+      "kind": "call",
+      "source": "document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 230,
+      "kind": "call",
+      "source": "edit.document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 296,
+      "kind": "call",
+      "source": "edit.document.snapshot()"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 345,
+      "kind": "call",
+      "source": "self.snapshot()"
+    }
+  ],
+  "limits": "Syntactic sites, not dynamic dispatch or behavioral proof. Nested lock ordering read semantically."
+}
