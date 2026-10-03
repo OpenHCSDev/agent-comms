@@ -175,7 +175,7 @@ class DeliveryScope(MessageDisplayScope):
             return ChannelDisplayScope(BuiltinChannel.ANY.value, None)
         if is_channel_target(target):
             return ChannelDisplayScope(target, catalog.history_targets(target))
-        peer = snapshot.aliases.get(target, target)
+        peer = snapshot.canonical_name(target)
         if peer not in snapshot.threads:
             from .errors import UnregisteredThreadError
 

@@ -1,6 +1,7 @@
 """Channel membership and notifications have one canonical bus authority."""
 
 from dataclasses import replace
+from contextlib import AsyncExitStack
 
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
@@ -102,17 +103,16 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     )
     turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")
     try:
-        assert turn.admit()
-        turn.begin()
-        turn.prepare_prompt()
-        turn.open_stream()
-        await turn.prepare_native()
-        assert "Independently authorized task" in turn.task
-        assert initial.message.message_id in turn.task
-        assert "Canonical bus awareness" in turn.task
-        assert "No response obligation" in turn.task
-        assert agent.turns.persistent_backends == {}
-        assert not (root / "acp_passive_channel_awareness.json").exists()
+        async with AsyncExitStack() as resources:
+            async with AsyncExitStack() as permits:
+                assert await turn.acquire(resources, permits)
+                await turn.prepare_native()
+                assert turn.task == "Independently authorized task"
+                rendered = turn.context.render().text
+                assert initial.message.message_id in rendered
+                assert "Canonical bus awareness" in rendered
+                assert "No response obligation" in rendered
+                assert agent.turns.persistent_backends == {}
+                assert not (root / "acp_passive_channel_awareness.json").exists()
     finally:
-        comms.agents.finish_turn(turn.turn_lease)
         await agent.shutdown()

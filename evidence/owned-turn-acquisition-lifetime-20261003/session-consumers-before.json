@@ -1,0 +1,1136 @@
+{
+  "parsed": 11,
+  "declared_files": [
+    "src/agent_comms/session_lifecycle.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/goal_management.py",
+    "src/agent_comms/agent_activity.py",
+    "src/agent_comms/config_options.py",
+    "src/agent_comms/acp.py",
+    "src/agent_comms/manual_compaction_bridge.py",
+    "src/agent_comms/turn_progress.py",
+    "src/agent_comms/turn_runner.py",
+    "src/agent_comms/owned_turn.py"
+  ],
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 42,
+      "node": "ClassDef",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 19,
+      "node": "alias",
+      "name": "SessionInfoUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 27,
+      "node": "alias",
+      "name": "CoordinationChangedUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 28,
+      "node": "alias",
+      "name": "GoalChangedUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 111,
+      "node": "FunctionDef",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 237,
+      "node": "AsyncFunctionDef",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 281,
+      "node": "AsyncFunctionDef",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 332,
+      "node": "Name",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 152,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 216,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 238,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 282,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 283,
+      "node": "Attribute",
+      "name": "goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 284,
+      "node": "Attribute",
+      "name": "agent_info_of"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 222,
+      "node": "Name",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 291,
+      "node": "Name",
+      "name": "CoordinationChangedUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 301,
+      "node": "Name",
+      "name": "GoalChangedUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 302,
+      "node": "Attribute",
+      "name": "queue_state"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 217,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 185,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 210,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 221,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 234,
+      "node": "Name",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 303,
+      "node": "Attribute",
+      "name": "trusted_metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 321,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 221,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 233,
+      "node": "Name",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 234,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 254,
+      "node": "Name",
+      "name": "SessionInfoUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 264,
+      "node": "Name",
+      "name": "SessionInfoUpdate"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 324,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 323,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 257,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 266,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 60,
+      "node": "FunctionDef",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 194,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 198,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 217,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 359,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 103,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 359,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 360,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 139,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 218,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 361,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 119,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 225,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 364,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 365,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 344,
+      "node": "FunctionDef",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 347,
+      "node": "FunctionDef",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 358,
+      "node": "FunctionDef",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 87,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 212,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 250,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 280,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 345,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 46,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 71,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 76,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 213,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 250,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 251,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 252,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 280,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 281,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 282,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 361,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 219,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 230,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 296,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 345,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 214,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 311,
+      "node": "FunctionDef",
+      "name": "goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 118,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 317,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 118,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 174,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 225,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 308,
+      "node": "Attribute",
+      "name": "goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 46,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 82,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 174,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 191,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 225,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 323,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 328,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 341,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 380,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 404,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 108,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 318,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 319,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 391,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 411,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 175,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 176,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 209,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 226,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 229,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 245,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 367,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 91,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 140,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 289,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 231,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 240,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 262,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 255,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 229,
+      "node": "FunctionDef",
+      "name": "agent_info_of"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 113,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 128,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 113,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 128,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 162,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 61,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 113,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 114,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 115,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 128,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 142,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 150,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 162,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 62,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 131,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 146,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 230,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 134,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 163,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 135,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 130,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 39,
+      "node": "alias",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 193,
+      "node": "Name",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 215,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 230,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 308,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 274,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 303,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 276,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 77,
+      "node": "alias",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 96,
+      "node": "Name",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 380,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 368,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 371,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 315,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "agent_info_of"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 48,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 31,
+      "node": "alias",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 40,
+      "node": "Name",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "agent_info_of"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 46,
+      "node": "alias",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 141,
+      "node": "Name",
+      "name": "SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 168,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 316,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 316,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 318,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 151,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 330,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 338,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 320,
+      "node": "Name",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 107,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 335,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 336,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 344,
+      "node": "Attribute",
+      "name": "require"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 171,
+      "node": "Attribute",
+      "name": "snapshot"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 174,
+      "node": "Attribute",
+      "name": "snapshot"
+    }
+  ],
+  "scope": "Original before source for shared SessionLifecycle observation; whole-package726 census retained separately. Dynamic runtime/partial/MRO requires semantic reading."
+}
