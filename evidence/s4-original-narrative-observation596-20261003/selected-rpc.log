@@ -1,0 +1,40 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_original_summary_assembly_inspector ___________________
+
+tmp_path = PosixPath('/home/ts/wt/a59601/test_original_summary_assembly0')
+
+    async def test_original_summary_assembly_inspector(tmp_path):
+        """Actual selected RPC generation with a local provider, never a live input.
+    
+        This qualifies the observation source. No canonical commit, configured
+        provider study, submitted bounded control or recall credit is claimed.
+        """
+        from dataclasses import replace
+        from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+        from agent_comms.pi_summary_payloads import SummarySummarizedData
+        from agent_comms.turn_context import FileProvenance
+        from retained_native_fixture import RecordedNativeCheckpoint, RecordedSummaryAssembly
+        from summary_prefix_configured_installed_journey import observe_native_requests
+        import hashlib
+    
+        pin = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+        summaries = tmp_path / "summary-assemblies"
+        summaries.mkdir(mode=0o700)
+        observation = tmp_path / "original-observations.jsonl"
+        with observe_native_requests(pin, observation, summaries=summaries) as observe_launch:
+            async with native_summary_owner(tmp_path, 200, observe_launch=observe_launch) as fixture:
+                package, session, original, preparation, selected, settings, calls, _, launch = fixture
+                child, _, exchange, errors = await launch()
+                command = AgentCommsSummarizeCompaction(
+                    id="original-source-capture", version=1, operation_id=uuid4().hex,
+                    witness=preparation.witness, selected=selected, settings=settings,
+                    retained_text="Original exact injected task envelope.")
+>               _, reply = await exchange(FieldCodec.encode(command))
+                                          ^^^^^^^^^^
+E               NameError: name 'FieldCodec' is not defined
+
+tests/test_selected_summary_failure_native.py:304: NameError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_failure_native.py::test_original_summary_assembly_inspector
+1 failed in 10.40s

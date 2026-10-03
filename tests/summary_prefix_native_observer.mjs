@@ -1,10 +1,10 @@
-/** Private installed journey only: original call frames, hashes/counts, no bodies.
+/** Private installed journey: original frames and separately pinned SDK bodies.
  * Inspector observes the actual route formation and selected request; it does
  * not substitute provider, transport, response, session or product source.
  */
 import { appendFileSync } from 'node:fs';
 
-const [, , port, packageRoot, output, contexts] = process.argv;
+const [, , port, packageRoot, output, contexts, summaries] = process.argv;
 if (output && packageRoot) {
     // External inspection preserves the native import fence. Read only original
     // frames from this owned private child's loopback debugger; no code overlay.
@@ -54,13 +54,25 @@ if (output && packageRoot) {
         return indices[0];
     };
     const { pathToFileURL } = await import('node:url');
-    const routePoint = await post('Debugger.setBreakpointByUrl', {
+    const routePoint = (!summaries || contexts) && await post('Debugger.setBreakpointByUrl', {
         url: pathToFileURL(api).href, lineNumber: line(apiLines, 'if (model.baseUrl !== DEFAULT_CODEX_BASE_URL)'),
     });
-    const streamPoint = await post('Debugger.setBreakpointByUrl', {
+    const streamPoint = (!summaries || contexts) && await post('Debugger.setBreakpointByUrl', {
         url: pathToFileURL(rpc).href,
         lineNumber: line(rpcLines, 'const selectedStream = (model, context, options) => {') + 2,
     });
+    const summaryRequestPoint = summaries && await post('Debugger.setBreakpointByUrl', {
+        url:pathToFileURL(rpc).href,
+        lineNumber:line(rpcLines, 'const result = await compact(preparation, binding.model'),
+    });
+    const assemblyPoint = summaries && await post('Debugger.setBreakpointByUrl', {
+        url:pathToFileURL(`${packageRoot}/dist/core/compaction/compaction.js`).href,
+        lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/compaction/compaction.js`, 'utf8').split('\n'),
+            'summary = contextPolicy.packSummary(retainedText, summary, annotations,'),
+    });
+    // Inspector correlation within this one private selected operation. It does
+    // not select a native source or grant a request, commit or retry.
+    let originalSummaryRequest;
     const contextPoint = contexts && await post('Debugger.setBreakpointByUrl', {
         url: pathToFileURL(`${packageRoot}/dist/core/turn-context.js`).href,
         lineNumber: line(source.readFileSync(`${packageRoot}/dist/core/turn-context.js`, 'utf8').split('\n'),
@@ -71,6 +83,39 @@ if (output && packageRoot) {
         try {
             if (!params.hitBreakpoints.length) return;
             const frame = params.callFrames[0];
+            if (summaryRequestPoint && params.hitBreakpoints.includes(summaryRequestPoint.breakpointId)) {
+                const observed = await post('Debugger.evaluateOnCallFrame', {
+                    callFrameId:frame.callFrameId,
+                    expression:'({request, tokensBefore:preparation.tokensBefore})', returnByValue:true,
+                });
+                if (observed.exceptionDetails) throw new Error('Original selected summary request unavailable');
+                originalSummaryRequest = observed.result.value;
+                return;
+            }
+            if (assemblyPoint && params.hitBreakpoints.includes(assemblyPoint.breakpointId)) {
+                const observed = await post('Debugger.evaluateOnCallFrame', {
+                    callFrameId:frame.callFrameId,
+                    expression:`({summary, firstKeptEntryId, tokensBefore,
+                        generated_parts:[historyResult?.text,prefixResult?.text].filter(value=>value!==undefined),
+                        inherited_summary:historyResult ? null : previousSummary ?? null})`,
+                    returnByValue:true,
+                });
+                if (observed.exceptionDetails) throw new Error('Original pre-pack summary assembly unavailable');
+                const assembly = observed.result.value;
+                if (!originalSummaryRequest ||
+                    assembly.firstKeptEntryId !== originalSummaryRequest.request.witness.firstKeptEntryId ||
+                    assembly.tokensBefore !== originalSummaryRequest.tokensBefore)
+                    throw new Error('Original summary assembly does not match its inspected selected request');
+                const {request} = originalSummaryRequest;
+                const path = `${summaries}/summary-${request.operationId}.json`;
+                source.writeFileSync(path, JSON.stringify({request, summary:assembly.summary,
+                    generated_parts:assembly.generated_parts, inherited_summary:assembly.inherited_summary}),
+                    {mode:0o600,flag:'wx'});
+                appendFileSync(output, JSON.stringify({stage:'summary-assembly', path,
+                    operation_id:request.operationId})+'\n', {mode:0o600});
+                originalSummaryRequest = undefined;
+                return;
+            }
             if (contextPoint && params.hitBreakpoints.includes(contextPoint.breakpointId)) {
                 // Read the original TurnContext object at its manifest publication.
                 // Do not ask for a later preview or reconstruct provider context.
@@ -92,7 +137,7 @@ if (output && packageRoot) {
                     context_digest:provenance.context_digest}) + '\n', {mode:0o600});
                 return;
             }
-            const stage = params.hitBreakpoints.includes(routePoint.breakpointId) ? 'route' : 'selected-request';
+            const stage = params.hitBreakpoints.includes(routePoint?.breakpointId) ? 'route' : 'selected-request';
             const expression = `(() => {
                 const hash = value => process.getBuiltinModule('node:crypto').createHash('sha256')
                     .update(JSON.stringify(value ?? null)).digest('hex');
