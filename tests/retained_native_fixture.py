@@ -1,6 +1,8 @@
-"""Enroll an already running native test host in the actual retained custody owner."""
+"""Read original retention measurements and reuse the actual native custody owner."""
 
 import asyncio
+import hashlib
+import json
 from collections import Counter
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -20,6 +22,14 @@ from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_payloads import StateData
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_rpc import unique_fields
+from agent_comms.native_turn_context import NativeContextData
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.retained_task_facts import (
+    ConstraintTaskFact, DecisionTaskFact, HumanConstraintTaskFact, RetainedTaskFacts,
+)
+from agent_comms.turn_context import ContextManifest, FileProvenance, NativeProvenance
+from agent_comms.wire_log import WireLog
 
 
 @dataclass(frozen=True)
@@ -29,6 +39,27 @@ class RecordedNativeCheckpoint:
     journal: Annotated[Path, PathText]
     reference: SummaryOperationIdentity
     commit_id: str
+    # Optional external measurement evidence, not native lifecycle state. A
+    # missing original capture cannot be reconstructed from today's registry.
+    registry_scope: FileProvenance | None = None
+    wire: Annotated[Path, PathText] | None = None
+
+    @staticmethod
+    def read_record(reference: FileProvenance, target):
+        """Decode one pinned original artifact through its existing declaration."""
+        raw = Path(reference.path).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != reference.sha256:
+            raise ValueError("Recorded measurement artifact changed")
+        return FieldCodec.decode(target, json.loads(raw, object_pairs_hook=unique_fields))
+
+    def summary_usage(self, entry):
+        # capture() already verifies the original metadata digest, which covers
+        # NativeSummaryPayload.usage. Never decode another usage vocabulary.
+        if entry.usage is None:
+            return {"evaluated": False, "reason": "Original summary usage not retained"}
+        return {"evaluated": True, "usage": FieldCodec.encode(entry.usage),
+                "tokens_before": entry.tokens_before,
+                "scope": "Original SDK-normalized counters; no cache savings or paired cost inference"}
 
     def capture(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):
         """Borrow original records after the journal/native owners corroborate them."""
@@ -74,6 +105,7 @@ class RecordedNativeCheckpoint:
             "retained_facts": FieldCodec.encode(attempt.request.retained),
             "selected_model": FieldCodec.encode(attempt.request.selected),
             "settings": FieldCodec.encode(attempt.request.settings),
+            "summary_usage": self.summary_usage(entry),
             "revision_mass": {
                 "evaluated": False,
                 "reason": "An original scope and authorized correction evidence are required, not content differences",
@@ -111,12 +143,81 @@ class RecordedNativeCheckpoint:
                 branch = evidence.branch(current_entry.id, evidence.entries)
                 if previous_entry.id == current_entry.id or previous_entry not in branch:
                     raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
+                report["revision_mass"] = self.revision_from(previous, previous_attempt, current_attempt)
                 report["source_changes"] = {
                     "previous": FieldCodec.encode(previous_attempt.identity),
                     "current": FieldCodec.encode(current_attempt.identity),
                     **current_attempt.request.retained.changed_from(previous_attempt.request.retained),
                 }
             return report
+
+    def revision_from(self, previous, before, after):
+        """Measure captured authored lineages using the original scope owner.
+
+        The journal cut authenticates captured facts; the certified wire read
+        corroborates their original publications. Existing task declarations
+        decide correction lineage and scope. This read grants no update/replay.
+        """
+        if previous.registry_scope is None or self.registry_scope is None or self.wire is None:
+            return {"evaluated": False,
+                    "reason": "Original scope snapshots and certified wire evidence are required"}
+        prior = self.read_record(previous.registry_scope, RegistrySnapshot)
+        current = self.read_record(self.registry_scope, RegistrySnapshot)
+        before_owner = prior.require_active(before.request.source.incarnation.name)
+        after_owner = current.require_active(after.request.source.incarnation.name)
+        if (before.request.source.incarnation.resolved(prior) != before_owner.incarnation
+                or after.request.source.incarnation.resolved(current) != after_owner.incarnation
+                or before_owner.incarnation.resolved(current) != after_owner.incarnation):
+            raise ValueError("Original revision scopes belong to different owner incarnations")
+        original_facts = before.request.retained.facts + after.request.retained.facts
+        with WireLog(self.wire).certified_read() as source:
+            for fact in original_facts:
+                for message in fact.authored_sources():
+                    delivery, = source.references((message.reference,))
+                    if delivery.message != message:
+                        raise ValueError("Retained authored fact differs from its original publication")
+        # Multiplicity belongs to availability. A lineage projection visits each
+        # original authored record once, in its original publication order.
+        originals = {RetainedTaskFacts.canonical_journal_bytes(FieldCodec.encode(fact)): fact
+                     for fact in original_facts}
+        facts = tuple(sorted(originals.values(), key=lambda fact: (
+            tuple(message.seq for message in fact.authored_sources()),
+            RetainedTaskFacts.canonical_journal_bytes(FieldCodec.encode(fact)),
+        )))
+        combined = RetainedTaskFacts(facts)
+
+        def selected(retained, owner, registry, families):
+            roots = {message.reference for fact in retained.facts
+                     if isinstance(fact, families) for message in fact.authored_sources()}
+            return {root.task.lineage_reference(root): tuple(message.task.selected_sources(message))
+                    for root, message in retained.current_authored_lineages(owner, registry)
+                    if root.reference in roots}
+
+        def measure(families):
+            eligible = selected(before.request.retained, before_owner, prior, families)
+            expected = selected(combined, after_owner, current, families)
+            observed = selected(after.request.retained, after_owner, current, families)
+            unauthorized, authorized, ended = [], [], []
+            for identity, original in eligible.items():
+                desired = expected.get(identity, ())
+                actual = observed.get(identity, ())
+                if actual != desired:
+                    unauthorized.append(FieldCodec.encode(identity))
+                elif desired != original:
+                    (authorized if desired else ended).append(FieldCodec.encode(identity))
+            denominator = len(eligible)
+            return {"evaluated": bool(denominator), "eligible": denominator,
+                    "unauthorized": len(unauthorized), "identities": unauthorized,
+                    "mass": len(unauthorized) / denominator if denominator else None,
+                    "authorized_supersessions": authorized, "scope_or_explicit_drop": ended,
+                    "additions": [FieldCodec.encode(identity) for identity in observed.keys() - eligible.keys()],
+                    "reason": "Original scoped lineages compared" if denominator
+                              else "No eligible authored identities"}
+
+        return {"evaluated": True,
+                "scope": "Original captured scopes and certified authored task publications",
+                "constraints": measure((ConstraintTaskFact, HumanConstraintTaskFact)),
+                "decisions": measure(DecisionTaskFact)}
 
 
 @dataclass(frozen=True)
@@ -129,48 +230,97 @@ class RecordedNativeProbe:
     # Full-context controls have no compaction checkpoint. This is an explicit
     # external measurement field, not a nullable native lifecycle state.
     checkpoint: RecordedNativeCheckpoint | None = None
+    sdk_context: FileProvenance | None = None
+    context_manifest: FileProvenance | None = None
+
+    def prompt_presence(self, context, retained):
+        """Measure a recorded SDK payload, never reconstruct a provider prompt."""
+        if self.sdk_context is None or self.context_manifest is None:
+            return {"evaluated": False,
+                    "reason": "Original SDK payload and matching context manifest not supplied"}
+        data = RecordedNativeCheckpoint.read_record(self.sdk_context, NativeContextData)
+        manifest = RecordedNativeCheckpoint.read_record(self.context_manifest, ContextManifest)
+        self.session.require_same_session(data.identity)
+        if (data.counter != manifest.counter
+                or tuple(segment.measured_manifest() for segment in data.segments) != manifest.segments):
+            raise ValueError("Recorded SDK payload differs from its original context manifest")
+        # Existing NativeProvenance identifies this exact request, not merely a
+        # same-session get_context preview. Counter/segment metadata alone do not.
+        source = NativeProvenance(self.session, context.request_generation, context.llm_context_digest)
+        if not data.segments or any(source not in segment.provenance for segment in data.segments):
+            raise ValueError("Recorded SDK context is not this original probe request")
+        for segment in data.segments:
+            raw = segment.text().encode()
+            if (len(raw) != segment.utf8_bytes
+                    or hashlib.sha256(raw).hexdigest() != segment.sha256):
+                raise ValueError("Recorded SDK segment bytes differ from measured source")
+        if retained is None or not retained.facts:
+            return {"evaluated": False, "reason": "No eligible original retained fact denominator"}
+        # Encode the exact envelope as a JSON string because measured native
+        # segments contain original provider JSON. This is byte presence, not
+        # recall credit, semantic interpretation or final HTTP-body evidence.
+        envelope = json.dumps(retained.text, ensure_ascii=False)[1:-1]
+        present = any(envelope in segment.text() for segment in data.segments)
+        return {"evaluated": True, "stage": "recorded SDK provider input",
+                "final_transport_evaluated": False,
+                "context_digest": context.llm_context_digest,
+                "required": len(retained.facts),
+                "present": len(retained.facts) if present else 0,
+                "exact_envelope_present": present}
 
     def observe(self):
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
-            context = NativeContextProof.read_evidence(
-                Path(self.session.session_file), self.input_id, evidence=evidence
-            )
-            self.session.require_same_session(NativeSessionIdentity(
-                context.session_id, str(context.session_file)
-            ))
-            _, entries = evidence.observe()
-            user, = (row for row in entries if row.id == context.session_entry_id)
-            answer, = (row for row in entries if row.id == self.answer_entry_id)
-            if not isinstance(answer, MessageEntry) or not answer.final_reply:
-                raise ValueError("Recorded recall answer is not a successful native terminal")
-            if answer.parent_id != user.id:
-                raise ValueError("Recall requires a direct tool-free answer to its original probe")
-            if self.checkpoint is not None:
-                checkpoint = self.checkpoint.observe(self.session, evidence)
-                if user.parent_id != checkpoint["native_entry_id"]:
-                    raise ValueError("Recorded probe must immediately follow its original checkpoint")
-            else:
-                checkpoint = {
-                    "applicable": False, "reason": "No compaction checkpoint declared for this control",
-                    "canonical_availability": {
-                        "evaluated": False, "reason": "Full-context control has no committed retained envelope"
-                    },
-                }
-            return {
-                # The located proof's Path is an acquired resource coordinate.
-                # Export its original declared wire facts, not a second proof.
-                "context": FieldCodec.encode({
-                    item.metadata.get("wire_name", item.name): getattr(context, item.name)
-                    for item in fields(NativeContextRecord)
-                }),
-                "session": FieldCodec.encode(self.session),
-                "prompt": user.message.text,
-                "answer": FieldCodec.encode(answer),
-                "answer_text": answer.message.authoritative_text,
-                "checkpoint": checkpoint,
-                "canonical_availability": checkpoint["canonical_availability"],
-                "prompt_scope": "original native user and assembled-context proof, not final provider payload",
+            return self.read(evidence)
+
+    def read(self, evidence: NativeEvidenceRead):
+        """Borrow the run owner's original source for every measurement."""
+        evidence.require_path(Path(self.session.session_file))
+        context = NativeContextProof.read_evidence(
+            Path(self.session.session_file), self.input_id, evidence=evidence
+        )
+        self.session.require_same_session(NativeSessionIdentity(
+            context.session_id, str(context.session_file)
+        ))
+        _, entries = evidence.observe()
+        user, = (row for row in entries if row.id == context.session_entry_id)
+        answer, = (row for row in entries if row.id == self.answer_entry_id)
+        if not isinstance(answer, MessageEntry) or not answer.final_reply:
+            raise ValueError("Recorded recall answer is not a successful native terminal")
+        if answer.parent_id != user.id:
+            raise ValueError("Recall requires a direct tool-free answer to its original probe")
+        if self.checkpoint is not None:
+            attempt, entry, covered = self.checkpoint.capture(self.session, evidence)
+            checkpoint = self.checkpoint._report(attempt, entry, covered)
+            retained = attempt.request.retained
+            if user.parent_id != checkpoint["native_entry_id"]:
+                raise ValueError("Recorded probe must immediately follow its original checkpoint")
+        else:
+            retained = None
+            checkpoint = {
+                "applicable": False, "reason": "No compaction checkpoint declared for this control",
+                "canonical_availability": {
+                    "evaluated": False, "reason": "Full-context control has no committed retained envelope"
+                },
             }
+        return {
+            # The located proof's Path is an acquired resource coordinate.
+            # Export its original declared wire facts, not a second proof.
+            "context": FieldCodec.encode({
+                item.metadata.get("wire_name", item.name): getattr(context, item.name)
+                for item in fields(NativeContextRecord)
+            }),
+            "session": FieldCodec.encode(self.session),
+            "prompt": user.message.text,
+            "answer": FieldCodec.encode(answer),
+            "answer_text": answer.message.authoritative_text,
+            "answer_usage": {"evaluated": answer.message.usage is not None,
+                             "usage": FieldCodec.encode(answer.message.usage)},
+            "checkpoint": checkpoint,
+            "canonical_availability": checkpoint["canonical_availability"],
+            "provider_prompt_presence": self.prompt_presence(context, retained),
+            "prompt_scope": "original native user and assembled-context proof, not final provider payload",
+        }
+
 
 
 def retained_native_host(
