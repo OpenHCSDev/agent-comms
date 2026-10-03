@@ -27,3 +27,25 @@ implementations are read. Managed warm-key reuse and original immutable-package
 policy are distinct from a same-UID sandbox. Tests and installed affected controls
 come after coherent source. Original13.562/98.141 negatives and protected581 source
 remain; no latency claim from the old3.938s one-verify profile.
+
+## Working batch
+
+Six production files,16deleted/43added. SelectedExecution retains its first actual
+NativePiRpcLaunch resource (optional acquired resource, not a domain state) and
+reuses that artifact only within its one-use run. NativePiRpcLaunch.tracked owns
+borrowed/fresh selection. It still executes source/header, tool restriction,
+private-resource durability, complete environment/configuration/argv construction
+and every new child startup/attestation. Independent and first tracked calls
+still fully verify. Pre-claim validation still verifies: these are distinct
+early admission and first acquired launch boundaries, not silently borrowed proof.
+
+PrivateSendAdmission, SelectedAttempt and both triage/no-triage/FULL continuations
+now carry original SelectedExecution instead of a separately threaded package
+Path. Delete unused SelectedAttempt.prepare package argument/import. Existing
+TrackedTurnSession uses the same joined worker/measurement owner for either
+independent or selected construction. No JS, native schema, provider budget,
+child readiness or source-coverage change. No new proof flag/counter/cache/type.
+
+Before/working-after AST726 modules/zero omissions. Final changed-boundary
+installed qualification pending a released existing mutable holder from Sch;
+534 already belongs to588 and is not borrowed. No environment allocated.

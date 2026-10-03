@@ -17,7 +17,7 @@ from .agent_events import CompactionEvent
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
-from .native_pi import _private_session_dir, _trusted_package
+from .native_pi import NativePiRpcLaunch, _private_session_dir, _trusted_package
 from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -42,6 +42,23 @@ class SelectedExecution:
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
+    _native_launch: NativePiRpcLaunch | None = field(init=False, default=None, repr=False)
+
+    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+        """Lend the actual acquired artifact across this execution's stages.
+
+        The first child still acquires a fresh launch. Subsequent stages rebuild
+        their complete source/configuration through that immutable acquisition;
+        no native child, input proof or readiness is borrowed from a prior turn.
+        """
+        if package != self.native_package:
+            raise IdentityConflict("Selected launch differs from its execution package")
+        launch = NativePiRpcLaunch.tracked(
+            package, acquired_launch=self._native_launch, **options
+        )
+        if self._native_launch is None:
+            self._native_launch = launch
+        return launch
 
     def validate(self) -> None:
         if not self.opt_in:

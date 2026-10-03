@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
-from pathlib import Path
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
@@ -213,7 +212,7 @@ class SelectedAttempt:
             input_id,
         )
 
-    async def prepare(self, package, session, action, write_authority):
+    async def prepare(self, session, action, write_authority):
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(
@@ -243,15 +242,15 @@ class SelectedAttempt:
             raise
         return request, action
 
-    async def run(self, package: Path, session: SelectedSession, action, write_authority):
+    async def run(self, execution, session: SelectedSession, action, write_authority):
         participant = self.participant
-        request, action = await self.prepare(package, session, action, write_authority)
+        request, action = await self.prepare(session, action, write_authority)
         self.stage.progress.input_id = request.admission.input_id
         with request.native_failures():
             tools = self.tool_owner(session, request.admission.input_id, action)
             participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
-                package,
+                execution,
                 provider=participant.provider,
                 model=participant.model,
                 observe_event=self.observe_event,
@@ -291,7 +290,7 @@ class SelectedConsideration:
                 sources=participant.batch.sources,
             ).value
             attempt = SelectedAttempt.engage(participant, created)
-            return await attempt.run(execution.native_package, session,
+            return await attempt.run(execution, session,
                                      execution.action(session), execution.write_authority)
         participant.transition(
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
@@ -307,7 +306,7 @@ class SelectedConsideration:
         with request.native_failures():
             participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
-                execution.native_package,
+                execution,
                 provider=participant.provider,
                 model=participant.model,
                 observe_event=participant.dispatch,
