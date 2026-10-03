@@ -238,7 +238,9 @@ class InputDrain(FutureInputQueue):
                     await self.drain_inbox(session_id)
                     await self.sessions.config.sync_thread(session_id)
                     if time.monotonic() >= next_goal_wait_check:
-                        self.comms.goals.recover_closed_goal_wait(session_id)
+                        await Coordination.run_worker(partial(
+                            self.comms.goals.recover_closed_goal_wait, session_id,
+                        ))
                         next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                     self.effects.turns.goals.schedule_goal(session_id)
                     await self.sessions.config.refresh_auth_models()

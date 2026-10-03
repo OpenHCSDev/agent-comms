@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .goal_actions import (
     EditGoalAction,
@@ -249,9 +251,10 @@ class GoalScheduler:
         return resumed
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = self.comms.goals.goal_changed(
-            thread_name, self.goal_execution_signatures.get(session_id)
-        )
+        event = await Coordination.run_worker(partial(
+            self.comms.goals.goal_changed,
+            thread_name, self.goal_execution_signatures.get(session_id),
+        ))
         if event is None:
             return
         await self.effects._emit_event(session_id, event)
