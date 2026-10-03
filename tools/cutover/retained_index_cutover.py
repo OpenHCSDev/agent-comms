@@ -63,4 +63,6 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
             str(Path(__file__).with_name(self.installer_script)), self.wire_root_id,
             *self.operation_arguments,
         ], env=environment, check=True)
+
+    def bind_target_launch(self, lifecycle) -> None:
         lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)
