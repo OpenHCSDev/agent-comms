@@ -1,0 +1,11 @@
+# Native launch artifact custody
+
+Base: merged569355186a7. One immutable native deployment is verified at acquisition; original launch/child/writer resources carry its use. No path/mtime cache, global success registry, provider input or new native artifact.
+
+Confirmed repeated work: managed saved launch verifies at route preflight and again during header lookup before it even checks existing child reuse. NativeCompactionWriter verifies both acquisition and exchange on the same instance. PiHelper does not add a hash. Original PiSessionChild.key already holds the complete NativePiRpcLaunch/auth revision; RetainedNative owns current saved-source custody.
+
+Use NativePiRpcLaunch to own saved-header selection within its verified launch. SessionIdentityHelper owns the one header/revision operation; standalone NativeSessionIdentity.locate still performs its required new acquisition verification. RetainedNative can return only its original complete matching launch/auth key for the same current saved source; any argument/environment/config/auth/source/package change takes the original fresh factory. Callers hold their existing borrow lock while choosing and consuming this resource. NativeCompactionWriter keeps acquisition verification for its entire original immutable resource, with original CAS/input/FD guards unaffected.
+
+Whole caller closure: managed factory, NativeSessionPreparation, backend.stream, native custody/child reuse, header helper and standalone locator, writer. Separate fresh-owner preflight, selected execution admission, tracked child creation, offline token/preparation/fork helper and cutover validation still own their distinct admission/acquisition boundaries. They must not borrow an unrelated prior success.
+
+Before AST: existing NRA Package roots src/agent_comms/tests/tools;726 modules, zero parse omissions,409 lexical references. Dynamic resolution is not inferred; actual launch and MRO callers are read semantically. Original immutable-by-policy package is not a same-UID sandbox. Final checks must detect stale source/config/auth reuse and invalid fresh artifact, then exercise actual saved42MB native preparation/reuse/retirement without a provider prompt. No speed claim for the old13.562s gap or98.141s provider duration.
