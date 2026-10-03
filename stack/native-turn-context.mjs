@@ -186,20 +186,25 @@ export class TurnContext {
             messages:await session.agent.convertToLlm(Array.from(session.storedContext.messages(session.agent))),
             tools:session.agent.state.tools});
     }
-    static async project(session, entries) {
+    static async project(session, entryIds) {
+        // Resolve original identities at the store, not caller-supplied bodies.
         // One captured entry set supplies both SDK conversion and attribution.
         // This is a preview; no native input/context proof is minted.
-        const selected = Array.from(entries);
+        const store=session.sessionManager.entryStore;
+        store.assertCurrent();
+        const selected = Array.from(entryIds, id=>store.get(id));
         const context = await SessionContext.entryContext(session, selected.values());
-        return this.capture(session, context, undefined, selected);
+        const projected = await this.capture(session, context, undefined, selected);
+        store.assertCurrent();
+        return projected;
     }
     static async fullSource(session) {
         const manager=session.sessionManager;
-        return this.project(session, manager.entryStore.uncompactedEntries(manager.getLeafId()));
+        return this.project(session, manager.entryStore.uncompactedMetadata(manager.getLeafId()).map(meta=>meta.id));
     }
     static async recentSource(session) {
         const manager=session.sessionManager;
-        return this.project(session, manager.entryStore.keptEntries(manager.getLeafId()));
+        return this.project(session, manager.entryStore.keptMetadata(manager.getLeafId()).map(meta=>meta.id));
     }
     render() {
         const provider={messages:[]};
