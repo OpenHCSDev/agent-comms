@@ -108,9 +108,159 @@
   "sites": [
     {
       "file": "dist/core/agent-session-services.js",
+      "line": 56,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/agent-session-services.js",
+      "line": 57,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/agent-session-services.js",
       "line": 64,
       "node": "Identifier",
       "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 394,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 400,
+      "node": "MemberExpression",
+      "name": "_runAutoCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 410,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 412,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 427,
+      "node": "MemberExpression",
+      "name": "_runAutoCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 628,
+      "node": "MemberExpression",
+      "name": "getRetrySettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1057,
+      "node": "MemberExpression",
+      "name": "_prepareRetry"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1069,
+      "node": "MemberExpression",
+      "name": "_checkCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1086,
+      "node": "MemberExpression",
+      "name": "beforeInput"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1189,
+      "node": "MemberExpression",
+      "name": "_checkCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1833,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1984,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1985,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2015,
+      "node": "MemberExpression",
+      "name": "_runAutoCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2045,
+      "node": "MemberExpression",
+      "name": "_runAutoCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2075,
+      "node": "MemberExpression",
+      "name": "_runAutoCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 1981,
+      "node": "MethodDefinition",
+      "name": "_checkCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2090,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2089,
+      "node": "MethodDefinition",
+      "name": "_runAutoCompaction"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2253,
+      "node": "MemberExpression",
+      "name": "getCompactionEnabled"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2637,
+      "node": "MemberExpression",
+      "name": "getRetrySettings"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2636,
+      "node": "MethodDefinition",
+      "name": "_prepareRetry"
+    },
+    {
+      "file": "dist/core/agent-session.js",
+      "line": 2694,
+      "node": "MemberExpression",
+      "name": "getRetryEnabled"
     },
     {
       "file": "dist/core/resource-loader.js",
@@ -123,6 +273,42 @@
       "line": 73,
       "node": "Identifier",
       "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/sdk.js",
+      "line": 186,
+      "node": "MemberExpression",
+      "name": "getProviderRetrySettings"
+    },
+    {
+      "file": "dist/core/sdk.js",
+      "line": 237,
+      "node": "MemberExpression",
+      "name": "getProviderRetrySettings"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 14,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 48,
+      "node": "MethodDefinition",
+      "name": "beforeInput"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 64,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/session-context.js",
+      "line": 62,
+      "node": "MethodDefinition",
+      "name": "beforeInput"
     },
     {
       "file": "dist/core/settings-manager.js",
@@ -219,6 +405,84 @@
       "line": 379,
       "node": "Identifier",
       "name": "SettingsManager"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 548,
+      "node": "MethodDefinition",
+      "name": "getCompactionEnabled"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 567,
+      "node": "MemberExpression",
+      "name": "getCompactionEnabled"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 565,
+      "node": "MethodDefinition",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 582,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 581,
+      "node": "MethodDefinition",
+      "name": "getRetryEnabled"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 594,
+      "node": "MemberExpression",
+      "name": "getRetryEnabled"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 595,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 592,
+      "node": "MethodDefinition",
+      "name": "getRetrySettings"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 613,
+      "node": "MemberExpression",
+      "name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "file": "dist/core/settings-manager.js",
+      "line": 610,
+      "node": "MethodDefinition",
+      "name": "getProviderRetrySettings"
+    },
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "line": 75,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "line": 179,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
+    },
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "line": 237,
+      "node": "MemberExpression",
+      "name": "getCompactionSettings"
     },
     {
       "file": "dist/main.js",
