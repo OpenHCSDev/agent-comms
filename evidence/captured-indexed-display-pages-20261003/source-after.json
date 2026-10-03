@@ -1,0 +1,1981 @@
+{
+  "coverage": [
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "revision": "HEAD",
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "revision": "bb1ed231",
+      "root": "src/toad",
+      "parsed": 289,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/active_route.py",
+      "line": 112,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/active_route.py",
+      "line": 117,
+      "kind": "Call",
+      "source": "WireLog(self.root / 'bus.jsonl')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 113,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 124,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 154,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/backend.py",
+      "line": 751,
+      "kind": "Call",
+      "source": "self.watchdog.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_activity_index.py",
+      "line": 29,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_activity_index.py",
+      "line": 43,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, source: BusFileRevision | None, stream: BinaryIO | None, parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_display_index.py",
+      "line": 83,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, revision: tuple[int, int, int, int] | None, semantics: DisplayMetricScope, initial: DisplayMetrics, apply: Callable[[Mapping, DisplayMetrics], None]) -> DisplayCheckpoint | None:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 35,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 62,
+      "kind": "ClassDef",
+      "source": "class BusPageIndex:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 41,
+      "kind": "FunctionDef",
+      "source": "def covers(self, stream: BinaryIO, source: BusFileRevision) -> bool:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 195,
+      "kind": "FunctionDef",
+      "source": "def offsets(self, *, lower: int | None, upper: int | None, descending: bool, targets: frozenset[str] | None, before_offset: int | None=None) -> Generator[BusPageRow, None, None]:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 173,
+      "kind": "Call",
+      "source": "BusPageSource(identity, size, self._tail(stream, size))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 187,
+      "kind": "Call",
+      "source": "BusPageSource((stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns), size, self._tail(stream, size))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 148,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 136,
+      "kind": "Call",
+      "source": "comms.registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 370,
+      "kind": "Call",
+      "source": "comms.registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 292,
+      "kind": "Call",
+      "source": "InputDispositions(ctx.root / InputDispositions.filename).reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 177,
+      "kind": "Call",
+      "source": "self.boundary.registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 64,
+      "kind": "Call",
+      "source": "WireLog(self.root / 'bus.jsonl')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 29,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 213,
+      "kind": "Call",
+      "source": "InputDispositions(self.journal.path.parent / InputDispositions.filename).reading(blocking=blocking)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 162,
+      "kind": "Call",
+      "source": "InputDispositions(self.journal.path.parent / InputDispositions.filename).reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 101,
+      "kind": "Call",
+      "source": "InputDispositions(self.journal.path.parent / InputDispositions.filename).reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 229,
+      "kind": "Call",
+      "source": "bus._registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 36,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 64,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 72,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 236,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 45,
+      "kind": "FunctionDef",
+      "source": "def snapshot(ref: str) -> dict[str, int]:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 47,
+      "kind": "Call",
+      "source": "cls.snapshot([(path, git(repo, 'show', f'{ref}:{path}')) for path in sorted(selected)])"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 48,
+      "kind": "Call",
+      "source": "snapshot(base)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 48,
+      "kind": "Call",
+      "source": "snapshot(head)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 258,
+      "kind": "Call",
+      "source": "ctx.goals.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 445,
+      "kind": "Call",
+      "source": "store.snapshot(goal.id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 186,
+      "kind": "Call",
+      "source": "ctx.owner_store.snapshot(goal.id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 363,
+      "kind": "Call",
+      "source": "attempts.snapshot(goal.id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 384,
+      "kind": "Call",
+      "source": "ctx.goals.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 416,
+      "kind": "Call",
+      "source": "ctx.goals.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 646,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, goal_id: str) -> Generation | None:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 862,
+      "kind": "Call",
+      "source": "self.snapshot(goal_id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 654,
+      "kind": "Call",
+      "source": "self.snapshot(generation.goal_id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 737,
+      "kind": "Call",
+      "source": "self.snapshot(goal_id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 853,
+      "kind": "Call",
+      "source": "self.snapshot(value.goal_id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 118,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 317,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 174,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 225,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 98,
+      "kind": "Call",
+      "source": "store.snapshot(goal.id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 139,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 102,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 17,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest, PageTraversal"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 27,
+      "kind": "ImportFrom",
+      "source": "from .presentation import BusPresentation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 117,
+      "kind": "ImportFrom",
+      "source": "from .read_basis import DMDisplayBasis"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 350,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 401,
+      "kind": "Call",
+      "source": "MessagePageRequest(view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 53,
+      "kind": "Call",
+      "source": "presentation.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 325,
+      "kind": "Call",
+      "source": "TranscriptRoutes(source_root).snapshot(stage)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 333,
+      "kind": "Call",
+      "source": "WireLog(stage / 'bus.jsonl')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 404,
+      "kind": "Call",
+      "source": "WireLog(Path(source.root) / 'bus.jsonl')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 352,
+      "kind": "Call",
+      "source": "BusPageIndex(archived.path)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 362,
+      "kind": "Call",
+      "source": "Registration(stage / 'registry.json').snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 46,
+      "kind": "ImportFrom",
+      "source": "from .read_basis import ChannelDisplayScope, DMDisplayBasis"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 69,
+      "kind": "ImportFrom",
+      "source": "from .presentation import BusPresentation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 82,
+      "kind": "Call",
+      "source": "BusPresentation(bus, registry, channels.catalog)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 216,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 273,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 301,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 501,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 173,
+      "kind": "Call",
+      "source": "self.presentation.channel_page(target, viewer=viewer, before=before, after=after, limit=limit, max_bytes=max_bytes)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 292,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 353,
+      "kind": "Call",
+      "source": "self.presentation.snapshot(viewer=viewer)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/history_views.py",
+      "line": 181,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/importing.py",
+      "line": 253,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, format: ImportFormat, source_id: str, project: str, title: str) -> ImportSnapshot:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/importing.py",
+      "line": 304,
+      "kind": "Call",
+      "source": "buffer.snapshot(ImportFormat.OPENCODE, text(info.get('id')) or source.stem, text(info.get('directory')), text(info.get('title')))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/importing.py",
+      "line": 521,
+      "kind": "Call",
+      "source": "buffer.snapshot(ImportFormat.CODEX, scan.identity or source.stem, scan.latest_project or scan.project, source.stem)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/importing.py",
+      "line": 384,
+      "kind": "Call",
+      "source": "buffer.snapshot(ImportFormat.OPENCODE, info.id, info.directory, info.title)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/input_drain.py",
+      "line": 289,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/input_drain.py",
+      "line": 236,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/input_origin.py",
+      "line": 92,
+      "kind": "Call",
+      "source": "comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/locked_store.py",
+      "line": 75,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/locked_store.py",
+      "line": 81,
+      "kind": "Call",
+      "source": "self.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 32,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 49,
+      "kind": "Call",
+      "source": "WireLog(bus_path)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 133,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 168,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "self.log._record_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 103,
+      "kind": "Call",
+      "source": "self._activity.snapshot(revision, stream, self._bus_activity_fields)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 123,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 264,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 275,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 284,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 337,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_bus.py",
+      "line": 75,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "source": "from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 210,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 82,
+      "kind": "FunctionDef",
+      "source": "@abstractmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 107,
+      "kind": "FunctionDef",
+      "source": "def offsets(self, index, targets, boundary):"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 155,
+      "kind": "FunctionDef",
+      "source": "def offsets(self, index, targets, boundary):"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 235,
+      "kind": "FunctionDef",
+      "source": "def read_opened(self, log, marker, source, stream, records) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 256,
+      "kind": "FunctionDef",
+      "source": "def indexed(self, index, log, marker, source, stream) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 108,
+      "kind": "Call",
+      "source": "index.offsets(lower=None, upper=self.cursor, descending=True, targets=targets, before_offset=boundary)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 115,
+      "kind": "Call",
+      "source": "index.offsets(lower=self.cursor - 1, upper=None, descending=True, targets=targets, before_offset=boundary)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 156,
+      "kind": "Call",
+      "source": "index.offsets(lower=self.cursor, upper=None, descending=False, targets=targets, before_offset=boundary)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 160,
+      "kind": "Call",
+      "source": "index.offsets(lower=None, upper=self.cursor + 1, descending=True, targets=targets, before_offset=boundary)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 113,
+      "kind": "Call",
+      "source": "index.offsets(lower=0, upper=0, descending=True, targets=targets, before_offset=boundary)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 232,
+      "kind": "Call",
+      "source": "log.page_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 233,
+      "kind": "Call",
+      "source": "self.read_opened(log, marker, source, stream, records)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 268,
+      "kind": "Call",
+      "source": "self.traversal.offsets(index, targets, source.size)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 247,
+      "kind": "Call",
+      "source": "saved.covers(stream, source)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/message_page.py",
+      "line": 248,
+      "kind": "Call",
+      "source": "self.indexed(index, log, marker, source, stream)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 513,
+      "kind": "Call",
+      "source": "registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 144,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 109,
+      "kind": "Call",
+      "source": "self.runner.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 200,
+      "kind": "Call",
+      "source": "self.runner.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 168,
+      "kind": "Call",
+      "source": "self.runner.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 45,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 52,
+      "kind": "Call",
+      "source": "runner.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 392,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 437,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 284,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 417,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 446,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 118,
+      "kind": "Call",
+      "source": "lifecycle.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 208,
+      "kind": "Call",
+      "source": "self.lifecycle.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 231,
+      "kind": "Call",
+      "source": "lifecycle.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 186,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .message_page import MessagePage, MessagePageRequest"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 166,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 231,
+      "kind": "ClassDef",
+      "source": "class BusPresentation:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 45,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 189,
+      "kind": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 241,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 267,
+      "kind": "FunctionDef",
+      "source": "def channel_page(self, target: str, *, viewer: str | None=None, before: int | None=None, after: int | None=None, limit: int=100, max_bytes: int=256 * 1024) -> MessagePage:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 100,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 362,
+      "kind": "Call",
+      "source": "BusDisplayIndex(self._path, viewer).snapshot(bus_revision, semantics, initial, lambda record, metrics: semantics.observe_wire(record, metrics))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 198,
+      "kind": "Call",
+      "source": "registry.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 198,
+      "kind": "Call",
+      "source": "catalog.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 291,
+      "kind": "Call",
+      "source": "MessagePageRequest.capture(scope, before=before, after=after, limit=limit, max_bytes=max_bytes).read_opened(self.bus.log, marker, source, stream, records)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 199,
+      "kind": "Call",
+      "source": "reads.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 315,
+      "kind": "Call",
+      "source": "DisplaySelection.reading(self.registry, self.catalog, self.bus.reads, viewer)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 201,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 256,
+      "kind": "Call",
+      "source": "self.bus.log._record_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 258,
+      "kind": "Call",
+      "source": "DisplaySelection.reading(self.registry, self.catalog, self.bus.reads, viewer)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 283,
+      "kind": "Call",
+      "source": "self.bus.log.page_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/presentation.py",
+      "line": 285,
+      "kind": "Call",
+      "source": "DisplaySelection.reading(self.registry, self.catalog, self.bus.reads, viewer)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 38,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 557,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 219,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 216,
+      "kind": "Call",
+      "source": "self.bus._registry.store.reading(blocking=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 167,
+      "kind": "Call",
+      "source": "self.bus._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/publisher.py",
+      "line": 57,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/publisher.py",
+      "line": 121,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/publisher.py",
+      "line": 344,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/publisher.py",
+      "line": 255,
+      "kind": "Call",
+      "source": "self._registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/queued_input.py",
+      "line": 102,
+      "kind": "Call",
+      "source": "inputs.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/queued_input.py",
+      "line": 152,
+      "kind": "Call",
+      "source": "inputs.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 118,
+      "kind": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 161,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 182,
+      "kind": "Call",
+      "source": "registry.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 236,
+      "kind": "Call",
+      "source": "registry.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 177,
+      "kind": "Call",
+      "source": "bus.log._record_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 198,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 358,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self) -> RegistrySnapshot:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 211,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 212,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 218,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 250,
+      "kind": "Call",
+      "source": "edit.document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 280,
+      "kind": "Call",
+      "source": "self.store._read_unlocked().snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 304,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 308,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 334,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 338,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 348,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 355,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 360,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 361,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 364,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 370,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 375,
+      "kind": "Call",
+      "source": "self.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 219,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 230,
+      "kind": "Call",
+      "source": "edit.document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 296,
+      "kind": "Call",
+      "source": "edit.document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registration.py",
+      "line": 345,
+      "kind": "Call",
+      "source": "self.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registry_document.py",
+      "line": 60,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self) -> RegistrySnapshot:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registry_document.py",
+      "line": 217,
+      "kind": "Call",
+      "source": "self.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registry_document.py",
+      "line": 359,
+      "kind": "Call",
+      "source": "self.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registry_store.py",
+      "line": 111,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/registry_store.py",
+      "line": 113,
+      "kind": "Call",
+      "source": "WireLog(self.path.with_name('bus.jsonl'))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 548,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, owner: str) -> ThreadCommsSnapshot:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 397,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 430,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 441,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 491,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 511,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/relationships.py",
+      "line": 552,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 165,
+      "kind": "Call",
+      "source": "comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 230,
+      "kind": "Call",
+      "source": "comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/runtime.py",
+      "line": 308,
+      "kind": "Call",
+      "source": "self._comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 113,
+      "kind": "Call",
+      "source": "server.agent._comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 117,
+      "kind": "Call",
+      "source": "ctx.server.agent._comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 141,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 146,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 145,
+      "kind": "Call",
+      "source": "WireLog(registry.store.path.with_name('bus.jsonl'))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/selected_session.py",
+      "line": 226,
+      "kind": "Call",
+      "source": "participant.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 216,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/store_files.py",
+      "line": 96,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/store_files.py",
+      "line": 98,
+      "kind": "Call",
+      "source": "WireLog(store_path)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/task_sources.py",
+      "line": 550,
+      "kind": "Call",
+      "source": "InputDispositions(original_source.path.parent / InputDispositions.filename).reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 560,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 290,
+      "kind": "Call",
+      "source": "self.watchdog.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 259,
+      "kind": "Call",
+      "source": "self.watchdog.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 20,
+      "kind": "Call",
+      "source": "CompactionJournal.snapshot(root / 'compaction-commits.sqlite3', session_file, thread.incarnation, registry)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 47,
+      "kind": "FunctionDef",
+      "source": "def covers(self, sequence: int) -> bool:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 133,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, destination: Path) -> None:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 214,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 232,
+      "kind": "Call",
+      "source": "registry.store.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 232,
+      "kind": "Call",
+      "source": "inputs.reading()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 233,
+      "kind": "Call",
+      "source": "document.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 432,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 245,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 286,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 480,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 104,
+      "kind": "Call",
+      "source": "self.receipts.covers(sequence)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 397,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 435,
+      "kind": "Call",
+      "source": "WireLog(receipt_root / 'bus.jsonl')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 519,
+      "kind": "Call",
+      "source": "self.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 130,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 210,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 159,
+      "kind": "Call",
+      "source": "store.snapshot(goal.id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 111,
+      "kind": "Call",
+      "source": "store.snapshot(owner.goal.id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 109,
+      "kind": "Call",
+      "source": "comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 250,
+      "kind": "Call",
+      "source": "store.snapshot(goal_id)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 309,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 185,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 49,
+      "kind": "FunctionDef",
+      "source": "def reading(self) -> None:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 52,
+      "kind": "ClassDef",
+      "source": "class WireLog:"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 407,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 460,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 479,
+      "kind": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 246,
+      "kind": "Call",
+      "source": "self._opened_wire_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 434,
+      "kind": "Call",
+      "source": "self._opened_wire_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 445,
+      "kind": "Call",
+      "source": "self._opened_wire_snapshot(need_sequence=False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 462,
+      "kind": "Call",
+      "source": "self._opened_wire_snapshot(need_sequence=need_sequence)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 483,
+      "kind": "Call",
+      "source": "self.page_snapshot(need_sequence=need_sequence)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 491,
+      "kind": "Call",
+      "source": "self._record_snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 167,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 186,
+      "kind": "Call",
+      "source": "registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 22,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 27,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 82,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 116,
+      "kind": "ImportFrom",
+      "source": "from .bus_page_index import BusPageIndex"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 124,
+      "kind": "ImportFrom",
+      "source": "from .wire_log import WireLog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 84,
+      "kind": "Call",
+      "source": "BusPageIndex(path)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 118,
+      "kind": "Call",
+      "source": "BusPageIndex(path, readonly=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "src/agent_comms/worker.py",
+      "line": 56,
+      "kind": "Call",
+      "source": "agent._comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 130,
+      "kind": "Call",
+      "source": "self.transcripts.snapshot(coordination.wire_root, coordination.thread.name)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/transcript_reader.py",
+      "line": 99,
+      "kind": "AsyncFunctionDef",
+      "source": "async def snapshot(self, root, thread, *, before=None, after=None, through=None, read_identity: TranscriptReadIdentity | None=None):"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/transcript_reader.py",
+      "line": 95,
+      "kind": "Call",
+      "source": "self.snapshot(root, thread, before=before, after=after, through=through, read_identity=read_identity)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/transcript_reader.py",
+      "line": 85,
+      "kind": "Call",
+      "source": "self.snapshot(identity.root, identity.requested_name, before=identity.before, after=identity.after, through=identity.through)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/transcript_reader.py",
+      "line": 82,
+      "kind": "Call",
+      "source": "self.snapshot(identity.root, identity.requested_name, before=identity.before, after=identity.after, through=identity.through)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/goal_display.py",
+      "line": 17,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/goal_display.py",
+      "line": 44,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/goal_display.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/goal_display.py",
+      "line": 84,
+      "kind": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/target_commands.py",
+      "line": 97,
+      "kind": "Call",
+      "source": "self.comms.registry.snapshot()"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/transcript_publication.py",
+      "line": 597,
+      "kind": "AsyncFunctionDef",
+      "source": "async def snapshot(self, page: TranscriptPage) -> None:"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 2229,
+      "kind": "Call",
+      "source": "self.conversation.transcript.snapshot(update.page)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/thread_comms_model.py",
+      "line": 44,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, owner: str) -> ThreadCommsSnapshot:"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/thread_comms_source.py",
+      "line": 24,
+      "kind": "FunctionDef",
+      "source": "def snapshot(self, owner: str):"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/thread_comms_source.py",
+      "line": 25,
+      "kind": "Call",
+      "source": "self.service.snapshot(owner)"
+    }
+  ],
+  "limits": "Lexical declarations/imports/calls; original code read semantically, dynamic alias/MRO dispatch not resolved by AST"
+}
