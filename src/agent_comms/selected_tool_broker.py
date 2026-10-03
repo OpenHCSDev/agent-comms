@@ -18,6 +18,7 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Generic, TypeVar
@@ -35,7 +36,7 @@ from .coordination_tables.participants import OwnerGenerations
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
-from .private_path import PrivateDirectoryRole, PrivateFileRole
+from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole
 from .pi_rpc import unique_fields
 from .selected_actions import SelectedAction
 
@@ -354,9 +355,8 @@ class OwnerToolSocket(ABC, Generic[Call]):
     def __init__(self, directory: Path, token: str) -> None:
         if type(token) is not str or not _TOKEN.fullmatch(token):
             raise ValueError("Selected tool transport requires a random 256-bit token")
-        # Linux AF_UNIX pathnames are short. The per-recipient private session
-        # directory already scopes this socket, so one byte is sufficient.
         self.path = Path(directory).absolute() / "s"
+        self._resources = ExitStack()
         self.token = token
         self.expected_pid: int | None = None
         # Live owner-side completion only. A visible .done file after failed
@@ -436,11 +436,12 @@ class OwnerToolSocket(ABC, Generic[Call]):
             raise SelectedToolDenied("Selected tool socket parent is not private")
         if self.path.exists() or self.path.is_symlink():
             raise SelectedToolDenied("Selected tool socket already exists")
-        self._server = await asyncio.start_unix_server(
-            self._handle, path=str(self.path), limit=self.max_request + 1
-        )
-        self._created = True
         try:
+            self.address = self._resources.enter_context(PrivateSocketRole.address(self.path))
+            self._server = await asyncio.start_unix_server(
+                self._handle, path=str(self.address), limit=self.max_request + 1
+            )
+            self._created = True
             os.chmod(self.path, 0o600)
         except BaseException:
             await self.close()
@@ -462,6 +463,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
         if self._created:
             self.path.unlink(missing_ok=True)
             self._created = False
+        self._resources.close()
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         task = asyncio.current_task()

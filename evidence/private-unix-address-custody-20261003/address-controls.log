@@ -1,0 +1,56 @@
+.FE                                                                      [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_unsafe_directory_root_permissions_db_and_wal_fail_closed _
+
+    @pytest.fixture
+    def private_root():
+        # Unix socket paths have a hard byte limit; use a short, owned test root.
+        root = Path(tempfile.mkdtemp(prefix="rg-", dir="/var/tmp"))
+        try:
+            with CoordinationStore(root / "coordination.sqlite3") as store:
+                db = store._connection
+                db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
+                db.execute("INSERT INTO owner_generations VALUES ('a','Alice',1)")
+                db.execute(
+                    "INSERT INTO current_executions "
+                    "(owner_lookup,execution_id,attempt_ordinal,pointer_revision) "
+                    "VALUES ('a',NULL,NULL,0)"
+                )
+>               db.execute(
+                    (
+                        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                        "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                        "ms) VALUES ('secret-execution','acp',json_object('kind','pending'),NULL,'Ali"
+                        "ce','a',1,2,NULL,1,1)"
+                    )
+                )
+E               sqlite3.OperationalError: table executions has no column named exact_target
+
+tests/test_recovery_gateway.py:41: OperationalError
+=================================== FAILURES ===================================
+________ test_existing_gateway_restart_returns_only_redacted_owner_dto _________
+
+root = PosixPath('/var/tmp/rg-client-mxk4rdge/retained-source-retained-source-retained-source-retained-source-retained-source-retained-source-retained-source-retained-source-')
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="gateway requires Linux SO_PEERCRED")
+    async def test_existing_gateway_restart_returns_only_redacted_owner_dto(root: Path) -> None:
+        with CoordinationStore(root / "coordination.sqlite3") as store:
+            db = store._connection
+            db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
+            db.execute("INSERT INTO owner_generations VALUES ('a','Alice',1)")
+            db.execute("INSERT INTO current_executions VALUES ('a',NULL,NULL,0)")
+>           db.execute(
+                (
+                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                    "ms) VALUES ('SECRET_EXECUTION','acp',json_object('kind','pending'),NULL,'Ali"
+                    "ce','a',1,2,NULL,1,1)"
+                )
+            )
+E           sqlite3.OperationalError: table executions has no column named exact_target
+
+tests/test_recovery_gateway_client.py:43: OperationalError
+=========================== short test summary info ============================
+FAILED tests/test_recovery_gateway_client.py::test_existing_gateway_restart_returns_only_redacted_owner_dto
+ERROR tests/test_recovery_gateway.py::test_unsafe_directory_root_permissions_db_and_wal_fail_closed
+1 failed, 1 passed, 1 error in 0.30s

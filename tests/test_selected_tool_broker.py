@@ -314,7 +314,9 @@ async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path)
     """Execute the actual producer through Node, with no Pi/model/provider."""
     from agent_comms.pi_events import ToolExecutionEnd
 
-    tmp_path.chmod(0o700)
+    tmp_path = tmp_path / ("persistent-session-" * 8)
+    tmp_path.mkdir(mode=0o700)
+    assert len(os.fsencode(tmp_path)) > 108
     input_id, token = secrets.token_hex(16), secrets.token_hex(32)
     target = tmp_path / "notes.txt"
     target.write_text("before")
@@ -349,7 +351,7 @@ await tool.execute('paired', {json.dumps(arguments)}, new AbortController().sign
 """,
             env={
                 **os.environ,
-                "AGENT_COMMS_SELECTED_TOOL_SOCKET": str(socket.path),
+                "AGENT_COMMS_SELECTED_TOOL_SOCKET": str(socket.address),
                 "AGENT_COMMS_SELECTED_TOOL_TOKEN": token,
             },
             stdout=asyncio.subprocess.PIPE,

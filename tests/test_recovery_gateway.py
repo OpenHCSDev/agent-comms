@@ -26,26 +26,15 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def private_root():
-    # Unix socket paths have a hard byte limit; use a short, owned test root.
+    # Original database/root custody; address allocation belongs to PrivateSocketRole.
     root = Path(tempfile.mkdtemp(prefix="rg-", dir="/var/tmp"))
     try:
-        with CoordinationStore(root / "coordination.sqlite3") as store:
-            db = store._connection
-            db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
-            db.execute("INSERT INTO owner_generations VALUES ('a','Alice',1)")
-            db.execute(
-                "INSERT INTO current_executions "
-                "(owner_lookup,execution_id,attempt_ordinal,pointer_revision) "
-                "VALUES ('a',NULL,NULL,0)"
-            )
-            db.execute(
-                (
-                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                    "ms) VALUES ('secret-execution','acp',json_object('kind','pending'),NULL,'Ali"
-                    "ce','a',1,2,NULL,1,1)"
-                )
-            )
+        from agent_comms.coordinator import Coordination
+        from agent_comms.coordination_tables.executions import ExecutionOrigin
+        with Coordination(root / "coordination.sqlite3") as store:
+            store.participants.register("a", "Alice", "Alice", committed=True)
+            store.executions.create("secret-execution", ExecutionOrigin.ACP, "a", "Alice", 2)
+            store.executions.mark_pending("secret-execution", expected_revision=1)
         yield root
     finally:
         shutil.rmtree(root)
@@ -369,9 +358,15 @@ async def test_unsafe_directory_root_permissions_db_and_wal_fail_closed(private_
     copied = too_long / "coordination.sqlite3"
     shutil.copyfile(db, copied)
     os.chmod(copied, 0o600)
-    with pytest.raises(GatewayUnavailableError):
-        await RecoveryGateway(too_long).start()
-    assert not (too_long / ".recovery-viewer").exists()
+    gateway = RecoveryGateway(too_long)
+    await gateway.start()
+    try:
+        from agent_comms.recovery_gateway_client import read_gateway_projection
+        assert (await read_gateway_projection(gateway.path, "Alice"))["availability"] == "available"
+        assert gateway.path.is_socket()
+    finally:
+        await gateway.close()
+    assert not gateway.path.exists()
     link = private_root.parent / f"{private_root.name}-link"
     link.symlink_to(private_root, target_is_directory=True)
     try:

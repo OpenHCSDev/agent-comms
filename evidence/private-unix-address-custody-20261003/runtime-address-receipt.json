@@ -1,0 +1,16 @@
+{
+  "scope": "Actual installed runtime IPC and PiSessionChild address-resource custody, Node project client; no SDK/provider/input claim",
+  "complete": true,
+  "socket_bytes": 222,
+  "project": {
+    "worktree": "/home/ts/.cache/agent-scratch/m576-runtime-address-original-control/persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-"
+  },
+  "native_resource_client": {
+    "result": {
+      "worktree": "/home/ts/.cache/agent-scratch/m576-runtime-address-original-control/persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-persistent-root-"
+    }
+  },
+  "child_absent": true,
+  "child_resources_closed": true,
+  "socket_removed": true
+}
