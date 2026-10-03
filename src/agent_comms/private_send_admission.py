@@ -35,6 +35,7 @@ from .tracked_turn import TrackedTurnSession
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
+    from .coordinated_runtime import SelectedExecution
     from .agent_events import AgentEvent
     from .native_attestation import ObservedAttestation
     from .pi_events import PiEvent
@@ -138,7 +139,7 @@ class PrivateSendAdmission:
 
     async def execute(
         self,
-        package: Path,
+        execution: SelectedExecution,
         *,
         provider: str,
         model: str,
@@ -154,7 +155,7 @@ class PrivateSendAdmission:
         with Coordination(str(self.store_path)) as store:
             try:
                 result = await TrackedTurnSession.execute(
-                    package,
+                    execution.native_package,
                     input_id=self.input_id,
                     prompt=self.prompt.text,
                     context_contributions=self.prompt.contributions,
@@ -176,6 +177,7 @@ class PrivateSendAdmission:
                     ),
                     prompt_send_boundary=self,
                     acquisition_measurements=self._measurements,
+                    launch_owner=execution,
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)

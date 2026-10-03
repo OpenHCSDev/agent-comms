@@ -102,7 +102,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
             sources=participant.batch.sources, settled=settled,
         ).value
         attempt = SelectedAttempt.engage(participant, created)
-        return await attempt.run(execution.native_package, session,
+        return await attempt.run(execution, session,
                                  execution.action(session), execution.write_authority)
 
 

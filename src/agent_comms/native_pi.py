@@ -550,6 +550,7 @@ class NativePiRpcLaunch:
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
+        acquired_launch: NativePiRpcLaunch | None = None,
     ) -> NativePiRpcLaunch:
         """Verify compiled Pi bytes and acquire private writable resources before spawning.
 
@@ -558,6 +559,7 @@ class NativePiRpcLaunch:
         only establishes the executable and its resources; native input, context,
         and model-delivery proofs remain separate per-attempt observations.
         """
+        package = Path(package).absolute()
         session_dir, session_file = session.directory, session.path
         try:
             for value in (provider, model):
@@ -569,7 +571,12 @@ class NativePiRpcLaunch:
         if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
             raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
         session.require_launch_tools(selected_tool_mode)
-        cli = _trusted_package(package)
+        if acquired_launch is None:
+            cli = _trusted_package(package)
+        else:
+            if package.absolute() != acquired_launch.package:
+                raise NativePiUnavailable("Tracked launch differs from its acquired native artifact")
+            cli = acquired_launch.package / "dist" / "cli.js"
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
         _durable_private_session_dir(session_dir)
