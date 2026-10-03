@@ -41,7 +41,7 @@ def main(path: Path) -> None:
         '''        const id = command.id;
         // Reserve synchronously before ANY await: RPC dispatches concurrent lines.
         if (acSummarySlot && !["agent_comms_cancel_summary", "agent_comms_summarize_compaction",
-            "agent_comms_compaction_settings", "get_state"].includes(command.type))
+            "agent_comms_compaction_settings", "agent_comms_prepare_compaction", "get_state"].includes(command.type))
             return error(id, command.type, "Selected summary in flight; mutation denied");
         switch (command.type) {''')
     source = replace_once(source, '''                void session
@@ -64,6 +64,12 @@ def main(path: Path) -> None:
                 if (!acValidCompactionSettingsRequest(command))
                     return error(id, command.type, "Invalid selected compaction settings request");
                 return success(id, command.type, acSelectedCompactionSettings(command, session,
+                    acSummarySlot !== null || acOtherCommandInFlight !== 0));
+            }
+            case "agent_comms_prepare_compaction": {
+                if (!acValidCompactionPreparationRequest(command))
+                    return error(id, command.type, "Invalid selected preparation request");
+                return success(id, command.type, acSelectedCompactionPreparation(command, session,
                     acSummarySlot !== null || acOtherCommandInFlight !== 0));
             }
             case "agent_comms_summarize_compaction": {
@@ -107,7 +113,7 @@ def main(path: Path) -> None:
         try {
             const response = await handleCommand(command);''', '''        const command = parsed;
         const acCountCommand = !["agent_comms_summarize_compaction", "agent_comms_cancel_summary",
-            "agent_comms_compaction_settings", "get_state"].includes(command?.type);
+            "agent_comms_compaction_settings", "agent_comms_prepare_compaction", "get_state"].includes(command?.type);
         if (acCountCommand) acOtherCommandInFlight++;
         try {
             const response = await handleCommand(command);''')

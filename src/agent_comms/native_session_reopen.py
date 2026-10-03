@@ -48,7 +48,7 @@ class NativeSessionIdentity:
             raise ValueError("Native identity differs from owner's canonical session")
 
     @staticmethod
-    def read(package: Path, session_file: str) -> NativeSessionIdentity:
+    def locate(package: Path, session_file: str) -> NativeSessionIdentity:
         """Locate the original header without constructing another history index.
 
         A located identity is not history readiness. The actual native loader

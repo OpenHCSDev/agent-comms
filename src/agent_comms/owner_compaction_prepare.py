@@ -66,6 +66,10 @@ class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
         return self
 
     @abstractmethod
+    def require_source(self, identity: NativeSessionIdentity) -> None:
+        """The cut or skip belongs to the originally acquired saved session."""
+
+    @abstractmethod
     def checked(self, file: Path, revision: FileRevision) -> Self:
         """Bind an observed cutpoint to the already captured native revision."""
 
@@ -83,6 +87,10 @@ class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
 @dataclass(frozen=True)
 class SkipPreparationResult(NativePreparationResult):
     session_id: str = field(metadata={"wire_name": "sessionId"})
+
+    def require_source(self, identity: NativeSessionIdentity) -> None:
+        if self.session_id != identity.session_id:
+            raise NativePreparationError("Skipped preparation source changed")
 
     def checked(self, file: Path, revision: FileRevision) -> Self:
         if not self.session_id:
@@ -107,6 +115,9 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
     def __post_init__(self):
         if not 0 <= self.tokens_before <= 2**53 - 1:
             raise NativePreparationError("Invalid native preparation token count")
+
+    def require_source(self, identity: NativeSessionIdentity) -> None:
+        self.witness.require_same_session(identity)
 
     def checked(self, file: Path, revision: FileRevision) -> NativePreparation:
         if self.witness.session_file != str(file) or self.witness.revision != revision:

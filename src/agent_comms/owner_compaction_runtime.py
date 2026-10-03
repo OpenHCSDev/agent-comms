@@ -18,10 +18,12 @@ from .compaction_source import CompactionSource
 from .compaction_result import CompactionResult, RefusedCompactionResult
 from .coordinator import Coordination
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_prepare import NativePreparation, prepare_native_source
+from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
 from .owner_compaction_settings import PiCompactionDecision
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .selected_pi_route import prepare_selected_native_source
+from .pi_summary_payloads import SelectedModel
 from .threads import Thread
 
 
@@ -93,7 +95,7 @@ async def compact_owner_once(
     summarize: Callable[[NativePreparation, CompactionSource], Awaitable[OwnerSummaryOutcome]],
     *,
     settings: PiCompactionDecision,
-    context_window: int,
+    selected: SelectedModel,
     pending_input_keys: tuple[str, ...] = (),
     settings_paths: tuple[str, ...] | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
@@ -106,25 +108,27 @@ async def compact_owner_once(
     can mutate the saved file. Its next prompt must pass strict fresh reopen.
     The caller may not hide a COMMIT UNKNOWN or trigger a second summary/write.
     """
-    preparation = await Coordination.run_worker(partial(
-        prepare_native_source,
-        bridge.native.package_dir,
-        owner.require_saved_session(),
-        settings=settings,
-        context_window=context_window,
-    ))
+    # The retained idle child owns both preparations. Each supplies its actual
+    # settings/model; captured original facts enter only the second budget.
+    async def prepare(retained_text: str):
+        return await prepare_selected_native_source(
+            persistent, session_file=owner.require_saved_session(),
+            expected_package=bridge.native.package_dir,
+            selected=selected, settings=settings.summary_settings(),
+            retained_text=retained_text,
+        )
+
+    preparation = await prepare("")
 
     async def perform(prepared: NativePreparation) -> CompactionResult:
-        prepared, source = await Coordination.run_worker(partial(
-            bridge.prepare_source,
+        prepared, source = await bridge.prepare_source(
             owner,
             owner_generation,
             prepared=prepared,
-            settings=settings,
-            context_window=context_window,
+            prepare=prepare,
             pending_input_keys=pending_input_keys,
             settings_paths=settings_paths,
-        ))
+        )
         async def at_cut(prepared: NativePreparation) -> CompactionResult:
             if not await settings.boundary_current(source.retained, owner, bridge.registry):
                 return RefusedCompactionResult("Authored subtask boundary changed; optional compaction skipped")

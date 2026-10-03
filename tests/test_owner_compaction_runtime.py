@@ -11,9 +11,7 @@ import pytest
 from agent_comms import owner_compaction_runtime
 from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness
 from agent_comms.owner_compaction_provider import NativeSummary
-from agent_comms.owner_compaction_runtime import compact_owner_once
-from agent_comms.owner_compaction_settings import PiCompactionDecision
-from agent_comms.pi_vocabulary import OverflowCompactionReason
+from agent_comms.owner_compaction_runtime import _commit_native_summary
 from agent_comms.private_path import FileRevision
 
 
@@ -44,28 +42,7 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
         witness,
         1, False,
     )
-    monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
-
     class Bridge:
-        native = SimpleNamespace(package_dir="test-owned-package")
-        @staticmethod
-        def snapshot():
-            pytest.fail("Mandatory compaction read an unused registry snapshot")
-
-        registry = SimpleNamespace(snapshot=snapshot)
-        def require_source_current(self, *_args):
-            pass
-
-        def prepare_source(self, *_args, **_kwargs):
-            return (
-                NativePreparation(
-                    witness,
-                    1,
-                    False,
-                ),
-                SimpleNamespace(retained=None),
-            )
-
         def commit(self, *_args, **_kwargs):
             entered.set()
             assert release.wait(timeout=4), "test release never arrived"
@@ -76,19 +53,11 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
         async def discard_for_external_write(self, *_args):
             pass
 
-    async def synthetic_summary(_metadata, _source):
-        return NativeSummary("synthetic, no provider", None, None)
-
     async def owner():
         async with turn_lock:
-            await compact_owner_once(
-                Bridge(),
-                SimpleNamespace(require_saved_session=lambda: str(saved)),
-                1,
-                Persistent(),
-                synthetic_summary,
-                settings=PiCompactionDecision(16384, 20000, True, False, OverflowCompactionReason, ()),
-                context_window=128000,
+            await _commit_native_summary(
+                Bridge(), SimpleNamespace(), 1, Persistent(), prepared,
+                SimpleNamespace(), NativeSummary("worker lifetime control, no provider", None, None),
             )
 
     task = asyncio.create_task(owner(), name="actual-owner-turn")

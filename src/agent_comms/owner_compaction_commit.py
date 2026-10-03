@@ -27,8 +27,8 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .native_compaction_request import NativeIntent, NativeSummaryPayload
 from .native_compaction_writer import NativeCompactionWriter
 from .native_entries import NativeEvidenceRead
-from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
-from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
+from .owner_compaction_prepare import NativePreparation, NativePreparationResult, NativeWitness
+from .owner_compaction_settings import PiCompactionDecision
 from .pi_summary_payloads import SelectedModel, SummaryDeclinedData, SummaryFiles, SummaryUsage
 from .registration import Registration
 from .reservation_rules import CommitReservationCheck
@@ -140,7 +140,7 @@ class OwnerCompactionCommit:
 
         return await compact_owner_once(
             self, owner, owner_generation, persistent, summarize,
-            settings=settings, context_window=selected.context_window,
+            settings=settings, selected=selected,
             pending_input_keys=pending_input_keys, settings_paths=settings_paths,
             on_admission=on_admission, on_event=on_event,
         )
@@ -166,14 +166,13 @@ class OwnerCompactionCommit:
                 raise CompactionJournalError("Unresolved native commit; reconcile before preparation")
             return held.capture(pending_input_keys, settings_paths)
 
-    def prepare_source(
+    async def prepare_source(
         self,
         owner: Thread,
         owner_generation: int,
         *,
         prepared: NativePreparation,
-        settings: PiCompactionSettings,
-        context_window: int,
+        prepare: Callable[[str], Awaitable[NativePreparationResult]],
         pending_input_keys: tuple[str, ...] = (),
         settings_paths: tuple[str, ...] | None = None,
     ) -> tuple[NativePreparation, CompactionSource]:
@@ -184,23 +183,23 @@ class OwnerCompactionCommit:
         commit: the writer must still CAS against the saved native witness.
         """
         prepared.witness.require_session(owner.require_saved_session())
-        self.reconcile_interrupted_summaries(owner, owner_generation, prepared.witness)
-        source = self.capture_source(
-            owner,
-            owner_generation,
-            prepared.witness,
-            pending_input_keys=pending_input_keys,
-            settings_paths=settings_paths,
-        )
+
+        def capture():
+            self.reconcile_interrupted_summaries(owner, owner_generation, prepared.witness)
+            return self.capture_source(
+                owner, owner_generation, prepared.witness,
+                pending_input_keys=pending_input_keys, settings_paths=settings_paths,
+            )
+
+        source = await Coordination.run_worker(capture)
         # Capture determines the required original facts. Native policy then
         # allocates that exact payload together with its atomic recent suffix;
         # both reads remain tied to the original source revision and leaf.
-        allocated = prepare_native_source(
-            self.native.package_dir, source.native.session_file,
-            settings=settings, context_window=context_window, retained_text=source.retained.text,
-        ).require_ready()
+        allocated = (await prepare(source.retained.text)).require_ready()
         source = source.at_prepared_cut(allocated.witness)
-        self.require_source_current(owner, owner_generation, source)
+        await Coordination.run_worker(partial(
+            self.require_source_current, owner, owner_generation, source
+        ))
         return allocated, source
 
     def require_source_current(self, owner: Thread, owner_generation: int,
