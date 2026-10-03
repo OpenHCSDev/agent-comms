@@ -1,0 +1,75 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_______ test_single_captured_basis_survives_mode_change_during_snapshot ________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1109/test_single_captured_basis_sur0')
+
+    def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
+        comms = populated(tmp_path)
+        comms.messaging.send("alice", "bob", "member DM")
+        original = comms.bus.log._record_snapshot
+        started, finished = Event(), Event()
+    
+        def toggle():
+            started.set()
+            comms.channels.set_channel_any_mode("#api", True)
+            finished.set()
+    
+        @contextmanager
+        def toggle_after_boundary(*, need_sequence=True):
+            with original(need_sequence=need_sequence) as snapshot:
+                writer = WorkerThread(target=toggle, daemon=True)
+                writer.start()  # blocked on the short wire lock until the boundary opens
+                assert started.wait(timeout=3) and not finished.is_set()
+                try:
+                    yield snapshot
+                finally:
+                    writer.join(timeout=3)
+                    assert finished.is_set()
+    
+        with patch.object(comms.bus.log, "_record_snapshot", side_effect=toggle_after_boundary):
+            first = comms.views.viewer_snapshot(str(tmp_path))
+        old = next(view for view in first.channels if view.channel.name == "#api")
+        assert not old.channel.any_mode
+>       assert old.last_activity == 0
+E       AssertionError: assert 1791030664.881624 == 0
+E        +  where 1791030664.881624 = ChannelView(channel=Channel(name='#api', tags=frozenset({'api'}), order=<ThreadSort.CREATED: 'created_at'>, created_at...ew=None), members=('carol', 'alice'), last_activity=1791030664.881624, last_user_input=0.0, pinned_members=frozenset()).last_activity
+
+tests/test_channel_display.py:118: AssertionError
+________ test_alias_retag_and_tag_rename_reproject_without_new_wire_row ________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1109/test_alias_retag_and_tag_renam0')
+
+    def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
+        comms = populated(tmp_path)
+        comms.messaging.send("alice", "bob", "old sender DM")
+        comms.channels.set_channel_any_mode("api", True)
+        high_water = comms.bus.log.latest_sequence()
+        assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
+        initial = {
+            view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+        }
+        assert initial["#api"].last_activity > 0
+    
+        comms.registry.rename("alice", "renamed")
+        assert comms.bus.log.latest_sequence() == high_water
+        assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
+        renamed = comms.registry.require("renamed")
+        comms.registry.register(
+            replace(renamed, tags=frozenset({"ui"})), comms.registry.status("renamed")
+        )
+        assert comms.bus.log.latest_sequence() == high_water
+        assert bodies(comms.views.channel_display_page("#api")) == []
+        after = {
+            view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+        }
+>       assert after["#api"].last_activity < initial["#api"].last_activity
+E       AssertionError: assert 1791030665.0463428 < 1791030665.0032785
+E        +  where 1791030665.0463428 = ChannelView(channel=Channel(name='#api', tags=frozenset({'api'}), order=<ThreadSort.CREATED: 'created_at'>, created_at...rue, view=None), members=('carol',), last_activity=1791030665.0463428, last_user_input=0.0, pinned_members=frozenset()).last_activity
+E        +  and   1791030665.0032785 = ChannelView(channel=Channel(name='#api', tags=frozenset({'api'}), order=<ThreadSort.CREATED: 'created_at'>, created_at...w=None), members=('carol', 'alice'), last_activity=1791030665.0032785, last_user_input=0.0, pinned_members=frozenset()).last_activity
+
+tests/test_channel_display.py:174: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_channel_display.py::test_single_captured_basis_survives_mode_change_during_snapshot
+FAILED tests/test_channel_display.py::test_alias_retag_and_tag_rename_reproject_without_new_wire_row
+2 failed in 0.55s

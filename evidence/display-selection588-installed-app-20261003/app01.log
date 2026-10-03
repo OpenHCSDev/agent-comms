@@ -1,0 +1,436 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=9, pipe_handle=15)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 131, in _main
+    prepare(preparation_data)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 246, in prepare
+    _fixup_main_from_path(data['init_main_from_path'])
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 297, in _fixup_main_from_path
+    main_content = runpy.run_path(main_path,
+                                  run_name="__mp_main__")
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app_irc_dm.py", line 15, in <module>
+    RUN.mkdir(mode=0o700)
+    ~~~~~~~~~^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileExistsError: [Errno 17] File exists: '/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app01'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=9, pipe_handle=17)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 131, in _main
+    prepare(preparation_data)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 246, in prepare
+    _fixup_main_from_path(data['init_main_from_path'])
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 297, in _fixup_main_from_path
+    main_content = runpy.run_path(main_path,
+                                  run_name="__mp_main__")
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app_irc_dm.py", line 15, in <module>
+    RUN.mkdir(mode=0o700)
+    ~~~~~~~~~^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileExistsError: [Errno 17] File exists: '/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app01'
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/session_ │
+│ tabs.py:269 in _tabs_changed                                                 │
+│                                                                              │
+│   266 │   @handles(core_events.OpenTabsChanged)                              │
+│   267 │   async def _tabs_changed(self, event: CoreEventMessage) -> None:    │
+│   268 │   │   if self.screen.is_active:                                      │
+│ ❱ 269 │   │   │   await self._sync_tabs()                                    │
+│   270 │                                                                      │
+│   271 │   async def _sync_tabs(self) -> None:                                │
+│   272 │   │   # Activation and published metadata can request the same catch │
+│                                                                              │
+│ ╭────────── locals ──────────╮                                               │
+│ │ event = CoreEventMessage() │                                               │
+│ │  self = SessionsTabs()     │                                               │
+│ ╰────────────────────────────╯                                               │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/session_ │
+│ tabs.py:276 in _sync_tabs                                                    │
+│                                                                              │
+│   273 │   │   # Serialize the mounted projection, reading the newest tabs af │
+│   274 │   │   # previous mount completes instead of duplicating IDs or losin │
+│   275 │   │   async with self._sync_lock:                                    │
+│ ❱ 276 │   │   │   await self._reconcile_tabs()                               │
+│   277 │                                                                      │
+│   278 │   async def _reconcile_tabs(self) -> None:                           │
+│   279 │   │   if not self.is_attached or not self.screen.is_active:          │
+│                                                                              │
+│ ╭─────── locals ────────╮                                                    │
+│ │ self = SessionsTabs() │                                                    │
+│ ╰───────────────────────╯                                                    │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/session_ │
+│ tabs.py:289 in _reconcile_tabs                                               │
+│                                                                              │
+│   286 │   │   │   │   self.current_session = self.app.selected_mode          │
+│   287 │   │   │   │   self._sync_spinner(tabs)                               │
+│   288 │   │   │   │   return                                                 │
+│ ❱ 289 │   │   │   prepared = await self.app.preparation.submit(TabRosterWork │
+│   290 │   │   │   if not self.is_attached or not self.screen.is_active:      │
+│   291 │   │   │   │   return                                                 │
+│   292 │   │   │   if tabs == self.app.open_tabs:                             │
+│                                                                              │
+│ ╭────────────────── locals ──────────────────╮                               │
+│ │ self = SessionsTabs()                      │                               │
+│ │ tabs = (                                   │                               │
+│ │        │   OpenTab(                        │                               │
+│ │        │   │   mode_name='session-1',      │                               │
+│ │        │   │   title='New Session',        │                               │
+│ │        │   │   unread=ExactUnread(         │                               │
+│ │        │   │   │   count=0                 │                               │
+│ │        │   │   )                           │                               │
+│ │        │   ),                              │                               │
+│ │        │   OpenTab(                        │                               │
+│ │        │   │   mode_name='comms-1',        │                               │
+│ │        │   │   title='#app588',            │                               │
+│ │        │   │   unread=ExactUnread(         │                               │
+│ │        │   │   │   count=0                 │                               │
+│ │        │   │   )                           │                               │
+│ │        │   )                               │                               │
+│ │        )                                   │                               │
+│ ╰────────────────────────────────────────────╯                               │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/work_preparation │
+│ .py:305 in submit                                                            │
+│                                                                              │
+│   302 │   │   │   │   break                                                  │
+│   303 │   │   │   self._changed.clear()                                      │
+│   304 │   │   │   await self._changed.wait()                                 │
+│ ❱ 305 │   │   result = await asyncio.shield(pending)                         │
+│   306 │   │   return cast(ResultT, await self._deliver(key, result))         │
+│   307 │                                                                      │
+│   308 │   async def _deliver(self, key: WorkKey, result: PreparedValue[Resul │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │  cached = None                                                           │ │
+│ │     key = WorkKey(                                                       │ │
+│ │           │   kind=<class 'toad.sidebar_preparation.TabRosterWork'>,     │ │
+│ │           │                                                              │ │
+│ │           revision=b'y\xeb\x02\x1f\xad^\xd0\x9e"\xcc\xfcM\x12Ao\xfa\x10… │ │
+│ │           │   scope=None                                                 │ │
+│ │           )                                                              │ │
+│ │ pending = <Task finished name='prepare-TabRosterWork'                    │ │
+│ │           coro=<PreparationRuntime._execute() done, defined at           │ │
+│ │           /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.a… │ │
+│ │           exception=BrokenProcessPool('A child process terminated        │ │
+│ │           abruptly, the process pool is not usable anymore')>            │ │
+│ │    self = <toad.work_preparation.PreparationRuntime object at            │ │
+│ │           0x7fd3bf21d160>                                                │ │
+│ │    work = TabRosterWork(                                                 │ │
+│ │           │   tabs=(                                                     │ │
+│ │           │   │   OpenTab(                                               │ │
+│ │           │   │   │   mode_name='session-1',                             │ │
+│ │           │   │   │   title='New Session',                               │ │
+│ │           │   │   │   unread=ExactUnread(count=0)                        │ │
+│ │           │   │   ),                                                     │ │
+│ │           │   │   OpenTab(                                               │ │
+│ │           │   │   │   mode_name='comms-1',                               │ │
+│ │           │   │   │   title='#app588',                                   │ │
+│ │           │   │   │   unread=ExactUnread(count=0)                        │ │
+│ │           │   │   )                                                      │ │
+│ │           │   )                                                          │ │
+│ │           )                                                              │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/work_preparation │
+│ .py:318 in _execute                                                          │
+│                                                                              │
+│   315 │   │   return copied                                                  │
+│   316 │                                                                      │
+│   317 │   async def _execute(self, key: WorkKey, work: PreparationWork[Resul │
+│ ❱ 318 │   │   result = await work.execute(self)                              │
+│   319 │   │   prepared = await self.run_thread(work.store_result, result)    │
+│   320 │   │   if work.retain_result:                                         │
+│   321 │   │   │   # Structured source keys retain their immutable metadata t │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │  key = WorkKey(                                                          │ │
+│ │        │   kind=<class 'toad.sidebar_preparation.TabRosterWork'>,        │ │
+│ │        │                                                                 │ │
+│ │        revision=b'y\xeb\x02\x1f\xad^\xd0\x9e"\xcc\xfcM\x12Ao\xfa\x10F\x… │ │
+│ │        │   scope=None                                                    │ │
+│ │        )                                                                 │ │
+│ │ self = <toad.work_preparation.PreparationRuntime object at               │ │
+│ │        0x7fd3bf21d160>                                                   │ │
+│ │ work = TabRosterWork(                                                    │ │
+│ │        │   tabs=(                                                        │ │
+│ │        │   │   OpenTab(                                                  │ │
+│ │        │   │   │   mode_name='session-1',                                │ │
+│ │        │   │   │   title='New Session',                                  │ │
+│ │        │   │   │   unread=ExactUnread(count=0)                           │ │
+│ │        │   │   ),                                                        │ │
+│ │        │   │   OpenTab(                                                  │ │
+│ │        │   │   │   mode_name='comms-1',                                  │ │
+│ │        │   │   │   title='#app588',                                      │ │
+│ │        │   │   │   unread=ExactUnread(count=0)                           │ │
+│ │        │   │   )                                                         │ │
+│ │        │   )                                                             │ │
+│ │        )                                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/work_preparation │
+│ .py:163 in execute                                                           │
+│                                                                              │
+│   160 │   │   """A task admitted by the existing local/persistent renderer." │
+│   161 │                                                                      │
+│   162 │   async def execute(self, runtime: PreparationRuntime) -> ResultT:   │
+│ ❱ 163 │   │   return await runtime.renderer.submit(self.render_task)         │
+│   164                                                                        │
+│   165                                                                        │
+│   166 @dataclass(frozen=True)                                                │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ runtime = <toad.work_preparation.PreparationRuntime object at            │ │
+│ │           0x7fd3bf21d160>                                                │ │
+│ │    self = TabRosterWork(                                                 │ │
+│ │           │   tabs=(                                                     │ │
+│ │           │   │   OpenTab(                                               │ │
+│ │           │   │   │   mode_name='session-1',                             │ │
+│ │           │   │   │   title='New Session',                               │ │
+│ │           │   │   │   unread=ExactUnread(count=0)                        │ │
+│ │           │   │   ),                                                     │ │
+│ │           │   │   OpenTab(                                               │ │
+│ │           │   │   │   mode_name='comms-1',                               │ │
+│ │           │   │   │   title='#app588',                                   │ │
+│ │           │   │   │   unread=ExactUnread(count=0)                        │ │
+│ │           │   │   )                                                      │ │
+│ │           │   )                                                          │ │
+│ │           )                                                              │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/render_processes │
+│ .py:103 in submit                                                            │
+│                                                                              │
+│   100 │                                                                      │
+│   101 │   async def submit(self, task: "RenderTask[Result]") -> Result:      │
+│   102 │   │   """Submit a typed rendering operation to the persistent app-ow │
+│ ❱ 103 │   │   return await task.complete(self.run(task.execute))             │
+│   104 │                                                                      │
+│   105 │   async def aclose(self) -> None:                                    │
+│   106 │   │   """Asynchronously join this pool; safe to call concurrently or │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ self = <toad.render_processes.RenderProcessPool object at                │ │
+│ │        0x7fd3bf21cec0>                                                   │ │
+│ │ task = TabRosterRenderTask(                                              │ │
+│ │        │   tabs=(                                                        │ │
+│ │        │   │   OpenTab(                                                  │ │
+│ │        │   │   │   mode_name='session-1',                                │ │
+│ │        │   │   │   title='New Session',                                  │ │
+│ │        │   │   │   unread=ExactUnread(count=0)                           │ │
+│ │        │   │   ),                                                        │ │
+│ │        │   │   OpenTab(                                                  │ │
+│ │        │   │   │   mode_name='comms-1',                                  │ │
+│ │        │   │   │   title='#app588',                                      │ │
+│ │        │   │   │   unread=ExactUnread(count=0)                           │ │
+│ │        │   │   )                                                         │ │
+│ │        │   )                                                             │ │
+│ │        )                                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/render_backend.p │
+│ y:21 in complete                                                             │
+│                                                                              │
+│   18 class RenderExecution(ABC, Generic[ResultT]):                           │
+│   19 │   async def complete(self, execution: Awaitable[object]) -> ResultT:  │
+│   20 │   │   """Accept the actual completed worker result through this task' │
+│ ❱ 21 │   │   return self.accept_result(await execution)                      │
+│   22 │                                                                       │
+│   23 │   @abstractmethod                                                     │
+│   24 │   def execute(self) -> ResultT:                                       │
+│                                                                              │
+│ ╭──────────────────────────────── locals ────────────────────────────────╮   │
+│ │ execution = <coroutine object RenderProcessPool.run at 0x7fd3be20e740> │   │
+│ │      self = TabRosterRenderTask(                                       │   │
+│ │             │   tabs=(                                                 │   │
+│ │             │   │   OpenTab(                                           │   │
+│ │             │   │   │   mode_name='session-1',                         │   │
+│ │             │   │   │   title='New Session',                           │   │
+│ │             │   │   │   unread=ExactUnread(count=0)                    │   │
+│ │             │   │   ),                                                 │   │
+│ │             │   │   OpenTab(                                           │   │
+│ │             │   │   │   mode_name='comms-1',                           │   │
+│ │             │   │   │   title='#app588',                               │   │
+│ │             │   │   │   unread=ExactUnread(count=0)                    │   │
+│ │             │   │   )                                                  │   │
+│ │             │   )                                                      │   │
+│ │             )                                                          │   │
+│ ╰────────────────────────────────────────────────────────────────────────╯   │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/render_processes │
+│ .py:95 in run                                                                │
+│                                                                              │
+│    92 │   │   # No await between admission and registration: admission is at │
+│    93 │   │   # the owning loop. Waiting never propagates caller cancellatio │
+│    94 │   │   # underlying future (or logs an abandoned exception via shield │
+│ ❱  95 │   │   future = asyncio.wrap_future(self._executor.submit(function, * │
+│    96 │   │   self._pending.add(future)                                      │
+│    97 │   │   future.add_done_callback(self._finished)                       │
+│    98 │   │   await asyncio.wait((future,))                                  │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │     args = ()                                                            │ │
+│ │ function = <bound method TabRosterRenderTask.execute of                  │ │
+│ │            TabRosterRenderTask(tabs=(OpenTab(mode_name='session-1',      │ │
+│ │            title='New Session', unread=ExactUnread(count=0)),            │ │
+│ │            OpenTab(mode_name='comms-1', title='#app588',                 │ │
+│ │            unread=ExactUnread(count=0))))>                               │ │
+│ │     loop = <_UnixSelectorEventLoop running=True closed=False             │ │
+│ │            debug=False>                                                  │ │
+│ │     self = <toad.render_processes.RenderProcessPool object at            │ │
+│ │            0x7fd3bf21cec0>                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3. │
+│ 14/concurrent/futures/process.py:799 in submit                               │
+│                                                                              │
+│   796 │   def submit(self, fn, /, *args, **kwargs):                          │
+│   797 │   │   with self._shutdown_lock:                                      │
+│   798 │   │   │   if self._broken:                                           │
+│ ❱ 799 │   │   │   │   raise BrokenProcessPool(self._broken)                  │
+│   800 │   │   │   if self._shutdown_thread:                                  │
+│   801 │   │   │   │   raise RuntimeError('cannot schedule new futures after  │
+│   802 │   │   │   if _global_shutdown:                                       │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │   args = ()                                                              │ │
+│ │     fn = <bound method TabRosterRenderTask.execute of                    │ │
+│ │          TabRosterRenderTask(tabs=(OpenTab(mode_name='session-1',        │ │
+│ │          title='New Session', unread=ExactUnread(count=0)),              │ │
+│ │          OpenTab(mode_name='comms-1', title='#app588',                   │ │
+│ │          unread=ExactUnread(count=0))))>                                 │ │
+│ │ kwargs = {}                                                              │ │
+│ │   self = <concurrent.futures.process.ProcessPoolExecutor object at       │ │
+│ │          0x7fd3bd24b620>                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+BrokenProcessPool: A child process terminated abruptly, the process pool is not 
+usable anymore
+{"state": "FAIL", "scope": "Installed real App/IRC/DM and canonical private messaging/painted ACK", "publicEffects": 0, "providerCalls": 0, "mockProtocols": 0, "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app01/wire", "rootId": "b3f7475b89e24b5f853e016b2317f4da", "startedAt": 1791033125.5466328, "frames": [], "finishedAt": 1791033189.2301712, "error": "BrokenProcessPool('A child process terminated abruptly, the process pool is not usable anymore')", "privateWorkerPids": []}
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/app.py", line 2220, in run_test
+    yield pilot
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app_irc_dm.py", line 76, in main
+    await channel_target('#app588').open(context)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/navigation_target.py", line 101, in open
+    return await context.app.session_navigation.history(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/session_navigation.py", line 153, in history
+    await self.admit(admission)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/session_navigation.py", line 82, in admit
+    await admission.ready(self)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/session_admission.py", line 144, in ready
+    await sessions.app.workspace_sessions.require(self.mode).wait_content_ready()
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/screens/comms.py", line 226, in wait_content_ready
+    await self._content_ready.wait()
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py", line 213, in wait
+    await fut
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app_irc_dm.py", line 129, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app_irc_dm.py", line 72, in main
+    async with app.run_test(size=(140, 48)) as pilot:
+               ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 235, in __aexit__
+    await self.gen.athrow(value)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/app.py", line 2228, in run_test
+    raise self._exception
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/message_pump.py", line 707, in _process_messages_loop
+    await self._dispatch_message(message)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/message_pump.py", line 790, in _dispatch_message
+    await self._on_message(message)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/message_pump.py", line 880, in _on_message
+    await invoke(method, message)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/_callback.py", line 96, in invoke
+    return await _invoke(callback, *params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/_callback.py", line 58, in _invoke
+    result = await result
+             ^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/core_event_carrier.py", line 122, in on_core_event_message
+    await message.consume(self, message)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/core_event_carrier.py", line 13, in dispatch_publication
+    await receiver.consume_handlers(message, receiver.handlers_for(message.event))
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/core_event_carrier.py", line 63, in consume_handlers
+    await invoke(partial(handler, **kwargs), message, *args)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/_callback.py", line 96, in invoke
+    return await _invoke(callback, *params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/_callback.py", line 58, in _invoke
+    result = await result
+             ^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/session_tabs.py", line 269, in _tabs_changed
+    await self._sync_tabs()
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/session_tabs.py", line 276, in _sync_tabs
+    await self._reconcile_tabs()
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/session_tabs.py", line 289, in _reconcile_tabs
+    prepared = await self.app.preparation.submit(TabRosterWork(tabs))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/work_preparation.py", line 305, in submit
+    result = await asyncio.shield(pending)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/work_preparation.py", line 318, in _execute
+    result = await work.execute(self)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/work_preparation.py", line 163, in execute
+    return await runtime.renderer.submit(self.render_task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/render_processes.py", line 103, in submit
+    return await task.complete(self.run(task.execute))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/render_backend.py", line 21, in complete
+    return self.accept_result(await execution)
+                              ^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/render_processes.py", line 95, in run
+    future = asyncio.wrap_future(self._executor.submit(function, *args), loop=loop)
+                                 ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 799, in submit
+    raise BrokenProcessPool(self._broken)
+concurrent.futures.process.BrokenProcessPool: A child process terminated abruptly, the process pool is not usable anymore

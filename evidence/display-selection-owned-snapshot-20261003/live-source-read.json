@@ -1,0 +1,46 @@
+{
+  "source": "source checkout; actual active bus; no installed/UI acceptance claim",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "viewer": "user",
+  "snapshots": [
+    {
+      "seconds": 2.726868405006826,
+      "rows": 30,
+      "oldest": 485,
+      "newest": 514,
+      "scope": "#openhcs"
+    },
+    {
+      "seconds": 2.686059844971169,
+      "rows": 30,
+      "oldest": 485,
+      "newest": 514,
+      "scope": "#openhcs"
+    },
+    {
+      "seconds": 2.560043172969017,
+      "rows": 30,
+      "oldest": 485,
+      "newest": 514,
+      "scope": "#openhcs"
+    },
+    {
+      "seconds": 2.4852810950251296,
+      "rows": 30,
+      "oldest": 485,
+      "newest": 514,
+      "scope": "#openhcs"
+    },
+    {
+      "seconds": 2.504696618998423,
+      "rows": 30,
+      "oldest": 485,
+      "newest": 514,
+      "scope": "#openhcs"
+    }
+  ],
+  "new_inputs": 0,
+  "provider_calls": 0,
+  "read_acknowledgements": 0,
+  "native_launches": 0
+}
