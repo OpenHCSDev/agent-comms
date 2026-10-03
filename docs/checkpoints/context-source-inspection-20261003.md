@@ -126,3 +126,46 @@ original owners; lexical AST evidence alone does not prove receiver identity.
 At the functional head the batch changes12 production files, adds460 lines and
 deletes35. These counts describe source/API expansion plus replaced decisions;
 they do not claim all architecture debt is eliminated or full request/HTTP proof.
+
+## Recorded root read follow-up
+
+Functional head `4ab53277ad3075978c36d75bbd010de5df169d00` closes serialized
+per-message SDK reads. A root opens one original SDK projection; a fully captured
+message group renders without one. Exact descendant reads keep original child
+coordinates. Mixed groups combine original captured public values with verified
+original journal parts from that single result.
+
+The existing NativeMessages mixin declares which contributor observations
+partition the complete value. ContextSegment defaults to annotations only;
+SegmentManifest delegates through the existing declared family. System/source
+range annotations cannot reconstruct missing complete bodies. The original
+NativeQuery sends only uncaptured complete parts. Native resolution does not
+repeat partition decisions: its recursive recordedMembers route/owner map was
+deleted. One acquired projection provides a temporary value lookup, never a
+retained cache or another source authority.
+
+Against39f89 this changes five production files,92 additions/29 deletions;
+compiled manifest pin changes are separately the immutable2121 artifact witness.
+Existing refactor-audit Package parsed311 production modules at both heads with
+zero omissions; narrowed declaration/caller results are in
+`evidence/context-source-inspection603-root-batch/owner-consumers.json`.
+Lexical resolution does not establish dynamic MRO; the existing NativeMessages
+and ContextSegment hooks were read together. Python query factory, TurnRunner
+reader, NativeContextData verification, SDK request adapter and group resolution
+all consume the same original parts contract.
+
+Final source sanity:13 controls passed, one installed callback control excluded;
+existing Node syntax checks passed. Controls cover one read for1000 original
+messages, no reader for complete captures, mixed original values, strict missing
+bytes/foreign values, annotation incompleteness, child selection and typed query
+roundtrip. No provider or public mutation occurred. Installed SDK root/mixed
+controls are added to the existing native_turn_context_contract driver; they
+remain pending the matching artifact. Sch'sf3/39 compiled package is preserved
+but does not qualify the newly required query.parts payload. No native89 claim.
+Pre-existing capture provenance.some(JSON.stringify) work is a separate source
+relationship; this follow-up does not claim to remove or time it.
+
+Mendel606 owns RetainedNative.inspect/inspect_acquired and EmptyNative.inspect:
+required original preparation and stats publication, then one acquired query.
+BorrowedNative retains its active receiver. Those methods are unchanged here;
+normal whole-head integration will receive606 rather than duplicate its methods.
