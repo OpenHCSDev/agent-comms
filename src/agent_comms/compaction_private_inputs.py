@@ -33,6 +33,7 @@ from .private_path import FileRevision
 from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceRead
     from .fresh_private_session import FreshPrivateSession
 
 # Only a returned COMMIT+fsync enrolls a live creation object; a visible row cannot.
@@ -83,6 +84,7 @@ class PrivateInputs(JournalRole):
         *,
         fresh: FreshPrivateSession | None,
         admission_generation: int | None,
+        native_reader: NativeEvidenceRead | None = None,
     ) -> None:
         """The original private-input owner covers every selected raw input.
 
@@ -118,7 +120,7 @@ class PrivateInputs(JournalRole):
             try:
                 verify_continued_private_session(
                     self.journal.path.parent, session_file, source, raw_ids, inputs,
-                    journal_db=db,
+                    journal_db=db, native_reader=native_reader,
                 )
             except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
                 raise CompactionJournalError(

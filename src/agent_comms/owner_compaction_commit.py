@@ -129,6 +129,7 @@ class OwnerCompactionCommit:
                 tokens_before=prepared.tokens_before,
                 custom_instructions=instructions,
                 future_queue=self.boundary.future_queue,
+                native_reader=self.boundary.native_reader,
                 on_event=on_event, reason=reason,
             )
             attestation.require_registry(self.registry, owner)
