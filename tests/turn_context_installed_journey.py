@@ -11,7 +11,7 @@ from pathlib import Path
 import agent_comms
 
 
-async def configured_terminal(owner, thread, output, receipt):
+async def configured_terminal(owner, thread, output, receipt, marker):
     """One installed stdio ACP attachment on the existing configured SDK fork."""
     from acp import spawn_agent_process
     from acp.schema import TextContentBlock
@@ -23,7 +23,6 @@ async def configured_terminal(owner, thread, output, receipt):
 
     service = owner._comms
     subscriber = Subscriber()
-    marker = '597_CONFIGURED_ORIGINAL_TERMINAL_ONCE'
     text = ('Bounded acceptance only. Do not resume inherited tasks or goals, use tools, '
             f'or change files. Reply exactly {marker}, then stop.')
     started = time.monotonic()
@@ -188,7 +187,8 @@ async def run_configured(options):
         assert thread.name not in owner.turns.persistent_backends
 
         if options.terminal_only:
-            token, child = await configured_terminal(owner, thread, output, receipt)
+            token, child = await configured_terminal(owner, thread, output, receipt,
+                                                     options.terminal_marker)
             stored = InputDispositions(service.root / InputDispositions.filename).read()
             original, = stored.rows.values()
             assert original.has_started
@@ -458,6 +458,7 @@ if __name__ == "__main__":
     parser.add_argument('--configured-source-name', default='nra-architecture')
     parser.add_argument('--context-only', action='store_true')
     parser.add_argument('--terminal-only', action='store_true')
+    parser.add_argument('--terminal-marker', default='597_CONFIGURED_ORIGINAL_TERMINAL_ONCE')
     parser.add_argument('--complete-goal-controls', action='store_true')
     parser.add_argument('--complete-history-controls', action='store_true')
     journey = parser.add_mutually_exclusive_group()

@@ -1,0 +1,241 @@
+{"source_head": "1b09822cb7f6bac41150217f0ed552d585f697dc", "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python", "installed": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms", "source_file_count": 311, "files_byte_equal": true, "wheel_sha256": "b6522f006837cacb96abf377e738e4e1e9b23d6f72fde7dc7471e72dd4a30dc5"}
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 34 items
+
+tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin] PASSED [  2%]
+tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare] PASSED [  5%]
+tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[reserve] PASSED [  8%]
+tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[receipt_capture] PASSED [ 11%]
+tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[goal_retirement] PASSED [ 14%]
+tests/test_turn_goal_account.py::test_cancelled_acquisition_joins_reserved_input_before_rollback[False] PASSED [ 17%]
+tests/test_turn_goal_account.py::test_cancelled_acquisition_joins_reserved_input_before_rollback[True] PASSED [ 20%]
+tests/test_atomic_turn_source_owner.py::test_begin_callback_and_native_attachment_share_original_owner PASSED [ 23%]
+tests/test_atomic_turn_source_owner.py::test_source_attachment_refuses_replaced_original_owner[same-turn-id] PASSED [ 26%]
+tests/test_atomic_turn_source_owner.py::test_source_attachment_refuses_replaced_original_owner[new-admission] PASSED [ 29%]
+tests/test_acp_queue_contract.py::test_queue_exact_ids_restore_snapshot_and_admission_change PASSED [ 32%]
+tests/test_acp_queue_contract.py::test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable PASSED [ 35%]
+tests/test_acp_queue_contract.py::test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay PASSED [ 38%]
+tests/test_acp_queue_contract.py::test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue[user_text0] PASSED [ 41%]
+tests/test_acp_queue_contract.py::test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue[user_text1] PASSED [ 44%]
+tests/test_acp_queue_contract.py::test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue[user_text2] PASSED [ 47%]
+tests/test_acp_queue_contract.py::test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue[7] PASSED [ 50%]
+tests/test_acp_queue_contract.py::test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue[False] PASSED [ 52%]
+tests/test_acp_queue_contract.py::test_unavailable_projection_never_drops_or_replays_owned_rows[rows0] PASSED [ 55%]
+tests/test_acp_queue_contract.py::test_unavailable_projection_never_drops_or_replays_owned_rows[rows1] PASSED [ 58%]
+tests/test_acp_queue_contract.py::test_unavailable_projection_never_drops_or_replays_owned_rows[rows2] PASSED [ 61%]
+tests/test_acp_queue_contract.py::test_alias_maps_only_attachment_session_id PASSED [ 64%]
+tests/test_acp_queue_contract.py::test_attachment_routing_rename_preserves_exact_executor_fences PASSED [ 67%]
+tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling ERROR [ 70%]
+tests/test_runtime_goal_snapshot.py::test_goal_actions_check_revision_and_preserve_owner_pause ERROR [ 73%]
+tests/test_runtime_goal_snapshot.py::test_goal_update_cannot_bypass_blocked_retry_or_replace_owner ERROR [ 76%]
+tests/test_runtime_goal_snapshot.py::test_goal_update_rechecks_snapshot_inside_write_lock ERROR [ 79%]
+tests/test_goal_ui_creation.py::test_ui_set_goal_creates_ledger_before_reporting_success FAILED [ 82%]
+tests/test_goal_ui_creation.py::test_explicit_retry_cannot_invent_missing_launch_authority FAILED [ 85%]
+tests/test_runtime_owned_session_admission.py::test_cli_registration_refuses_unbound_then_uses_original_owned_session PASSED [ 88%]
+tests/test_wake_lifetime.py::test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private PASSED [ 91%]
+tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[shutdown] ERROR [ 94%]
+tests/test_child_process.py::test_repeated_cancellation_joins_real_tree_before_return[run] PASSED [ 97%]
+tests/test_child_process.py::test_repeated_cancellation_joins_real_tree_before_return[session] PASSED [100%]
+
+==================================== ERRORS ====================================
+_ ERROR at setup of test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling _
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_goal_snapshot_reads_curre0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c9ef000>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...st_goal_snapshot_reads_current_pair_without_mutation_or_scheduling (setup)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_goal_actions_check_revision_and_preserve_owner_pause __
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_goal_actions_check_revisi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c835780>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...shot.py::test_goal_actions_check_revision_and_preserve_owner_pause (setup)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_goal_update_cannot_bypass_blocked_retry_or_replace_owner _
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_goal_update_cannot_bypass0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c887e00>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'....py::test_goal_update_cannot_bypass_blocked_retry_or_replace_owner (setup)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ ERROR at setup of test_goal_update_rechecks_snapshot_inside_write_lock ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_goal_update_rechecks_snap0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c8877e0>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'..._snapshot.py::test_goal_update_rechecks_snapshot_inside_write_lock (setup)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[shutdown] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_uncertain_or_changed_inpu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c90d470>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.registry.declare(
+            Thread(
+                "owner",
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, admission_generation = comms.registry.live_owner_with_generation("owner")
+        current, admission_generation = comms.registry.lease_live_turn_with_generation(
+            current, "turn", expected_owner_generation=admission_generation
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+>       agent.turns.active_turns["owner"] = "turn"
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'TurnRunner' object has no attribute 'active_turns'. Did you mean: 'acquire_turn'?
+
+tests/test_input_drain.py:53: AttributeError
+=================================== FAILURES ===================================
+___________ test_ui_set_goal_creates_ledger_before_reporting_success ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_ui_set_goal_creates_ledge0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c8e22e0>
+
+    async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:47: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:31: in _owner
+    owner = canonical_agent(
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...n.py::test_ui_set_goal_creates_ledger_before_reporting_success (call)', 'AGENT_COMMS_AGENT_MODELS': 'openrouter/fake'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+__________ test_explicit_retry_cannot_invent_missing_launch_authority __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-controls11/test_explicit_retry_cannot_inv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f918c8e38c0>
+
+    async def test_explicit_retry_cannot_invent_missing_launch_authority(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:31: in _owner
+    owner = canonical_agent(
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...py::test_explicit_retry_cannot_invent_missing_launch_authority (call)', 'AGENT_COMMS_AGENT_MODELS': 'openrouter/fake'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_goal_ui_creation.py::test_ui_set_goal_creates_ledger_before_reporting_success - KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+FAILED tests/test_goal_ui_creation.py::test_explicit_retry_cannot_invent_missing_launch_authority - KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling - KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_actions_check_revision_and_preserve_owner_pause - KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_update_cannot_bypass_blocked_retry_or_replace_owner - KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_update_rechecks_snapshot_inside_write_lock - KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[shutdown] - AttributeError: 'TurnRunner' object has no attribute 'active_turns'. Did you mean: 'acquire_turn'?
+=================== 2 failed, 27 passed, 5 errors in 10.65s ====================

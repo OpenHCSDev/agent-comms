@@ -121,7 +121,7 @@ class TurnRunner:
         self.persistent_backends: dict[str, backend.PersistentPiSession] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
         self.emitted_errors: dict[str, ACPFailure] = {}
-        self.goals = GoalScheduler(comms, effects, self.session_busy)
+        self.goals = GoalScheduler(comms, effects)
         self.reply_window = (
             reply_window
             if reply_window is not None
@@ -165,7 +165,7 @@ class TurnRunner:
         name = self.sessions.bindings.get(session_id)
         if name is None:
             return
-        thread = self.comms.registry.require(name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         lease = thread.turn_lease
         if lease is None:
             return
@@ -179,14 +179,15 @@ class TurnRunner:
 
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
+        environment = await Coordination.run_worker(lambda: thread.native_environment(
+            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        ))
         state = await NativeSessionPreparation.open(
             self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),
             self.agent_bin,
             self.native_arguments(thread),
             worktree=thread.worktree,
-            environment=thread.native_environment(
-                self.comms.root, self.comms.registry.snapshot(), thread.worktree
-            ),
+            environment=environment,
             session_file=thread.session_file,
         )
         state.model.require_selection(thread.model)
@@ -221,7 +222,7 @@ class TurnRunner:
         self.turn_tasks[session_id] = turn_task
         try:
             thread_name = await self.sessions.sync_identity(session_id)
-            self.comms.registry.require(thread_name)
+            await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
             text = self.effects._prompt_text(prompt)
             images = self.effects._prompt_images(prompt)
             agent_task: str | None = None
@@ -311,7 +312,7 @@ class TurnRunner:
                     break
                 continue
             # No reply yet: keep waiting while a peer is on it.
-            peer_progress = self.peer_progress(thread_name, sent_seq)
+            peer_progress = await Coordination.run_worker(partial(self.peer_progress, thread_name, sent_seq))
             idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
             if idle_for >= IDLE_GRACE and waited >= self.no_reply_window:
                 break
@@ -338,15 +339,17 @@ class TurnRunner:
             await self.sessions.proxies[session_id].request("cancel")
             return
         name = self.sessions.bindings.get(session_id)
-        if name and (goal := self.comms.registry.require(name).goal) and goal.state.active:
-            self.comms.goals.update_goal(
-                name,
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
+        if thread is not None and (goal := thread.goal) and goal.state.active:
+            await Coordination.run_worker(partial(
+                self.comms.goals.update_goal, name,
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,
-            )
+            ))
         task = self.turn_tasks.get(session_id)
         if task is not None:
-            lease = self.comms.registry.require(name).turn_lease if name is not None else None
+            current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
+            lease = current.turn_lease if current is not None else None
             if lease is not None:
                 await self.transition_turn(session_id, lease, CancellingPhase())
             task.cancel()
@@ -368,7 +371,7 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        if not self.owns_turn(session_id, turn_id) or controller is None:
+        if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
         if permission is None:
@@ -406,7 +409,7 @@ class TurnRunner:
             # An ACP controller exception is denial, never a raw error in Pi
             # RPC/model output or a reason to resend an uncertain MCP call.
             return pi.CancelledUiChoice()
-        if not self.owns_turn(session_id, turn_id):
+        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         if isinstance(controller, SocketClient) and not self.runtime.is_controller(
             session_id, controller
@@ -470,15 +473,15 @@ class TurnRunner:
         return TurnTranscriptUpdate(state=self.turn_state(session_id))
 
     async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
-        await self.effects._emit_event(session_id, self.current_turn_update(session_id), client=client)
+        update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
+        await self.effects._emit_event(session_id, update, client=client)
 
-    def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
-        return (
-            self.inputs.backend_inboxes.get(session_id) if self.turn_state(session_id).accepts_followup else None
-        )
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
+        state = await Coordination.run_worker(partial(self.turn_state, session_id))
+        return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
     async def close_idle_backend(self, session_id: str) -> None:
-        if not self.session_busy(session_id) and (
+        if not await Coordination.run_worker(partial(self.session_busy, session_id)) and (
             persistent := self.persistent_backends.get(session_id)
         ):
             await persistent.close_idle()

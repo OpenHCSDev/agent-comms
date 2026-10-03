@@ -1,0 +1,518 @@
+{
+  "parsed": 12,
+  "declared_files": [
+    "src/agent_comms/input_disposition.py",
+    "src/agent_comms/turn_input_source.py",
+    "src/agent_comms/channel_input_batch.py",
+    "src/agent_comms/owned_turn.py",
+    "src/agent_comms/input_attempt.py",
+    "src/agent_comms/locked_store.py",
+    "src/agent_comms/queued_input.py",
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/agent_event_updates.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/session_lifecycle.py"
+  ],
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 74,
+      "node": "FunctionDef",
+      "name": "record"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 78,
+      "node": "FunctionDef",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 228,
+      "node": "FunctionDef",
+      "name": "record"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 238,
+      "node": "FunctionDef",
+      "name": "reserve_turn"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 301,
+      "node": "FunctionDef",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 246,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 259,
+      "node": "FunctionDef",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 253,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 253,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 267,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 267,
+      "node": "Name",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 293,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 315,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 348,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 247,
+      "node": "Attribute",
+      "name": "record"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 250,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 254,
+      "node": "Attribute",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "node": "Attribute",
+      "name": "record"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 309,
+      "node": "Attribute",
+      "name": "finish_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 364,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 131,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 142,
+      "node": "Attribute",
+      "name": "reserve_turn"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 20,
+      "node": "Name",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 42,
+      "node": "Name",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 42,
+      "node": "Attribute",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 43,
+      "node": "Name",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 53,
+      "node": "Name",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 28,
+      "node": "Attribute",
+      "name": "originals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 245,
+      "node": "FunctionDef",
+      "name": "reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 486,
+      "node": "FunctionDef",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 191,
+      "node": "Attribute",
+      "name": "reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 302,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 130,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 275,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 339,
+      "node": "Attribute",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 489,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 502,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 508,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 168,
+      "node": "Attribute",
+      "name": "record"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 103,
+      "node": "FunctionDef",
+      "name": "finish_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 270,
+      "node": "FunctionDef",
+      "name": "finish_unbound"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 84,
+      "node": "FunctionDef",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 119,
+      "node": "Attribute",
+      "name": "record"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 543,
+      "node": "FunctionDef",
+      "name": "finish_original_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 215,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 547,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 572,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 560,
+      "node": "Attribute",
+      "name": "finish_original_inputs"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 224,
+      "node": "AsyncFunctionDef",
+      "name": "on_done"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 378,
+      "node": "FunctionDef",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 194,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 198,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 103,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 139,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 175,
+      "node": "Attribute",
+      "name": "update"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 119,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 347,
+      "node": "FunctionDef",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 87,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 348,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 46,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 71,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 76,
+      "node": "Name",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 239,
+      "node": "AsyncFunctionDef",
+      "name": "sync_identity"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 284,
+      "node": "FunctionDef",
+      "name": "configuration_updates"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 310,
+      "node": "AsyncFunctionDef",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 224,
+      "node": "Name",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 312,
+      "node": "Attribute",
+      "name": "configuration_updates"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 187,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 199,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 236,
+      "node": "Name",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 247,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 235,
+      "node": "Name",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 236,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 338,
+      "node": "Attribute",
+      "name": "status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 260,
+      "node": "Attribute",
+      "name": "metadata"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 269,
+      "node": "Attribute",
+      "name": "metadata"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -22,6 +23,7 @@ from .messages import Message
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .channel_input_batch import SingleInputBatch
     from .registry_document import RegistrySnapshot
     from .input_origin import InputProvenance
     from .selected_source import SelectedSource
@@ -68,6 +70,10 @@ class InputDocument:
 
     def lookup(self, key: str | None) -> InputAttempt:
         return self.rows.get(key, MissingInput())
+
+    def record(self, row: ReservedInput) -> InputDocument:
+        """An existing original cannot be replaced by another reservation."""
+        return self if row.key in self.rows else replace(self, rows={**self.rows, row.key: row})
 
     def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:
         """Capture ordered originals from their sole durable declaration owner."""
@@ -221,31 +227,37 @@ class InputDispositions(LockedStore[InputDocument]):
 
     def record(
         self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
-        origin: InputOrigin = UnattributedInputOrigin(),
+        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
     ) -> bool:
-        """Return acceptance only after the reservation and directory are fsynced."""
+        """Enlist supplied reservation custody before publishing acceptance."""
         row = ReservedInput(key, seq, owner, admission, target, text,
                             origin=origin)
-        recorded = False
+        def reserve(original: InputDocument) -> InputDocument:
+            changed = original.record(row)
+            if changed is not original and custody is not None:
+                custody.callback(self.settle_unbound, (row.key,))
+            return changed
 
-        def change(document: InputDocument) -> InputDocument:
-            nonlocal recorded
-            if key in document.rows:
-                return document
-            recorded = True
-            return replace(document, rows={**document.rows, key: row})
+        document = self.update(reserve)
+        return document.rows[key] is row
 
-        self.update(change)
-        return recorded
+    def reserve_turn(
+        self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
+    ) -> SingleInputBatch:
+        """Enlist rollback before publication; caller retains the original wire scope."""
+        from .channel_input_batch import SingleInputBatch
 
-    def reserve_turn(self, owner: str, turn: TurnId, admission: int, text: str) -> str:
-        """Reserve one original with no external ingress in the existing input store."""
-        key = f"turn:{turn.value}"
-        if not self.record(
-            key, seq=None, owner=owner, admission=admission, target=owner, text=text
-        ):
-            raise RelationViolationError("Original turn input was already reserved")
-        return key
+        row = ReservedInput(f"turn:{turn.value}", None, owner, admission, owner, text)
+
+        def reserve(document: InputDocument) -> InputDocument:
+            changed = document.record(row)
+            if changed is document:
+                raise RelationViolationError("Original turn input was already reserved")
+            custody.callback(self.settle_unbound, (row.key,))
+            return changed
+
+        document = self.update(reserve)
+        return SingleInputBatch(document.originals((row.key,)))
 
     def _transition(self, key: str, change) -> bool:
         changed = False

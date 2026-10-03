@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from .coordinator import Coordination
 
 from .backend import PersistentPiSession
 from .compaction_records import SelectedSummaryAttempt
@@ -49,7 +50,7 @@ async def compact_manual_owner(
         raise ValueError(
             "Canonical manual compaction requires the prepared selected native session"
         )
-    snapshot = runner.comms.registry.snapshot()
+    snapshot = await Coordination.run_worker(runner.comms.registry.snapshot)
     captured = RegistryOwner.capture(snapshot, thread_name, "Manual compaction owner changed")
     owner = captured.thread
     turn = captured.require_active_turn()

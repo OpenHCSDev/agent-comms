@@ -155,7 +155,7 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
     elif change == "promote":
         await agent.prompt("owner", [], _meta=encode_request(SendNowRequest()))
     elif change == "shutdown":
-        await agent.inputs.stop_wakes()
+        await agent.inputs.close()
     elif change == "lost_owner":
         bridge.boundary = replace(bridge.boundary, future_queue=CommsAgent(agent._comms).inputs)
     elif change in {"changed_queue", "deleted_queue"}:

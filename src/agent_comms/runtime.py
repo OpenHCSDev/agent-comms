@@ -6,6 +6,9 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 
 from __future__ import annotations
 
+from functools import partial
+from .coordinator import Coordination
+
 import asyncio
 import json
 import os
@@ -244,7 +247,7 @@ class RuntimeServer:
         session_id = None
         try:
             request = RuntimeRequest.from_wire(json.loads(await reader.readline()))
-            context = request.bind(self, reader, client)
+            context = await request.bind(self, reader, client)
             session_id = context.session_id
             await request.apply(context)
         except (Exception, asyncio.CancelledError) as error:
@@ -324,7 +327,7 @@ class RuntimeConnection:
     async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         # Startup has no elapsed-time expiry. The registered process and lease
         # own its lifetime; caller cancellation also ends this unsent operation.
-        snapshot = self._owner_snapshot()
+        snapshot = await Coordination.run_worker(self._owner_snapshot)
         try:
             process = snapshot.require_active(self.session_id).require_process()
         except RelationViolationError as error:
@@ -333,7 +336,7 @@ class RuntimeConnection:
         path = socket_path(self._comms.root, process.pid)
 
         while True:
-            self._require_connect_owner(owner, process)
+            await Coordination.run_worker(partial(self._require_connect_owner, owner, process))
             try:
                 with PrivateSocketRole.address(path) as address:
                     reader, writer = await asyncio.open_unix_connection(address, limit=8 * 1024 * 1024)
@@ -341,7 +344,7 @@ class RuntimeConnection:
                 await asyncio.sleep(0.05)
                 continue
             try:
-                self._require_connect_owner(owner, process)
+                await Coordination.run_worker(partial(self._require_connect_owner, owner, process))
                 self.path = path
                 return reader, writer
             except BaseException:

@@ -11,6 +11,8 @@ import asyncio
 import json
 import os
 from abc import abstractmethod
+from functools import partial
+from .coordinator import Coordination
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Self
 
@@ -61,15 +63,19 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         # The owner decodes once; proxies preserve the owner's error envelope.
         return {"action": cls.declared_name, "thread": thread, **parameters}
 
-    def bind(
+    def require_owner(self, snapshot):
+        owner = snapshot.require(self.thread)
+        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
+            raise RuntimeError("This process no longer owns the thread.")
+        return owner
+
+    async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
     ) -> RuntimeRequestContext:
-        owner = server.agent._comms.registry.require(self.thread)
-        name = owner.name
-        if owner.pid != os.getpid() or not server.agent._comms.registry.status(name).running:
-            raise RuntimeError("This process no longer owns the thread.")
-        session_id = server.agent.sessions.require_owned_session(owner)
-        return RuntimeRequestContext(server, reader, client, session_id, name)
+        snapshot = await Coordination.run_worker(server.agent._comms.registry.snapshot)
+        owner = self.require_owner(snapshot)
+        session_id = server.agent.sessions.require_owned_session(owner, snapshot)
+        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
 
 
 class ResultRuntimeRequest(RuntimeRequest):
@@ -110,12 +116,13 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
         snapshot.require_owner_process(self.binding.owner, self.binding.process)
         return snapshot.require_active(self.binding.owner.incarnation.name)
 
-    def bind(self, server, reader, client):
-        self.require_original(server.agent._comms.registry.snapshot())
-        return super().bind(server, reader, client)
+    def require_owner(self, snapshot):
+        self.require_original(snapshot)
+        return super().require_owner(snapshot)
 
     async def result(self, ctx):
-        current = self.require_original(ctx.server.agent._comms.registry.snapshot())
+        snapshot = await Coordination.run_worker(ctx.server.agent._comms.registry.snapshot)
+        current = self.require_original(snapshot)
         return {"worktree": current.worktree}
 
 
@@ -226,19 +233,19 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        return ctx.server.agent._comms.goals.input_delivery(
+        return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
-            awaiting_keys=ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
-        )
+            awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
+        ))
 
 
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        result = ctx.server.agent._comms.goals.dismiss_historical_inputs(
-            ctx.name, awaiting_keys=ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
-        )
+        result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
+            ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
+        ))
         await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
         return result
 
@@ -248,7 +255,9 @@ class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        history = ctx.server.agent._comms.goals.goal_history(ctx.name, goal_id=self.goal_id)
+        history = await Coordination.run_worker(partial(
+            ctx.server.agent._comms.goals.goal_history, ctx.name, goal_id=self.goal_id,
+        ))
         return {"history": [row.to_wire() for row in history]}
 
 
@@ -259,11 +268,15 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         from .acp_extension import TurnChangedUpdate, encode_updates
         await self.change(ctx)
-        goal, execution = ctx.server.agent._comms.goals.goal_snapshot(ctx.name)
+        goal, execution = await Coordination.run_worker(partial(
+            ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
+        ))
         return {
             "goal": goal.to_wire() if goal is not None else None,
             "goalExecution": asdict(execution) if execution is not None else None,
-            "_meta": encode_updates(TurnChangedUpdate(ctx.server.agent.turns.turn_state(ctx.session_id))),
+            "_meta": encode_updates(TurnChangedUpdate(await Coordination.run_worker(partial(
+                ctx.server.agent.turns.turn_state, ctx.session_id,
+            )))),
         }
 
 
@@ -327,9 +340,6 @@ class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class ContextRuntimeRequest(ResultRuntimeRequest):
     async def inspect(self, ctx):
-        from functools import partial
-        from .coordinator import Coordination
-
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
         context = await agent.turns.inspect_context(ctx.session_id, owner)
@@ -348,9 +358,6 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
     source: Provenance
 
     async def result(self, ctx):
-        from functools import partial
-        from .coordinator import Coordination
-
         context = await self.inspect(ctx)
         text = await Coordination.run_worker(partial(
             context.public_source_text, ctx.server.agent._comms,
@@ -371,9 +378,6 @@ class RecordedContextRuntimeRequest(ResultRuntimeRequest):
         return ContextManifest.for_request(history, self.turn, self.request_id)
 
     async def manifest(self, ctx):
-        from functools import partial
-        from .coordinator import Coordination
-
         return await Coordination.run_worker(partial(self.read_manifest, ctx))
 
 
@@ -382,9 +386,6 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
     source: Provenance
 
     async def result(self, ctx):
-        from functools import partial
-        from .coordinator import Coordination
-
         manifest = await self.manifest(ctx)
         text = await Coordination.run_worker(partial(
             manifest.public_source_text, ctx.server.agent._comms, self.segment, self.source,
@@ -395,9 +396,6 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
     async def result(self, ctx):
-        from functools import partial
-        from .coordinator import Coordination
-
         manifest = await self.manifest(ctx)
         if not 0 <= self.segment < len(manifest.segments):
             raise ValueError("Original request has no selected segment")
