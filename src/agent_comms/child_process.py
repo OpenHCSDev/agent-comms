@@ -1433,6 +1433,20 @@ class ChildCommand(DeclaredFamily, affix="Command"):
 
 
 @dataclass(frozen=True)
+class ControllingTerminalCommand(ChildCommand):
+    """Acquire stdin's PTY after exec, inside the acquired child's new session."""
+
+    command: tuple[str, ...]
+
+    def run(self) -> None:
+        import fcntl
+        import termios
+
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        os.execvpe(self.command[0], self.command, os.environ)
+
+
+@dataclass(frozen=True)
 class NamespaceInitCommand(ChildCommand):
     launch: NamespaceLaunch
     ready_fd: int
