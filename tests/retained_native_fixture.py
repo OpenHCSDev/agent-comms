@@ -10,10 +10,10 @@ from typing import Annotated
 
 from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
+from agent_comms.compaction_records import CompactionOperation, NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.input_disposition import InputDocument
-from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead
+from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 
@@ -227,6 +227,37 @@ class RecordedNativeCheckpoint:
                 **measured}
 
 
+    def scoped_facts(self, attempt):
+        """Read original captured configuration and scoped Decision publications."""
+        if self.registry_scope is None or self.wire is None:
+            return {"evaluated": False, "reason": "Original scope/publications unavailable",
+                    "configured_settings": {"evaluated": False}}
+        snapshot = self.read_record(self.registry_scope, RegistryDocument).snapshot()
+        owner = snapshot.require_active(attempt.request.source.incarnation.name)
+        if attempt.request.source.incarnation.resolved(snapshot) != owner.incarnation:
+            raise ValueError("Action evidence belongs to another original owner")
+        retained = attempt.request.retained
+        roots = {message.reference for fact in retained.facts
+                 if isinstance(fact, DecisionTaskFact) for message in fact.authored_sources()}
+        declarations = tuple((root, message) for root, message in
+                             retained.current_authored_lineages(owner, snapshot)
+                             if root.reference in roots)
+        with WireLog(self.wire).certified_read() as source:
+            for root, message in declarations:
+                for original in (root, message):
+                    delivery, = source.references((original.reference,))
+                    if delivery.message != original:
+                        raise ValueError("Decision differs from its original publication")
+        return {"evaluated": True, "scope": "Original scoped Decision alternatives only",
+                "configured_settings": {"evaluated": owner.model is not None and owner.thinking_level is not None,
+                                        "model": owner.model, "thinking": FieldCodec.encode(owner.thinking_level),
+                                        "scope": "Captured registry configuration, not provider-reported request selection"},
+                "decisions": tuple({"lineage": root.reference,
+                                    "current": message.reference,
+                                    "declaration": message.task.require_decision()}
+                                   for root, message in declarations)}
+
+
 @dataclass(frozen=True)
 class RecordedNativeProbe:
     """One original probe and answer; tool-assisted answers are labelled separately."""
@@ -241,6 +272,8 @@ class RecordedNativeProbe:
     context_manifest: FileProvenance | None = None
     sdk_segment_bytes: FileProvenance | None = None
     submitted_inputs: FileProvenance | None = None
+    # Controls without a summary still need the SDK's original fork record.
+    fork_journal: Annotated[Path, PathText] | None = None
 
     def submitted_prompt(self, user):
         """Bind an original submitted source to its exact recorded native write.
@@ -292,11 +325,10 @@ class RecordedNativeProbe:
                             if isinstance(provenance, NativeProvenance))
         return source
 
-    def prompt_presence(self, context, retained, data):
-        """Measure a recorded SDK payload, never reconstruct a provider prompt."""
+    def request_manifest(self, context, data):
+        """One original request relation serves presence and construction."""
         if data is None or self.context_manifest is None:
-            return {"evaluated": False,
-                    "reason": "Original SDK payload and matching context manifest not supplied"}
+            return None
         manifest = RecordedNativeCheckpoint.read_record(self.context_manifest, ContextManifest)
         if (data.counter != manifest.counter
                 or tuple(segment.measured_manifest() for segment in data.segments) != manifest.segments):
@@ -306,6 +338,13 @@ class RecordedNativeProbe:
         source = NativeProvenance(self.session, context.request_generation, context.llm_context_digest)
         if not data.segments or any(source not in segment.provenance for segment in data.segments):
             raise ValueError("Recorded SDK context is not this original probe request")
+        return manifest
+
+    def prompt_presence(self, retained, data, manifest):
+        """Measure a recorded SDK payload, never reconstruct a provider prompt."""
+        if manifest is None:
+            return {"evaluated": False,
+                    "reason": "Original SDK payload and matching context manifest not supplied"}
         if self.sdk_segment_bytes is None:
             return {"evaluated": False,
                     "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"}
@@ -326,7 +365,7 @@ class RecordedNativeProbe:
         present = any(envelope in text for text in texts)
         return {"evaluated": True, "stage": "recorded SDK provider input",
                 "final_transport_evaluated": False,
-                "context_digest": context.llm_context_digest,
+                "context_digest": self.sdk_request(data).context_digest,
                 "required": len(retained.facts),
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
@@ -334,6 +373,33 @@ class RecordedNativeProbe:
     def observe(self):
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
+
+    def construction(self, evidence, user, manifest):
+        """Read construction facts without inferring a policy from a label."""
+        journal = self.checkpoint.journal if self.checkpoint is not None else self.fork_journal
+        fork = None
+        if journal is not None:
+            fork = CompactionJournal.observe_readonly(journal, lambda db:
+                NativeForkCreation.one(db, session_file=self.session.session_file), absent=None)
+            if fork is not None:
+                fork.require_same_session(self.session)
+                fork.covered_prefix(evidence, evidence.entries)
+        branch = evidence.branch(user.id, evidence.entries)
+        models = tuple(entry for entry in branch if entry.model_choice is not None)
+        thinking = tuple(entry for entry in branch if isinstance(entry, ThinkingLevelChangeEntry))
+        return {
+            "fork": FieldCodec.encode(fork),
+            "journal_settings": {
+                "evaluated": bool(models and thinking),
+                "model": models[-1].model_choice if models else None,
+                "thinking": FieldCodec.encode(thinking[-1].thinking_level) if thinking else None,
+                "original_entries": tuple(entry.id for entry in models[-1:] + thinking[-1:]),
+                "scope": "Historical branch metadata; not current request selection",
+            },
+            "sdk_manifest": FieldCodec.encode(manifest),
+            "condition_evaluated": False,
+            "reason": "SDK assembly is recorded; a label does not prove full-history or truncation policy",
+        }
 
     @staticmethod
     def model_steps(branch):
@@ -366,6 +432,7 @@ class RecordedNativeProbe:
         ))
         _, entries = evidence.observe()
         user, = (row for row in entries if row.id == context.session_entry_id)
+        manifest = self.request_manifest(context, data)
         answer, = (row for row in entries if row.id == self.answer_entry_id)
         if not isinstance(answer, MessageEntry) or not answer.final_reply:
             raise ValueError("Recorded recall answer is not a successful native terminal")
@@ -378,10 +445,13 @@ class RecordedNativeProbe:
             attempt, entry, covered = self.checkpoint.capture(self.session, evidence)
             checkpoint = self.checkpoint._report(attempt, entry, covered)
             retained = attempt.request.retained
+            scoped = self.checkpoint.scoped_facts(attempt)
             if user.parent_id != checkpoint["native_entry_id"]:
                 raise ValueError("Recorded probe must immediately follow its original checkpoint")
         else:
             retained = None
+            scoped = {"evaluated": False, "reason": "No original scoped checkpoint",
+                      "configured_settings": {"evaluated": False}}
             checkpoint = {
                 "applicable": False, "reason": "No compaction checkpoint declared for this control",
                 "canonical_availability": {
@@ -401,6 +471,8 @@ class RecordedNativeProbe:
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
+            "construction": self.construction(evidence, user, manifest),
+            "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(calls), "tools": tuple(call.name for call in calls),
                 "unassisted_recall": not calls,
@@ -408,7 +480,7 @@ class RecordedNativeProbe:
             },
             "checkpoint": checkpoint,
             "canonical_availability": checkpoint["canonical_availability"],
-            "provider_prompt_presence": self.prompt_presence(context, retained, data),
+            "provider_prompt_presence": self.prompt_presence(retained, data, manifest),
             "prompt_scope": "original native user and assembled-context proof, not final provider payload",
         }
 
