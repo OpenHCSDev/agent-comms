@@ -81,7 +81,7 @@ class PackageDirectUrl(ABC):
     url: str
 
     @abstractmethod
-    def require_original(self, source_head: str):
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
         """Validate the installer origin; source bytes are owned by InstalledSource."""
 
 
@@ -89,7 +89,7 @@ class PackageDirectUrl(ABC):
 class VcsPackageDirectUrl(PackageDirectUrl):
     vcs_info: PackageVcsInfo
 
-    def require_original(self, source_head: str):
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
         if self.vcs_info.commit_id != source_head:
             raise RuntimeError('Installed VCS origin differs from the declared source')
 
@@ -99,7 +99,7 @@ class PackageArchiveInfo:
     hashes: dict[str, str] = field(default_factory=dict, metadata={'wire_omit_default': True})
     hash: str | None = field(default=None, metadata={'wire_omit_default': True})
 
-    def require_original(self, path: Path):
+    def require_original(self, artifact: ReviewedArtifact):
         hashes = dict(self.hashes)
         if self.hash is not None:
             algorithm, separator, value = self.hash.partition('=')
@@ -109,20 +109,24 @@ class PackageArchiveInfo:
                 raise RuntimeError('Installed archive has conflicting hash provenance')
             hashes[algorithm] = value
         sha256 = hashes.get('sha256')
-        if not sha256:
-            raise RuntimeError('Installed archive has no consistent SHA256 provenance')
-        ReviewedArtifact(path, sha256).require_original()
+        if sha256 is not None and sha256 != artifact.sha256:
+            raise RuntimeError('Installed archive SHA256 differs from the reviewed artifact')
+        artifact.require_original()
 
 
 @dataclass(frozen=True)
 class ArchivePackageDirectUrl(PackageDirectUrl):
     archive_info: PackageArchiveInfo
 
-    def require_original(self, source_head: str):
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
         origin = urlsplit(self.url)
         if origin.scheme != 'file' or origin.netloc not in ('', 'localhost'):
             raise RuntimeError('Installed archive requires its original local artifact')
-        self.archive_info.require_original(Path(unquote(origin.path)))
+        path = Path(unquote(origin.path))
+        originals = tuple(artifact for artifact in artifacts if artifact.path == path)
+        if len(originals) != 1:
+            raise RuntimeError('Installed archive requires one reviewed original artifact')
+        self.archive_info.require_original(originals[0])
 
 
 @dataclass(frozen=True)
@@ -136,10 +140,10 @@ class InstalledSource:
     direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl
     inventory_sha256: str
 
-    def require_original(self):
+    def require_original(self, artifacts: tuple[ReviewedArtifact, ...] = ()):
         if not self.byte_equal:
             raise RuntimeError('Installed source bytes are not verified')
-        self.direct_url.require_original(self.head)
+        self.direct_url.require_original(self.head, artifacts)
 
 
 @dataclass(frozen=True)
@@ -164,6 +168,8 @@ class InstalledSourceProof:
     dependency_bypass: bool
     journey_owners: tuple[str, ...]
     journey_assessment: str
+    archive_artifacts: tuple[ReviewedArtifact, ...] = field(
+        default=(), metadata={'wire_omit_default': True})
 
     def require_activation(self, activation: CohortActivation):
         actual = {source.module: source.head for source in self.sources}
@@ -175,7 +181,7 @@ class InstalledSourceProof:
                 activation.native_package, activation.native_manifest, activation.native_tree):
             raise RuntimeError('Source proof names another native artifact')
         for source in self.sources:
-            source.require_original()
+            source.require_original(self.archive_artifacts)
         if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
             raise RuntimeError('Package/source/native trust is incomplete')
 
