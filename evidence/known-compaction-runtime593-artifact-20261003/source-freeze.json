@@ -1,0 +1,16 @@
+{
+  "source_checkpoint": "be1a0c47fe1363ec49588e48eff9b9ced7bdbbda",
+  "builder_source": "99572b63fd211600091f6d8b48dc0dc900f2221c",
+  "source_files": {
+    "stack/native-session-storage.patch": "e1f16cfb10f97a3faec45b5b595fdfd75fb68c64f960d43988b024c21d4fbe54",
+    "stack/native-compaction-selected-summary.mjs": "0de1a5bcdf8fa1a083e217c091a8e0a4ae91f0239eee5a87677e461de28d9728",
+    "stack/patch-native-selected-compaction-summary.py": "ae9978570deb00c1179b83386d1964feda248691832c3f9d4908fb67d12b3b05"
+  },
+  "baseline_native": "7c2a2e644420c349dfdbadf0e1fa555d783697298bb984f1459e3326015b1dcf",
+  "single_stock_assembly": true,
+  "normal_main589_joined": true,
+  "provider_calls": 0,
+  "public_effects": 0,
+  "new_environment": false,
+  "new_worktree": false
+}
