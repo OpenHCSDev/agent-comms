@@ -30,6 +30,7 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceRead
     from .fresh_private_session import FreshPrivateSession
     from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
     from .reservation_rules import ReservationCheck
@@ -64,6 +65,7 @@ class SelectedSummaries(JournalRole):
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
         future_queue: FutureInputQueue | None = None,
+        native_reader: NativeEvidenceRead | None = None,
     ) -> str:
         """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
 
@@ -112,6 +114,7 @@ class SelectedSummaries(JournalRole):
                     self.journal.private_inputs.require_source_coverage(
                         db, Path(canonical), envelope.source, covered_inputs,
                         fresh=fresh_session, admission_generation=admission_generation,
+                        native_reader=native_reader,
                     )
                     if CompactionOperation.unresolved_in(db, canonical):
                         raise CompactionJournalError(
