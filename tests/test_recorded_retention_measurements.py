@@ -327,19 +327,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             measured = probe.construction(evidence, branch,
-                                         manifest(str(self.session), ('first', 'probe')), {})['source_coverage']
+                                         manifest(str(self.session), ('first', 'probe')), {}, {'evaluated': False})['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
             partial = probe.construction(evidence, branch,
-                                         manifest(str(self.session), ('probe',)), {})['source_coverage']
+                                         manifest(str(self.session), ('probe',)), {}, {'evaluated': False})['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, branch, manifest(path, ids), {})
-            self.assertFalse(probe.construction(evidence, branch, None, {})['source_coverage']['evaluated'])
+                    probe.construction(evidence, branch, manifest(path, ids), {}, {'evaluated': False})
+            self.assertFalse(probe.construction(evidence, branch, None, {}, {'evaluated': False})['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
@@ -408,9 +408,27 @@ class RecordedMeasurementTests(unittest.TestCase):
             sdk_segment_bytes=self.artifact('segments.json', tuple(s.text() for s in data.segments)))
         original = probe.read_sdk_context()
         manifest = probe.request_manifest(context, original)
-        report = probe.prompt_presence(retained, original, manifest)
+        texts, construction = probe.serialized_construction(original, manifest)
+        report = probe.prompt_presence(retained, texts, construction)
         self.assertTrue(report['exact_envelope_present'])
         self.assertFalse(report['final_transport_evaluated'])
+        self.assertTrue(construction['evaluated'])
+        self.assertEqual(construction['artifact'], probe.sdk_segment_bytes)
+        self.assertEqual(construction['utf8_bytes'], len(raw))
+        self.assertFalse(construction['final_transport_evaluated'])
+        self.assertFalse(probe.prompt_presence(None, texts, construction)['evaluated'])
+        self.assertFalse(probe.prompt_presence(RetainedTaskFacts(()), texts, construction)['evaluated'])
+        absent = replace(probe, sdk_segment_bytes=None)
+        absent_texts, unavailable = absent.serialized_construction(original, manifest)
+        self.assertIsNone(absent_texts)
+        self.assertFalse(unavailable['evaluated'])
+        self.assertEqual(absent.prompt_presence(retained, absent_texts, unavailable), unavailable)
+        wrong = replace(probe, sdk_segment_bytes=self.artifact('changed-segments.json', ('different',)))
+        with self.assertRaisesRegex(ValueError, 'measured source'):
+            wrong.serialized_construction(original, manifest)
+        Path(probe.sdk_segment_bytes.path).write_text('[]')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            probe.serialized_construction(original, manifest)
         with self.assertRaisesRegex(ValueError, 'original probe request'):
             probe.request_manifest(replace(context, request_generation=2), original)
         Path(probe.sdk_context.path).write_text('{}')

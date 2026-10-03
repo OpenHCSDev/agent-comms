@@ -1,0 +1,140 @@
+{
+  "revision": "0a1b45d8568ca24a604a7f0d37d972dcf936eb57",
+  "tool": "Existing audit.findings.Package",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "name": "NativeContextData",
+      "line": 34
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "FileProvenance",
+      "line": 36
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "MeasuredNativeSegment",
+      "line": 166
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "ContextManifest",
+      "line": 422
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274
+    }
+  ],
+  "calls": [
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 572,
+      "call": "self.read_sdk_context"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 582,
+      "call": "self.request_manifest"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 583,
+      "call": "self.serialized_construction"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 624,
+      "call": "self.construction"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 633,
+      "call": "self.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 409,
+      "call": "probe.read_sdk_context"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 410,
+      "call": "probe.request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 411,
+      "call": "probe.serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 412,
+      "call": "probe.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 422,
+      "call": "absent.serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 425,
+      "call": "absent.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 428,
+      "call": "wrong.serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 431,
+      "call": "probe.serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 433,
+      "call": "probe.request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 436,
+      "call": "probe.read_sdk_context"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 329,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 334,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 419,
+      "call": "probe.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 420,
+      "call": "probe.prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 341,
+      "call": "probe.construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 342,
+      "call": "probe.construction"
+    }
+  ],
+  "limits": "Lexical references only; reviewed original native TurnContext.capture determines SDK values and source selection. No dynamic resolution claim."
+}
