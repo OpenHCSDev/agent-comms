@@ -94,10 +94,25 @@ async def main(args):
                 await connection.close()
         if original != {path: digest(Path(path)) for path in original}:
             raise AssertionError('Unopened observation altered original source')
+        preparation_begin_ns = time.monotonic_ns()
         await owner.turns.prepare_selected_session(name, thread)
+        preparation_end_ns = time.monotonic_ns()
         child = owner.turns.persistent_backends[name].custody.idle().child.proc
         receipt['native_process'] = FieldCodec.encode(child.identity)
         receipt['prepared_child_alive'] = child.alive()
+        if args.reuse_preparation:
+            original = owner.turns.persistent_backends[name].custody.idle().child
+            reuse_begin_ns = time.monotonic_ns()
+            await owner.turns.prepare_selected_session(name, thread)
+            reuse_end_ns = time.monotonic_ns()
+            retained = owner.turns.persistent_backends[name].custody.idle().child
+            if retained is not original or not child.alive():
+                raise AssertionError('Unchanged preparation replaced original acquired child')
+            receipt['launch_preparation'] = {
+                'cold_begin_ns': preparation_begin_ns, 'cold_end_ns': preparation_end_ns,
+                'reuse_begin_ns': reuse_begin_ns, 'reuse_end_ns': reuse_end_ns,
+                'same_original_child': True,
+            }
         if original != {path: digest(Path(path)) for path in original}:
             raise AssertionError('Selected startup altered original saved source')
         if args.prepare_compaction:
@@ -194,4 +209,6 @@ if __name__ == '__main__':
     parser.add_argument('--worktree', type=Path, default=Path('/home/ts/.agent-comms'))
     parser.add_argument('--prepare-compaction', action='store_true',
                         help='Observe both native dry cuts on the acquired configured saved source')
+    parser.add_argument('--reuse-preparation', action='store_true',
+                        help='Prepare the same saved owner twice and require its original acquired child')
     asyncio.run(main(parser.parse_args()))
