@@ -75,7 +75,7 @@ try {
  const old=error('maximum context length of 1048576 tokens. You requested a total of 1076118 tokens: 432636 tokens from the input messages and 643482 tokens for the completion');
  request.params.max_tokens=643482;assert(ProviderRejection.decode(old).revisedAllowance(request)>0);
  const abort=new AbortController();let sends=0;
- const cancelled=new ContextBudgetRequest(capability,small,{max_tokens:643482},'max_tokens',async()=>{sends++;abort.abort();throw original;},small,abort.signal);
+ const cancelled=new ContextBudgetRequest(capability,small,{max_tokens:643482},'max_tokens',async()=>{sends++;abort.abort();throw original;},small,{signal:abort.signal});
  await assert.rejects(cancelled.send());assert.equal(sends,1);
  const receipt={actual_image_bytes:imageBytes.length,canonical_image_estimate:nativeEstimate,external_schema_image_projections:5,actual_provider_adapters:['openai-completions','anthropic-messages'],requests,desired_absence:true,explicit_caller_and_final_hook_cap:true,final_tool_schema:true,nonfit_http_calls:0,mandatory_anthropic:true,secondary_rejection_guards:true,cancel_during_rejection_calls:1,paid_calls:0,limits:'Provider adapter/local HTTP contracts, not eleven APIs installed acceptance. Native/ACP/original retained journey separately required.'};
  writeFileSync(receiptFile,JSON.stringify(receipt,null,2)+'\n');console.log(JSON.stringify(receipt));

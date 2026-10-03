@@ -793,6 +793,7 @@ class ReportedModel(PiModel):
     id: str | None = None
     name: str | None = None
     context_window: int | None = wire_field("contextWindow")
+    max_tokens: int | None = wire_field("maxTokens")
 
     @property
     def identity(self):

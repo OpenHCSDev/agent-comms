@@ -23,7 +23,7 @@ def main(provider: Path) -> None:
         '            const budgetField = params.max_tokens !== undefined ? "max_tokens" : compat.maxTokensField;\n'
         "            const budgetRequest = new ContextBudgetRequest(model, context, params, budgetField, "
         "payload => client.chat.completions.create(payload, requestOptions).withResponse(), "
-        "chatInput(params), options?.signal);\n"
+        "chatInput(params), options);\n"
         "            const { data: openaiStream, response } = await retryProviderRequest(() => budgetRequest.send(), {", 1)
     provider.write_text(source)
 
