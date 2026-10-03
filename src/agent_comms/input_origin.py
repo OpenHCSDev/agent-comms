@@ -46,6 +46,18 @@ class InputProvenance(Provenance):
     key: str
     origin: InputOrigin
 
+    def public_description(self) -> str:
+        return f"Original input {self.key} · {self.origin.declared_name}"
+
+    def public_text(self, comms) -> str:
+        from .input_disposition import InputDispositions
+
+        inputs = InputDispositions(comms.root / InputDispositions.filename).read()
+        row = inputs.lookup(self.key)
+        if not row.matches_original_provenance(self):
+            raise RelationViolationError("Source is outside the original input document")
+        return inputs.originals((self.key,))[0].source_text
+
     def require_human_input(self):
         self.origin.require_human()
         return self

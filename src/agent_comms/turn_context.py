@@ -26,6 +26,20 @@ if TYPE_CHECKING:
 class Provenance(DeclaredFamily, affix="Provenance"):
     """A source coordinate, not permission to execute or replay it."""
 
+    @abstractmethod
+    def public_description(self) -> str: ...
+
+    def public_text(self, comms) -> str:
+        """Read an authenticated source, never reconstruct request wording.
+
+        The inspection owner checks membership before calling this method.
+        Coordinates without original text evidence remain unavailable.
+        """
+        raise ValueError(f"Original text is not retained by {self.public_description()}")
+
+    def preview_observations(self) -> tuple[PreviewProvenance, ...]:
+        return ()
+
     def require_human_input(self):
         from .errors import RelationViolationError
 
@@ -37,22 +51,44 @@ class FileProvenance(Provenance):
     path: str
     sha256: str
 
+    def public_description(self) -> str:
+        return f"File {self.path} · SHA256 {self.sha256}"
+
+    def public_text(self, comms) -> str:
+        raw = Path(self.path).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.sha256:
+            raise ValueError("Original file bytes are unavailable: the source has changed")
+        return raw.decode("utf-8")
+
 
 @dataclass(frozen=True)
 class OwnerProvenance(Provenance):
     owner: ThreadIncarnation
     revision: str
 
+    def public_description(self) -> str:
+        return f"Owner {self.owner.name} · born {self.owner.created_at} · revision {self.revision}"
+
 
 @dataclass(frozen=True)
 class WireProvenance(Provenance):
     source: MessageReference
+
+    def public_description(self) -> str:
+        return f"Wire message {self.source.seq} · {self.source.message_id}"
+
+    def public_text(self, comms) -> str:
+        (original,) = comms.bus.log.messages_for_references((self.source,))
+        return original.body
 
 
 @dataclass(frozen=True)
 class JournalProvenance(Provenance):
     path: str
     entries: tuple[str, ...]
+
+    def public_description(self) -> str:
+        return f"Native journal {self.path} · entries {', '.join(self.entries)}"
 
 
 @dataclass(frozen=True)
@@ -61,11 +97,21 @@ class NativeProvenance(Provenance):
     request_generation: int
     context_digest: str
 
+    def public_description(self) -> str:
+        return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
+                f"· context {self.context_digest}")
+
 
 @dataclass(frozen=True)
 class PreviewProvenance(Provenance):
     identity: NativeSessionIdentity
     context_digest: str
+
+    def public_description(self) -> str:
+        return f"Current native preview {self.identity.session_id} · context {self.context_digest}"
+
+    def preview_observations(self) -> tuple[PreviewProvenance, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -73,6 +119,17 @@ class ResourceProvenance(Provenance):
     path: str
     sha256: str
     representation: str
+
+    def public_description(self) -> str:
+        return f"Resource {self.path} · {self.representation} · SHA256 {self.sha256}"
+
+
+@dataclass(frozen=True)
+class ContextSourceText:
+    """A public source-read result, not another context or input record."""
+
+    description: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -107,6 +164,11 @@ class SegmentManifest:
         if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
             raise ValueError("Context segment requires its measured byte digest")
 
+    def source_membership(self):
+        yield from self.provenance
+        for contributor in self.contributors:
+            yield from contributor.source_membership()
+
 
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(DeclaredFamily, affix="Segment"):
@@ -119,6 +181,12 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     @abstractmethod
     def text(self) -> str: ...
 
+    def public_description(self) -> str:
+        return self.declared_name.replace("_", " ").title()
+
+    def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
+        return ()
+
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
 
@@ -127,6 +195,14 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
         return SegmentManifest(
             self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
         )
+
+    def source_membership(self):
+        yield from self.provenance
+
+    def require_source(self, source: Provenance) -> Provenance:
+        if source not in self.source_membership():
+            raise ValueError("Source is outside the selected context segment")
+        return source
 
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
@@ -182,6 +258,17 @@ class MeasuredNativeSegment(ContextSegment):
         # The SDK measures/hashes its exact original JSON representation.
         return SegmentManifest(self.declared_name, self.provenance,
                                self.sha256, self.utf8_bytes, self.tokens, self.contributors)
+
+    def source_membership(self):
+        yield from super().source_membership()
+        for contributor in self.contributors:
+            yield from contributor.source_membership()
+
+    def public_description(self) -> str:
+        return f"{super().public_description()} · {self.tokens} estimated tokens"
+
+    def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
+        return self.contributors
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -428,6 +515,28 @@ class ContextManifest:
     # never observed dispatch. It grants neither admission nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
+    def require_source(self, source: Provenance) -> Provenance:
+        for segment in self.segments:
+            if source in segment.source_membership():
+                return source
+        raise ValueError("Source is outside the original recorded context")
+
+    @classmethod
+    def for_request(cls, history, turn: RecordedContextTurn, request_id: str) -> ContextManifest:
+        """Select the original indexed publication, never today's preview."""
+        selected = tuple(record for record in history
+                         if record.turn == turn and record.request_id == request_id)
+        if not request_id or len(selected) != 1:
+            raise ValueError("Original context request is absent or ambiguous")
+        return selected[0]
+
+    def public_source_text(self, comms, segment: int, source: Provenance) -> ContextSourceText:
+        if not 0 <= segment < len(self.segments):
+            raise ValueError("Source has no original recorded context segment")
+        if source not in self.segments[segment].source_membership():
+            raise ValueError("Source is outside the original recorded context segment")
+        return ContextSourceText(source.public_description(), source.public_text(comms))
+
     def changed_from_history(self, history: tuple[ContextManifest, ...]) -> dict:
         """Compare with the previous original turn at this sealed wire position.
 
@@ -462,6 +571,26 @@ class TurnContext:
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]
+
+    @classmethod
+    def for_inspection(cls, comms, owner: Thread) -> TurnContext:
+        """The current Core contributors, before any future original input.
+
+        This is a preview through the same contributor declarations used by
+        preparation. It is never a recorded SDK request or an input grant.
+        """
+        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views())
+        for segment in owner.context_goal_segments():
+            context = context.prepend(segment)
+        for segment in comms.bus.awareness_segments(owner):
+            context = context.append(segment)
+        return context
+
+    def require_source(self, source: Provenance) -> Provenance:
+        for segment in self.segments:
+            if source in segment.source_membership():
+                return source
+        raise ValueError("Source is outside the selected context preview")
 
     @classmethod
     def for_owner(
