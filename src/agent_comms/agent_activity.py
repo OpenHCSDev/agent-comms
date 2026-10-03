@@ -113,8 +113,12 @@ class AgentActivity:
         snapshot = snapshot or self.registry.snapshot()
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
-        activity = ObservedActivity.acquire(
-            self.activity.current(participant.name, active=participant.executing), owner)
+        return self._observed(participant, owner,
+            self.activity.current(participant.name, active=participant.executing))
+
+    def _observed(self, participant: Thread, owner: OwnerIdentity,
+                  event: Activity) -> ObservedActivity:
+        activity = ObservedActivity.acquire(event, owner)
         if participant.turn_state.busy:
             phase = participant.turn_state.phase
             return replace(activity, state=phase.activity_state, detail=phase.summary)
@@ -122,9 +126,13 @@ class AgentActivity:
 
     def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
         snapshot = snapshot or self.registry.snapshot()
+        events = self.activity.all_current(
+            active=frozenset(name for name, thread in snapshot.threads.items() if thread.executing),
+            threads=snapshot.threads,
+        )
         return {
-            name: self.activity_of(name, snapshot=snapshot)
-            for name in snapshot.threads
+            name: self._observed(thread, snapshot.owner_identity(name), events[name])
+            for name, thread in snapshot.threads.items()
         }
 
     def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:

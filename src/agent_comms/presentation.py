@@ -494,13 +494,13 @@ class ThreadView:
         cls,
         snapshot: RegistrySnapshot,
         agents: AgentActivity,
+        activities: Mapping[str, ObservedActivity],
         goal_waits: GoalWaits,
         *,
         show_stopped: bool,
         show_archived: bool,
     ) -> tuple[ThreadView, ...]:
         runtime = agents.runtime_info.read()
-        activities = agents.all_activity(snapshot=snapshot)
         waits = goal_waits.read()
         return tuple(
             cls.capture(

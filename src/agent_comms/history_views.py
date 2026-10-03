@@ -278,7 +278,7 @@ class HistoryViews:
             channels,
             catalog.pinned_members(),
             catalog.list_order,
-            self.agents.all_activity(),
+            self.agents.all_activity(snapshot=snapshot),
             self.last_sent_timestamps(),
             ChannelActivity.for_views(channels, self.bus.channel_activity()),
             show_stopped=show_stopped,
@@ -288,9 +288,11 @@ class HistoryViews:
     def thread_views(
         self, *, show_stopped: bool = True, show_archived: bool = False
     ) -> tuple[ThreadView, ...]:
+        snapshot = self.registry.snapshot()
         return ThreadView.roster(
-            self.registry.snapshot(),
+            snapshot,
             self.agents,
+            self.agents.all_activity(snapshot=snapshot),
             GoalWaits(self.root / GoalWaits.filename),
             show_stopped=show_stopped,
             show_archived=show_archived,
@@ -325,20 +327,35 @@ class HistoryViews:
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:
-        channels = self.channel_views(show_stopped=show_stopped, show_archived=show_archived)
-        unread = self.bus.pending_counts(actor) if actor in self.registry else {}
-        channel_unread: dict[str, int] = {}
+        registry = self.registry.snapshot()
         catalog = self.channels.catalog.read()
+        declarations = catalog.views(registry.threads)
+        activities = self.agents.all_activity(snapshot=registry)
+        sent = self.last_sent_timestamps()
+        channels = ChannelView.roster(
+            registry, declarations, catalog.pinned_members(), catalog.list_order,
+            activities, sent, ChannelActivity.for_views(declarations, self.bus.channel_activity()),
+            show_stopped=show_stopped, show_archived=show_archived,
+        )
+        threads = ThreadView.roster(
+            registry, self.agents, activities, GoalWaits(self.root / GoalWaits.filename),
+            show_stopped=show_stopped, show_archived=show_archived,
+        )
+        unread = (
+            self.bus.pending_counts(actor)
+            if registry.aliases.get(actor, actor) in registry.threads else {}
+        )
+        channel_unread: dict[str, int] = {}
         for view in channels:
             targets = catalog.history_targets(view.channel.name)
             channel_unread[view.channel.name] = sum(
                 count for target, count in unread.items() if targets is None or target in targets
             )
         return CoordinationSnapshot(
-            threads=self.thread_views(show_stopped=show_stopped, show_archived=show_archived),
+            threads=threads,
             channels=channels,
             unread=unread,
-            last_sent=self.last_sent_timestamps(),
+            last_sent=sent,
             channel_unread=channel_unread,
             channel_order=catalog.list_order,
             show_stopped=show_stopped,
@@ -364,12 +381,13 @@ class HistoryViews:
                 records, scopes, scopes, captured_viewer, viewer_names, bus_revision
             )
             sent = self.last_sent_timestamps()
+            activities = self.agents.all_activity(snapshot=registry)
             channels = ChannelView.roster(
                 registry,
                 declarations,
                 pins,
                 order,
-                self.agents.all_activity(),
+                activities,
                 sent,
                 display_activity,
                 show_stopped=show_stopped,
@@ -378,6 +396,7 @@ class HistoryViews:
             threads = ThreadView.roster(
                 registry,
                 self.agents,
+                activities,
                 GoalWaits(self.root / GoalWaits.filename),
                 show_stopped=show_stopped,
                 show_archived=show_archived,

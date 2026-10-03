@@ -102,6 +102,9 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
     @contextmanager
     def toggle_after_boundary(*, need_sequence=True):
         with original(need_sequence=need_sequence) as snapshot:
+            if started.is_set():
+                yield snapshot
+                return
             writer = WorkerThread(target=toggle, daemon=True)
             writer.start()  # blocked on the short wire lock until the boundary opens
             assert started.wait(timeout=3) and not finished.is_set()
