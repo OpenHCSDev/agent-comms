@@ -1,0 +1,84 @@
+E                                                                        [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_acquired_native_source_survives_commit_and_refuses_rewritten_prefix _
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/m568-native-evidence/test_acquired_native_source_su0')
+
+    @pytest.fixture
+    def native(tmp_path):
+        script = """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const moduleURL = pathToFileURL(join(process.argv[1], 'dist/core/session-manager.js'));
+    const {SessionManager} = await import(moduleURL);
+    const manager = SessionManager.create(process.argv[2], join(process.argv[2], 'sessions'));
+    const kept = manager.appendMessage({role:'user', content:'task', timestamp:1});
+    manager.appendMessage({role:'assistant', content:[{type:'text',text:'answer'}],
+      provider:'fixture',model:'fixture',api:'fixture',stopReason:'stop',timestamp:2});
+    console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
+    """
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script, PACKAGE, str(tmp_path)],
+            capture_output=True,
+            check=True,
+            timeout=5,
+        )
+        witness = FieldCodec.decode(NativeWitness, json.loads(result.stdout))
+        registry = Registration(tmp_path / "registry.json")
+        owner = Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=witness.session_file,
+            goal=Goal("task", "goal"),
+        )
+        registry.register(owner)
+        owner, owner_generation = registry.live_owner_with_generation("owner")
+        owner, owner_generation = registry.lease_live_turn_with_generation(
+            owner, "turn", expected_owner_generation=owner_generation
+        )
+        bridge = OwnerCompactionCommit(tmp_path / "registry.json", Path(PACKAGE))
+        # Capture once BEFORE each test's summary/invalidations, never at commit.
+>       source = bridge.capture_source(owner, owner_generation, witness)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_owner_compaction_commit.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:167: in capture_source
+    return held.capture(pending_input_keys, settings_paths)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/compaction_boundary.py:183: in capture
+    ).retained_task_facts_unlocked(owner.incarnation)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/wire_log.py:183: in retained_task_facts_unlocked
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7fbebd0e4d70>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/wire_log.py:298: RelationViolationError
+=========================== short test summary info ============================
+ERROR tests/test_owner_compaction_commit.py::test_acquired_native_source_survives_commit_and_refuses_rewritten_prefix
+1 error in 1.71s

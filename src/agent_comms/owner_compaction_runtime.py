@@ -9,12 +9,14 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 
 from .agent_events import AgentEvent, CompactionSkipped, CompactionStart
 from .backend import PersistentPiSession
 from .compaction_records import CompactionOperation, SelectedSummaryAttempt
 from .compaction_source import CompactionSource
 from .compaction_result import CompactionResult, RefusedCompactionResult
+from .coordinator import Coordination
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation, prepare_native_source
 from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
@@ -104,16 +106,16 @@ async def compact_owner_once(
     can mutate the saved file. Its next prompt must pass strict fresh reopen.
     The caller may not hide a COMMIT UNKNOWN or trigger a second summary/write.
     """
-    preparation = await asyncio.to_thread(
+    preparation = await Coordination.run_worker(partial(
         prepare_native_source,
         bridge.native.package_dir,
         owner.require_saved_session(),
         settings=settings,
         context_window=context_window,
-    )
+    ))
 
     async def perform(prepared: NativePreparation) -> CompactionResult:
-        prepared, source = await asyncio.to_thread(
+        prepared, source = await Coordination.run_worker(partial(
             bridge.prepare_source,
             owner,
             owner_generation,
@@ -122,13 +124,15 @@ async def compact_owner_once(
             context_window=context_window,
             pending_input_keys=pending_input_keys,
             settings_paths=settings_paths,
-        )
+        ))
         async def at_cut(prepared: NativePreparation) -> CompactionResult:
             if not await settings.boundary_current(source.retained, owner, bridge.registry):
                 return RefusedCompactionResult("Authored subtask boundary changed; optional compaction skipped")
             if on_event is not None:
                 await on_event(CompactionStart(reason="adaptive"))
-            await asyncio.to_thread(bridge.require_source_current, owner, owner_generation, source)
+            await Coordination.run_worker(partial(
+                bridge.require_source_current, owner, owner_generation, source
+            ))
             result = await summarize(prepared, source)
 
             async def write(summary: NativeSummary) -> CompactionOperation:
@@ -137,7 +141,9 @@ async def compact_owner_once(
                 )
 
             operation = await result.commit_with(write)
-            admission = result.admit_original(bridge, owner, owner_generation, operation, source)
+            admission = await Coordination.run_worker(partial(
+                result.admit_original, bridge, owner, owner_generation, operation, source
+            ))
             if admission is not None:
                 if on_admission is None:
                     admission.invalidate()

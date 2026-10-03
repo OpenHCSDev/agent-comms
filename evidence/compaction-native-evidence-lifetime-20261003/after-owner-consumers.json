@@ -1,0 +1,5117 @@
+{
+  "head": "5639e72692539d1391628d44050ed49c75d15f55",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "modules": 311,
+      "parse_omissions": []
+    },
+    {
+      "root": "tests",
+      "modules": 362,
+      "parse_omissions": []
+    },
+    {
+      "root": "tools",
+      "modules": 53,
+      "parse_omissions": []
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 464,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 363,
+      "kind": "Attribute",
+      "expression": "HumanInputOrigin.capture"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 297,
+      "kind": "Attribute",
+      "expression": "ActivityCheckpoint.capture"
+    },
+    {
+      "path": "src/agent_comms/activity_checkpoint.py",
+      "line": 48,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 232,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 17,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 35,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/bus_projection.py",
+      "line": 26,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/bus_source_page.py",
+      "line": 26,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 35,
+      "kind": "FunctionDef",
+      "expression": "@staticmethod"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 91,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 116,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 51,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 139,
+      "kind": "Attribute",
+      "expression": "RegistryOwner.capture"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 373,
+      "kind": "Attribute",
+      "expression": "RegistryOwner.capture"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 357,
+      "kind": "import",
+      "expression": "from .compaction_boundary import CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 735,
+      "kind": "import",
+      "expression": "from .compaction_boundary import CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 360,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 740,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 561,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 167,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 29,
+      "kind": "ClassDef",
+      "expression": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 159,
+      "kind": "ClassDef",
+      "expression": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 89,
+      "kind": "FunctionDef",
+      "expression": "@contextmanager"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 168,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, pending_input_keys: tuple[str, ...], settings_paths: tuple[str, ...] | None) -> CompactionSource:"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 33,
+      "kind": "Name",
+      "expression": "native_reader"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 161,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 162,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 166,
+      "kind": "Name",
+      "expression": "native_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 33,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 97,
+      "kind": "Name",
+      "expression": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "self.native_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 93,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "native_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 184,
+      "kind": "Attribute",
+      "expression": "owner.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 68,
+      "kind": "Attribute",
+      "expression": "RetainedSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 71,
+      "kind": "Attribute",
+      "expression": "inputs.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "witness.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "self.native_reader"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 115,
+      "kind": "Name",
+      "expression": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 118,
+      "kind": "Name",
+      "expression": "native_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 72,
+      "kind": "Attribute",
+      "expression": "owner.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 100,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 102,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 67,
+      "kind": "Attribute",
+      "expression": "JournalCustody.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "JournalCustody.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 177,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 161,
+      "kind": "Name",
+      "expression": "admit_original"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 405,
+      "kind": "Attribute",
+      "expression": "evidence.source.verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 64,
+      "kind": "Attribute",
+      "expression": "CoordinationSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 11,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from .compaction_boundary import HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 22,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 44,
+      "kind": "Name",
+      "expression": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 45,
+      "kind": "Attribute",
+      "expression": "held.capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 53,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 38,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 552,
+      "kind": "Attribute",
+      "expression": "ResponseConversation.capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 73,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 158,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 183,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 237,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 210,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 25,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 102,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 114,
+      "kind": "Attribute",
+      "expression": "NativeEvidenceScope.borrow"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 114,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 68,
+      "kind": "FunctionDef",
+      "expression": "@abstractmethod"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 80,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 92,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 104,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 93,
+      "kind": "Attribute",
+      "expression": "ChannelDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "DMDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 385,
+      "kind": "Attribute",
+      "expression": "PageTraversal.capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 50,
+      "kind": "Attribute",
+      "expression": "presentation.bus.reads.capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 402,
+      "kind": "Attribute",
+      "expression": "view.capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 362,
+      "kind": "Attribute",
+      "expression": "RegistryProvenance.capture"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 307,
+      "kind": "Attribute",
+      "expression": "ThreadView.capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 28,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 43,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 56,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 73,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 93,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 113,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 128,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 154,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 175,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 216,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 226,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 239,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 258,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 294,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 20,
+      "kind": "Attribute",
+      "expression": "member.capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 197,
+      "kind": "Attribute",
+      "expression": "member.capture"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 129,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, keys: tuple[str, ...]):"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 127,
+      "kind": "Attribute",
+      "expression": "self.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 395,
+      "kind": "Attribute",
+      "expression": "UserFollowupSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 396,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 585,
+      "kind": "Attribute",
+      "expression": "InitialInput.capture"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 87,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 264,
+      "kind": "Attribute",
+      "expression": "self.reads.capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 274,
+      "kind": "Attribute",
+      "expression": "self.reads.capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 282,
+      "kind": "Attribute",
+      "expression": "DMDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 337,
+      "kind": "Attribute",
+      "expression": "DMDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 316,
+      "kind": "Attribute",
+      "expression": "AwarenessSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 373,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 313,
+      "kind": "Attribute",
+      "expression": "UnavailableAwarenessSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 66,
+      "kind": "FunctionDef",
+      "expression": "@staticmethod"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 220,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 221,
+      "kind": "Attribute",
+      "expression": "PageTraversal.capture"
+    },
+    {
+      "path": "src/agent_comms/messages.py",
+      "line": 123,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self):"
+    },
+    {
+      "path": "src/agent_comms/messages.py",
+      "line": 130,
+      "kind": "Attribute",
+      "expression": "self.task.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 35,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 43,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 98,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 58,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 74,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 11,
+      "kind": "import",
+      "expression": "from .compaction_boundary import HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "HeldCompaction"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 57,
+      "kind": "Attribute",
+      "expression": "NativeAuthority.capture"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 198,
+      "kind": "ClassDef",
+      "expression": "class NativeEvidenceRead:"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 378,
+      "kind": "ClassDef",
+      "expression": "class NativeEvidenceScope(ExitStack):"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 118,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 231,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 277,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, witness):"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 362,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 392,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 219,
+      "kind": "import",
+      "expression": "from .native_pi import PrivateEvidenceRead, _private_session_dir"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 113,
+      "kind": "Attribute",
+      "expression": "cls.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 231,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 392,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 120,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 222,
+      "kind": "Name",
+      "expression": "PrivateEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 92,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 49,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 158,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 71,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 108,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 593,
+      "kind": "ClassDef",
+      "expression": "class PrivateEvidenceRead:"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 235,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 623,
+      "kind": "FunctionDef",
+      "expression": "def _capture_append(self):"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 673,
+      "kind": "FunctionDef",
+      "expression": "def verify_snapshot(self, size, expected_digest):"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 824,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 831,
+      "kind": "Attribute",
+      "expression": "NativeInputEvidenceRead.borrow"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 845,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 851,
+      "kind": "Attribute",
+      "expression": "NativeEvidenceRead.borrow"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 306,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 320,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 327,
+      "kind": "Attribute",
+      "expression": "NativeInputEvidenceRead.borrow"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 350,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 589,
+      "kind": "Name",
+      "expression": "PrivateEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 659,
+      "kind": "Attribute",
+      "expression": "self._capture_append"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 851,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 332,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 665,
+      "kind": "Attribute",
+      "expression": "self.verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 237,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 110,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 245,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 205,
+      "kind": "Attribute",
+      "expression": "RegistryOwner.capture"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 226,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 130,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 111,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 178,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 412,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 620,
+      "kind": "Attribute",
+      "expression": "_SelectedDecision.capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 676,
+      "kind": "Attribute",
+      "expression": "_OpenObligation.capture"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 364,
+      "kind": "FunctionDef",
+      "expression": "def admit_original(admission: SelectedSummaryAdmission) -> None:"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 187,
+      "kind": "Attribute",
+      "expression": "InputBatch.capture"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 379,
+      "kind": "Name",
+      "expression": "admit_original"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 47,
+      "kind": "Attribute",
+      "expression": "RegistryOwner.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 77,
+      "kind": "Attribute",
+      "expression": "SelectedAdmissionSource.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 70,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 81,
+      "kind": "Attribute",
+      "expression": "bridge.compact_selected"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from .compaction_boundary import CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 43,
+      "kind": "ClassDef",
+      "expression": "class OwnerCompactionCommit:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 76,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def compact_selected(self, owner: Thread, owner_generation: int, persistent: PersistentPiSession, source: SelectedSource, selected: SelectedModel, settings: PiCompactionDecision, *, purpose: type[CompactionReason]=ThresholdCompactionReason, instructions: str | None=None, pending_input_keys: tuple[str, ...]=(), on_admission: Callable[[SelectedSummaryAdmission], None] | None=None, on_event: Callable[[AgentEvent], Awaitable[None]] | None=None, reason: str='adaptive') -> CompactionResult:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 148,
+      "kind": "FunctionDef",
+      "expression": "def capture_source(self, owner: Thread, owner_generation: int, witness: NativeWitness, *, pending_input_keys: tuple[str, ...]=(), settings_paths: tuple[str, ...] | None=None) -> CompactionSource:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 169,
+      "kind": "FunctionDef",
+      "expression": "def prepare_source(self, owner: Thread, owner_generation: int, *, prepared: NativePreparation, settings: PiCompactionSettings, context_window: int, pending_input_keys: tuple[str, ...]=(), settings_paths: tuple[str, ...] | None=None) -> tuple[NativePreparation, CompactionSource]:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 206,
+      "kind": "FunctionDef",
+      "expression": "def require_source_current(self, owner: Thread, owner_generation: int, source: CompactionSource) -> None:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 215,
+      "kind": "FunctionDef",
+      "expression": "def reconcile_interrupted_summaries(self, owner: Thread, owner_generation: int, witness: NativeWitness) -> None:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 233,
+      "kind": "FunctionDef",
+      "expression": "def settle_selected_refusal(self, owner: Thread, owner_generation: int, source: CompactionSource, declined: SummaryDeclinedData) -> None:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 361,
+      "kind": "FunctionDef",
+      "expression": "def reconcile(self, owner: Thread, owner_generation: int, commit_id: str, *, timeout: float=5) -> CompactionOperation:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 61,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 51,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 152,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 187,
+      "kind": "Attribute",
+      "expression": "self.reconcile_interrupted_summaries"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 188,
+      "kind": "Attribute",
+      "expression": "self.capture_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 203,
+      "kind": "Attribute",
+      "expression": "self.require_source_current"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 216,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 271,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 46,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "native_reader"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 162,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 167,
+      "kind": "Attribute",
+      "expression": "held.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 208,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 223,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 242,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 284,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 322,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 346,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 369,
+      "kind": "Attribute",
+      "expression": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 69,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 135,
+      "kind": "Attribute",
+      "expression": "self.settle_selected_refusal"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 198,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 17,
+      "kind": "import",
+      "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 35,
+      "kind": "FunctionDef",
+      "expression": "def admit_original(self, bridge, owner, owner_generation, operation, source):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 53,
+      "kind": "Attribute",
+      "expression": "RegistryOwner.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 62,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 78,
+      "kind": "Attribute",
+      "expression": "bridge.compact_selected"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 38,
+      "kind": "ClassDef",
+      "expression": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 145,
+      "kind": "FunctionDef",
+      "expression": "def prepare_native_source(package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int, retained_text: str='') -> NativePreparationResult:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 55,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, reader: NativeEvidenceRead | None=None):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 56,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 103,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 55,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 58,
+      "kind": "Attribute",
+      "expression": "NativeEvidenceRead.borrow"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "evidence.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 58,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 17,
+      "kind": "import",
+      "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 40,
+      "kind": "FunctionDef",
+      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission | None:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 42,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 21,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativePreparation, prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 160,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def _commit_native_summary(bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, persistent: PersistentPiSession, prepared: NativePreparation, source: CompactionSource, result: NativeSummary) -> CompactionOperation:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 38,
+      "kind": "FunctionDef",
+      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 75,
+      "kind": "FunctionDef",
+      "expression": "def admit_original(self, bridge: OwnerCompactionCommit, owner: Thread, owner_generation: int, operation: CompactionOperation | None, source: CompactionSource) -> SelectedSummaryAdmission:"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 89,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 161,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 40,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 110,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 119,
+      "kind": "Attribute",
+      "expression": "bridge.prepare_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 134,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 139,
+      "kind": "Name",
+      "expression": "_commit_native_summary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 145,
+      "kind": "Attribute",
+      "expression": "result.admit_original"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 146,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 42,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 177,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 441,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 249,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 426,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 12,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 254,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 295,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 175,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 463,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 206,
+      "kind": "Attribute",
+      "expression": "ChannelDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 308,
+      "kind": "Attribute",
+      "expression": "DisplaySelection.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 190,
+      "kind": "Attribute",
+      "expression": "ChannelDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 315,
+      "kind": "Attribute",
+      "expression": "self.bus.reads.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 496,
+      "kind": "Attribute",
+      "expression": "cls.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 244,
+      "kind": "Attribute",
+      "expression": "DisplaySelection.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 282,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 292,
+      "kind": "Attribute",
+      "expression": "self.bus.reads.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 448,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 672,
+      "kind": "Attribute",
+      "expression": "FinalSeal.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 752,
+      "kind": "Attribute",
+      "expression": "PendingSeal.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 761,
+      "kind": "Attribute",
+      "expression": "FinalSeal.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 602,
+      "kind": "Attribute",
+      "expression": "FinalSeal.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 668,
+      "kind": "Attribute",
+      "expression": "PrefixCertificate.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 757,
+      "kind": "Attribute",
+      "expression": "PrefixCertificate.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 870,
+      "kind": "Attribute",
+      "expression": "PendingSeal.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 878,
+      "kind": "Attribute",
+      "expression": "FinalSeal.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 874,
+      "kind": "Attribute",
+      "expression": "PrefixCertificate.capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 594,
+      "kind": "Attribute",
+      "expression": "PrefixCertificate.capture"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 196,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 110,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 118,
+      "kind": "Attribute",
+      "expression": "NativeEvidenceScope.borrow"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 119,
+      "kind": "Attribute",
+      "expression": "CoveragePage.capture"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 215,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 224,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 226,
+      "kind": "Attribute",
+      "expression": "NativeEvidenceScope.borrow"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 118,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 226,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 41,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 88,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "QueuedInputContext.capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 179,
+      "kind": "Attribute",
+      "expression": "QueuedInputContext.capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 192,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 337,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 379,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 349,
+      "kind": "Attribute",
+      "expression": "cls.capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 215,
+      "kind": "Attribute",
+      "expression": "bus.reads.capture"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 81,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, viewer: str, messages: Iterable[Message], snapshot: RegistrySnapshot, bus_path: Path, *, conversation_snapshot: RegistryProvenance | None=None) -> DisplayBasis:"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 57,
+      "kind": "Attribute",
+      "expression": "edit.document.prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 357,
+      "kind": "FunctionDef",
+      "expression": "def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 24,
+      "kind": "FunctionDef",
+      "expression": "@staticmethod"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 26,
+      "kind": "Attribute",
+      "expression": "ThreadProvenance.capture"
+    },
+    {
+      "path": "src/agent_comms/response_conversation.py",
+      "line": 22,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 87,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 171,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 172,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 173,
+      "kind": "Attribute",
+      "expression": "RestartTarget.capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 274,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 23,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 183,
+      "kind": "Attribute",
+      "expression": "DMDisplayScope.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 216,
+      "kind": "FunctionDef",
+      "expression": "def capture(resource: Coordination):"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 23,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/selected_result.py",
+      "line": 30,
+      "kind": "AsyncFunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 190,
+      "kind": "import",
+      "expression": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 218,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 226,
+      "kind": "Attribute",
+      "expression": "bridge.compact_selected"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 176,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 88,
+      "kind": "Attribute",
+      "expression": "JournalCustody.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 50,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 138,
+      "kind": "Attribute",
+      "expression": "JournalCustody.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 81,
+      "kind": "Attribute",
+      "expression": "CoordinatedTurn.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 155,
+      "kind": "Attribute",
+      "expression": "CoordinatedTurn.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 102,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 125,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 57,
+      "kind": "Attribute",
+      "expression": "SelectedWakeSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 67,
+      "kind": "Attribute",
+      "expression": "SelectedWakeSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 270,
+      "kind": "Attribute",
+      "expression": "CoordinatedTurn.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 62,
+      "kind": "Attribute",
+      "expression": "SelectedTriageSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 90,
+      "kind": "Attribute",
+      "expression": "SelectedWorkSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 240,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, message: Message):"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 314,
+      "kind": "FunctionDef",
+      "expression": "@abstractmethod"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 434,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, message):"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 518,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, message):"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 575,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, message):"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 605,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self, message):"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 280,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 218,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 490,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/thread_provenance.py",
+      "line": 33,
+      "kind": "FunctionDef",
+      "expression": "@staticmethod"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 31,
+      "kind": "import",
+      "expression": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 237,
+      "kind": "FunctionDef",
+      "expression": "def retained_task_facts(self):"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 173,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 414,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 235,
+      "kind": "Attribute",
+      "expression": "GoalSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 61,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, event: T) -> NativeCommitObservation[T]:"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 69,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, event: T) -> NativeCommitObservation[T]:"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 407,
+      "kind": "Attribute",
+      "expression": "self.input_commit.capture"
+    },
+    {
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 17,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 259,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 263,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcript_updates.py",
+      "line": 51,
+      "kind": "Attribute",
+      "expression": "TranscriptSnapshotUpdate.capture"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 297,
+      "kind": "Attribute",
+      "expression": "CompactionOutcomeCursor.capture"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 438,
+      "kind": "Attribute",
+      "expression": "CompactionOutcomeCursor.capture"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 484,
+      "kind": "Attribute",
+      "expression": "CompactionOutcomeCursor.capture"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 260,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 296,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 343,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "kind": "Attribute",
+      "expression": "CoordinationSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "SelectedAdmissionSource.capture"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 115,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 392,
+      "kind": "Attribute",
+      "expression": "CommittedAppendHint.capture"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 487,
+      "kind": "Attribute",
+      "expression": "CandidateQuery.capture"
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "line": 38,
+      "kind": "FunctionDef",
+      "expression": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 231,
+      "kind": "Attribute",
+      "expression": "RetainedSegment.capture"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 192,
+      "kind": "Attribute",
+      "expression": "message.retained_task_facts"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 451,
+      "kind": "Attribute",
+      "expression": "BusFileRevision.capture"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 67,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 110,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 71,
+      "kind": "Attribute",
+      "expression": "cut.capture"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 115,
+      "kind": "Attribute",
+      "expression": "checkpoint.capture"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 66,
+      "kind": "Name",
+      "expression": "capture_source"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 93,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 49,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 156,
+      "kind": "Name",
+      "expression": "capture_source"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 134,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/native_proof_cases.py",
+      "line": 26,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 69,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 46,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 93,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 70,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 70,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 133,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 264,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 356,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 142,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 145,
+      "kind": "Attribute",
+      "expression": "self.capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 335,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 378,
+      "kind": "Attribute",
+      "expression": "self.checkpoint.capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 134,
+      "kind": "Attribute",
+      "expression": "self.capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 148,
+      "kind": "Attribute",
+      "expression": "previous.capture"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 134,
+      "kind": "Attribute",
+      "expression": "HumanInputOrigin.capture"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 95,
+      "kind": "Attribute",
+      "expression": "HumanInputOrigin.capture"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 85,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 116,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 120,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 26,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 81,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 25,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 56,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 143,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 109,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 160,
+      "kind": "Attribute",
+      "expression": "SelectedAdmissionSource.capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 174,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile_interrupted_summaries"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 61,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 451,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 779,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 270,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 69,
+      "kind": "FunctionDef",
+      "expression": "def capture_source():"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 74,
+      "kind": "Name",
+      "expression": "capture_source"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1985,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 242,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 61,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 616,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 54,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 317,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 39,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 261,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 270,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 84,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 313,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 17,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 191,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 229,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 23,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 53,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 29,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 37,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 43,
+      "kind": "Attribute",
+      "expression": "InputBatch.capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 30,
+      "kind": "Attribute",
+      "expression": "InputBatch.capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 42,
+      "kind": "Attribute",
+      "expression": "InputBatch.capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 39,
+      "kind": "Attribute",
+      "expression": "InputBatch.capture"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 407,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 488,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 63,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 300,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def capture(*args, **kwargs):"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 304,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 73,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 370,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 479,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 811,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_command_families.py",
+      "line": 153,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 30,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 76,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 63,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 400,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 208,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 274,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 284,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1917,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def capture(package, **kwargs):"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1921,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 122,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 130,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 443,
+      "kind": "Attribute",
+      "expression": "SelectedWakeSegment.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1477,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1485,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 431,
+      "kind": "Attribute",
+      "expression": "SelectedWakeSegment.capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 434,
+      "kind": "Attribute",
+      "expression": "SelectedWakeSegment.capture"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 206,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 80,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_current_delivery.py",
+      "line": 67,
+      "kind": "Attribute",
+      "expression": "comms.bus.reads.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 29,
+      "kind": "FunctionDef",
+      "expression": "def capture(comms):"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 30,
+      "kind": "Attribute",
+      "expression": "HumanInputOrigin.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 103,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 121,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 146,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 153,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 196,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 54,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 170,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 175,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 199,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 245,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 110,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 23,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 254,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 614,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 237,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 261,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 266,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 280,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 330,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 354,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 369,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 379,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 401,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 526,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 553,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 608,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 309,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 432,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 21,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 20,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 167,
+      "kind": "Attribute",
+      "expression": "comms.bus.reads.capture"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 147,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 169,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 45,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 144,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 31,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 133,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 88,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 187,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 86,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 119,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 147,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 178,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 224,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 277,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 322,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 71,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 21,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_headless_diagnostics.py",
+      "line": 65,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 161,
+      "kind": "FunctionDef",
+      "expression": "def capture(cls, channel, snapshot, **kwargs):"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 154,
+      "kind": "Attribute",
+      "expression": "ChannelDisplayScope.capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 167,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 119,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 287,
+      "kind": "Attribute",
+      "expression": "PendingSeal.capture"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 11,
+      "kind": "FunctionDef",
+      "expression": "def capture(self, snapshot):"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 15,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 16,
+      "kind": "Attribute",
+      "expression": "self.capture"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 96,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 86,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 149,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 28,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 103,
+      "kind": "FunctionDef",
+      "expression": "def capture(fixture):"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 70,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 71,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 78,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 126,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 198,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 223,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 40,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 227,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 241,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 235,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 83,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 157,
+      "kind": "Attribute",
+      "expression": "ResponseConversation.capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 239,
+      "kind": "Attribute",
+      "expression": "AddressedPage.capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 121,
+      "kind": "Attribute",
+      "expression": "AddressedPage.capture"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 38,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 89,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 231,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 84,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 178,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 257,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 83,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 35,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 45,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 69,
+      "kind": "Attribute",
+      "expression": "MessagePageRequest.capture"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 149,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 65,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 175,
+      "kind": "Attribute",
+      "expression": "HumanInputOrigin.capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 133,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 149,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 155,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 319,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 41,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 263,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 27,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 12,
+      "kind": "import",
+      "expression": "from agent_comms.native_entries import NativeEntry, NativeEvidenceScope"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 13,
+      "kind": "import",
+      "expression": "from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 23,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 37,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 51,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 74,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 125,
+      "kind": "Name",
+      "expression": "PrivateEvidenceRead"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 145,
+      "kind": "Name",
+      "expression": "NativeEvidenceScope"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 160,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 171,
+      "kind": "Name",
+      "expression": "PrivateEvidenceRead"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 217,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 224,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 9,
+      "kind": "import",
+      "expression": "from agent_comms.compaction_boundary import CompactionBoundary"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 75,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 88,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 90,
+      "kind": "Attribute",
+      "expression": "boundary.hold"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 91,
+      "kind": "Attribute",
+      "expression": "held.capture"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 107,
+      "kind": "Attribute",
+      "expression": "witness.retained_task_facts"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 150,
+      "kind": "Attribute",
+      "expression": "commit.OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 166,
+      "kind": "Attribute",
+      "expression": "commit.OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 21,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1467,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 369,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 66,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 72,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 240,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 293,
+      "kind": "Attribute",
+      "expression": "NativeContextJournal.open_evidence"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 48,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 58,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 52,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 113,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 153,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 132,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 227,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 63,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 261,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 217,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 328,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 348,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 356,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 366,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 399,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 45,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 54,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 61,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 54,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 136,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 162,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_authority.py",
+      "line": 30,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 33,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 34,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 68,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 83,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 85,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 115,
+      "kind": "Attribute",
+      "expression": "bridge.boundary.native_reader"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 162,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 220,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 261,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 304,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 341,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 480,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 505,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 743,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 171,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 221,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 282,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 318,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 350,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 423,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 457,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 479,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 484,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 529,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 545,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 932,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 1113,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 74,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 97,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 517,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 101,
+      "kind": "Attribute",
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 113,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 297,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 333,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 388,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 598,
+      "kind": "Attribute",
+      "expression": "bridge.boundary.hold"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 787,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 804,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 858,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 864,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "bridge.require_source_current"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 38,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 28,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativePreparationError, SkipPreparationResult, prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 115,
+      "kind": "Attribute",
+      "expression": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 313,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 599,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 600,
+      "kind": "Attribute",
+      "expression": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 644,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 691,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 844,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 924,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 875,
+      "kind": "Attribute",
+      "expression": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1006,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1019,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 73,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 85,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 520,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 522,
+      "kind": "Attribute",
+      "expression": "bridge.prepare_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 590,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 635,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 682,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 835,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 117,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 602,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 509,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 877,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 524,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 12,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 56,
+      "kind": "FunctionDef",
+      "expression": "def require_source_current(self, *_args):"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "expression": "def prepare_source(self, *_args, **_kwargs):"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 42,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 306,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 377,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 456,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 478,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "tests/test_owner_release_restart.py",
+      "line": 91,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 135,
+      "kind": "Attribute",
+      "expression": "pending.capture"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 139,
+      "kind": "Attribute",
+      "expression": "observed.capture"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 51,
+      "kind": "Attribute",
+      "expression": "AddressedPage.capture"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 42,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 50,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 56,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 63,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 170,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 344,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 35,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_publication_snapshot_identity.py",
+      "line": 67,
+      "kind": "Attribute",
+      "expression": "ResponseConversation.capture"
+    },
+    {
+      "path": "tests/test_read_ledger.py",
+      "line": 163,
+      "kind": "Attribute",
+      "expression": "comms.bus.reads.capture"
+    },
+    {
+      "path": "tests/test_read_ledger.py",
+      "line": 65,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_authority.py",
+      "line": 20,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 23,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 20,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 40,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 65,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 20,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 54,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 86,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 60,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 194,
+      "kind": "Attribute",
+      "expression": "SelectedAdmissionSource.capture"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 159,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 188,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 202,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 164,
+      "kind": "import",
+      "expression": "from test_current_input_origin import Client, capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 39,
+      "kind": "Attribute",
+      "expression": "captured.retained_task_facts"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 170,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 175,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 56,
+      "kind": "Attribute",
+      "expression": "owner.retained_task_facts"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 31,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 133,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 115,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 21,
+      "kind": "import",
+      "expression": "from agent_comms.native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 108,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 146,
+      "kind": "Name",
+      "expression": "NativeEvidenceRead"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 24,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 30,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 144,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 150,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 525,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "line": 41,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 50,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_runtime_subscription_handshake.py",
+      "line": 37,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 150,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 399,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 491,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 740,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 750,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 764,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 177,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 443,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1030,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 31,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 37,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 348,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 471,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 357,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 55,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 68,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 493,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 506,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 25,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 165,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 131,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 198,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 461,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 472,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 14,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import prepare_native_source"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "SelectedAdmissionSource.capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 65,
+      "kind": "Name",
+      "expression": "OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 140,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 114,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile_interrupted_summaries"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 189,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 67,
+      "kind": "Name",
+      "expression": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 109,
+      "kind": "Attribute",
+      "expression": "bridge.reconcile_interrupted_summaries"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 33,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 408,
+      "kind": "import",
+      "expression": "from agent_comms.compaction_boundary import CompactionBoundary"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 411,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 460,
+      "kind": "import",
+      "expression": "from agent_comms.compaction_boundary import CompactionBoundary"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 462,
+      "kind": "import",
+      "expression": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 36,
+      "kind": "Name",
+      "expression": "NativeWitness"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 438,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 497,
+      "kind": "Name",
+      "expression": "CompactionBoundary"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 441,
+      "kind": "Attribute",
+      "expression": "boundary.hold"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 442,
+      "kind": "Attribute",
+      "expression": "held.capture"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 453,
+      "kind": "Attribute",
+      "expression": "boundary.hold"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 641,
+      "kind": "Attribute",
+      "expression": "result.admit_original"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 503,
+      "kind": "Attribute",
+      "expression": "boundary.hold"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 504,
+      "kind": "Attribute",
+      "expression": "held.capture"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 43,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 160,
+      "kind": "Attribute",
+      "expression": "QueuedInputContext.capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 22,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 94,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 133,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 34,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 99,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 184,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 228,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 88,
+      "kind": "Attribute",
+      "expression": "TranscriptSnapshotUpdate.capture"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 324,
+      "kind": "Attribute",
+      "expression": "CoordinationSegment.capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 17,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 35,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 39,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 51,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_viewer_snapshot_index.py",
+      "line": 109,
+      "kind": "Attribute",
+      "expression": "comms.bus.reads.capture"
+    },
+    {
+      "path": "tests/test_wake_candidate_index.py",
+      "line": 54,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 47,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 57,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_wake_lifetime.py",
+      "line": 22,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 179,
+      "kind": "FunctionDef",
+      "expression": "def capture(root):"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 184,
+      "kind": "Name",
+      "expression": "capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 24,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 119,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 133,
+      "kind": "FunctionDef",
+      "expression": "def capture_source():"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 90,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "capture_source"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 173,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 174,
+      "kind": "Attribute",
+      "expression": "checkpoint.capture"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 218,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 149,
+      "kind": "Attribute",
+      "expression": "NativeEntry.open_evidence"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 282,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 53,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 368,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 103,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 200,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 365,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 384,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 356,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 381,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "tools/cutover/read_original_owner.py",
+      "line": 29,
+      "kind": "Attribute",
+      "expression": "OwnerRestartSelection.capture"
+    },
+    {
+      "path": "tools/cutover/seed_original_owner_capture.py",
+      "line": 19,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tools/cutover/seed_original_task_carry.py",
+      "line": 21,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tools/cutover/seed_retained_index_fixture.py",
+      "line": 20,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 43,
+      "kind": "Attribute",
+      "expression": "ProcessIdentity.capture"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 137,
+      "kind": "Attribute",
+      "expression": "RetainedOwnerLaunch.capture"
+    }
+  ],
+  "limits": "Lexical declarations, references, assignments, imports and capabilities. Aliases/dynamic resolution require semantic reading. Native JS untouched; dependency census is567 and exact044 artifact. Not dynamic-resolution proof."
+}
