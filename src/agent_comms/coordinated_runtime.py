@@ -85,7 +85,9 @@ class SelectedExecution:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
         self.root = Path(self.root).absolute()
-        self.validate()
+        # Package acquisition belongs to this execution before it can select
+        # a claim. Join its blocking verification before that custody advances.
+        await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
             async with SelectedParticipant.select(
@@ -103,6 +105,6 @@ class SelectedExecution:
                     self.session_file,
                     self.fresh_private_enrollment,
                     self.selected_thinking_level,
-                    self.native_package,
+                    self,
                 )
                 return await SelectedConsideration(participant).run(self, session)

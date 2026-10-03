@@ -205,16 +205,23 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             not math.isfinite(model_wait_timeout) or model_wait_timeout <= 0
         ):
             raise ValueError("A model progress wait must be positive and finite")
-        launch = NativePiRpcLaunch.tracked(
-            package,
-            worktree=worktree,
-            session=session,
-            provider=provider,
-            model=model,
-            thinking_level=thinking_level,
-            environment=environment,
-            selected_tool_mode=selected_tool_mode,
-        )
+        measurements = (acquisition_measurements if acquisition_measurements is not None
+                        else PublicationMeasurements())
+        # This fresh child still acquires its own verified launch. Hashing and
+        # settings publication must not block the native event reader; joined
+        # cancellation completes that acquisition before returning to custody.
+        with measurements.operation("native_launch_selection"):
+            launch = await Coordination.run_worker(partial(
+                NativePiRpcLaunch.tracked,
+                package,
+                worktree=worktree,
+                session=session,
+                provider=provider,
+                model=model,
+                thinking_level=thinking_level,
+                environment=environment,
+                selected_tool_mode=selected_tool_mode,
+            ))
         turn = cls(
             launch,
             commands.Prompt(
@@ -229,7 +236,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
             startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary,
-                                             measurements=acquisition_measurements),
+                                             measurements=measurements),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,

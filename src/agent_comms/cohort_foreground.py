@@ -23,6 +23,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
@@ -148,7 +149,9 @@ async def run_foreground_once(
         or not worktree.is_dir()
     ):
         raise ValueError("wait must be in [0,300] and worktree must exist")
-    _preflight(root, wire_root_id, native_package, opt_in)
+    await Coordination.run_worker(partial(
+        _preflight, root, wire_root_id, native_package, opt_in,
+    ))
     if (
         selected_existing_file_write is not None
         and type(selected_existing_file_write) is not SelectedExistingFileWrite
