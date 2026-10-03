@@ -52,3 +52,30 @@ already completed596 local summary has no canonical commit. Neither is promoted
 into a matched submitted bounded baseline. The separate provider study is still
 unapproved; missing historical evidence is not an approval blocker to this
 private construction implementation.
+
+## Final scoped validation
+
+The unchanged native89 package exercised the completed private SDK construction
+with no network/provider calls. The authored SDK source control checks bounded
+narrative conversion, original kept text/image, instructions, tools and identity;
+foreign session and stale compaction are refused. Native journal bytes stayed
+unchanged. This is conversion/selection plumbing, not an original model baseline.
+
+The actual original checkpoint CLI returns unavailable because its pre-pack
+assembly was not captured. All seven protected original hashes remain exact.
+The prior 3/3 unassisted and 6/6 assisted score is preserved, not newly measured
+by this construction check. The completed sanity batch passed 27 tests and
+19 subtests in 2.15s. No configured model call, input replay, environment, native
+artifact, public mutation or context installation.
+
+Existing NRA Package AST parsed src/tests/tools with zero omissions; selected
+owner declarations stay 20, lexical references 213 to 214. Built-in Acorn parsed
+the changed JS before/after plus five original native owner modules: nine units,
+zero omissions. Dynamic SDK callbacks were read semantically; AST is not a
+behavior proof. Replaced ten private fixture/consumer lines; no production delta.
+
+Receipt: evidence/s4-bounded-native-construction598-20261003/receipt.json.
+The remaining application fact belongs to existing SDK context/NativeForkCreation
+owners: a new fork cannot simply claim the old session identity, and a preview
+cannot grant an input. Source construction is reviewable without the unapproved
+comparative study; actual submission/model acceptance remains open.
