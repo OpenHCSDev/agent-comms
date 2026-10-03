@@ -1,5 +1,5 @@
 {
-  "sha": "45258b835980acc5fc76503fc2043f4ad5becb8d",
+  "sha": "ee3f19907899534084eefa9943c83220cfe199b2",
   "parsed": 726,
   "omissions": [],
   "sites": [
@@ -768,56 +768,84 @@
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 97,
+      "line": 17,
+      "node": "alias",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 125,
       "node": "alias",
       "name": "PiSessionChild",
       "source": "PiSessionChild"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 145,
+      "line": 173,
       "node": "alias",
       "name": "PiSessionChild",
       "source": "PiSessionChild"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 103,
+      "line": 36,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 131,
       "node": "Name",
       "name": "PiSessionChild",
       "source": "PiSessionChild"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 111,
+      "line": 139,
       "node": "Name",
       "name": "PiSessionChild",
       "source": "PiSessionChild"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 150,
+      "line": 178,
       "node": "Name",
       "name": "PiSessionChild",
       "source": "PiSessionChild"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 158,
+      "line": 186,
       "node": "Name",
       "name": "PiSessionChild",
       "source": "PiSessionChild"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 164,
+      "line": 192,
       "node": "Attribute",
       "name": "close_idle",
       "source": "owner.persistent.close_idle"
     },
     {
       "path": "tests/test_backend_native_custody.py",
-      "line": 160,
+      "line": 27,
+      "node": "Attribute",
+      "name": "external_write",
+      "source": "owner.persistent.external_write"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 28,
+      "node": "Name",
+      "name": "ReopenNative",
+      "source": "ReopenNative"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 188,
       "node": "Attribute",
       "name": "close_idle",
       "source": "owner.persistent.close_idle"
@@ -1082,5 +1110,5 @@
       "source": "backend.PersistentPiSession"
     }
   ],
-  "ambiguity": "Syntactic attributes do not prove dynamic dispatch. Actual MRO/resource/SDK callers read; uncommitted evidence runner has no production imports."
+  "ambiguity": "Syntactic attributes do not prove dynamic dispatch. Actual MRO/resource/SDK callers read; evidence runner imports original installed production."
 }

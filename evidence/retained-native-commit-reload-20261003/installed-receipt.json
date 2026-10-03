@@ -1,0 +1,197 @@
+{
+  "result": "CONFIGURED_SAME_NATIVE_RELOADED_COMMIT_AND_DISTINCT_TURN_PASS",
+  "intent": {
+    "source_head": "ee3f19907899534084eefa9943c83220cfe199b2",
+    "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98/node_modules/@earendil-works/pi-coding-agent",
+    "original_python": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/python",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "original_selection": {
+      "identity": {
+        "incarnation": {
+          "name": "openhcs-audit-merged-boundaries",
+          "created_at": 1790873473.1996155
+        },
+        "generation": 2678
+      },
+      "process": {
+        "pid": 3478993,
+        "start_time": 49758355
+      },
+      "admission_generation": 2642
+    },
+    "settings_paths": [
+      "/home/ts/.pi/agent/settings.json",
+      "/home/ts/code/projects/openhcs/.pi/settings.json",
+      "/home/ts/.pi/agent/models.json",
+      "/home/ts/code/projects/openhcs/.pi/models.json"
+    ],
+    "protected_before": {
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "e7575aac784196d2cfae74ec70dc4c4385460e54a863638212dc5a296a2b7bbe",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "c7e0f6ed9fac32fd4cfd88b7dbd5f99d08e9a6fadb4eacb2d4c9c9ec682a6f87",
+      "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/79cb9232873a4501a118cc25da9fca67.json": "a997603d0a073c1e9c9266fcc373be029cc3f6f1f52dea24646c9b99553cec0d"
+    },
+    "source_bytes": 42045168,
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/retained-native581-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "sdk": "0.12.1",
+    "source_files_equal": 339,
+    "public_inputs": 0,
+    "replay": false,
+    "scope": "One configured isolated saved-session fork, SDK/ACP manual selected summary, private peer during streaming, then distinct new input; no physical UI or public channel performance claim."
+  },
+  "journey": {
+    "complete": true,
+    "public_inputs": 0,
+    "input_replays": 0,
+    "installed_UI": false,
+    "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "source_bytes": 42045168,
+    "original_sha256": "e7575aac784196d2cfae74ec70dc4c4385460e54a863638212dc5a296a2b7bbe",
+    "fork_bytes": 42045151,
+    "manual_commit": "d44e30718af64f9899ae8e895d7de893",
+    "peer_messages_during_summary": 1,
+    "original_inputs_before_new_prompt": 0,
+    "distinct_input_started_once": true,
+    "distinct_answer": true,
+    "elapsed_seconds": 124.47397436096799,
+    "original_source_unchanged": true,
+    "native_children_closed": true
+  },
+  "selected_requests": [
+    {
+      "request_id": "7b34231a-1c8a-4524-bc25-a4ab7ae5134b",
+      "operation": {
+        "session_file": "/home/ts/.cache/agent-scratch/m581-retained-native-commit-20261003/forks/2026-10-03T10-17-30-973Z_01a10144-d65e-7122-88d8-b1bc15aa3294.jsonl",
+        "operation_id": "1dac3bf99ab54ba3b9cbba32659bf3d0"
+      },
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "source529",
+            "created_at": 1791022654.881568
+          },
+          "generation": 1
+        },
+        "turn_id": "compaction-3d873e5050e3444d89773d9f67de2b59",
+        "admission_generation": 1
+      },
+      "native_process": {
+        "pid": 3546425,
+        "start_time": 49829544
+      },
+      "phases": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.04755,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498305361993934
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 7.259496,
+          "transport": "",
+          "callback": "before_provider_request",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498305365606895
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 7.315782,
+          "transport": "",
+          "callback": "before_provider_request",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498305366383055
+        },
+        {
+          "stage": "budget_admission",
+          "elapsed_ms": 8.860207,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498305366852373
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 10.122557,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498305367289892
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 1031.272644,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498306348769760
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 1031.324622,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498306349346302
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 1365.584463,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498306679164382
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3323.466377,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498308637219995
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 98009.101621,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498403322948315
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 98010.980649,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 498403510329755
+        }
+      ]
+    }
+  ],
+  "normal_request_count": 1,
+  "subsequent_turns_distinct_from_selected_summary": true,
+  "same_native_process_after_committed_reload": true,
+  "original_native_process_retired_after_shutdown": true,
+  "original_protected_unchanged": true,
+  "limits": "Observed request/callback/transport spans on this configured fork only; no controlled performance gain or historical attribution. Concurrent summary leaves are not summed as wall time."
+}
