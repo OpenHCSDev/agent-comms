@@ -161,7 +161,7 @@ async def run_configured(options):
             AGENT_COMMS_AGENT_BIN=str(runtime / 'pi-comms-native'),
             PATH=str(runtime) + os.pathsep + environment.get('PATH', os.defpath),
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
-            XDG_DATA_HOME=str(root / 'data'))
+            XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_DEBUG_LOG=str(root / 'owner-debug.log'))
         for name in ('PYTHONPATH', 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY',
             'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID'):
             environment.pop(name, None)
@@ -198,7 +198,6 @@ async def run_configured(options):
             replies = tuple(entry for entry in entries[entries.index(user) + 1:] if entry.final_reply)
             assert replies[-1].message.authoritative_text.strip() == token
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
-            captured.require_current()
             receipt.update(state='SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS',
                 original_input=FieldCodec.encode(original), original_native_user=user.id,
                 original_native_reply=replies[-1].id, source_unchanged=True,

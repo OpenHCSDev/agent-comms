@@ -21,3 +21,30 @@ claimed. No historical13.562/13.696 or98/99-second speed claim.
 Original authentic595 source/fork/private wire,583 control06, UNKNOWN and raw
 negative records are protected.534 is the existing package-only reused holder;
 no new environment/checkouts/native build. Parent owns receiving/publication.
+
+## Final actual configured Native/SDK/ACP acceptance
+
+The following closes the earlier resource-only native-path limit without a UI
+claim. Existing driver, SAME534/native89, fresh SDK fork of the original
+openhcs-audit-merged-runtime 42,376,246-byte saved source with captured
+openai-codex/gpt-6.1-sol/high settings. No provider substitution, priming, original
+input replay, new environment, public mutation, or frozen595 fork change.
+
+One real installed stdio ACP attachment submits one distinct terse prompt.
+Original native user bfa3ec16 and answer640d8e49; original lease
+0888345d28d44fed983dbb148c627be7. ACP receives the reply and final canonical idle
+TurnChanged state; original local goal waiter releases and becomes Active. ACP
+process752010 and native752173/birth52610919 actually exit through normal cleanup.
+Original public source hash remains exact; native input proof/disposition and
+all raw original records preserved in the private run. No UI paint claim.
+
+Actual run24.361s, attachment-through-return13.016s. Original native request5.976s,
+awaited callbacks4.184ms; observed lease-begin→native-request-preparing4.480s.
+These are this input's spans, NOT evidence the old13.562/13.696 inter-request or
+98/99-second provider spans improved. Separate cold acquisition/postcommit clocks
+are absent here; those intervals must not be guessed. See CONFIGURED-TIMING.json.
+
+Original raw terminal, ACP updates, native request log and driver log are copied
+unchanged to configured01-* evidence. Original private run (source/fork/proofs/
+auth/UNKNOWN) remains protected at .artifacts/joined-terminal-custody597-configured01.
+The affected configured path is accepted; production still equals reviewed2a90.
