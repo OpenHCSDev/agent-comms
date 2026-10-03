@@ -34,6 +34,7 @@ from .pi_payloads import (
     UnknownData,
 )
 from .pi_summary_payloads import (
+    CompactionPreparationData,
     CompactionSettingsData,
     SelectedModel,
     SelectedSummaryData,
@@ -443,6 +444,18 @@ class AgentCommsCompactionSettings(PiCommand):
     selected: SelectedModel
     purpose: type[CompactionReason] = ThresholdCompactionReason
     boundary: tuple[MessageReference, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsPrepareCompaction(NativeQuery):
+    response_payload = CompactionPreparationData
+    strict_response = True
+    version: int = 1
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    selected: SelectedModel
+    settings: PiCompactionSettings
+    retained_text: str = field(default="", metadata={"wire_name": "retainedText"})
 
 
 @dataclass(frozen=True, kw_only=True)

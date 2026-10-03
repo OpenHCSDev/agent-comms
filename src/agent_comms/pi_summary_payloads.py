@@ -9,7 +9,7 @@ from typing import Literal
 
 from .field_codec import FieldCodec
 from .compaction_identity import NativeCommitIdentity
-from .owner_compaction_prepare import NativeWitness
+from .owner_compaction_prepare import NativePreparationResult, NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
 
@@ -337,3 +337,29 @@ class CompactionSettingsData(PiResponseData):
         if self.decision.boundary != request.boundary:
             raise ValueError("Selected timing source changed")
         return self.decision
+
+
+@dataclass(frozen=True)
+class CompactionPreparationData(PiResponseData):
+    """The selected child's original store supplies a read-only prepared cut."""
+
+    strict_fields = True
+    version: Literal[1]
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    selected: SelectedModel
+    settings: PiCompactionSettings
+    preparation: NativePreparationResult
+
+    def require_request(self, request):
+        from pathlib import Path
+        from .native_session_reopen import NativeSessionIdentity
+        from .private_path import FileRevision
+
+        original = NativeSessionIdentity(request.session_id, request.session_file)
+        observed = NativeSessionIdentity(self.session_id, self.session_file)
+        if observed != original or self.selected != request.selected or self.settings != request.settings:
+            raise ValueError("Selected preparation source or settings changed")
+        self.preparation.require_source(original)
+        file = Path(original.session_file)
+        return self.preparation.checked(file, FileRevision.from_stat(file.stat()))

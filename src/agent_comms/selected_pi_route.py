@@ -12,8 +12,9 @@ from typing import TypeVar
 from .backend import PersistentPiSession
 from .native_pi import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
-from .owner_compaction_settings import PiCompactionDecision
-from .pi_commands import AgentCommsCompactionSettings, PiCommand
+from .owner_compaction_prepare import NativePreparationResult
+from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
+from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, PiCommand
 from .pi_events import Response
 from .pi_rpc import PiRpcChannel
 from .pi_summary_payloads import SelectedModel
@@ -80,11 +81,9 @@ async def _exchange_observation(
             raise SelectedPiProbeUnknownError("Selected Pi dry-run transport uncertain") from error
 
 
-def _read_settings_response(
-    raw: bytes, request: AgentCommsCompactionSettings
-) -> PiCompactionDecision:
+def _read_selected_response(raw: bytes, request: PiCommand):
     if not raw.endswith(b"\n") or len(raw) > 16384:
-        raise SelectedPiProbeUnknownError("Incomplete selected settings response")
+        raise SelectedPiProbeUnknownError("Incomplete selected observation response")
     response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384)
     return response.require_request(request).require_request(request)
 
@@ -111,7 +110,31 @@ async def observe_selected_compaction_decision(
         boundary=boundary,
     )
     return await _exchange_observation(
-        persistent, request, source, _read_settings_response,
+        persistent, request, source, _read_selected_response,
+        expected_package=expected_package, timeout=timeout, max_response=16384,
+    )
+
+
+async def prepare_selected_native_source(
+    persistent: PersistentPiSession, *, session_file: str, expected_package: Path,
+    selected: SelectedModel, settings: PiCompactionSettings, retained_text: str = "",
+    timeout: float = 3.0,
+) -> NativePreparationResult:
+    """Prepare on the existing idle store; never open a detached history index.
+
+    Both the initial cut and the later exact retained payload use this same
+    observation lifetime. Failure retires uncertain custody and grants no
+    fallback preparation, provider request or input replay.
+    """
+    source = persistent.custody.idle().identity
+    source.require_session(session_file)
+    request = AgentCommsPrepareCompaction(
+        id=secrets.token_hex(16), session_id=source.session_id,
+        session_file=source.session_file, selected=selected, settings=settings,
+        retained_text=retained_text,
+    )
+    return await _exchange_observation(
+        persistent, request, source, _read_selected_response,
         expected_package=expected_package, timeout=timeout, max_response=16384,
     )
 

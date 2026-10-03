@@ -13,6 +13,7 @@ import sys
 import threading
 from contextlib import contextmanager
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -23,13 +24,14 @@ from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import AttachedChild, Platform, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.compaction_publication import publish_pending_local
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import (NativePreparationError, SkipPreparationResult,
                                                  prepare_native_source)
 from agent_comms.owner_compaction_provider import NativeSummary
-from agent_comms.owner_compaction_runtime import compact_owner_once
+from agent_comms.owner_compaction_runtime import _commit_native_summary
 from agent_comms.owner_compaction_settings import PiCompactionSettings, PiSettingsEvidenceError
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -65,6 +67,23 @@ console.log(manager.getSessionFile());
         text=True,
     )
     return Path(result.stdout.strip())
+
+
+async def _prepare_saved_source(session, settings, context_window, retained_text):
+    # These writer controls have no selected child. Their explicit standalone
+    # native read is a different resource contract, never a selected fallback.
+    return await Coordination.run_worker(partial(
+        prepare_native_source, Path(PACKAGE), str(session), settings=settings,
+        context_window=context_window, retained_text=retained_text,
+    ))
+
+
+async def _capture_saved_source(bridge, owner, generation):
+    prepare = partial(_prepare_saved_source, Path(owner.require_saved_session()),
+                      PiCompactionSettings(16384, 1), 128000)
+    return await bridge.prepare_source(
+        owner, generation, prepared=(await prepare("")).require_ready(), prepare=prepare,
+    )
 
 
 def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
@@ -112,14 +131,7 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     before = session.read_bytes()
-    candidate = bridge.prepare_source(
-        owner, owner_generation,
-        prepared=prepare_native_source(
-            bridge.native.package_dir, owner.require_saved_session(),
-            settings=PiCompactionSettings(16384, 1), context_window=128000,
-        ).require_ready(),
-        settings=PiCompactionSettings(16384, 1), context_window=128000
-    )
+    candidate = asyncio.run(_capture_saved_source(bridge, owner, owner_generation))
     prepared, source = candidate
     assert session.read_bytes() == before
     operation = bridge.commit(
@@ -519,14 +531,7 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             )
             bridge = OwnerCompactionCommit(root / "registry.json", package)
             monkeypatch.setenv("AC_CAPACITY_PHASE", "prepare")
-            candidate = bridge.prepare_source(
-                owner, generation,
-                prepared=prepare_native_source(
-                    bridge.native.package_dir, owner.require_saved_session(),
-                    settings=PiCompactionSettings(16384, 1), context_window=128000,
-                ).require_ready(),
-                settings=PiCompactionSettings(16384, 1), context_window=128000
-            )
+            candidate = asyncio.run(_capture_saved_source(bridge, owner, generation))
             prepared, source = candidate
             receipt["phases"].append("prepare")
             assert prepared.witness.session_id == fixture["session_id"]
@@ -597,14 +602,7 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
         owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
-    candidate = bridge.prepare_source(
-        owner, owner_generation,
-        prepared=prepare_native_source(
-            bridge.native.package_dir, owner.require_saved_session(),
-            settings=PiCompactionSettings(16384, 1), context_window=128000,
-        ).require_ready(),
-        settings=PiCompactionSettings(16384, 1), context_window=128000
-    )
+    candidate = asyncio.run(_capture_saved_source(bridge, owner, owner_generation))
     prepared, source = candidate
     before = session.read_bytes()
     comms = Comms(root)
@@ -652,15 +650,11 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
         comms.messaging.send("peer", "owner", "Correction after preparation")
         return NativeSummary(captured.retained.text + "\n\nNow stale", None, None)
 
+    prepared, captured = await _capture_saved_source(bridge, owner, owner_generation)
+    summary = await corrected_summary(prepared, captured)
     with pytest.raises(RelationViolationError, match="source changed"):
-        await compact_owner_once(
-            bridge,
-            owner,
-            owner_generation,
-            persistent,
-            corrected_summary,
-            settings=PiCompactionSettings(16384, 1),
-            context_window=128000,
+        await _commit_native_summary(
+            bridge, owner, owner_generation, persistent, prepared, captured, summary,
         )
     assert persistent.custody.session_file == str(session)
     assert session.read_bytes() == original
@@ -690,6 +684,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
+    prepared, captured = await _capture_saved_source(bridge, owner, owner_generation)
     native_call = bridge.native.exchange
     entered = threading.Event()
     release = threading.Event()
@@ -717,14 +712,9 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
 
     async def owned_turn():
         async with turn_lock:
-            return await compact_owner_once(
-                bridge,
-                owner,
-                owner_generation,
-                persistent,
-                synthetic_summary,
-                settings=PiCompactionSettings(16384, 1),
-                context_window=128000,
+            return await _commit_native_summary(
+                bridge, owner, owner_generation, persistent, prepared, captured,
+                await synthetic_summary(prepared, captured),
             )
 
     task = asyncio.create_task(owned_turn())
@@ -872,14 +862,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 check=True,
                 timeout=5,
             )
-        candidate = bridge.prepare_source(
-            owner, owner_generation,
-            prepared=prepare_native_source(
-                bridge.native.package_dir, owner.require_saved_session(),
-                settings=PiCompactionSettings(16384, 1), context_window=128000,
-            ).require_ready(),
-            settings=PiCompactionSettings(16384, 1), context_window=128000
-        )
+        candidate = asyncio.run(_capture_saved_source(bridge, owner, owner_generation))
         prepared, source = candidate
         operation = bridge.commit(
             owner,
@@ -968,16 +951,12 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                     None,
                 )
 
-            operation = await compact_owner_once(
-                bridge,
-                owner,
-                owner_generation,
-                persistent,
-                synthetic_summary,
-                settings=PiCompactionSettings(16384, 1),
-                context_window=128000,
+            prepared, captured = await _capture_saved_source(bridge, owner, owner_generation)
+            operation = await _commit_native_summary(
+                bridge, owner, owner_generation, persistent, prepared, captured,
+                await synthetic_summary(prepared, captured),
             )
-            assert operation.adaptive_result()
+            assert operation.state.declared_name == "committed"
             commit_ids.append(operation.commit_id)
             assert persistent.custody.session_file == str(session)
             assert await publish_pending_local(agent, "project", "project") == 1

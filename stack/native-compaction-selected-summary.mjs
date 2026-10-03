@@ -8,20 +8,34 @@ const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // Read the actual selected SettingsManager: it already owns project trust,
 // migrations and in-memory overrides. No detached reader guesses that state.
-function acValidCompactionSettingsRequest(command) {
+function acValidSelectedSourceRequest(command, keys) {
     const text = value => typeof value === "string" && value.length > 0 && value.length <= 4096;
-    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected", "purpose", "boundary"]) &&
-        command.type === "agent_comms_compaction_settings" && command.version === 2 && text(command.id) &&
-        ["threshold", "manual"].includes(command.purpose) && Array.isArray(command.boundary) &&
-        command.boundary.length <= 1 && command.boundary.every(ref =>
-            acExactObject(ref, ["seq", "message_id"]) && Number.isSafeInteger(ref.seq) &&
-            ref.seq > 0 && text(ref.message_id)) &&
+    return acExactObject(command, keys) && text(command.id) &&
         text(command.sessionId) && text(command.sessionFile) &&
         acExactObject(command.selected, ["provider", "modelId", "contextWindow"]) &&
         text(command.selected.provider) && text(command.selected.modelId) &&
         Number.isSafeInteger(command.selected.contextWindow) && command.selected.contextWindow > 0;
 }
-function acSelectedCompactionSettings(command, session, conflict) {
+function acValidCompactionSettingsRequest(command) {
+    return acValidSelectedSourceRequest(command,
+        ["id", "type", "version", "sessionId", "sessionFile", "selected", "purpose", "boundary"]) &&
+        command.type === "agent_comms_compaction_settings" && command.version === 2 &&
+        ["threshold", "manual"].includes(command.purpose) && Array.isArray(command.boundary) &&
+        command.boundary.length <= 1 && command.boundary.every(ref =>
+            acExactObject(ref, ["seq", "message_id"]) && Number.isSafeInteger(ref.seq) &&
+            ref.seq > 0 && typeof ref.message_id === "string" && ref.message_id.length > 0 &&
+            ref.message_id.length <= 4096);
+}
+function acValidCompactionPreparationRequest(command) {
+    return acValidSelectedSourceRequest(command,
+        ["id", "type", "version", "sessionId", "sessionFile", "selected", "settings", "retainedText"]) &&
+        command.type === "agent_comms_prepare_compaction" && command.version === 1 &&
+        acExactObject(command.settings, ["reserveTokens", "keepRecentTokens"]) &&
+        Number.isSafeInteger(command.settings.reserveTokens) && command.settings.reserveTokens >= 0 &&
+        Number.isSafeInteger(command.settings.keepRecentTokens) && command.settings.keepRecentTokens > 0 &&
+        typeof command.retainedText === "string" && command.retainedText.isWellFormed();
+}
+function acSelectedIdleSettings(command, session, conflict) {
     if (conflict || session.isCompacting || !session.isIdle || session.isStreaming || session.isRetrying ||
         session._retryAttempt || session._nativeInterruptIds || session.pendingMessageCount ||
         session.agent.steeringQueue.messages.length || session.agent.followUpQueue.messages.length ||
@@ -36,6 +50,10 @@ function acSelectedCompactionSettings(command, session, conflict) {
         settings.reserveTokens < 0 || settings.reserveTokens > 10000000 ||
         !Number.isSafeInteger(settings.keepRecentTokens) || settings.keepRecentTokens <= 0 ||
         settings.keepRecentTokens > 10000000) throw Error("Invalid effective compaction settings");
+    return settings;
+}
+function acSelectedCompactionSettings(command, session, conflict) {
+    const settings = acSelectedIdleSettings(command, session, conflict);
     const policy = CompactionPolicy.fromEnvironment();
     return {version: 2, sessionId: session.sessionId, sessionFile: session.sessionFile,
         selected: command.selected,
@@ -43,6 +61,27 @@ function acSelectedCompactionSettings(command, session, conflict) {
             keepRecentTokens: settings.keepRecentTokens,
             taskAware: policy.taskTimingEnabled(), boundary: command.boundary,
             reason: policy.decision(session, settings, command.purpose, command.boundary)}};
+}
+function acSelectedCompactionPreparation(command, session, conflict) {
+    const settings = acSelectedIdleSettings(command, session, conflict);
+    if (command.settings.reserveTokens !== settings.reserveTokens ||
+        command.settings.keepRecentTokens !== settings.keepRecentTokens)
+        throw Error("Selected preparation settings changed");
+    const manager = session.sessionManager;
+    const revision = manager.entryStore.revision;
+    const prepared = prepareCompaction(manager.entryStore, settings, session.model,
+        manager.getLeafId(), command.retainedText);
+    const preparation = prepared ? {status: "ready",
+        witness: manager.captureCompactionWitness(prepared.firstKeptEntryId),
+        tokensBefore: prepared.tokensBefore, isSplitTurn: prepared.isSplitTurn}
+        : {status: "skip", sessionId: session.sessionId};
+    manager.entryStore.assertCurrent();
+    if (manager.entryStore.revision !== revision)
+        throw Error("Selected preparation source changed");
+    return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
+        selected: command.selected,
+        settings: {reserveTokens: settings.reserveTokens, keepRecentTokens: settings.keepRecentTokens},
+        preparation};
 }
 function acValidSummaryRequest(value) {
     const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings", "retainedText"];
