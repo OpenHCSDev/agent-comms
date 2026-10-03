@@ -28,7 +28,7 @@ from agent_comms.private_path import FileRevision
 from agent_comms.text_digest import TextDigest
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.turn_lease import TurnLeaseFence
-from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
+from agent_comms.retained_task_facts import GoalTaskFact, HumanConstraintTaskFact, RetainedTaskFacts
 from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDrop
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
@@ -213,7 +213,10 @@ class RecordedMeasurementTests(unittest.TestCase):
                 (SegmentManifest('tool_catalog', (JournalProvenance(probe.session.session_file, ('original',)),),
                     'c' * 64, 10, 2),), 'native', request_id='request')
             return {'construction': {'fork': fork, 'sdk_manifest': manifest,
-                'request_budget': {'evaluated': True, 'observations': (point,)}},
+                'request_budget': {'evaluated': True, 'observations': (point,)},
+                'request_completion': RecordedNativeProbe.request_completion(
+                    {'evaluated': True, 'observations': (point,)},
+                    MessageEntry(id='terminal', message=AssistantMessage(provider='provider', model='model')))},
                 'model_steps': ({'selection': {'evaluated': True, 'provider': 'provider', 'model': 'model',
                     'api': 'original-api', 'response_model': None, 'provider_thinking_level': None}},),
                 'scoped_facts': {'configured_settings': {'evaluated': True, 'model': model, 'thinking': 'high'}}}
@@ -237,6 +240,15 @@ class RecordedMeasurementTests(unittest.TestCase):
         unavailable = observation('parent', probe=control)
         unavailable['construction']['request_budget'] = {'evaluated': False, 'reason': 'Historical record absent'}
         self.assertFalse(candidate.alignment(different, a, {'r1': unavailable}, scenario.rounds)['r1']['evaluated'])
+        # No-summary controls can match original request/terminal selections;
+        # absent captured settings are still unevaluated, never inherited.
+        no_summary = observation('parent', probe=control)
+        no_summary['scoped_facts'] = {'configured_settings': {'evaluated': False}}
+        match = candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds)['r1']
+        self.assertTrue(match['evaluated'])
+        self.assertFalse(match['captured_settings']['model']['evaluated'])
+        no_summary['construction']['request_completion'] = {'evaluated': False, 'reason': 'Different terminal selection'}
+        self.assertFalse(candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds)['r1']['evaluated'])
 
     def test_request_alignment_preserves_missing_intent_and_revised_allowances(self):
         # Prevent configured-model matches and missing output intent from
@@ -250,14 +262,21 @@ class RecordedMeasurementTests(unittest.TestCase):
         def observed(*points):
             return {'construction': {'request_budget': {'evaluated': True, 'observations': points}}}
 
+        terminal = MessageEntry(id='terminal', message=AssistantMessage(provider='original', model='model'))
+        joined = RecordedNativeProbe.request_completion(observed(point)['construction']['request_budget'], terminal)
+        self.assertTrue(joined['evaluated'])
+        self.assertEqual(joined['terminal_entry'], 'terminal')
+        wrong_terminal = replace(terminal, message=replace(terminal.message, model='another'))
+        self.assertFalse(RecordedNativeProbe.request_completion(observed(point)['construction']['request_budget'], wrong_terminal)['evaluated'])
+        self.assertFalse(RecordedNativeProbe.request_completion(observed(replace(point, model=None))['construction']['request_budget'], terminal)['evaluated'])
         a = observed(point, replace(point, requested_output_tokens=20, admitted_output_tokens=10))
         b = observed(replace(point, estimated_input_tokens=70, available_tokens=30, admitted_output_tokens=30))
-        match = RecordedNativeProbes.request_alignment(a, b, 'original/model')
+        match = RecordedNativeProbes.request_alignment(a, b)
         self.assertTrue(match['evaluated'])
         self.assertEqual(len(match['candidate']['observations']), 2)
         self.assertTrue(match['model_capacity']['context_window']['same'])
         absent = observed(replace(point, requested_output_tokens=None, admitted_output_tokens=None))
-        missing = RecordedNativeProbes.request_alignment(absent, absent, 'original/model')
+        missing = RecordedNativeProbes.request_alignment(absent, absent)
         self.assertFalse(missing['request_contract']['requested_output_tokens']['evaluated'])
         self.assertIsNone(missing['request_contract']['requested_output_tokens']['same'])
         for changed in (
@@ -266,13 +285,13 @@ class RecordedMeasurementTests(unittest.TestCase):
             replace(point, requested_output_tokens=51),
         ):
             with self.assertRaises(ValueError):
-                RecordedNativeProbes.request_alignment(observed(point), observed(changed), 'original/model')
+                RecordedNativeProbes.request_alignment(observed(point), observed(changed))
         with self.assertRaisesRegex(ValueError, 'Prepared native model'):
-            RecordedNativeProbes.request_alignment(observed(point), observed(point), 'another/model')
+            RecordedNativeProbes.request_alignment(observed(point), observed(replace(point, model=replace(point.model, id='another'))))
         with self.assertRaisesRegex(ValueError, 'original observations'):
-            RecordedNativeProbes.request_alignment(observed(), observed(point), 'original/model')
+            RecordedNativeProbes.request_alignment(observed(), observed(point))
         self.assertFalse(RecordedNativeProbes.request_alignment(
-            observed(replace(point, model=None)), observed(point), 'original/model')['evaluated'])
+            observed(replace(point, model=None)), observed(point))['evaluated'])
 
     def test_completion_metadata_is_original_and_never_filled_from_settings(self):
         # Detect decoder loss of selected/returned model and exact provider
@@ -327,19 +346,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             measured = probe.construction(evidence, branch,
-                                         manifest(str(self.session), ('first', 'probe')), {}, {'evaluated': False})['source_coverage']
+                                         manifest(str(self.session), ('first', 'probe')), {}, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
             partial = probe.construction(evidence, branch,
-                                         manifest(str(self.session), ('probe',)), {}, {'evaluated': False})['source_coverage']
+                                         manifest(str(self.session), ('probe',)), {}, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, branch, manifest(path, ids), {}, {'evaluated': False})
-            self.assertFalse(probe.construction(evidence, branch, None, {}, {'evaluated': False})['source_coverage']['evaluated'])
+                    probe.construction(evidence, branch, manifest(path, ids), {}, {'evaluated': False}, branch[-1])
+            self.assertFalse(probe.construction(evidence, branch, None, {}, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
@@ -361,6 +380,10 @@ class RecordedMeasurementTests(unittest.TestCase):
                             measurement=Measurement.ACTION, decision_source=message.reference)
         report = question.proposed_action('open-ticket', original)
         self.assertTrue(report['declared_alternative']['valid'])
+        self.assertTrue(declaration.contains_alternative('inspect-source'))
+        self.assertTrue(declaration.contains_alternative('open-ticket'))
+        self.assertFalse(declaration.contains_alternative('replay-unknown'))
+        self.assertFalse(declaration.contains_alternative(None))
         self.assertFalse(report['declared_alternative']['chosen'])
         self.assertFalse(report['execution']['evaluated'])
         self.assertFalse(report['constraint_validity']['evaluated'])
@@ -452,6 +475,12 @@ class RecordedMeasurementTests(unittest.TestCase):
         before = attempt(retained)
         unchanged = first.revision_from(first, before, before)['constraints']
         self.assertEqual((unchanged['eligible'], unchanged['unauthorized'], unchanged['mass']), (1, 0, 0))
+        # Different retained classifications still refer to the same certified
+        # publication. They cannot allocate a second lineage/denominator.
+        mixed = attempt(RetainedTaskFacts((*retained.facts, HumanConstraintTaskFact(pin))))
+        projected = first.revision_from(first, before, mixed)['constraints']
+        self.assertEqual(projected, unchanged)
+        self.assertFalse(replace(first, wire=None).revision_from(first, before, before)['evaluated'])
         lost = first.revision_from(first, before, attempt(RetainedTaskFacts(())))['constraints']
         self.assertEqual((lost['eligible'], lost['unauthorized'], lost['mass']), (1, 1, 1))
         comms.messaging.send_user_message(owner.name, 'Explicitly drop this constraint',
