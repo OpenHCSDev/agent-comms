@@ -1,6 +1,6 @@
 {
   "source_base": "92708dcb350918a0aa257193c8b27523fbe32074",
-  "transition": "source family following927 before final qualification",
+  "transition": "c4ce7f34 plus original method promotion to data-free shared RegistryNames behavior; three changed modules reparsed, zero omissions",
   "parsed_modules": 311,
   "omissions": [],
   "sites": [
@@ -245,144 +245,6 @@
       "call": "snapshot.canonical_name(name)"
     },
     {
-      "path": "src/agent_comms/registration.py",
-      "line": 305,
-      "scope": "Registration.canonical_name",
-      "call": "document.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registration.py",
-      "line": 309,
-      "scope": "Registration.aliases_for",
-      "call": "document.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registration.py",
-      "line": 324,
-      "scope": "Registration.goal_history",
-      "call": "document.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registration.py",
-      "line": 339,
-      "scope": "Registration.last_seen",
-      "call": "document.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registration.py",
-      "line": 367,
-      "scope": "Registration.peers",
-      "call": "document.snapshot().canonical_name(exclude)"
-    },
-    {
-      "path": "src/agent_comms/registration.py",
-      "line": 372,
-      "scope": "Registration.__contains__",
-      "call": "document.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 101,
-      "scope": "RegistryDocument.prepare_declaration",
-      "call": "self.snapshot().canonical_name(thread.name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 180,
-      "scope": "RegistryDocument.rename",
-      "call": "self.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 188,
-      "scope": "RegistryDocument.rename",
-      "call": "self.aliases.get(new_name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 233,
-      "scope": "RegistryDocument.unregister",
-      "call": "self.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 243,
-      "scope": "RegistryDocument.archive",
-      "call": "self.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 252,
-      "scope": "RegistryDocument.begin_delete",
-      "call": "self.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 260,
-      "scope": "RegistryDocument.remove",
-      "call": "self.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 278,
-      "scope": "RegistryDocument.heartbeat",
-      "call": "self.snapshot().canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 314,
-      "scope": "RegistryDocument.release_turn",
-      "call": "self.snapshot().canonical_name(lease.identity.incarnation.name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 342,
-      "scope": "RegistryDocument._turn_effects",
-      "call": "self.snapshot().canonical_name(lease.identity.incarnation.name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 379,
-      "scope": "RegistrySnapshot.status",
-      "call": "self.canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 399,
-      "scope": "RegistrySnapshot.require_active",
-      "call": "self.canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 413,
-      "scope": "RegistrySnapshot.owner_identity",
-      "call": "self.canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 417,
-      "scope": "RegistrySnapshot.admission_identity",
-      "call": "self.canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 421,
-      "scope": "RegistrySnapshot.owner_binding",
-      "call": "self.canonical_name(name)"
-    },
-    {
-      "path": "src/agent_comms/registry_provenance.py",
-      "line": 32,
-      "scope": "RegistryProvenance.canonical_name",
-      "call": "self.aliases.get(name, name)"
-    },
-    {
-      "path": "src/agent_comms/registry_provenance.py",
-      "line": 35,
-      "scope": "RegistryProvenance.require",
-      "call": "self.canonical_name(name)"
-    },
-    {
       "path": "src/agent_comms/relationships.py",
       "line": 492,
       "scope": "ThreadRelationships.edit",
@@ -453,7 +315,248 @@
       "line": 131,
       "scope": "TurnGoalAccount.thread_name",
       "call": "snapshot.canonical_name(self.owner.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 21,
+      "scope": "RegistryNames.canonical_name",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 44,
+      "scope": "RegistryProvenance.require",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 101,
+      "scope": "RegistryDocument.prepare_declaration",
+      "call": "self.canonical_name(thread.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 180,
+      "scope": "RegistryDocument.rename",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 188,
+      "scope": "RegistryDocument.rename",
+      "call": "self.aliases.get(new_name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 233,
+      "scope": "RegistryDocument.unregister",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 243,
+      "scope": "RegistryDocument.archive",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 252,
+      "scope": "RegistryDocument.begin_delete",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 260,
+      "scope": "RegistryDocument.remove",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 278,
+      "scope": "RegistryDocument.heartbeat",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 314,
+      "scope": "RegistryDocument.release_turn",
+      "call": "self.canonical_name(lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 342,
+      "scope": "RegistryDocument._turn_effects",
+      "call": "self.canonical_name(lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 379,
+      "scope": "RegistrySnapshot.status",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 399,
+      "scope": "RegistrySnapshot.require_active",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 413,
+      "scope": "RegistrySnapshot.owner_identity",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 417,
+      "scope": "RegistrySnapshot.admission_identity",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 421,
+      "scope": "RegistrySnapshot.owner_binding",
+      "call": "self.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 305,
+      "scope": "Registration.canonical_name",
+      "call": "document.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 309,
+      "scope": "Registration.aliases_for",
+      "call": "document.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 324,
+      "scope": "Registration.goal_history",
+      "call": "document.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 339,
+      "scope": "Registration.last_seen",
+      "call": "document.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 367,
+      "scope": "Registration.peers",
+      "call": "document.canonical_name(exclude)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 372,
+      "scope": "Registration.__contains__",
+      "call": "document.canonical_name(name)"
     }
   ],
-  "limits": "AST call/owner syntax only; receiver and recorded provenance reviewed semantically. This is not runtime qualification."
+  "limits": "AST call/owner syntax only; receiver and recorded provenance reviewed semantically. This is not runtime qualification.",
+  "refreshed_modules": 3,
+  "declarations": [
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "name": "RegistryNames",
+      "bases": [],
+      "annotations": [
+        [
+          "aliases",
+          "Mapping[str, str]"
+        ]
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "name": "RegistryProvenance",
+      "bases": [
+        "RegistryNames"
+      ],
+      "annotations": [
+        [
+          "threads",
+          "dict[str, ThreadProvenance]"
+        ],
+        [
+          "aliases",
+          "dict[str, str]"
+        ]
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "name": "RegistryDocument",
+      "bases": [
+        "RegistryNames"
+      ],
+      "annotations": [
+        [
+          "threads",
+          "dict[str, Thread]"
+        ],
+        [
+          "statuses",
+          "dict[str, ThreadStatus]"
+        ],
+        [
+          "last_seen",
+          "dict[str, float]"
+        ],
+        [
+          "aliases",
+          "dict[str, str]"
+        ],
+        [
+          "owners",
+          "GenerationCounter"
+        ],
+        [
+          "admissions",
+          "GenerationCounter"
+        ]
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "name": "RegistrySnapshot",
+      "bases": [
+        "RegistryProvenance"
+      ],
+      "annotations": [
+        [
+          "threads",
+          "Mapping[str, Thread]"
+        ],
+        [
+          "statuses",
+          "Mapping[str, ThreadStatus]"
+        ],
+        [
+          "last_seen",
+          "Mapping[str, float]"
+        ],
+        [
+          "aliases",
+          "Mapping[str, str]"
+        ],
+        [
+          "owner_generations",
+          "Mapping[str, int]"
+        ],
+        [
+          "admission_generations",
+          "Mapping[str, int]"
+        ]
+      ]
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "name": "Registration",
+      "bases": [],
+      "annotations": []
+    }
+  ]
 }

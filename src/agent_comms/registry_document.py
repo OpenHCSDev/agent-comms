@@ -27,7 +27,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .registry_provenance import RegistryProvenance
+from .registry_provenance import RegistryNames, RegistryProvenance
 from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(slots=True)
-class RegistryDocument:
+class RegistryDocument(RegistryNames):
     threads: dict[str, Thread] = field(default_factory=dict)
     statuses: dict[str, ThreadStatus] = field(default_factory=dict)
     last_seen: dict[str, float] = field(default_factory=dict)
@@ -98,7 +98,7 @@ class RegistryDocument:
         return name
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
-        canonical = self.snapshot().canonical_name(thread.name)
+        canonical = self.canonical_name(thread.name)
         requested = thread.for_registration(canonical, self.threads.get(canonical))
         change = self.prepare_registration(requested, status, new_owner=False)
         return change.declared(requested)
@@ -177,7 +177,7 @@ class RegistryDocument:
 
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
         """Rename one running thread while retaining old names as aliases."""
-        canonical = self.snapshot().canonical_name(name)
+        canonical = self.canonical_name(name)
         if canonical not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if new_name == canonical:
@@ -230,7 +230,7 @@ class RegistryDocument:
         return self.admissions.generations[expected.name]
 
     def unregister(self, name: str) -> None:
-        name = self.snapshot().canonical_name(name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
@@ -240,7 +240,7 @@ class RegistryDocument:
         self.admissions.advance(name)
 
     def archive(self, name: str) -> None:
-        name = self.snapshot().canonical_name(name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
@@ -249,7 +249,7 @@ class RegistryDocument:
         self.admissions.advance(name)
 
     def begin_delete(self, name: str) -> None:
-        name = self.snapshot().canonical_name(name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         self.statuses[name] = self.statuses[name].for_deletion()
@@ -257,7 +257,7 @@ class RegistryDocument:
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        name = self.snapshot().canonical_name(name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         detached = tuple(
@@ -275,7 +275,7 @@ class RegistryDocument:
         return detached
 
     def heartbeat(self, name: str) -> None:
-        name = self.snapshot().canonical_name(name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         previous = self.statuses[name]
@@ -311,7 +311,7 @@ class RegistryDocument:
 
     def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
         """Release only this exact lease; a revoked admission cannot attest completion."""
-        name = self.snapshot().canonical_name(lease.identity.incarnation.name)
+        name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None:
             return False, None
@@ -339,7 +339,7 @@ class RegistryDocument:
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
         """Capture publication effects from the exact fenced document mutation."""
-        name = self.snapshot().canonical_name(lease.identity.incarnation.name)
+        name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None or current.turn_lease != lease.renamed(name):
             return ()

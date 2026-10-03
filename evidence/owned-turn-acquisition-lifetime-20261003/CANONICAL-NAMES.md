@@ -4,8 +4,13 @@ Source correction following reviewed92708dcb, not a Ready receipt.
 Pattern IDEN-7: the loaded-resource query had widened alias resolution into
 membership validation for every unrelated loaded binding.
 
-RegistryProvenance.canonical_name owns alias resolution without membership.
-RegistrySnapshot inherits it; require/status/active/process/lease consumers keep
+RegistryNames carries the original alias-resolution method through MRO for the
+mutable RegistryDocument and frozen RegistryProvenance/RegistrySnapshot.
+It has no instance storage or dataclass fields. Their existing declarations,
+immutability and FieldCodec field layouts remain unchanged. The mutable and
+frozen dataclasses cannot directly inherit each other, so this shared behavior
+base removes the need for per-query map projections.
+Require/status/active/process/lease consumers keep
 their separate membership and custody decisions. SessionLifecycle resolves each
 loaded name through the original captured snapshot; RuntimeRequest.require_owner
 still validates the actual requested thread and process before that lookup.
@@ -15,9 +20,9 @@ A removed unrelated binding therefore cannot prevent an otherwise valid request.
 and mutable document operations, Registration, admission/lease/input owners,
 goal/wait/relationship decisions, live and archived history, publication,
 read ledger/display basis and recorded incarnation consumers. Mutable document
-and Registration queries derive a snapshot from the already acquired document,
-without reopening its lock. Those temporary projections copy the current maps;
-they are not another retained namespace or a cache. Archived consumers continue
+and Registration queries invoke that inherited method directly on the acquired
+document: no snapshot, copying, second read, retained namespace or cache.
+Archived consumers continue
 to receive their original certified RegistryProvenance, not today's registry.
 
 The remaining alias lookups have different contracts: RegistryDocument.rename
@@ -33,12 +38,18 @@ resolution was read from source; AST syntax is not a dynamic execution proof.
 The existing runtime socket control now retains an actually bound removed owner
 before the valid loaded owner, then exercises the same alias rename. It also
 asks the original RuntimeRequest owner validator to refuse the removed target.
-It has not yet run against this changed source. The earlier0d configured receipt
-does not qualify this batch.
+Installed controls05 ran this original socket journey against c4ce7f34 and
+passed, including removed unrelated binding, valid renamed alias and refused
+removed requested target. It does not qualify the later no-copy source refinement.
+The earlier0d configured receipt does not qualify this batch.
 
 Original controls04 was interrupted after582.74s with no completed tests;
 both private stack-inspection attempts were denied by process access policy.
 Its original negative log is retained. Only its exact owned provider-free
 driver1832816/birth53441930 received SIGINT, through Platform.send; it exited2.
-No public process, native attempt or group was signaled. Final changed checks
-and the distinct configured-fork journey remain pending.
+No public process, native attempt or group was signaled. Bounded controls05 then
+confirmed the namespace regression and stopped during the pre-native failure
+control's owner.shutdown. Its full original stack shows waiting on async cleanup
+while the executor workers are idle; it does not establish a physical store-lock
+cause. The original negative is retained. Final changed checks and the distinct
+configured-fork journey remain pending.
