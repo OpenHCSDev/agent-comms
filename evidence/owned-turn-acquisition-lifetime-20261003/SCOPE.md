@@ -24,8 +24,15 @@ source batch and address cancellation/resource custody; no unchanged provider
 wave. Changed actual-path qualification needs a released existing holder.
 
 Related retirement consumer: InputDrain.finish_turn_inputs for original owned and
-selected turns. Its original wire-locked notice settlement joins before loop
+selected turns. Its original wire-locked input settlement joins before loop
 capabilities retire; cancellation cannot skip queue/grant cleanup after the write.
 Shared native-preparation boundary: TurnRunner.prepare_selected_session joins the
 original registry/environment acquisition for its existing context/manual/owned
 callers. NativeSessionPreparation and SessionContext methods stay unchanged.
+
+Extended same-family claim: InputDocument/InputDispositions reservation membership
+and rollback before durable publication; OriginalTurnInput and OwnedTurn consume
+the original receipt without a reread. ACP Done loses its separate input mutation.
+SessionLifecycle identity/metadata storage projection joins the same original
+worker; RegistrySnapshot owns status lookup and Registration derives it. Only
+status methods are touched in registry files; turn CAS/native/FieldCodec unchanged.

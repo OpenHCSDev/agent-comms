@@ -345,11 +345,7 @@ class Registration:
         return self.snapshot().require(name)
 
     def status(self, name: str) -> ThreadStatus:
-        with self.store.reading() as document:
-            name = document.aliases.get(name, name)
-            if name not in document.statuses:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return document.statuses[name]
+        return self.snapshot().status(name)
 
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:

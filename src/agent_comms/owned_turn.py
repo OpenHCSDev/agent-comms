@@ -155,8 +155,9 @@ class OwnedTurn:
             self.lease_custody, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        self.input_custody = ExitStack()
-        resources.push_async_callback(Coordination.run_worker, self.input_custody.close)
+        self.input_custody = AsyncExitStack()
+        resources.push_async_callback(self.input_custody.aclose)
+        self.input_custody.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with _store_lock(self.runner.comms._wire_lock_path):
@@ -257,7 +258,7 @@ class OwnedTurn:
             source_type = DependencyOriginalInput
         else:
             source_type = RoutedOriginalInput
-        self.original = source_type(
+        original = source_type(
             accepted_id=self.accepted_input_id,
             goal_permission=permission,
             prompt=self.context.render().text,
@@ -269,16 +270,19 @@ class OwnedTurn:
                 else NoInputDependency()
             ),
             batch=self.batch,
-        ).reserve(
-            self.runner.inputs.dispositions,
-            self.thread,
-            TurnId(self.turn_id),
-            self.turn_lease.admission_generation,
         )
-        self.original_keys = self.original.keys
-        # The worker can reserve before cancellation reaches its result. Retain
-        # original unbound cleanup until the loop has installed the input owner.
-        self.input_custody.callback(self.settle_unbound)
+        with _store_lock(self.runner.comms._wire_lock_path), ExitStack() as reservation:
+            self.original = original.reserve(
+                self.runner.inputs.dispositions,
+                self.thread,
+                TurnId(self.turn_id),
+                self.turn_lease.admission_generation,
+                custody=reservation,
+            )
+            self.original_keys = self.original.keys
+            # The store enlists rollback before publication. The original keys
+            # now belong to the outer custody before the worker can return.
+            reservation.pop_all()
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
         self.backend_inbox = self.runner.inputs.bind_native_turn(

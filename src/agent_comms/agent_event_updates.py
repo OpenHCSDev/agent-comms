@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .store_files import _store_lock
-
 from typing import TYPE_CHECKING, Any, cast
 
 from acp.schema import (
@@ -226,9 +224,6 @@ class AcpEventConsumer(MroDispatch):
     async def on_done(self, event: events.Done) -> None:
         session_id = self.session_id
         client = self.client
-        with _store_lock(self.agent._comms._wire_lock_path):
-            original = self.agent.inputs.original_sources.get(session_id)
-            self.agent.inputs.dispositions.settle_unbound(original.notice_keys if original else ())
         if not event.ok and event.text:
             # The existing emission owner deduplicates full typed evidence,
             # including a terminal not-sent transition with unchanged text.

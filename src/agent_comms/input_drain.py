@@ -541,7 +541,7 @@ class InputDrain(FutureInputQueue):
             self.pending_turns.setdefault(session_id, []).append(continuation)
 
     def finish_original_inputs(self, session_id: str) -> None:
-        """The joined retirement owns the original notice and its wire cut."""
+        """The joined retirement owns the original input and its wire cut."""
         with _store_lock(self.comms._wire_lock_path):
             original = self.original_sources.pop(session_id, None)
             self.dispositions.settle_unbound(original.keys if original else ())
@@ -559,7 +559,7 @@ class InputDrain(FutureInputQueue):
         try:
             await Coordination.run_worker(partial(self.finish_original_inputs, session_id))
         finally:
-            # Cancellation joins the original notice write before retiring loop
+            # Cancellation joins the original input write before retiring loop
             # capabilities. No callback delivery is required to burn a grant or
             # retain accepted queued input for the next distinct turn.
             self.following_sources.pop(session_id, None)

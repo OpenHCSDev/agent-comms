@@ -375,6 +375,13 @@ class RegistrySnapshot(RegistryProvenance):
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
 
+    def status(self, name: str) -> ThreadStatus:
+        canonical = self.aliases.get(name, name)
+        try:
+            return self.statuses[canonical]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
     ) -> dict[str, str]:

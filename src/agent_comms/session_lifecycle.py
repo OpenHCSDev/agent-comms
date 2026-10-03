@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
+from .coordinator import Coordination
 from .config_options import ConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
@@ -236,12 +238,13 @@ class SessionLifecycle:
 
     async def sync_identity(self, session_id: str) -> str:
         cached_name = self.require(session_id)
-        thread = self.comms.registry.require(cached_name)
+        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+        thread = snapshot.require(cached_name)
         name = thread.name
         if (
             name != cached_name
             or thread.pid != os.getpid()
-            or not self.comms.registry.status(name).running
+            or not snapshot.status(name).running
         ):
             await self.effects.turns.close_idle_backend(session_id)
         self.bindings[session_id] = name
@@ -278,7 +281,10 @@ class SessionLifecycle:
         )
         await self.config.publish_configuration(session_id, thread_name)
 
-    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
+    def configuration_updates(
+        self, thread_name: str,
+    ) -> tuple[CoordinationChangedUpdate, GoalChangedUpdate]:
+        """Capture original store projections before loop/client effects consume them."""
         thread = self.comms.registry.require(thread_name)
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
         info = self.comms.agents.agent_info_of(thread_name)
@@ -287,7 +293,7 @@ class SessionLifecycle:
             if info is not None and info.context_used is not None and info.context_size
             else None
         )
-        return encode_updates(
+        return (
             CoordinationChangedUpdate(
                 ThreadIncarnation(thread.name, thread.created_at),
                 str(self.comms.root.resolve()),
@@ -299,6 +305,14 @@ class SessionLifecycle:
                 usage,
             ),
             GoalChangedUpdate(goal, execution),
+        )
+
+    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
+        configuration = await Coordination.run_worker(partial(
+            self.configuration_updates, thread_name,
+        ))
+        return encode_updates(
+            *configuration,
             self.effects.inputs.queue_state(session_id or thread_name),
             *await self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
