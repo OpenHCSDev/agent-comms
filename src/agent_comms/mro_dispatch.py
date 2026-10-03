@@ -36,25 +36,25 @@ class MroDispatch:
                 if capability in getattr(method, "__handled_classes__", ()):
                     yield getattr(self, name)
 
-    async def dispatch(self, value: Any) -> Any:
+    async def dispatch(self, value: Any, *args, **kwargs) -> Any:
         handlers = tuple(self.handlers_for(value))
         if not handlers:
             return value
-        return await self.consume_handlers(value, handlers)
+        return await self.consume_handlers(value, handlers, *args, **kwargs)
 
-    async def consume_handlers(self, value: Any, handlers: Iterable[Handler]) -> Any:
+    async def consume_handlers(self, value: Any, handlers: Iterable[Handler], *args, **kwargs) -> Any:
         """Consume the selected declarations inside the consumer's resource lifetime."""
         for handler in handlers:
-            value = self.replace_value(value, await handler(value))
+            value = self.replace_value(value, await handler(value, *args, **kwargs))
         return value
 
-    def dispatch_sync(self, value: Any) -> Any:
+    def dispatch_sync(self, value: Any, *args, **kwargs) -> Any:
         """Consume saved presentation facts without introducing an event loop."""
-        return self.consume_handlers_sync(value, self.handlers_for(value))
+        return self.consume_handlers_sync(value, self.handlers_for(value), *args, **kwargs)
 
-    def consume_handlers_sync(self, value: Any, handlers: Iterable[Handler]) -> Any:
+    def consume_handlers_sync(self, value: Any, handlers: Iterable[Handler], *args, **kwargs) -> Any:
         for handler in handlers:
-            value = self.replace_value(value, handler(value))
+            value = self.replace_value(value, handler(value, *args, **kwargs))
         return value
 
     @staticmethod
