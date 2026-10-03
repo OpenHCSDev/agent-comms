@@ -3,10 +3,10 @@
 fe1d27fe3f641b2cc6f848b7a981186f29ba5f3daad7abb47b11a80548b1aa59  dist/core/compaction/compaction.js
 1a7a8c6323a8f227d4de1bacc667c6894e40e0c54844f19d36125e978ffa35fb  dist/core/compaction/compaction.d.ts
 626e94576349684a655cc224b4b4ce3eb8e648b1ec3fde59f229707055a8e193  dist/core/session-manager.js
-29e16b2015a53cd61fda2574284cdedf8d1c0dacfa03d03b0e98df4cb10a53c7  dist/modes/rpc/rpc-mode.js
+b8c88048fee816aa0102582360677cd87faa01c659aadd951fb1e1f4b9477126  dist/modes/rpc/rpc-mode.js
 d457ef09397b5e9e41697f9f56aa01f06caeef70e3e89af2b8e04362ed4eec80  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
-4dd447d193a7104230f51a7d09031c9cba81aec19d7d20762ba6c038ec06de51  dist/modes/rpc/rpc-types.d.ts
+1c395e5c57710ef470c95a931e148620878a31fb1688efbea3b335cfea37a2cc  dist/modes/rpc/rpc-types.d.ts
 8e9c3338bf40a4d965456214584400ab8c41130ca55ec3d8625d676d4807cab6  node_modules/@earendil-works/pi-agent-core/dist/agent.js
 97c1ab4b6eeb2ceef2b20d2b439109c316fae3aa96e4ee1519cc68d02bd06a06  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
 7ac656219e72b9f915ac8ab98d8e5a942f08b7a5cd0380ddd00626f707553081  node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
@@ -45,7 +45,7 @@ e30bbbbd2043d6b3c9ad87876cf488cce4a3eafa0c27ad3556d39dd35a47f648  node_modules/@
 9605f7cc8986b81f4e11d1d9f297632989d84339779751778c54c2769c85e2b4  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
-143e7335e68e5aa89d15c4cf5c012aed3ddf0d0a23c4194b64d1fcb3b00f8db0  dist/core/turn-context.js
+131a01202e80864342359e838cd7ee2b1b01ec4c85c68ad9f891bfb39b6c607a  dist/core/turn-context.js
 e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba  dist/core/turn-context.d.ts
 176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9  dist/core/tools/agent-comms-file-artifact.js
 b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
@@ -53,4 +53,4 @@ b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tool
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
 31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
 8209e570ef6044ce26f2ee7c95a1bcfda926457cf90b83d3356e10f54355004e  node_modules/@earendil-works/pi-ai/dist/utils/retry.d.ts
-# agent-comms-native-tree-v1 5ff27e716d8adc6cd1a2482fb90d35e24b4c4f837160f262ff05ee2c52769798
+# agent-comms-native-tree-v1 fd4f6c7e57bd8f19fc4a14a8a8c3d6a196f68dc765de1538ba34443f0feab780
