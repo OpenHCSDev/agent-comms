@@ -66,7 +66,7 @@ async def owner(tmp_path, monkeypatch):
     )
     # Only native package verification is outside this source-boundary fixture.
     # The actual registry, wire, disposition, session locks and source CAS run.
-    monkeypatch.setattr(NativeCompactionWriter, "verify", lambda self: None)
+    monkeypatch.setattr(NativeCompactionWriter, "verify", lambda self, native_launch=None: None)
     bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
     witness = NativeWitness(
         session_id="saved",

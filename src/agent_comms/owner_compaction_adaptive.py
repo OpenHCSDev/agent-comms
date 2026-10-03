@@ -57,7 +57,8 @@ async def maybe_compact_owner_turn(
     if not persistent.available:
         raise PiSettingsEvidenceError("Selected native session must be prepared before input")
 
-    package = persistent.custody.idle().child.key[0].package
+    launch = persistent.custody.idle().child.key[0]
+    package = launch.package
     settings = await read_selected_compaction_decision(
         persistent, session_file=session_file,
         expected_package=package, selected=selected,
@@ -68,7 +69,8 @@ async def maybe_compact_owner_turn(
     if not settings.trigger:
         return False
     async with OwnerCompactionCommit.open(
-        registry.store.path, package, session_file, future_queue=future_queue
+        registry.store.path, package, session_file, future_queue=future_queue,
+        native_launch=launch,
     ) as bridge:
         try:
             revision = SessionRevision.observe(session_file).require_available()

@@ -60,7 +60,8 @@ async def compact_manual_owner(
     if package is None:
         raise ValueError("Canonical native package is unavailable")
     async with OwnerCompactionCommit.open(
-        runner.comms.registry.store.path, Path(package), session_file
+        runner.comms.registry.store.path, Path(package), session_file,
+        native_launch=persistent.custody.idle().child.key[0],
     ) as bridge:
 
         settings = await read_selected_compaction_decision(

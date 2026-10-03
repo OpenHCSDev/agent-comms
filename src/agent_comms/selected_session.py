@@ -226,7 +226,8 @@ class SavedSelectedSession(SelectedSession):
             snapshot = participant.comms.registry.snapshot()
             generation = snapshot.owner_generations[owner.name]
             async with OwnerCompactionCommit.open(
-                participant.comms.registry.store.path, turn.launch.package, self.session_file
+                participant.comms.registry.store.path, turn.launch.package, self.session_file,
+                native_launch=turn.launch,
             ) as bridge:
                 source = ManualSource(
                     incarnation=owner.incarnation, owner=owner.process_identity,
