@@ -19,6 +19,8 @@ def install_event_host(
     comms_tools=False,
     native_settings=None,
     ui_probe=None,
+    replacement_probe=None,
+    cancelled_session=None,
 ):
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     verify_native_package(package)
@@ -48,6 +50,9 @@ def install_event_host(
             env["S1_DELAY_SETTLEMENT"] = str(delay_settlement)
         if ui_probe is not None:
             env["S1_UI_PROBE"] = str(ui_probe)
+        if replacement_probe is not None:
+            env["S1_REPLACEMENT_PROBE"] = str(replacement_probe)
+            env["S1_CANCELLED_SESSION"] = str(cancelled_session)
         if comms_tools:
             env["S1_COMMS_TOOLS"] = "1"
         options = launch.argv[launch.argv.index(str(package / "dist/cli.js")) + 1 :]
