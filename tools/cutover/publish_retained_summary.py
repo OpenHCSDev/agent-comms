@@ -96,12 +96,20 @@ class VcsPackageDirectUrl(PackageDirectUrl):
 
 @dataclass(frozen=True)
 class PackageArchiveInfo:
-    hashes: dict[str, str]
+    hashes: dict[str, str] = field(default_factory=dict, metadata={'wire_omit_default': True})
     hash: str | None = field(default=None, metadata={'wire_omit_default': True})
 
     def require_original(self, path: Path):
-        sha256 = self.hashes.get('sha256')
-        if not sha256 or (self.hash is not None and self.hash != f'sha256={sha256}'):
+        hashes = dict(self.hashes)
+        if self.hash is not None:
+            algorithm, separator, value = self.hash.partition('=')
+            if not separator or not algorithm or not value:
+                raise RuntimeError('Installed archive has a malformed legacy hash')
+            if algorithm in hashes and hashes[algorithm] != value:
+                raise RuntimeError('Installed archive has conflicting hash provenance')
+            hashes[algorithm] = value
+        sha256 = hashes.get('sha256')
+        if not sha256:
             raise RuntimeError('Installed archive has no consistent SHA256 provenance')
         ReviewedArtifact(path, sha256).require_original()
 
