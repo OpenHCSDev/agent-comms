@@ -1,0 +1,72 @@
+{
+  "scope": "READ ONLY original576 real SDK-fork owner/native/ACP saved history and wire after accepted channel journey; no native child launch/input/provider/public mutation",
+  "root": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire",
+  "installed_python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "owner": "openhcs-helper2",
+  "native_source_bytes": 43205875,
+  "original_fact_count": 0,
+  "certified_facts_equal_original_scan": true,
+  "cli": [
+    {
+      "argv": [
+        "retained-context",
+        "openhcs-helper2"
+      ],
+      "exit_code": 0,
+      "seconds": 0.8222489220206626,
+      "json_keys": [
+        "authored",
+        "compaction",
+        "export_scope",
+        "input_supplied",
+        "kind",
+        "native_source_contract",
+        "observations",
+        "provenance",
+        "text"
+      ],
+      "error": null
+    },
+    {
+      "argv": [
+        "compaction-status",
+        "--thread",
+        "openhcs-helper2"
+      ],
+      "exit_code": 0,
+      "seconds": 0.6552165760076605,
+      "json_keys": [
+        "attempts",
+        "thread"
+      ],
+      "error": null
+    }
+  ],
+  "protected_files": 21,
+  "protected_hashes_unchanged": true,
+  "protected_hashes": {
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/native_prompt_bindings.sqlite3": "b9319051dfa6fcf8c559d81d87d8a05a56f77a04450e06d2bcf797bc0c6d3679",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/compaction-commits.sqlite3": "56fed8765d43de83342073940b4932689a3e196e0627b04158d1b61ff91158fe",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/coordination.sqlite3": "08932da1429a70cceadb79ea1a18ca27a88ddc1723f70731c2c16b64266939ea",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/bus.jsonl": "56ae7409b4d25c94cbc87ff301e9a3975110c443f12e81ab1fb83ae127290b54",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/activity.jsonl": "f319b710f0d3fb75428e547900299df0cf360a81c05baa04b92e0507c9a779d9",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/wake_candidates.sqlite3": "1a340dcf8f11cbef085e69060c8f4cffd77e2c62ebb9abdad2ef80468c079985",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/bus_page_index.sqlite3": "2d092bf9aa8331d99d943903f03a2ee1bdc73fc8658668483d9ee613488344cf",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/registry.json": "21745f47795a2d84c82f318c8b9518e5e8e61cb7306b46868e5fe6c6c4e3735d",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/private_bus_checkpoint.sqlite3": "eba4f0bc96d1c9fd411561a344f1272e4ae38aa9899f3646991ed2fbf02cf6d5",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-57-017Z_01a100ed-5819-7658-9907-9299877e9a41.jsonl": "eb846d6a6c45c1e2c50b17f8b14079bfbfd180eeefccb62b238f0d9a1f42c665",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-42-321Z_01a100ed-1eb2-73f9-90e9-330a453c2b61.jsonl": "fbae84f3e479afda55ca53b385f5b0934eb3d96985fe87059fc80ead6e1f1938",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl.input-proof": "80d7ce39a4657138f86493942d530944599c5c3139d2f56d41a558ded81e38d4",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-42-321Z_01a100ed-1eb2-73f9-90e9-330a453c2b61.jsonl.input-proof": "52e8a89cdfdc890cc4125dc8620ce436d5f75335fa302472dde254f281161d21",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl": "44d3ff0bbff769bce6d9d9cf0e7209915d30aac189a27d3b5905811ee09a9fc7",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-57-017Z_01a100ed-5819-7658-9907-9299877e9a41.jsonl.input-proof": "4d5c115012a79341028efd553995013a4ddc4df9cb83b94fd48d3b81a0ed095c",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/diagnostics/c023786aa89748e93a22205ca7c1c1fd.requests.jsonl": "74aaa0bb037fe4f4b2d1c442d17c57fdce621bdf1a981480609a1143f1352f52",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/diagnostics/64f72c98a4ab50471fd3ec45ea8c4748.requests.jsonl": "b238d43b4f8a504ecf57ace67e665c34457bcd08770bef6ffa04066a3c4e5f54",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/diagnostics/0029802114dddd1d83c3c8ffbd735aa9.requests.jsonl": "06523f1b3ecc1daec2bec14f4969491eb97fa06553486dc88b92c4cecfdce6d0",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/diagnostics/4c83f2a15b1f8023e21e1c15d0d047a7.requests.jsonl": "15254e4fbe1ad2281ca7b643dcad827c98d6749f0904cf12c006950dbf7ae1ce",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/diagnostics/be2a4bf8c9a44989bf81fd77c095b855.requests.jsonl": "6bd48caf76627adfa1489ce14a12b7689728e1d38aeeeca4a04cd47874353943",
+    "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/wire/diagnostics/fbc435474d72fef274f77c2ee971aa1b.requests.jsonl": "5326a7e55565277e5d29f767d6ce7d2e1162b541f9ded12b15014912805c7282"
+  },
+  "new_inputs": 0,
+  "provider_calls": 0
+}

@@ -1,0 +1,8 @@
+{
+  "installed": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/retained-fact578-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "7fdfa72887a7c732185431f65f379d2bccce710fbb434f150012a98a2990c974",
+  "members": 342,
+  "installed_difference": [],
+  "source_difference": []
+}

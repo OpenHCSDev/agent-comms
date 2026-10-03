@@ -1,0 +1,77 @@
+{
+  "kind": "retained",
+  "text": "<exact-task-source>\n{\"facts\": []}\n</exact-task-source>",
+  "provenance": [
+    {
+      "kind": "owner",
+      "owner": {
+        "name": "openhcs-helper2",
+        "created_at": 1791016913.988097
+      },
+      "revision": "dd2c2794587e06d62d8ca1d6ee585494e9518d6f213a32e7d20369973ad97b7f"
+    }
+  ],
+  "input_supplied": false,
+  "authored": {
+    "scope": "authored declarations and their original pinned inputs only",
+    "sources": [],
+    "facts": {
+      "facts": []
+    }
+  },
+  "export_scope": "current authored declarations only; never goal, unpinned input, native artifact or failure state",
+  "observations": {
+    "scope": "current certified wire/registry/input read; durable owner inputs and pinned originals including queued and UNKNOWN; not a compaction admission",
+    "facts": {
+      "facts": []
+    }
+  },
+  "compaction": {
+    "session_file": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl",
+    "scope": "original journal rows for this saved-session path; historical owners remain recorded",
+    "tables": {
+      "operations": [],
+      "selected_summary_attempts": [],
+      "publications": [],
+      "private_raw_inputs": [
+        {
+          "kind": "private_raw_inputs",
+          "input_id": "b1056bc39708d94537afd7db1198dd1b",
+          "session_file": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl",
+          "status": "unknown"
+        },
+        {
+          "kind": "private_raw_inputs",
+          "input_id": "84f405667458a7b9e729c4f9bbba2aef",
+          "session_file": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl",
+          "status": "unknown"
+        },
+        {
+          "kind": "private_raw_inputs",
+          "input_id": "d2af878d5bdd4a70a8e1d87fed74ae6d",
+          "session_file": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl",
+          "status": "unknown"
+        }
+      ],
+      "enrolled_private_sessions": [],
+      "native_fork_creation": [
+        {
+          "kind": "native_fork_creation",
+          "sessionId": "01a100ed-3b50-712c-b1c2-d2067b47d22c",
+          "sessionFile": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl",
+          "source": {
+            "sessionId": "01a0eed9-e545-72c7-a2fa-d3870585abee",
+            "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl"
+          },
+          "sourceRevision": "2084:7888084:43192604:1790991939572883559:1790991939572883559",
+          "revision": "2084:6335220:43192604:1791016910292801414:1791016910292801414",
+          "prefixDigest": {
+            "value": "6108dca7f1b5e14a52146ee47212b1a296380f96cbaf2dd6f621a87810d58241"
+          },
+          "entryCount": 9861
+        }
+      ]
+    }
+  },
+  "native_source_contract": "NativeWitness.retained_task_facts reads only its exact session, leaf and file revision; NativeEvidenceRead preserves original request/result entry pairs. Current native leaf, uncaptured tool results and filesystem state are not inferred by this inspection. Original attempt requests/intents retain the facts captured by HeldCompaction; operation and summary states retain failures and UNKNOWN without replay."
+}
