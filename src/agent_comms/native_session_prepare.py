@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import aclosing
 from pathlib import Path
 from functools import partial
@@ -42,7 +42,7 @@ class NativeSessionPreparation(backend.TurnSession):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
         self.active_session_file = identity.session_file
         self.admission = PreparedSession()
-        self.finished = True
+        await self.stats.request(self)
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.native_session.custody.retained:
@@ -65,6 +65,7 @@ class NativeSessionPreparation(backend.TurnSession):
         worktree: str,
         environment: dict[str, str],
         session_file: str,
+        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]] | None = None,
     ) -> StateData:
         owner = asyncio.current_task()
         async with persistent.lock:
@@ -82,6 +83,8 @@ class NativeSessionPreparation(backend.TurnSession):
                                 raise NativePiUnavailable(event.text)
                     state = preparation.native.attestation.state
                     assert state is not None
+                    if observe is not None:
+                        await observe(state, preparation.context_info())
                     return state
                 finally:
                     if owner is not None:

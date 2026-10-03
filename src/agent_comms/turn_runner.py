@@ -189,9 +189,17 @@ class TurnRunner:
             worktree=thread.worktree,
             environment=environment,
             session_file=thread.session_file,
+            observe=partial(self.observe_selected_preparation, session_id, thread),
         )
-        state.model.require_selection(thread.model)
         return state
+
+    async def observe_selected_preparation(
+        self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
+    ) -> None:
+        """Publish this attested saved owner through the shared info consumer."""
+        state.model.require_selection(thread.model)
+        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await self.effects._emit_event(session_id, info)
 
     async def inspect_context(self, session_id, thread):
         persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
