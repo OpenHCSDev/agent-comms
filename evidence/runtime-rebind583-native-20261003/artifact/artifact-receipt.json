@@ -17,7 +17,7 @@
   "payload_bytes": 138412001,
   "all_files_single_links": true,
   "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
-  "single_stock_assembly": true,
+  "single_stock_assembly": false,
   "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
   "provider_calls": 0,
   "public_changes": false,
@@ -29,5 +29,6 @@
     "pin-derivation-first-wrong-directory.log: copied helper still referenced previous573out; derive owner corrected to __file__ directory before any manifest/target write"
   ],
   "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
-  "original_51b_unchanged": true
+  "original_51b_unchanged": true,
+  "total_stock_assembly_attempts": 2
 }
