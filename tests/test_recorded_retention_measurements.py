@@ -28,7 +28,7 @@ from agent_comms.private_path import FileRevision
 from agent_comms.text_digest import TextDigest
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.turn_lease import TurnLeaseFence
-from agent_comms.retained_task_facts import GoalTaskFact, RetainedTaskFacts
+from agent_comms.retained_task_facts import GoalTaskFact, HumanConstraintTaskFact, RetainedTaskFacts
 from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDrop
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
@@ -361,6 +361,10 @@ class RecordedMeasurementTests(unittest.TestCase):
                             measurement=Measurement.ACTION, decision_source=message.reference)
         report = question.proposed_action('open-ticket', original)
         self.assertTrue(report['declared_alternative']['valid'])
+        self.assertTrue(declaration.contains_alternative('inspect-source'))
+        self.assertTrue(declaration.contains_alternative('open-ticket'))
+        self.assertFalse(declaration.contains_alternative('replay-unknown'))
+        self.assertFalse(declaration.contains_alternative(None))
         self.assertFalse(report['declared_alternative']['chosen'])
         self.assertFalse(report['execution']['evaluated'])
         self.assertFalse(report['constraint_validity']['evaluated'])
@@ -452,6 +456,12 @@ class RecordedMeasurementTests(unittest.TestCase):
         before = attempt(retained)
         unchanged = first.revision_from(first, before, before)['constraints']
         self.assertEqual((unchanged['eligible'], unchanged['unauthorized'], unchanged['mass']), (1, 0, 0))
+        # Different retained classifications still refer to the same certified
+        # publication. They cannot allocate a second lineage/denominator.
+        mixed = attempt(RetainedTaskFacts((*retained.facts, HumanConstraintTaskFact(pin))))
+        projected = first.revision_from(first, before, mixed)['constraints']
+        self.assertEqual(projected, unchanged)
+        self.assertFalse(replace(first, wire=None).revision_from(first, before, before)['evaluated'])
         lost = first.revision_from(first, before, attempt(RetainedTaskFacts(())))['constraints']
         self.assertEqual((lost['eligible'], lost['unauthorized'], lost['mass']), (1, 1, 1))
         comms.messaging.send_user_message(owner.name, 'Explicitly drop this constraint',

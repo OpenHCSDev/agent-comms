@@ -524,11 +524,11 @@ class Question:
                 "reason": "Referenced Decision is not current in the original captured scope"})
         item, = selected
         decision = item["declaration"]
-        if self.expected not in (decision.chosen, *decision.rejected):
+        if not decision.contains_alternative(self.expected):
             raise ValueError("Frozen action oracle contradicts its original Decision alternatives")
         return dict(result, declared_alternative={
             "evaluated": True, "missing": answer is None,
-            "valid": answer in (decision.chosen, *decision.rejected),
+            "valid": decision.contains_alternative(answer),
             "chosen": answer == decision.chosen, "source": FieldCodec.encode(item["current"]),
             "scope": observed["scope"],
         })

@@ -169,6 +169,35 @@ class RecordedNativeCheckpoint:
                 }
             return report
 
+    def authored_scope(self, attempt):
+        """Acquire the original captured scope and certify its authored rows.
+
+        Revision and action measurements borrow the same owner relation; this
+        neither selects today's scope nor treats an omitted row as nonexistent.
+        """
+        if self.registry_scope is None or self.wire is None:
+            return None
+        snapshot = self.read_record(self.registry_scope, RegistryDocument).snapshot()
+        owner = snapshot.require_active(attempt.request.source.incarnation.name)
+        if attempt.request.source.incarnation.resolved(snapshot) != owner.incarnation:
+            raise ValueError("Authored evidence belongs to another original owner")
+        with WireLog(self.wire).certified_read() as source:
+            for fact in attempt.request.retained.facts:
+                for message in fact.authored_sources():
+                    delivery, = source.references((message.reference,))
+                    if delivery.message != message:
+                        raise ValueError("Retained authored fact differs from its original publication")
+        return snapshot, owner
+
+    @staticmethod
+    def authored_lineages(retained, owner, registry, families):
+        """Select the measured family from the original lineage projection."""
+        roots = {message.reference for fact in retained.facts
+                 if isinstance(fact, families) for message in fact.authored_sources()}
+        return tuple((root, message) for root, message in
+                     retained.current_authored_lineages(owner, registry)
+                     if root.reference in roots)
+
     def revision_from(self, previous, before, after):
         """Measure captured authored lineages using the original scope owner.
 
@@ -176,40 +205,28 @@ class RecordedNativeCheckpoint:
         corroborates their original publications. Existing task declarations
         decide correction lineage and scope. This read grants no update/replay.
         """
-        if previous.registry_scope is None or self.registry_scope is None or self.wire is None:
+        prior_scope = previous.authored_scope(before)
+        current_scope = self.authored_scope(after)
+        if prior_scope is None or current_scope is None:
             return {"evaluated": False,
                     "reason": "Original scope snapshots and certified wire evidence are required"}
-        prior = self.read_record(previous.registry_scope, RegistryDocument).snapshot()
-        current = self.read_record(self.registry_scope, RegistryDocument).snapshot()
-        before_owner = prior.require_active(before.request.source.incarnation.name)
-        after_owner = current.require_active(after.request.source.incarnation.name)
-        if (before.request.source.incarnation.resolved(prior) != before_owner.incarnation
-                or after.request.source.incarnation.resolved(current) != after_owner.incarnation
-                or before_owner.incarnation.resolved(current) != after_owner.incarnation):
+        prior, before_owner = prior_scope
+        current, after_owner = current_scope
+        if before_owner.incarnation.resolved(current) != after_owner.incarnation:
             raise ValueError("Original revision scopes belong to different owner incarnations")
         original_facts = before.request.retained.facts + after.request.retained.facts
-        with WireLog(self.wire).certified_read() as source:
-            for fact in original_facts:
-                for message in fact.authored_sources():
-                    delivery, = source.references((message.reference,))
-                    if delivery.message != message:
-                        raise ValueError("Retained authored fact differs from its original publication")
         # Multiplicity belongs to availability. A lineage projection visits each
-        # original authored record once, in its original publication order.
-        originals = {RetainedTaskFacts.canonical_journal_bytes(FieldCodec.encode(fact)): fact
-                     for fact in original_facts}
-        facts = tuple(sorted(originals.values(), key=lambda fact: (
-            tuple(message.seq for message in fact.authored_sources()),
-            RetainedTaskFacts.canonical_journal_bytes(FieldCodec.encode(fact)),
-        )))
-        combined = RetainedTaskFacts(facts)
+        # certified original publication once. Fact encoding/classification is
+        # not publication identity; the message declaration derives its facts.
+        originals = {message.reference: message for fact in original_facts
+                     for message in fact.authored_sources()}
+        combined = RetainedTaskFacts(tuple(fact
+            for message in sorted(originals.values(), key=lambda message: message.seq)
+            for fact in message.retained_task_facts()))
 
         def selected(retained, owner, registry, families):
-            roots = {message.reference for fact in retained.facts
-                     if isinstance(fact, families) for message in fact.authored_sources()}
             return {root.task.lineage_reference(root): tuple(message.task.selected_sources(message))
-                    for root, message in retained.current_authored_lineages(owner, registry)
-                    if root.reference in roots}
+                    for root, message in self.authored_lineages(retained, owner, registry, families)}
 
         def measure(families):
             eligible = selected(before.request.retained, before_owner, prior, families)
@@ -241,25 +258,13 @@ class RecordedNativeCheckpoint:
 
     def scoped_facts(self, attempt):
         """Read original captured configuration and scoped Decision publications."""
-        if self.registry_scope is None or self.wire is None:
+        captured = self.authored_scope(attempt)
+        if captured is None:
             return {"evaluated": False, "reason": "Original scope/publications unavailable",
                     "configured_settings": {"evaluated": False}}
-        snapshot = self.read_record(self.registry_scope, RegistryDocument).snapshot()
-        owner = snapshot.require_active(attempt.request.source.incarnation.name)
-        if attempt.request.source.incarnation.resolved(snapshot) != owner.incarnation:
-            raise ValueError("Action evidence belongs to another original owner")
+        snapshot, owner = captured
         retained = attempt.request.retained
-        roots = {message.reference for fact in retained.facts
-                 if isinstance(fact, DecisionTaskFact) for message in fact.authored_sources()}
-        declarations = tuple((root, message) for root, message in
-                             retained.current_authored_lineages(owner, snapshot)
-                             if root.reference in roots)
-        with WireLog(self.wire).certified_read() as source:
-            for root, message in declarations:
-                for original in (root, message):
-                    delivery, = source.references((original.reference,))
-                    if delivery.message != original:
-                        raise ValueError("Decision differs from its original publication")
+        declarations = self.authored_lineages(retained, owner, snapshot, DecisionTaskFact)
         return {"evaluated": True, "scope": "Original scoped Decision alternatives only",
                 "configured_settings": {"evaluated": owner.model is not None and owner.thinking_level is not None,
                                         "model": owner.model, "thinking": FieldCodec.encode(owner.thinking_level),

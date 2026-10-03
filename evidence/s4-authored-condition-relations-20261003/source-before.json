@@ -1,0 +1,197 @@
+{
+  "revision": "4dd07d993dfc3ac7db754c52f6452c5ef8d8aa2f",
+  "tool": "Existing audit.findings.Package",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/messages.py",
+      "name": "Message",
+      "line": 47,
+      "members": [
+        "publication_snapshot",
+        "reference",
+        "notification_references",
+        "require_decision",
+        "retains_authored_task",
+        "require_task_publication",
+        "require_claim_transition",
+        "retained_task_facts",
+        "__post_init__",
+        "view_cursor",
+        "view_key",
+        "view_order",
+        "message_id",
+        "display_metadata",
+        "to_wire",
+        "from_wire",
+        "from_committed_wire",
+        "require_retained_admission",
+        "response_policy",
+        "response_eligibility",
+        "starts_turn",
+        "starts_turn_for",
+        "reply_target"
+      ]
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "name": "RetainedTaskFacts",
+      "line": 234,
+      "members": [
+        "source_digest",
+        "original_input_facts",
+        "changed_from",
+        "original_inputs",
+        "canonical_journal_bytes",
+        "frame_journal",
+        "original_text_source",
+        "current_authored_lineages",
+        "current_authored_sources",
+        "optional_boundary",
+        "contains_source",
+        "for_owner",
+        "text",
+        "require_summary"
+      ]
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "name": "Decision",
+      "line": 565,
+      "members": [
+        "require_decision",
+        "require_previous",
+        "retained_task_facts",
+        "__post_init__",
+        "text"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "RecordedNativeProbes",
+      "line": 37,
+      "members": [
+        "resume_fork",
+        "observe",
+        "alignment",
+        "request_alignment",
+        "same_observations",
+        "completion_alignment"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "ScoredScenario",
+      "line": 363,
+      "members": [
+        "__post_init__",
+        "identity",
+        "scored_answers",
+        "public",
+        "support_groups",
+        "support_totals",
+        "proposed_actions",
+        "public_native",
+        "paired_quality"
+      ]
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "Question",
+      "line": 472,
+      "members": [
+        "__post_init__",
+        "score",
+        "public",
+        "proposed_action",
+        "executed_action"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeCheckpoint",
+      "line": 40,
+      "members": [
+        "read_bytes",
+        "read_json",
+        "read_json_lines",
+        "read_record",
+        "summary_usage",
+        "capture",
+        "_report",
+        "observe",
+        "inspect",
+        "revision_from",
+        "scoped_facts"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274,
+      "members": [
+        "submitted_prompt",
+        "answer_for_input",
+        "read_sdk_context",
+        "sdk_request",
+        "request_manifest",
+        "serialized_construction",
+        "prompt_presence",
+        "request_budget",
+        "observe",
+        "construction",
+        "model_steps",
+        "tool_steps",
+        "read"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 650,
+      "call": "probes.alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 654,
+      "call": "score.paired_quality"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 410,
+      "call": "question.proposed_action"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 124,
+      "call": "checkpoint.revision_from"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 597,
+      "call": "self.checkpoint.scoped_facts"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 164,
+      "call": "self.revision_from"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 211,
+      "call": "retained.current_authored_lineages"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 255,
+      "call": "retained.current_authored_lineages"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 250,
+      "call": "attempt.request.retained.current_authored_lineages"
+    }
+  ],
+  "limits": "Lexical declaration/member and call census; shared native owners reviewed separately, no applied condition or generic action predicate found."
+}
