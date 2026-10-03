@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/certified-archived-wire-history-20261003/installed-original-history.py", line 73, in <module>
+    assert archived,'Full CLI must traverse original archived messages'
+           ^^^^^^^^
+AssertionError: Full CLI must traverse original archived messages
