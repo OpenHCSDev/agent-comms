@@ -1,0 +1,248 @@
+FF
+=================================== FAILURES ===================================
+____ test_actual_native_replacement_callback_once_and_cancel[immutable_cli] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f3d4b50ba10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3d4b3b56e0>
+driver = 'immutable_cli'
+
+    @pytest.mark.parametrize("driver", ["immutable_cli", "sdk_callbacks"])
+    async def test_actual_native_replacement_callback_once_and_cancel(native_backend, monkeypatch, driver):
+        """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+        from functools import partial
+        from uuid import uuid4
+    
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_custody import PiSessionChild
+        import hashlib
+        import os
+        from pathlib import Path
+    
+        from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+        from agent_comms.pi_commands import GetState, UnknownCommand
+    
+        native = native_backend
+        source_name = os.environ.get("PI_REPLACEMENT_TEST_SOURCE")
+        if not source_name:
+            pytest.skip("Set PI_REPLACEMENT_TEST_SOURCE to an actual completed saved native session")
+        source = Path(source_name).resolve(strict=True)
+        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        created = await ForkSessionHelper.run(ForkSessionRequest(
+            os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+            directory=str(native.project / "replacement-sessions"),
+        ), cwd=native.project)
+        events = native.project / "replacement-events.jsonl"
+        cancelled_target = native.project / "cancelled.jsonl"
+        command = "pi"
+        if driver == "sdk_callbacks":
+            from native_event_host import install_event_host
+            from urllib.parse import urlsplit
+    
+            address = urlsplit(json.loads((native.config / "models.json").read_text())["providers"]["response-local"]["baseUrl"])
+            command = "sdk-replacement-probe"
+            install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
+                               replacement_probe=events, cancelled_session=cancelled_target)
+        launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+            command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                   "--offline", "--no-extensions",
+                   "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+            worktree=native.project, session_file=created.session_file,
+        ))
+    
+        def observed():
+            return [json.loads(row) for row in events.read_text().splitlines()]
+    
+        async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
+            channel = PiRpcChannel(child.stdout)
+            errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+    
+            async def state():
+                request = GetState(id=uuid4().hex)
+                try:
+                    response = await request.exchange(channel, child.stdin, strict=True)
+                except EOFError as error:
+                    error.add_note(await errors)
+                    raise
+                return response.require_request(request)
+    
+            async def replacement(frame):
+                # These are vendor RPC frames, including fork's external entryId.
+                # The original open-command representation and channel decode own
+                # framing; this control creates no replacement pending registry.
+                identity = uuid4().hex
+                command = UnknownCommand(wire={"id": identity, **frame})
+                child.stdin.write(channel.command_bytes(command))
+                await child.stdin.drain()
+                while True:
+                    event = await channel.receive(strict=True)
+                    assert event is not None, await errors
+                    if isinstance(event, Response) and event.id == identity:
+                        assert event.success, event
+                        return event.data.require_payload().payload
+    
+            initial = await state()
+            if driver == "sdk_callbacks":
+                assert len(observed()) == 1 and observed()[0]["sessionId"] == initial.session_id
+            # Fork-before requires an actual user message, unlike clone-at. Ask
+            # the active SDK owner, not the raw saved-file tail, for that operand.
+            messages = await replacement({"type": "get_fork_messages"})
+            entry = messages["messages"][-1]["entryId"]
+            for frame in (
+                {"type": "switch_session", "sessionPath": created.session_file},
+                {"type": "clone"},
+                {"type": "fork", "entryId": entry},
+                {"type": "new_session"},
+            ):
+                previous = await state()
+                if driver == "sdk_callbacks":
+                    count = len(observed())
+>               await replacement(frame)
+
+tests/test_native_catalog_discovery.py:285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+frame = {'type': 'switch_session', 'sessionPath': '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-rebi..._native_replacement0/project/replacement-sessions/2026-10-03T11-33-22-044Z_01a1018a-47fd-74b4-a76d-8a667c182505.jsonl'}
+
+    async def replacement(frame):
+        # These are vendor RPC frames, including fork's external entryId.
+        # The original open-command representation and channel decode own
+        # framing; this control creates no replacement pending registry.
+        identity = uuid4().hex
+        command = UnknownCommand(wire={"id": identity, **frame})
+        child.stdin.write(channel.command_bytes(command))
+        await child.stdin.drain()
+        while True:
+            event = await channel.receive(strict=True)
+            assert event is not None, await errors
+            if isinstance(event, Response) and event.id == identity:
+                assert event.success, event
+>               return event.data.require_payload().payload
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'SessionSwitchData' object has no attribute 'payload'
+
+tests/test_native_catalog_discovery.py:267: AttributeError
+____ test_actual_native_replacement_callback_once_and_cancel[sdk_callbacks] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f3d4b16e490>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3d4b3b2cf0>
+driver = 'sdk_callbacks'
+
+    @pytest.mark.parametrize("driver", ["immutable_cli", "sdk_callbacks"])
+    async def test_actual_native_replacement_callback_once_and_cancel(native_backend, monkeypatch, driver):
+        """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+        from functools import partial
+        from uuid import uuid4
+    
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_custody import PiSessionChild
+        import hashlib
+        import os
+        from pathlib import Path
+    
+        from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+        from agent_comms.pi_commands import GetState, UnknownCommand
+    
+        native = native_backend
+        source_name = os.environ.get("PI_REPLACEMENT_TEST_SOURCE")
+        if not source_name:
+            pytest.skip("Set PI_REPLACEMENT_TEST_SOURCE to an actual completed saved native session")
+        source = Path(source_name).resolve(strict=True)
+        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        created = await ForkSessionHelper.run(ForkSessionRequest(
+            os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+            directory=str(native.project / "replacement-sessions"),
+        ), cwd=native.project)
+        events = native.project / "replacement-events.jsonl"
+        cancelled_target = native.project / "cancelled.jsonl"
+        command = "pi"
+        if driver == "sdk_callbacks":
+            from native_event_host import install_event_host
+            from urllib.parse import urlsplit
+    
+            address = urlsplit(json.loads((native.config / "models.json").read_text())["providers"]["response-local"]["baseUrl"])
+            command = "sdk-replacement-probe"
+            install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
+                               replacement_probe=events, cancelled_session=cancelled_target)
+        launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+            command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                   "--offline", "--no-extensions",
+                   "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+            worktree=native.project, session_file=created.session_file,
+        ))
+    
+        def observed():
+            return [json.loads(row) for row in events.read_text().splitlines()]
+    
+        async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
+            channel = PiRpcChannel(child.stdout)
+            errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+    
+            async def state():
+                request = GetState(id=uuid4().hex)
+                try:
+                    response = await request.exchange(channel, child.stdin, strict=True)
+                except EOFError as error:
+                    error.add_note(await errors)
+                    raise
+                return response.require_request(request)
+    
+            async def replacement(frame):
+                # These are vendor RPC frames, including fork's external entryId.
+                # The original open-command representation and channel decode own
+                # framing; this control creates no replacement pending registry.
+                identity = uuid4().hex
+                command = UnknownCommand(wire={"id": identity, **frame})
+                child.stdin.write(channel.command_bytes(command))
+                await child.stdin.drain()
+                while True:
+                    event = await channel.receive(strict=True)
+                    assert event is not None, await errors
+                    if isinstance(event, Response) and event.id == identity:
+                        assert event.success, event
+                        return event.data.require_payload().payload
+    
+            initial = await state()
+            if driver == "sdk_callbacks":
+                assert len(observed()) == 1 and observed()[0]["sessionId"] == initial.session_id
+            # Fork-before requires an actual user message, unlike clone-at. Ask
+            # the active SDK owner, not the raw saved-file tail, for that operand.
+            messages = await replacement({"type": "get_fork_messages"})
+            entry = messages["messages"][-1]["entryId"]
+            for frame in (
+                {"type": "switch_session", "sessionPath": created.session_file},
+                {"type": "clone"},
+                {"type": "fork", "entryId": entry},
+                {"type": "new_session"},
+            ):
+                previous = await state()
+                if driver == "sdk_callbacks":
+                    count = len(observed())
+>               await replacement(frame)
+
+tests/test_native_catalog_discovery.py:285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+frame = {'type': 'switch_session', 'sessionPath': '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-rebi..._native_replacement1/project/replacement-sessions/2026-10-03T11-33-25-339Z_01a1018a-54db-75c0-b856-74fa0448db61.jsonl'}
+
+    async def replacement(frame):
+        # These are vendor RPC frames, including fork's external entryId.
+        # The original open-command representation and channel decode own
+        # framing; this control creates no replacement pending registry.
+        identity = uuid4().hex
+        command = UnknownCommand(wire={"id": identity, **frame})
+        child.stdin.write(channel.command_bytes(command))
+        await child.stdin.drain()
+        while True:
+            event = await channel.receive(strict=True)
+            assert event is not None, await errors
+            if isinstance(event, Response) and event.id == identity:
+                assert event.success, event
+>               return event.data.require_payload().payload
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'SessionSwitchData' object has no attribute 'payload'
+
+tests/test_native_catalog_discovery.py:267: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_native_catalog_discovery.py::test_actual_native_replacement_callback_once_and_cancel[immutable_cli]
+FAILED tests/test_native_catalog_discovery.py::test_actual_native_replacement_callback_once_and_cancel[sdk_callbacks]
+2 failed in 6.77s

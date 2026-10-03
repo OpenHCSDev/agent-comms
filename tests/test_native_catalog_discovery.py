@@ -190,3 +190,117 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         assert not channel.pending._pending
     assert len(children) == 1 and not children[0].alive()
     print("actual_native_setting_results", observed)
+
+
+@pytest.mark.parametrize("driver", ["immutable_cli", "sdk_callbacks"])
+async def test_actual_native_replacement_callback_once_and_cancel(native_backend, monkeypatch, driver):
+    """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+    from functools import partial
+    from uuid import uuid4
+
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_custody import PiSessionChild
+    import hashlib
+    import os
+    from pathlib import Path
+
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.pi_commands import GetState, UnknownCommand
+
+    native = native_backend
+    source_name = os.environ.get("PI_REPLACEMENT_TEST_SOURCE")
+    if not source_name:
+        pytest.skip("Set PI_REPLACEMENT_TEST_SOURCE to an actual completed saved native session")
+    source = Path(source_name).resolve(strict=True)
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        directory=str(native.project / "replacement-sessions"),
+    ), cwd=native.project)
+    events = native.project / "replacement-events.jsonl"
+    cancelled_target = native.project / "cancelled.jsonl"
+    command = "pi"
+    if driver == "sdk_callbacks":
+        from native_event_host import install_event_host
+        from urllib.parse import urlsplit
+
+        address = urlsplit(json.loads((native.config / "models.json").read_text())["providers"]["response-local"]["baseUrl"])
+        command = "sdk-replacement-probe"
+        install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
+                           replacement_probe=events, cancelled_session=cancelled_target)
+    launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
+        command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+               "--offline", "--no-extensions",
+               "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+        worktree=native.project, session_file=created.session_file,
+    ))
+
+    def observed():
+        return [json.loads(row) for row in events.read_text().splitlines()]
+
+    async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
+        channel = PiRpcChannel(child.stdout)
+        errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+
+        async def state():
+            request = GetState(id=uuid4().hex)
+            try:
+                response = await request.exchange(channel, child.stdin, strict=True)
+            except EOFError as error:
+                error.add_note(await errors)
+                raise
+            return response.require_request(request)
+
+        async def replacement(frame):
+            # These are vendor RPC frames, including fork's external entryId.
+            # The original open-command representation and channel decode own
+            # framing; this control creates no replacement pending registry.
+            identity = uuid4().hex
+            command = UnknownCommand(wire={"id": identity, **frame})
+            child.stdin.write(channel.command_bytes(command))
+            await child.stdin.drain()
+            while True:
+                event = await channel.receive(strict=True)
+                assert event is not None, await errors
+                if isinstance(event, Response) and event.id == identity:
+                    assert event.success, event
+                    return event.data.require_payload()
+
+        initial = await state()
+        if driver == "sdk_callbacks":
+            assert len(observed()) == 1 and observed()[0]["sessionId"] == initial.session_id
+        # Fork-before requires an actual user message, unlike clone-at. Ask
+        # the active SDK owner, not the raw saved-file tail, for that operand.
+        messages = await replacement({"type": "get_fork_messages"})
+        entry = messages.payload["messages"][-1]["entryId"]
+        for frame in (
+            {"type": "switch_session", "sessionPath": created.session_file},
+            {"type": "clone"},
+            {"type": "fork", "entryId": entry},
+            {"type": "new_session"},
+        ):
+            previous = await state()
+            if driver == "sdk_callbacks":
+                count = len(observed())
+            await replacement(frame)
+            current = await state()
+            assert current.session_id
+            if frame["type"] == "switch_session":
+                assert current.identity == previous.identity
+            else:
+                assert current.session_id != previous.session_id
+            if driver == "sdk_callbacks":
+                assert len(observed()) == count + 1, (frame, observed())
+                assert observed()[-1]["sessionId"] == current.session_id
+        if driver == "sdk_callbacks":
+            before = await state()
+            count = len(observed())
+            await replacement({"type": "switch_session", "sessionPath": str(cancelled_target)})
+            after = await state()
+            assert after.identity == before.identity and len(observed()) == count
+            assert not cancelled_target.exists()
+        assert native.provider.posts == 0 and native.saved_inputs() == []
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
+        print("actual_native_replacement", driver, observed() if driver == "sdk_callbacks" else current.session_id, flush=True)
+    assert child.returncode is not None and not child.alive()
+    assert await errors == ""

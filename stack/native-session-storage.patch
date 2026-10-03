@@ -3040,7 +3040,17 @@
      };
      const success = (id, command, data) => {
          if (data === undefined) {
-@@ -777,7 +789,7 @@
+@@ -759,9 +771,6 @@
+             case "new_session": {
+                 const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
+                 const result = await runtimeHost.newSession(options);
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "new_session", result);
+             }
+             // =================================================================
+@@ -777,7 +786,7 @@
                      sessionId: session.sessionId,
                      sessionName: session.sessionName,
                      autoCompactionEnabled: session.autoCompactionEnabled,
@@ -3049,7 +3059,34 @@
                      pendingMessageCount: session.pendingMessageCount,
                      nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
                  };
-@@ -926,15 +938,15 @@
+@@ -898,16 +907,10 @@
+             }
+             case "switch_session": {
+                 const result = await runtimeHost.switchSession(command.sessionPath);
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "switch_session", result);
+             }
+             case "fork": {
+                 const result = await runtimeHost.fork(command.entryId);
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
+             }
+             case "clone": {
+@@ -916,9 +919,6 @@
+                     return error(id, "clone", "Cannot clone session: no current entry selected");
+                 }
+                 const result = await runtimeHost.fork(leafId, { position: "at" });
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "clone", { cancelled: result.cancelled });
+             }
+             case "get_fork_messages": {
+@@ -926,15 +926,15 @@
              }
              case "get_entries": {
                  const sessionManager = session.sessionManager;
@@ -3071,7 +3108,7 @@
              }
              case "get_tree": {
                  const sessionManager = session.sessionManager;
-@@ -956,7 +968,7 @@
+@@ -956,7 +956,7 @@
              // Messages
              // =================================================================
              case "get_messages": {
