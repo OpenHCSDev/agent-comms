@@ -826,6 +826,8 @@ def main() -> None:
                         default=Condition.BOUNDED)
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
+    parser.add_argument("--condition-source", action="store_true",
+                        help="PRIVATE: export original narrative bytes for SDK preview; requires --native-checkpoint")
     parser.add_argument("--previous-checkpoint", type=Path,
                         help="Original ancestor cut; reports source changes, not revision authority")
     recorded.add_argument("--probe-prompts", action="store_true")
@@ -833,6 +835,10 @@ def main() -> None:
         "--condition", type=Condition, choices=tuple(Condition), default=Condition.BOUNDED
     )
     args = parser.parse_args()
+    if args.condition_source and args.native_checkpoint is None:
+        parser.error("--condition-source requires --native-checkpoint")
+    if args.condition_source and args.previous_checkpoint is not None:
+        parser.error("--condition-source constructs one checkpoint, not a comparison")
     if args.previous_checkpoint is not None and args.native_checkpoint is None:
         parser.error("--previous-checkpoint requires --native-checkpoint")
     if args.compare_recorded_run is not None and args.recorded_run is None:
@@ -865,7 +871,11 @@ def main() -> None:
         previous = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.previous_checkpoint.read_text(), object_pairs_hook=unique_fields
         )) if args.previous_checkpoint is not None else None
-        result = checkpoint.inspect(previous)
+        if args.condition_source:
+            with checkpoint.original_source() as (session, evidence):
+                result = checkpoint.condition_source(session, evidence)
+        else:
+            result = checkpoint.inspect(previous)
     print(json.dumps(result, indent=2))
 
 
