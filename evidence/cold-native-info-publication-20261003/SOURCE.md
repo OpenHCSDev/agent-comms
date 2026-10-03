@@ -18,7 +18,10 @@ and completed observation. Its original StateData and context_info event go to
 TurnRunner's selected-preparation consumer. It validates the requested model before
 publishing via the original AgentEventConsumer and ACP usage event consumer. No
 current turn or goal state/configuration is initialized or changed by cold inspection.
-The optional hook is an application consumer resource, not a lifecycle state.
+The consumer is required at the owned preparation boundary: no attested-but-unpublished
+compatibility path remains. The direct fixture caller now uses the actual TurnRunner
+producer for initial configuration and retained observation instead of an unpublished
+NativeSessionPreparation invocation.
 
 AgentEventConsumer is now usable directly for an acquired owner's observations.
 Managed TurnProgress continues to supply its live binding and exact OwnedTurn hooks;
@@ -45,3 +48,11 @@ BOUND-2, AGENT-2. Original failed/cold406 evidence and all UNKNOWN remain untouc
 
 Working source only; configured installed cold/native/ACP qualification pending.
 No whole-latency/provider-duration or physical-footer pass claim.
+
+Retained inspection is a separate missing-publication edge: it can consume the idle
+child directly without calling prepare. Its shared generic inspect method is603-owned.
+Concrete coordinated change: required original preparation/stats publication on retained
+inspection, then its existing acquired query; Empty prepares once and consumes that
+acquired query directly. Borrowed active-reader correlation remains owned by the actual
+TurnSession/AgentInfo stream. Method edit is coordinated directly with Arendt; no query
+reader, usage formula, optional publisher or retained-usage cache is introduced.

@@ -65,7 +65,7 @@ class NativeSessionPreparation(backend.TurnSession):
         worktree: str,
         environment: dict[str, str],
         session_file: str,
-        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]] | None = None,
+        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         owner = asyncio.current_task()
         async with persistent.lock:
@@ -83,8 +83,7 @@ class NativeSessionPreparation(backend.TurnSession):
                                 raise NativePiUnavailable(event.text)
                     state = preparation.native.attestation.state
                     assert state is not None
-                    if observe is not None:
-                        await observe(state, preparation.context_info())
+                    await observe(state, preparation.context_info())
                     return state
                 finally:
                     if owner is not None:
