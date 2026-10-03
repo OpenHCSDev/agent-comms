@@ -18,8 +18,8 @@ b905c6ba22db6f8783efde300559116607ef4ad5cf6b9b604d3cec1f3e8aaf38  node_modules/@
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
 3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06  dist/core/agent-session-services.js
 26e34462390efffdac8253f83d4a33ccc5125c4f2b8aecc5b2e1b03d979396b6  dist/core/settings-manager.js
-66d34653479999e5110dd34183fdf69626ffd9cbd55c9b429a3e868919a5de11  dist/core/session-entry-store.js
-7c91a93256e940b20b9db84e2c986ab1a8799774d2f8bcee00049e6ed188de48  dist/core/session-context.js
+d1595267809937b4dc7b6aaf43b420805c6702732620d7faddd26cf0ebb876c4  dist/core/session-entry-store.js
+b644b4283b4059587a9883602910b4868adde69907dd740e1a636062ffcdf5fd  dist/core/session-context.js
 9b628019e91eb679be35889cf63533f5fbdff8248206e80fe4b6b608363fbc8f  dist/core/compaction/agent-comms-source.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
@@ -45,7 +45,7 @@ e30bbbbd2043d6b3c9ad87876cf488cce4a3eafa0c27ad3556d39dd35a47f648  node_modules/@
 9605f7cc8986b81f4e11d1d9f297632989d84339779751778c54c2769c85e2b4  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
-07518abbacece28c63eb9a1c40d4a3ce5d795db2c7434a675627f703b9920a3a  dist/core/turn-context.js
+11bcccebf0234a0ca5e2eeb9293637eb481ba8a73304e9ec14c7f3e4294443e4  dist/core/turn-context.js
 91383d3e0bf1985605dbbb0a3a3b5ef17da0f29c59c32db5c14af764999e696d  dist/core/turn-context.d.ts
 176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9  dist/core/tools/agent-comms-file-artifact.js
 b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
@@ -53,4 +53,4 @@ b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tool
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
 31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
 8209e570ef6044ce26f2ee7c95a1bcfda926457cf90b83d3356e10f54355004e  node_modules/@earendil-works/pi-ai/dist/utils/retry.d.ts
-# agent-comms-native-tree-v1 419453f846ef43a7e847508475685ddd0075a42792f6731d6d5f65f3c60cf74c
+# agent-comms-native-tree-v1 29fb1f9c57a829511f6a03acc15dc5d84e8652c57d1e95ee03fb37d4d02a3d91
