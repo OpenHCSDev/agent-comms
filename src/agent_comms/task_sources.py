@@ -569,6 +569,10 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
     def require_decision(self):
         return self
 
+    def contains_alternative(self, value: str | None) -> bool:
+        """Membership in this declaration, not permission from every constraint."""
+        return value == self.chosen or value in self.rejected
+
     def require_previous(self, original):
         return original.require_decision()
 

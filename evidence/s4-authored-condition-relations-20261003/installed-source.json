@@ -1,0 +1,14 @@
+{
+  "source_head": "2fbb6dc0400c23324e5c4766ae84b0d53d8bed64",
+  "normal_wheel": "s4-authored-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "holder": "reused released s523-runtime; no new environment",
+  "matching_owner_sources": {
+    "task_sources.py": "415d102ca6694c9838d27f858a2926b4814b058f2ed44a29d691b4cf1952ac71",
+    "field_codec.py": "8050f19bffa36118bac4e852836c86c76fabe22eb9c0292dbf01f15158eb2eb5",
+    "turn_context.py": "0c50b93f2868705c07a19f1f072283980ade58d403678fd04e781f5e8f2f4d5d",
+    "compaction_records.py": "c59a2fc1aa03fc3ada16b41d61bd2fa6fa9ea13796578c2e2ad92587a17453ff",
+    "retained_task_facts.py": "e4962935e41809839301e0170b9919d871f7527ea11e9ca09fb36aa6f9fe4643"
+  },
+  "wheel_build_source_head": "18f8ba10b75cc974608943f79483b8a3bcd518cf",
+  "product_delta_since_wheel_build": 0
+}
