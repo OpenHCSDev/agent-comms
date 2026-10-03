@@ -24,6 +24,7 @@ from .owner_compaction_settings import PiCompactionDecision
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .selected_pi_route import prepare_selected_native_source
 from .pi_summary_payloads import SelectedModel
+from .pi_vocabulary import CompactionReason
 from .threads import Thread
 
 
@@ -141,7 +142,8 @@ async def compact_owner_once(
 
             async def write(summary: NativeSummary) -> CompactionOperation:
                 return await _commit_native_summary(
-                    bridge, owner, owner_generation, persistent, prepared, source, summary
+                    bridge, owner, owner_generation, persistent, prepared, source, summary,
+                    reason=settings.reason,
                 )
 
             operation = await result.commit_with(write)
@@ -169,6 +171,8 @@ async def _commit_native_summary(
     prepared: NativePreparation,
     source: CompactionSource,
     result: NativeSummary,
+    *,
+    reason: type[CompactionReason],
 ) -> CompactionOperation:
     if not result.text:
         raise ValueError("Bounded owner summary required")
@@ -212,5 +216,7 @@ async def _commit_native_summary(
             if not committing.cancelled():
                 committing.exception()
             raise
-        await retained.reload(source.after_native_commit(operation.committed_outcome()).native)
+        await retained.reload(
+            source.after_native_commit(operation.committed_outcome()).native, operation, reason
+        )
         return operation

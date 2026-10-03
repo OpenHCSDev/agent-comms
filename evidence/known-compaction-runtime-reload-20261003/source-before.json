@@ -1,0 +1,532 @@
+{
+  "head": "c647c8d8246dfbac92fe82d5214404184d707f7f",
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 44,
+      "import": "from .native_custody import BorrowedNative, EmptyNative, NativeCleanupFailed, NativeCustody, PiSessionChild, RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 90,
+      "declaration": "PersistentPiSession",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 12,
+      "import": "from .compaction_source import CompactionSource"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 18,
+      "import": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 14,
+      "import": "from .compaction_states import IntentOperation, NativeOutcome, PendingPublication"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 19,
+      "import": "from .compaction_source import CompactionSource"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 21,
+      "import": "from .native_compaction_request import NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 17,
+      "import": "from .compaction_states import CommittedNativeOutcome, OperationState, PendingPublication, PublicationState, SummaryState, sql_names"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 166,
+      "import": "from .compaction_states import NativeOutcome"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 176,
+      "import": "from .native_compaction_request import NativeIntent"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 178,
+      "call": "self.committed_outcome"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 213,
+      "call": "self.committed_outcome"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 11,
+      "import": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 19,
+      "declaration": "CompactionSource",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 16,
+      "import": "from .compaction_states import CommittedNativeOutcome"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 351,
+      "declaration": "NativeOutcome",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 396,
+      "declaration": "CommittedNativeOutcome",
+      "bases": [
+        "NativeCommitPosition",
+        "NativeOutcome"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 90,
+      "call": "operation.committed_outcome"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 18,
+      "import": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 92,
+      "declaration": "NativeIntent",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 24,
+      "import": "from .compaction_source import CompactionSource"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 15,
+      "import": "from .compaction_states import NativeOutcome, UnknownNativeOutcome"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 212,
+      "declaration": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 22,
+      "import": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 241,
+      "import": "from .pi_commands import SwitchSession"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 254,
+      "call": "SwitchSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 13,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 16,
+      "import": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 16,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 24,
+      "import": "from .compaction_source import CompactionSource"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 27,
+      "import": "from .native_compaction_request import NativeIntent, NativeSummaryPayload"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 31,
+      "import": "from .owner_compaction_prepare import NativePreparation, NativePreparationResult, NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 44,
+      "declaration": "OwnerCompactionCommit",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 344,
+      "call": "operation.committed_outcome"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 348,
+      "call": "source.after_native_commit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 356,
+      "call": "identity.after_native_commit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 378,
+      "call": "intent.reconciliation"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 12,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 17,
+      "import": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 38,
+      "declaration": "NativeWitness",
+      "bases": [
+        "NativeSessionIdentity"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 16,
+      "import": "from .compaction_source import CompactionSource"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 17,
+      "import": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 15,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 17,
+      "import": "from .compaction_source import CompactionSource"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 20,
+      "import": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 175,
+      "call": "persistent.external_write"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 215,
+      "call": "retained.reload"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 215,
+      "call": "source.after_native_commit"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 215,
+      "call": "operation.committed_outcome"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 24,
+      "import": "from .owner_compaction_prepare import NativeWitness, PrepareCompactionHelper"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 207,
+      "declaration": "NativeQuery",
+      "bases": [
+        "PiCommand"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 411,
+      "declaration": "SwitchSession",
+      "bases": [
+        "MutatesSession",
+        "NativeQuery"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 12,
+      "import": "from .owner_compaction_prepare import NativePreparationResult, NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 10,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 15,
+      "import": "from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, NativeQuery"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 18,
+      "import": "from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 24,
+      "import": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 200,
+      "import": "from .owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 29,
+      "import": "from .compaction_states import CommittedNativeOutcome"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 31,
+      "import": "from .owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 176,
+      "call": "operation.committed_outcome"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 20,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 100,
+      "call": "operation.committed_outcome"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 113,
+      "import": "from agent_comms.compaction_source import CompactionSource"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 114,
+      "import": "from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 116,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 12,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 24,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 27,
+      "call": "owner.persistent.external_write"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 9,
+      "import": "from agent_comms.compaction_source import CompactionSource"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 10,
+      "import": "from agent_comms.compaction_states import CommittedOperation, NativeOutcome"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 15,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 16,
+      "import": "from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, RetiredUnknownSummary"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 20,
+      "import": "from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 272,
+      "import": "from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 273,
+      "import": "from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 274,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 27,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 28,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 415,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 14,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 33,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 34,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 111,
+      "call": "source.after_native_commit"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 111,
+      "call": "operation.committed_outcome"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 23,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 30,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 13,
+      "import": "from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness"
+    },
+    {
+      "path": "tests/test_retained_journal_framing.py",
+      "line": 5,
+      "import": "from agent_comms.compaction_states import AbortedNoWriteNativeOutcome, CommittedNativeOutcome, NativeOutcome, UnknownNativeOutcome"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 24,
+      "import": "from agent_comms.native_compaction_request import NativeIntent"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 197,
+      "call": "recovered.operations.get(operation.commit_id).committed_outcome"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 740,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 22,
+      "import": "from agent_comms.compaction_states import CommittedNativeOutcome, DeclinedPrestartSummary, LinkedSummary"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 422,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 18,
+      "import": "from agent_comms.compaction_states import AbortedNoWriteNativeOutcome, CommittedNativeOutcome, DeclinedPrestartSummary, ReservedSummary"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 14,
+      "import": "from agent_comms.owner_compaction_commit import OwnerCompactionCommit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 33,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 407,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 458,
+      "import": "from agent_comms.owner_compaction_prepare import NativeWitness"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 279,
+      "call": "operation.committed_outcome"
+    }
+  ],
+  "limits": "Python lexical source, not dynamic-resolution proof. Complete owner/consumer bodies and nativeSDK roots read."
+}
