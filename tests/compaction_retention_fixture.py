@@ -24,7 +24,7 @@ from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.message_reference import MessageReference
-from agent_comms.turn_context import ToolCatalogSegment
+from agent_comms.turn_context import JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
 
@@ -409,6 +409,9 @@ class Question:
     # Optional original source coordinate in external evaluation input. The
     # authored evidence_ref label cannot authenticate a runtime Decision.
     decision_source: MessageReference | None = None
+    # Original execution coordinates, distinct from an authored answer or a
+    # Decision alternative. This does not assert proposal/constraint validity.
+    action_source: JournalProvenance | None = None
 
     def __post_init__(self) -> None:
         if not self.identity or not self.prompt or not self.evidence_ref:
@@ -417,6 +420,11 @@ class Question:
             raise ValueError("A current expected answer cannot also be obsolete")
         if self.decision_source is not None and self.measurement is not Measurement.ACTION:
             raise ValueError("A Decision proposal source belongs on an action question")
+        if self.action_source is not None:
+            if self.measurement is not Measurement.ACTION:
+                raise ValueError("An execution source belongs on an action question")
+            if len(self.action_source.entries) != 2 or len(set(self.action_source.entries)) != 2:
+                raise ValueError("An execution source requires distinct original request/result entries")
 
     def score(self, answer: str | None) -> AnswerScore:
         return AnswerScore(
@@ -430,7 +438,7 @@ class Question:
 
     def proposed_action(self, answer, original):
         """A declared valid alternative is distinct from valid execution."""
-        result = {"execution": {"evaluated": False, "reason": "No executed-action evidence supplied"},
+        result = {"execution": self.executed_action(original),
                   "constraint_validity": {"evaluated": False,
                                           "reason": "Decision membership does not evaluate every constraint"}}
         if self.decision_source is None or original is None:
@@ -454,6 +462,20 @@ class Question:
             "chosen": answer == decision.chosen, "source": FieldCodec.encode(item["current"]),
             "scope": observed["scope"],
         })
+
+    def executed_action(self, original):
+        """Corroborate a named SDK result without crediting a lexical proposal."""
+        if self.action_source is None or original is None:
+            return {"evaluated": False, "reason": "No original request/result source supplied"}
+        selected = tuple(step for step in original["tool_steps"]
+                         if step["source"] == self.action_source)
+        if len(selected) != 1:
+            raise ValueError("Execution source is outside this original probe branch")
+        step, = selected
+        return dict(step["completion"], source=FieldCodec.encode(step["source"]), call=step["call"],
+                    scope="Original SDK tool result, not current filesystem or every task constraint",
+                    proposal_alignment={"evaluated": False,
+                        "reason": "A tool receipt does not bind its arguments to a declared Decision alternative"})
 
 
 @dataclass(frozen=True)

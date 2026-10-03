@@ -628,11 +628,15 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         return NativeTool.for_name(self.tool_name).result_artifacts(
             ProvidedToolResult(content=self.parts, details=self.details), not self.is_error)
 
-    def require_artifact_request(self, request):
+    def require_tool_request(self, request):
         calls = tuple(call for call in request.retained_tool_calls()
                       if call.id == self.tool_call_id)
         if len(calls) != 1 or calls[0].name != self.tool_name:
-            raise ValueError("Completed file operation lacks its exact original SDK call")
+            raise ValueError("Native tool result lacks its exact original SDK call")
+        return calls[0]
+
+    def require_artifact_request(self, request):
+        self.require_tool_request(request)
         if not self.completed_artifacts():
             raise ValueError("Native result has no successful original file operation evidence")
 
