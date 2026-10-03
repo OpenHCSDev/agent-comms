@@ -1,0 +1,4 @@
+actual_native_replacement immutable_cli 01a1018a-cd9f-7487-b650-2ba631152e39
+.actual_native_replacement sdk_callbacks [{'event': 'session_start', 'reason': 'startup', 'sessionId': '01a1018a-d03f-7735-a198-f6197e236759'}, {'event': 'session_start', 'reason': 'resume', 'sessionId': '01a1018a-d03f-7735-a198-f6197e236759'}, {'event': 'session_start', 'reason': 'fork', 'sessionId': '01a1018a-d86a-72a3-87c2-a826ff8c1d54'}, {'event': 'session_start', 'reason': 'fork', 'sessionId': '01a1018a-d888-72a3-87c2-a8289afe6ac9'}, {'event': 'session_start', 'reason': 'new', 'sessionId': '01a1018a-d896-72a3-87c2-a82bb4e24542'}]
+.
+2 passed in 6.68s
