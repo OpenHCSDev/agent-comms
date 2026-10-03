@@ -1,0 +1,258 @@
+{
+  "result": "CONFIGURED_SELECTED_SUMMARY_CLOCKS_AND_DISTINCT_TURN_PASS",
+  "intent": {
+    "source_head": "95fc70ac3347876e3e846567189d0e7cd25ddfc3",
+    "python": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/python",
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent",
+    "original_python": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001/bin/python",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "original_selection": {
+      "identity": {
+        "incarnation": {
+          "name": "openhcs-audit-merged-boundaries",
+          "created_at": 1790873473.1996155
+        },
+        "generation": 2222
+      },
+      "process": {
+        "pid": 1314726,
+        "start_time": 46490964
+      },
+      "admission_generation": 2186
+    },
+    "settings_paths": [
+      "/home/ts/.pi/agent/settings.json",
+      "/home/ts/code/projects/openhcs/.pi/settings.json",
+      "/home/ts/.pi/agent/models.json",
+      "/home/ts/code/projects/openhcs/.pi/models.json"
+    ],
+    "protected_before": {
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "ddc949ca74deb3dd897e277ba389af1e3d938fddbfdde2ccbf76a17215eefa21",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "739e95c253b589a40722c460a26ab8439920c0419c35d2b49293b4d4f9ef8ef3",
+      "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/79cb9232873a4501a118cc25da9fca67.json": "a997603d0a073c1e9c9266fcc373be029cc3f6f1f52dea24646c9b99553cec0d"
+    },
+    "source_bytes": 42026443,
+    "direct_url": {
+      "url": "file:///home/ts/.cache/agent-scratch/mendel-summary-request-observation555-20261003/wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "sdk": "0.12.1",
+    "source_files_equal": 339,
+    "public_inputs": 0,
+    "replay": false,
+    "scope": "One configured isolated saved-session fork, SDK/ACP manual selected summary, private peer during streaming, then distinct new input; no physical UI or public channel performance claim."
+  },
+  "journey": {
+    "complete": true,
+    "public_inputs": 0,
+    "input_replays": 0,
+    "installed_UI": false,
+    "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "source_bytes": 42026443,
+    "original_sha256": "ddc949ca74deb3dd897e277ba389af1e3d938fddbfdde2ccbf76a17215eefa21",
+    "fork_bytes": 42026426,
+    "manual_commit": "94c2383beb774fd3a6e4d5a5042df387",
+    "peer_messages_during_summary": 1,
+    "original_inputs_before_new_prompt": 0,
+    "distinct_input_started_once": true,
+    "distinct_answer": true,
+    "elapsed_seconds": 144.82768274098635,
+    "original_source_unchanged": true,
+    "native_children_closed": true
+  },
+  "selected_requests": [
+    {
+      "request_id": "ee29a369-b8b7-4bb3-8d8e-9e1151fcfca7",
+      "operation": {
+        "session_file": "/home/ts/.cache/agent-scratch/m555/forks/2026-10-03T01-35-22-831Z_01a0ff66-cecf-712a-bb17-8c9873b597c7.jsonl",
+        "operation_id": "f803af0ce72844c9afc14f993444247b"
+      },
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "source529",
+            "created_at": 1790991326.411686
+          },
+          "generation": 1
+        },
+        "turn_id": "compaction-154b60f452b6443cb2c89174ae1a57c3",
+        "admission_generation": 1
+      },
+      "native_process": {
+        "pid": 1470579,
+        "start_time": 46696802
+      },
+      "phases": [
+        {
+          "stage": "preparing",
+          "elapsed_ms": 0.04736,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466988375054151
+        },
+        {
+          "stage": "callback",
+          "elapsed_ms": 160.161204,
+          "transport": "",
+          "callback": "before_provider_request",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466988381303556
+        },
+        {
+          "stage": "callback_end",
+          "elapsed_ms": 160.225266,
+          "transport": "",
+          "callback": "before_provider_request",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466988381768547
+        },
+        {
+          "stage": "connecting",
+          "elapsed_ms": 162.775629,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466988382132848
+        },
+        {
+          "stage": "connected",
+          "elapsed_ms": 1272.018541,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466989485191458
+        },
+        {
+          "stage": "dispatch",
+          "elapsed_ms": 1272.107029,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466989485964102
+        },
+        {
+          "stage": "first_event",
+          "elapsed_ms": 1542.465808,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466989750572001
+        },
+        {
+          "stage": "first_delta_consumed",
+          "elapsed_ms": 3257.536516,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 466991465868256
+        },
+        {
+          "stage": "stream_end",
+          "elapsed_ms": 99100.384332,
+          "transport": "websocket",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 467087308356842
+        },
+        {
+          "stage": "finished",
+          "elapsed_ms": 99101.234403,
+          "transport": "",
+          "callback": "",
+          "attempt": 0,
+          "status": null,
+          "receipt_monotonic_ns": 467087681943991
+        }
+      ]
+    }
+  ],
+  "normal_request_count": 1,
+  "subsequent_turns_distinct_from_selected_summary": true,
+  "original_protected_unchanged": true,
+  "limits": "Observed request/callback/transport spans on this configured fork only; no controlled performance gain or historical attribution. Concurrent summary leaves are not summed as wall time.",
+  "actual_native_identities_exited": [
+    {
+      "identity": {
+        "pid": 1470579,
+        "start_time": 46696802
+      },
+      "alive": false
+    },
+    {
+      "identity": {
+        "pid": 1482678,
+        "start_time": 46709500
+      },
+      "alive": false
+    }
+  ],
+  "selected_model": {
+    "provider": "openai-codex",
+    "modelId": "gpt-6.1-sol",
+    "contextWindow": 272000
+  },
+  "selected_settings": {
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "journal_state": "manual_committed",
+  "native_commit_state": "committed",
+  "summary_finished_to_next_request_preparing_seconds": 13.696,
+  "summary_callback_total_ms": 0.067147,
+  "native_request_receipt_delays_ms": [
+    {
+      "stage": "preparing",
+      "delay_ms": 167.585736
+    },
+    {
+      "stage": "callback",
+      "delay_ms": 13.721297
+    },
+    {
+      "stage": "callback_end",
+      "delay_ms": 14.122226
+    },
+    {
+      "stage": "connecting",
+      "delay_ms": 11.936164
+    },
+    {
+      "stage": "connected",
+      "delay_ms": 5.751862
+    },
+    {
+      "stage": "dispatch",
+      "delay_ms": 6.436018
+    },
+    {
+      "stage": "first_event",
+      "delay_ms": 0.685138
+    },
+    {
+      "stage": "first_delta_consumed",
+      "delay_ms": 0.910685
+    },
+    {
+      "stage": "stream_end",
+      "delay_ms": 0.551455
+    },
+    {
+      "stage": "finished",
+      "delay_ms": 373.288533
+    }
+  ],
+  "acquisition_records_present": false
+}

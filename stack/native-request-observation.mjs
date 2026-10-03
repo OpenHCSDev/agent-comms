@@ -54,6 +54,17 @@ export class NativeRequestObservation {
                 () => config.onResponse?.(response, model), true, "Reading provider response") };
     }
 
+    async *events(events) {
+        let firstDelta = true;
+        for await (const event of events) {
+            if (firstDelta && event.type.endsWith("_delta")) {
+                firstDelta = false;
+                this.observe({ stage: "first_delta_consumed", detail: "Receiving model response" });
+            }
+            yield event;
+        }
+    }
+
     async emit(event, publish) {
         return this.callback(event.type, () => publish(event), event.type !== "message_update");
     }

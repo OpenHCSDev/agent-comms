@@ -1,0 +1,1 @@
+{"type":"model_request_progress","progress":{"requestId":"9f6011f0-7ec7-4b15-986d-5959de81e4c2","sessionId":"format-control","inputId":"","startedAtMs":1790989319637,"observedAtMs":1790989319637,"monotonicNs":"464958814182825","elapsedMs":0.072788,"callbackMs":0,"callbackCount":0,"callbackMaxMs":0,"stage":"preparing","detail":"Preparing compaction request"}}
