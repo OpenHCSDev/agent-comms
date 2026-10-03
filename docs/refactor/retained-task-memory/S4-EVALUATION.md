@@ -1,6 +1,8 @@
 # S4: Repeated-compaction retention evaluation
 
-**Source reviewed:** `4295d680`.
+**Historical plan baseline:** `4295d680`. Current measurement continuation: PR557;
+current S3 implementation: merged527, qualified functional02 on native960.
+The older baseline is not a request to rediscover or reimplement that capability.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 1 scaffold, step 4 native/model runs.**
 **Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* Decision, existing retained native fixture and lifecycle journeys.
 
@@ -51,6 +53,7 @@ python tests/compaction_retention_fixture.py
 python tests/compaction_retention_fixture.py --condition task-memory --answers answers.json
 python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/research.json --probe-prompts
 python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/goal.json --native-probes original-probes.json
+python tests/compaction_retention_fixture.py --recorded-run original-run.json
 ```
 
 All four labels use the same oracle: full-context, bounded, task-memory and
@@ -58,6 +61,18 @@ recent-only. For native/model evaluation, construct each condition in the runner
 and record its context digest.
 The scorer accepts recorded responses. Authored answers test the scorer; model
 retention requires actual model responses.
+
+`--recorded-run` uses the existing RecordedNativeProbes input with `rounds` and
+unprobed `checkpoints` maps. It validates distinct ancestor cuts in frozen round
+order through one borrowed original native source. Per-probe checkpoint,
+`sdk_context` and `context_manifest` references belong on RecordedNativeProbe.
+Checkpoint `registry_scope` references an original RegistryDocument capture;
+the document supplies its snapshot. Original certified `wire` corroborates task
+publications for scoped revision measurements. Missing original evidence stays
+unevaluated. SDK prompt presence is separate from final HTTP payload presence.
+Original NativeSummaryPayload and assistant PiUsage supply available counters;
+absent counters are never measured zeros. See
+[the receiving scope](../../checkpoints/repeated-retention-runner-20261002.md).
 
 ## Required next infrastructure and owner boundaries
 
