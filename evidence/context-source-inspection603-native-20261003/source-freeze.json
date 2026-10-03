@@ -1,0 +1,33 @@
+{
+  "source_checkpoint": "39f89a7c614e5e0c27009a1cbad6fce0efc96467",
+  "functional_source": "b0e5b57be2b3d78bc3b2fb2f960c78aabfa84a5c",
+  "files": {
+    "stack/native-turn-context.mjs": "131a01202e80864342359e838cd7ee2b1b01ec4c85c68ad9f891bfb39b6c607a",
+    "stack/native-turn-context.d.ts": "e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba",
+    "stack/patch-native-turn-context.py": "9076a8c4478cddcd272affb135deba88bd7b6bbfaa846412b68ca2b7095d27c2"
+  },
+  "expected_compiled_changes": [
+    {
+      "path": "dist/core/turn-context.js"
+    },
+    {
+      "path": "dist/core/turn-context.d.ts"
+    },
+    {
+      "path": "dist/core/agent-session.js"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-types.d.ts"
+    }
+  ],
+  "original_native": "89b56aea0bb128c4bf3e2c979de8a5afa79ac88b1f51a74c49cc1cab46da60d2",
+  "canonical_recipe_sha256": "518fb7c3e3d602811389d975cb785715809b4247909408d7d0d3c06a85c3febd",
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "new_environment": false,
+  "new_worktree": false,
+  "provider_calls": 0,
+  "public_changes": false
+}
