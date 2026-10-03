@@ -52,3 +52,14 @@ model content remains in the original protected root. This is fuller measurement
 plumbing, not a matched-model result or cost-saving claim. The listed alignment,
 quality-denominator and action-validity source work remains independent of any
 paid-study approval. No runtime policy is activated.
+
+## Runtime290 archive scope correction
+
+Bohr verified that current357 installed runtime290 activation differs from the
+historical staging290 metadata archived in560's borrow-release receipt. That
+archive records its named original files/hashes faithfully; it must not be used
+as the current installed-package declaration. Bohr separately retained matching
+current activation/full-source/native proof before granting Mendel the holder.
+The original release receipt remains unchanged. This does not change560's direct
+production-byte checks, the final Core563/de166 functional receipt, or protection
+of its original records. No reconstruction, package capture or gate is repeated.
