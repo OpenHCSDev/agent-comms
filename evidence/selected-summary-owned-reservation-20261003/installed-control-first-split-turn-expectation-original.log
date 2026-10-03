@@ -1,0 +1,48 @@
+actual_saved_prefix_reservation {"operation": "13b829cf937f4e7181b575f47b445b48", "source_bytes": 42117880, "source_sha256": "d1aed407f22d861c66b340b293bf00f47ebff51bc03c3a331650e3ba6de742ed", "redecoded_rows": 0, "provider_requests": 0, "scope": "returned SDK fork/coverage reservation; no provider/commit/input authority"}
+.actual_reservation_cancel_joined_no_summary_send 4f490e09994f4f70a898efe318d4519b
+.F
+=================================== FAILURES ===================================
+_____ test_actual_failure_settlement_cancel_preserves_known_native_result ______
+
+retained_summary = (<test_backend_native_lifecycle.NativeBackendFixture object at 0x7effaa2ca210>, NativePreparation(witness=NativeWitnes...action_journal.CompactionJournal object at 0x7effa872d450>, <function retained_summary.<locals>.run at 0x7effaa5e3d70>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7effaa28e210>
+
+    async def test_actual_failure_settlement_cancel_preserves_known_native_result(
+        retained_summary, monkeypatch,
+    ):
+        import threading
+    
+        native, _, _, journal, run = retained_summary
+        original, calls = native.session.read_bytes(), native.provider.posts
+        entered, release = threading.Event(), threading.Event()
+        fail = journal.summaries.fail
+    
+        def observe(*args):
+            assert threading.current_thread() is not threading.main_thread()
+            entered.set()
+            assert release.wait(10)
+            return fail(*args)
+    
+        monkeypatch.setattr(journal.summaries, "fail", observe)
+        native.provider.status = 400
+        task = asyncio.create_task(run())
+        try:
+            assert await asyncio.to_thread(entered.wait, 15)
+            task.cancel()
+        finally:
+            release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        attempts = journal.summaries.history(str(native.session))
+        assert len(attempts) == 1 and attempts[0].state.declared_name == "failed"
+        assert attempts[0].state.terminal and attempts[0].state.settled_without_original
+        assert not attempts[0].state.original_eligible
+>       assert native.provider.posts == calls + 1 and native.session.read_bytes() == original
+E       assert (4 == (2 + 1))
+E        +  where 4 = <compaction_loopback.LoopbackProvider object at 0x7effaa2caad0>.posts
+E        +    where <compaction_loopback.LoopbackProvider object at 0x7effaa2caad0> = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7effaa2ca210>.provider
+
+tests/test_selected_summary_exchange.py:320: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_exchange.py::test_actual_failure_settlement_cancel_preserves_known_native_result
+1 failed, 2 passed in 21.05s
