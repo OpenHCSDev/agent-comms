@@ -1,0 +1,146 @@
+{
+  "scope": "installed private original native/ACP channel source + original joined cancellation; localhost only, not configured-provider latency acceptance",
+  "source_head": "51449062",
+  "controls": "2 PASS 21.90s",
+  "originals": "/home/ts/.cache/agent-scratch/m574-parallel-originals",
+  "source_original_root": "/var/tmp/ac-sealed-test-883g0ri1",
+  "native_processes": [
+    {
+      "identity": {
+        "pid": 3011622,
+        "start_time": 48891650
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 3011607,
+        "start_time": 48891578
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 3011615,
+        "start_time": 48891645
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 3010475,
+        "start_time": 48890778
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 3010956,
+        "start_time": 48891117
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 3010600,
+        "start_time": 48890868
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 3010958,
+        "start_time": 48891119
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ],
+  "launch_acquisitions": [
+    {
+      "input_id": "2b3df5105eea733a84b656cd526d3abc",
+      "launch_seconds": 0.819678675,
+      "started_ns": 488915682758276,
+      "finished_ns": 488916502436951
+    },
+    {
+      "input_id": "7407b7eea04c1980c4c7f9a9a33f36ea",
+      "launch_seconds": 0.805476033,
+      "started_ns": 488914978984241,
+      "finished_ns": 488915784460274
+    },
+    {
+      "input_id": "a3e6bd25e5f2520f435e82f08f8aabd2",
+      "launch_seconds": 0.758184411,
+      "started_ns": 488915699228847,
+      "finished_ns": 488916457413258
+    },
+    {
+      "input_id": "cb8d5b20e5f2026434ab6301e0b1fa98",
+      "launch_seconds": 0.857659768,
+      "started_ns": 488906922429043,
+      "finished_ns": 488907780088811
+    },
+    {
+      "input_id": "6af30f230c4357ae29a08d5db17680ce",
+      "launch_seconds": 0.748028751,
+      "started_ns": 488910424837488,
+      "finished_ns": 488911172866239
+    },
+    {
+      "input_id": "3312fef486c64718e6429f77749cb65a",
+      "launch_seconds": 1.067397611,
+      "started_ns": 488907615527372,
+      "finished_ns": 488908682924983
+    },
+    {
+      "input_id": "1d858e2afa01a1527e33fd96e069fcc4",
+      "launch_seconds": 0.749230279,
+      "started_ns": 488910448790471,
+      "finished_ns": 488911198020750
+    }
+  ],
+  "localhost_posts": 7,
+  "provider_failures": [],
+  "all_peer_claims_settled": true,
+  "owner_stop_assertions": true,
+  "server_thread_alive": false,
+  "original_wire_sha256": "35c5dc8179ebf27f9830c7349cbc525635073f527f922118e2bf4422accde292",
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea/node_modules/@earendil-works/pi-coding-agent",
+  "notes": "Copied original private roots retain original embedded paths; evidence, not a newly admitted runtime or replay target.",
+  "owner_processes": [
+    {
+      "name": "questioner",
+      "identity": {
+        "pid": 3008872,
+        "start_time": 48890228
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "name": "answerer",
+      "identity": {
+        "pid": 3008875,
+        "start_time": 48890306
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "name": "answerer2",
+      "identity": {
+        "pid": 3009228,
+        "start_time": 48890392
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ]
+}

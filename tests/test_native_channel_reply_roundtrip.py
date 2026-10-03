@@ -315,10 +315,16 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert all(row["turn"]["identity"]["incarnation"]["name"] == original["owner"]
                            for row in samples)
                 assert len({tuple(row["native_process"].items()) for row in samples}) == 1
+                acquisitions = [row["acquisition"] for row in observations
+                                if row.get("input_id") == original["input_id"]
+                                and "acquisition" in row]
+                assert len(acquisitions) == 1
+                selection = acquisitions[0]["operations"]["native_launch_selection"]
+                assert selection["count"] == 1 and selection["total_ns"] > 0
             print("Native original timing samples", len(native), "inputs", len(request_inputs),
                   "maximum parent receipt lag seconds",
                   max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
-                      for row in native), flush=True)
+                  for row in native), flush=True)
             return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
@@ -490,3 +496,59 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 "server_thread_alive": serving.is_alive(),
                 "wire_sha256": hashlib.sha256(comms.bus.log.path.read_bytes()).hexdigest(),
             }, indent=2) + "\n")
+
+
+async def test_selected_validation_cancellation_joins_before_claim(tmp_path, monkeypatch):
+    """Pause real package validation; cancellation cannot escape its worker."""
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.native_pi import NativePiUnavailable
+
+    pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+    if not pin:
+        pytest.skip("Actual immutable native bundle required")
+    comms = Comms(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    before = comms.registry.snapshot()
+    entered, release, completed = threading.Event(), threading.Event(), threading.Event()
+    loop_thread = threading.get_ident()
+    worker_threads = []
+    validate = SelectedExecution.validate
+
+    def observed_validation(execution):
+        worker_threads.append(threading.get_ident())
+        entered.set()
+        assert release.wait(5), "Paused original validation was not released"
+        try:
+            return validate(execution)
+        finally:
+            completed.set()
+
+    monkeypatch.setattr(SelectedExecution, "validate", observed_validation)
+    execution = SelectedExecution(root=comms.root, wire_root_id=root_id,
+                                  owner_name="unregistered", native_package=Path(pin))
+    task = asyncio.create_task(execution.run())
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        assert len(worker_threads) == 1 and worker_threads[0] != loop_thread
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done() and not completed.is_set()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert completed.is_set()
+        assert comms.registry.snapshot() == before
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    # A separate invalid acquisition still refuses before participant/claim
+    # selection; no cancellation or prior validation grants it trust.
+    monkeypatch.setattr(SelectedExecution, "validate", validate)
+    invalid = SelectedExecution(root=comms.root, wire_root_id=root_id,
+                                owner_name="unregistered", native_package=tmp_path)
+    with pytest.raises(NativePiUnavailable):
+        await invalid.run()
+    assert comms.registry.snapshot() == before

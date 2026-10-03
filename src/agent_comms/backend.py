@@ -23,6 +23,7 @@ import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, AsyncExitStack, aclosing, contextmanager, nullcontext
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -49,6 +50,7 @@ from .native_custody import (
     RetainedNative,
 )
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .coordinator import Coordination
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
@@ -214,49 +216,47 @@ async def stream_agent_events(
     """
     owner = asyncio.current_task()
     try:
-        try:
-            launch = await asyncio.to_thread(
-                NativePiRpcLaunch.managed,
-                agent_bin,
-                tuple(agent_args),
-                worktree=Path(cwd),
-                environment=env_extra,
-                session_file=session_file,
-            )
-        except (OSError, ValueError, NativePiUnavailable) as error:
-            yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
-            return
-        from .session_fence import session_writer_fence
-
-        async with (
-            session_writer_fence(launch.session.session_file),
-            persistent_session.lock if persistent_session is not None else nullcontext(),
-        ):
+        async with persistent_session.lock if persistent_session is not None else nullcontext():
             try:
-                async with aclosing(
-                    TurnSession(
-                        launch,
-                        task,
-                        steering_queue=steering_queue,
-                        finish_event=finish_event,
-                        images=images,
-                        context_contributions=context_contributions,
-                        model_wait_timeout=model_wait_timeout,
-                        rpc_abort_grace=rpc_abort_grace,
-                        require_input_id=require_input_id,
-                        send_boundary=send_boundary,
-                        native_start=native_start,
-                        interrupt_boundary=interrupt_boundary,
-                        persistent_session=persistent_session,
-                        ui_request=ui_request,
-                        request_observer=request_observer,
-                    ).run()
-                ) as stream:
-                    async for event in stream:
-                        yield event
-            finally:
-                if owner is not None:
-                    await terminate_task_process(owner)
+                launch = await Coordination.run_worker(partial(
+                    (persistent_session.custody if persistent_session is not None else EmptyNative()).managed_launch,
+                    agent_bin,
+                    tuple(agent_args),
+                    worktree=Path(cwd),
+                    environment=env_extra,
+                    session_file=session_file,
+                ))
+            except (OSError, ValueError, NativePiUnavailable) as error:
+                yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
+                return
+            from .session_fence import session_writer_fence
+
+            async with session_writer_fence(launch.session.session_file):
+                try:
+                    async with aclosing(
+                        TurnSession(
+                            launch,
+                            task,
+                            steering_queue=steering_queue,
+                            finish_event=finish_event,
+                            images=images,
+                            context_contributions=context_contributions,
+                            model_wait_timeout=model_wait_timeout,
+                            rpc_abort_grace=rpc_abort_grace,
+                            require_input_id=require_input_id,
+                            send_boundary=send_boundary,
+                            native_start=native_start,
+                            interrupt_boundary=interrupt_boundary,
+                            persistent_session=persistent_session,
+                            ui_request=ui_request,
+                            request_observer=request_observer,
+                        ).run()
+                    ) as stream:
+                        async for event in stream:
+                            yield event
+                finally:
+                    if owner is not None:
+                        await terminate_task_process(owner)
     except Exception:
         # The owner-turn publisher owns diagnostic privacy and input settlement.
         # Preserve the producer's original cause instead of fabricating a terminal.
