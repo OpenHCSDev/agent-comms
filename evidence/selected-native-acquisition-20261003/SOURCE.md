@@ -1,0 +1,11 @@
+# Selected native acquisition
+
+Base: normal main f10980921de6080e7a7e89f1959243c1d7666a0a, includes571 and572. Reused goal-ledger checkout, no new environment/native copy/provider input.
+
+The source has two distinct costs. SelectedExecution validates the immutable package before participant/claim selection, then SelectedSession.prepare calls standalone NativeSessionIdentity.locate which hashes that SAME artifact again. The execution lifetime can lend that acquired package to the existing SessionIdentityHelper. Each TRIAGE/FULL TrackedTurnSession is a genuinely separate fresh child with its own source attestation and send authority; those package verifications remain. Both execution.validate and tracked launch construction currently block the event loop and occur before the recorded startup clock.
+
+Owner closure: SelectedExecution owns its one validation and selected source preparation, SelectedSession consumes that original execution for the SDK header observation, NativePiRpcLaunch still validates every new tracked launch, Coordination.run_worker joins blocking acquisition before enclosing custody exits, original PublicationMeasurements captures launch construction before startup. Initial async foreground preflight uses the same joined worker; acceptance preflight already runs inside Coordination.run_async. Sync CLI/standalone locators retain their independent validation boundaries.
+
+No prior-success flag, reusable path cache, new class, second trust store, source codec or relaxed input/claim fence. Original13.562s next-preparation gap and98.141s provider duration remain protected/unattributed. Patterns BOUND-1 repeated boundary validation and IMPL-12 duplicated lifecycle work; AST before/after uses existing NRA Package, includes all production/tests/tools Python modules, records omissions and dynamic ambiguity. Native immutable policy is not a same-UID sandbox.
+
+Checks come after the complete source change. They must detect incorrect header borrowing, event-loop blocking/cancellation escaping a worker, invalid package being admitted, and broken actual native TRIAGE/FULL/publication. Reuse existing installed holder and genuine protocol/local endpoint without any paid or public probe; do not repeat unchanged42MB summary/provider experiments. Sch owns normal merged receiving source; parent owns publication.
