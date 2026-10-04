@@ -1037,7 +1037,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         # real converter result. A transform may reduce messages legitimately;
         # its output count must not be confused with the installed prefix count.
         prefix = ({'type': 'session', 'id': self.identity.session_id},
-                  {'type': 'message', 'id': 'source',
+                  {'type': 'message', 'id': 'prior',
+                   'message': {'role': 'user', 'content': 'Earlier original source'}},
+                  {'type': 'message', 'id': 'source', 'parentId': 'prior',
                    'message': {'role': 'user', 'content': 'Original installed source'}})
         self.session.write_text(''.join(json.dumps(row) + '\n' for row in prefix))
         self.session.chmod(0o600)
@@ -1075,6 +1077,37 @@ class RecordedMeasurementTests(unittest.TestCase):
                                                  manifest, (row, conversion, restored))
             self.assertTrue(complete['evaluated'])
             self.assertEqual(complete['installations'], (installed,))
+            self.assertFalse(complete['entry_selection']['evaluated'])
+            self.assertNotIn('entry_selection', row)  # Historical absence stays absent.
+            for selection, selected, unselected in (
+                    (('prior', 'source'), ('prior', 'source'), ()),
+                    (('source',), ('source',), ('prior',)),
+                    ((), (), ('prior', 'source'))):
+                observed = replace(installed, entry_selection=JournalProvenance(
+                    str(self.session), selection))
+                selected_row = FieldCodec.encode(observed)
+                self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, selected_row), observed)
+                result = probe.installed_condition(evidence, branch, context, serialized,
+                    manifest, (selected_row, conversion, restored))
+                observation, = result['entry_selection']['observations']
+                self.assertTrue(observation['evaluated'])
+                self.assertEqual(observation['selected_message_entries'], selected)
+                self.assertEqual(observation['unselected_message_entries'], unselected)
+                self.assertEqual(observation['all_original_message_entries_selected'], not unselected)
+                # Original selection remains known even without matching request bytes.
+                no_request = probe.installed_condition(evidence, branch, context,
+                    {'evaluated': False}, None, (selected_row, restored))
+                self.assertFalse(no_request['evaluated'])
+                self.assertEqual(no_request['entry_selection'], result['entry_selection'])
+            for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
+                with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
+                    probe.installed_condition(evidence, branch, context, serialized, manifest,
+                        (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
+                            str(self.session), selection))), conversion, restored))
+            with self.assertRaises(ValueError):
+                probe.installed_condition(evidence, branch, context, serialized, manifest,
+                    (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
+                        str(self.root / 'another.jsonl'), ('source',)))), conversion, restored))
             with self.assertRaisesRegex(ValueError, 'has not retired'):
                 probe.installed_condition(evidence, branch, context, serialized,
                                           manifest, (row, conversion))
@@ -1100,7 +1133,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         identities = tuple(item.identity for item in scenario.rounds)
         unavailable = {identity: {'evaluated': False} for identity in identities}
         original = {'construction': {'condition_application': {'evaluated': True},
-            'condition_installation': {'evaluated': False},
+            'condition_installation': {'evaluated': False, 'entry_selection': {'evaluated': False}},
+            'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
         self.assertFalse(partial['evaluated'])
@@ -1115,6 +1149,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertTrue(observed['bounded_sdk_application']['evaluated'])
         self.assertTrue(observed['source_delivery']['evaluated'])
         self.assertFalse(observed['installed_sdk_source']['evaluated'])
+        self.assertFalse(observed['sdk_entry_selection']['evaluated'])
+        self.assertTrue(observed['native_request_admission']['evaluated'])
+        self.assertEqual(partial['native_request_admission']['unavailable_rounds'], identities[1:])
         self.assertFalse(observed['full_history_capacity']['evaluated'])
         self.assertFalse(observed['evaluated'])
         for condition in Condition:
@@ -1123,7 +1160,8 @@ class RecordedMeasurementTests(unittest.TestCase):
             self.assertFalse(labelled['evaluated'])
         partial_application = {'construction': {'condition_application': {
             'evaluated': False, 'transform': {'evaluated': True}},
-            'condition_installation': {'evaluated': False},
+            'condition_installation': {'evaluated': False, 'entry_selection': {'evaluated': False}},
+            'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
             {**evidence, identities[0]: partial_application}, delivered)
@@ -1132,7 +1170,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         # a supplied experimental label or its intended source selection.
         original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
         self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
-        original['construction']['condition_installation'] = {'evaluated': True}
+        original['construction']['condition_installation'] = {
+            'evaluated': True, 'entry_selection': {'evaluated': True}}
+        self.assertTrue(scored.condition_construction(evidence, delivered)['sdk_entry_selection']['evaluated'])
         self.assertTrue(scored.condition_construction(evidence, delivered)['installed_sdk_source']['evaluated'])
         self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])
 

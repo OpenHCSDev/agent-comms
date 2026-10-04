@@ -3,8 +3,10 @@
 Continue merged636 in the same checkout. Private measurement/fixture source
 only; no runtime/native/W1 edit, provider/study, package or original replay.
 
-`constructNativeConditions` already acquires the actual SDK entry selection and
-raw AgentMessages together. `armInstalledNativeCondition` observes that installed
+`constructNativeConditions` acquires SDK entries and raw AgentMessages together
+for full-context and recent-only construction. Task-memory borrows live SDK
+messages, and bounded construction combines a detached summary with kept
+messages; their broad journal attribution does not prove entry selection. `armInstalledNativeCondition` observes that installed
 prefix entering the original transform. Its recorded witness and hashes do not,
 by themselves, name the selected entries; a condition label or a transformed
 manifest's broad journal attribution cannot supply that missing observation.
