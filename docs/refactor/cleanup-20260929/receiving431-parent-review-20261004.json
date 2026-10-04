@@ -158,6 +158,22 @@
       "final_src_tests_tools_pins_equal_installed5b": true
     },
     "public_delivered": false,
-    "default_terminal_accepted": false
+    "default_terminal_accepted": false,
+    "Toad417": {
+      "head": "d25163292df7ba063199f5924b53b6b9d98cb344",
+      "merge": "57ebe1c91f587fb4337ab0548f0ada3c665582eb",
+      "debt": "SUCCESS37201728958",
+      "owned_context_files_equal_installed04b": true,
+      "named_App13_Reader14_receipt_hashes_equal": 6,
+      "scope": "Original App remount plus authenticated recorded System/search/full/copy/export/distinct child/footer; separate637 current-preview App; no new joined run"
+    },
+    "Core639": {
+      "head": "b7d2349f498e0350012276261f90249be5244561",
+      "merge": "a7830593e4994c08048ae9d5b3fa6aea45d9f6f1",
+      "debt": "SUCCESS37201540135",
+      "original_raw_hashes_matched": 19,
+      "runtime_native_tools_changed": false,
+      "scope": "Private authored SDK entry selection and correlated request admission; not configured study/wire projection"
+    }
   }
 }
