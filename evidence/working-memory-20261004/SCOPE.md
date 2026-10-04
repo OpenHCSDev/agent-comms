@@ -146,3 +146,10 @@ is reconstructed. No native artifact, installed package or paid request has
 been changed. Source sanity for this complete batch follows implementation;
 installed worker/UI acceptance, genuine native assembly, Codex developer capture,
 empirical calibration and the later sentinel remain unfinished.
+
+The final historical-attribution correction uses only UnattributedProvenance
+when no assembly ranges were captured. Old loaded-file metadata remains in the
+original manifest but cannot label any sentence as that file's instruction.
+New ranges retain exact original file/source coordinates. The affected source
+batch remains3PASS/0.52s, with this concrete historical case added; zero external
+requests or provider/native input. Receipt:historical-attribution-final.json.
