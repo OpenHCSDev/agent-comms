@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -142,6 +143,14 @@ class ResourceProvenance(Provenance):
 
 
 @dataclass(frozen=True)
+class UnattributedProvenance(Provenance):
+    """Captured wording with no original assembly attribution."""
+
+    def public_description(self) -> str:
+        return "Unattributed captured text · original source was not observed"
+
+
+@dataclass(frozen=True)
 class ContextSourceText:
     """A public source-read result, not another context or input record."""
 
@@ -175,6 +184,8 @@ class SegmentManifest:
     tokens: int
     contributors: tuple[SegmentManifest, ...] = ()
     captured_text: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
+    source_spans: tuple[ContributionCoordinates, ...] = field(
+        default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
@@ -184,6 +195,8 @@ class SegmentManifest:
 
     def source_membership(self):
         yield from self.provenance
+        for span in self.source_spans:
+            yield from span.provenance
         for contributor in self.contributors:
             yield from contributor.source_membership()
 
@@ -296,6 +309,18 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     def public_text(self) -> str:
         return self.text()
 
+    def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
+        return (ContributionCoordinates.capture(
+            self.declared_name, self.provenance, 0, self.public_text()),)
+
+    def public_spans(self) -> tuple[ContextSpan, ...]:
+        """Address public sentences within this owner's original source ranges."""
+        digest = self.manifest(0).sha256
+        text = self.public_text()
+        return tuple(ContextSpan(digest, sentence)
+                     for source in self.source_ranges()
+                     for sentence in source.sentences(text))
+
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
 
@@ -320,15 +345,62 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
 
 
 @dataclass(frozen=True)
-class InputContributionCoordinates:
-    """Coordinates in the original rendered input, never another input copy."""
-
+class ContributionCoordinates:
+    """Byte coordinates and proof in one owner's rendered public value."""
     kind: str
     provenance: tuple[Provenance, ...]
     offset: int
     length: int
     sha256: str
+
+    def __post_init__(self):
+        if not self.provenance or min(self.offset, self.length) < 0:
+            raise ValueError("Contribution requires original sources and nonnegative byte coordinates")
+        if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
+            raise ValueError("Contribution requires its original byte digest")
+
+    @classmethod
+    def capture(cls, kind, provenance, offset, text):
+        raw = text.encode("utf-8")
+        return cls(kind, provenance, offset, len(raw), hashlib.sha256(raw).hexdigest())
+
+    def public_text(self, original: str) -> str:
+        raw = original.encode("utf-8")
+        if self.offset + self.length > len(raw):
+            raise ValueError("Contribution extends beyond the original public value")
+        selected = raw[self.offset:self.offset + self.length]
+        if hashlib.sha256(selected).hexdigest() != self.sha256:
+            raise ValueError("Contribution differs from its original addressed bytes")
+        return selected.decode("utf-8")
+
+    def sentences(self, original: str):
+        text = self.public_text(original)
+        # Offsets derive from the owned text, never from a later source-file search.
+        byte_offset = self.offset
+        for sentence in re.split(r"(?<=[.!?])(?=\s)|(?<=\n)", text):
+            if sentence.strip():
+                yield ContributionCoordinates.capture(
+                    self.kind, self.provenance, byte_offset, sentence)
+            byte_offset += len(sentence.encode("utf-8"))
+
+
+@dataclass(frozen=True)
+class InputContributionCoordinates(ContributionCoordinates):
+    """Original INPUT coordinates; image membership remains input-only."""
     images: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class ContextSpan:
+    """An address in a measured segment, never another semantic text store."""
+
+    segment_sha256: str
+    coordinates: ContributionCoordinates
+
+    def public_text(self, segment: ContextSegment) -> str:
+        if segment.manifest(0).sha256 != self.segment_sha256:
+            raise ValueError("Span belongs to a different original segment")
+        return self.coordinates.public_text(segment.public_text())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -366,7 +438,14 @@ class MeasuredNativeSegment(ContextSegment):
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
         return SegmentManifest(self.declared_name, self.provenance,
-                               self.sha256, self.utf8_bytes, self.tokens, self.contributors)
+                               self.sha256, self.utf8_bytes, self.tokens, self.contributors,
+                               source_spans=self.assembly_ranges())
+
+    def assembly_ranges(self) -> tuple[ContributionCoordinates, ...]:
+        return ()
+
+    def manifest(self, tokens: int) -> SegmentManifest:
+        return self.measured_manifest()
 
     def matches_recorded(self, original: SegmentManifest) -> bool:
         return (self.declared_name == original.kind and self.sha256 == original.sha256
@@ -390,6 +469,32 @@ class SystemLayerSegment(MeasuredNativeSegment):
     tokens: int
     sha256: str
     utf8_bytes: int
+    source_spans: tuple[ContributionCoordinates, ...] = field(
+        default=(), metadata={"wire_omit_default": True})
+
+    def __post_init__(self):
+        super().__post_init__()
+        offset = 0
+        for span in self.source_spans:
+            if span.offset != offset:
+                raise ValueError("System assembly spans must cover the original value in order")
+            span.public_text(self.content)
+            offset += span.length
+        if self.source_spans and offset != len(self.content.encode("utf-8")):
+            raise ValueError("System assembly spans omit original text")
+
+    def assembly_ranges(self) -> tuple[ContributionCoordinates, ...]:
+        return self.source_spans
+
+    def source_membership(self):
+        yield from super().source_membership()
+        for span in self.source_spans:
+            yield from span.provenance
+
+    def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
+        # Old captures prove whole wording, not attribution to today's files.
+        return self.source_spans or (ContributionCoordinates.capture(
+            self.declared_name, (*self.provenance, UnattributedProvenance()), 0, self.content),)
 
     def provider_value(self):
         return self.content
@@ -426,6 +531,19 @@ class NativeMessages:
 
         return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
 
+    def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
+        from .pi_payloads import PiMessage
+
+        offset = 0
+        ranges = []
+        parts = self.recorded_parts(self.measured_manifest())
+        for index, message in enumerate(self.messages):
+            text = PiMessage.from_wire(message).text
+            provenance = parts[index].provenance if parts else self.provenance
+            ranges.append(ContributionCoordinates.capture(self.declared_name, provenance, offset, text))
+            offset += len(text.encode("utf-8")) + 1
+        return tuple(ranges)
+
     def render_into(self, prompt_parts, provider):
         provider.setdefault("messages", []).extend(self.messages)
 
@@ -454,6 +572,16 @@ class ToolCatalogSegment(MeasuredNativeSegment):
 
     def provider_value(self):
         return list(self.tools)
+
+    def public_spans(self) -> tuple[ContextSpan, ...]:
+        offset = 1
+        spans = []
+        for tool in self.tools:
+            text = json.dumps(tool, ensure_ascii=False, separators=(",", ":"))
+            coordinates = ContributionCoordinates.capture(self.declared_name, self.provenance, offset, text)
+            spans.append(ContextSpan(self.sha256, coordinates))
+            offset += coordinates.length + 1
+        return tuple(spans)
 
     def render_into(self, prompt_parts, provider):
         provider["tools"] = list(self.tools)
