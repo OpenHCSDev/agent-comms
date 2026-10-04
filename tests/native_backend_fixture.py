@@ -4,13 +4,22 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
+from functools import partial
 from unittest.mock import patch
 
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.child_process import BoundedRun
+from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owned_turn import OwnedTurn
+from agent_comms.owner_compaction_prepare import NativeWitness
+from agent_comms.queued_input import InitialInput
+from agent_comms.store_files import _store_lock
+from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 
 
@@ -22,6 +31,75 @@ class NativeBackendFixture:
         self.starts = []
         self.children = []
         self.observed = []
+
+    async def author_history(self):
+        """The SDK authors saved rows and their cut; no provider or receipt is invented."""
+        package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+        result = await BoundedRun.run(
+            ("node", "--input-type=module", "-e", """
+import {pathToFileURL} from 'node:url';
+import {join} from 'node:path';
+const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+  'dist/core/session-manager.js')));
+const manager = SessionManager.open(process.argv[2]);
+manager.appendModelChange('response-local','fixture');
+manager.appendThinkingLevelChange('off');
+const kept = manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+  api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+  timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+    cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
+""", package, str(self.session)),
+            timeout=10, cwd=self.project,
+        )
+        assert result.outcome.successful, result.stderr.decode()
+        return FieldCodec.decode(NativeWitness, json.loads(result.stdout))
+
+    @asynccontextmanager
+    async def open_owner(self):
+        """Acquire the real saved ACP owner and attested idle native child."""
+        agent = canonical_agent(
+            Comms(self.root), auto_wake=False, agent_bin="pi",
+            agent_args=["--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                        "--no-prompt-templates", "--no-tools"],
+        )
+        try:
+            session_id = (await agent.new_session(cwd=str(self.project))).session_id
+            original = agent._comms.registry.require(session_id)
+            attached = agent._comms.threads.attach_session(original, str(self.session))
+            await agent.turns.prepare_selected_session(session_id, attached)
+            child = agent.turns.persistent_backends[session_id].custody.child.proc
+            self.children.append(child)
+            yield agent, session_id
+        finally:
+            await agent.shutdown()
+            assert not agent.turns.turn_tasks and not agent.inputs.backend_inboxes
+            assert not agent.turns.persistent_backends
+
+    @asynccontextmanager
+    async def original_input(self, agent, session_id, text):
+        """Reserve and acquire through the same input/turn owners as ACP dispatch."""
+        def capture(custody):
+            with _store_lock(agent._comms._wire_lock_path):
+                return InitialInput.capture(
+                    agent.inputs, agent.sessions.require(session_id), text=text, prompt=text,
+                    echo=True, images=(), controller=None, custody=custody,
+                )
+
+        async with AsyncExitStack() as resources:
+            reservation = ExitStack()
+            resources.push_async_callback(Coordination.run_worker, reservation.close)
+            item, _owner = await Coordination.run_worker(partial(capture, reservation))
+            turn = OwnedTurn(
+                agent.turns, session_id, agent.sessions.require(session_id), text,
+                original_keys=(item.key,), initial_display_text=text,
+                original_owner_input=True, original_goal_id=item.context.active_goal_id,
+            )
+            async with AsyncExitStack() as permits:
+                assert await turn.acquire(resources, permits)
+                yield turn
 
     async def force_reopen(self):
         """Retire this fixture's actual attested child, preserving saved identity."""
@@ -167,4 +245,3 @@ async def native_backend_fixture(tmp_path):
                 task.cancel()
             await asyncio.gather(*connections, return_exceptions=True)
             assert all(not child.alive() for child in owner.children)
-
