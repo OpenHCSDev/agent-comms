@@ -79,6 +79,20 @@ while TypedTable leaves WHERE parameters unchanged. A tagged FieldCodec dict is
 not a substitute for json_extract(state, '$.kind')'s scalar. Shared-site advice was
 sent directly to Mendel; F4 does not need an F2 codec/schema change.
 
-Source checkpoint only: final focused/installed saved-compaction validation and
-hosted Debt result are pending. No original/provider/study run was repeated.
-Failing ratchets do not permit merge.
+Source checkpoint 97785da5: hosted Debt ratchet PASS (37178636773). After.json
+uses the existing parser over src/tests/tools (311/364/53, zero omissions). One
+session coverage declaration; unrelated bus-page/receipt covers methods are
+separate meanings. covered_prefix retains only branch ordering, selection and
+absent-operation orchestration comparisons, with no direct identity comparisons.
+
+Final source sanity: 10 compaction-boundary cases PASS, including original
+committed/fork coverage, append and corruption controls. The combined batch has
+18 PASS/17 FAIL: the other file's invalid-ID wording/removed session_dir callers
+are unchanged baseline source, not corrected or hidden here. Initial interpreters
+lacked test dependencies; no packages were installed. Existing534 supplied read-only
+dependencies and system pytest supplied the runner, with bytecode disabled. This
+is a source check, not installed production acceptance.
+
+Matching installed configured saved-compaction qualification remains pending.
+No original/provider/study run was repeated. No new environment, native artifact,
+package mutation or public effect. Failing ratchets do not permit merge.
