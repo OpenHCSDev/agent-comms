@@ -1,0 +1,77 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-async-bus-read-publication-custody-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 40 items / 36 deselected / 4 selected
+
+tests/test_recorded_retention_measurements.py ...F                       [100%]
+
+=================================== FAILURES ===================================
+_ RecordedMeasurementTests.test_sdk_probe_presence_uses_exact_user_text_and_original_coordinates _
+
+self = <test_recorded_retention_measurements.RecordedMeasurementTests testMethod=test_sdk_probe_presence_uses_exact_user_text_and_original_coordinates>
+
+    def test_sdk_probe_presence_uses_exact_user_text_and_original_coordinates(self):
+        # Prevent instruction/tool/assistant echoes or cross-message fragments
+        # becoming input presence. Original IDs and public text are separate.
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        text = 'Rendered\nλ/path'
+        user = MessageEntry(id='input', message=UserMessage(content=text, input_id=probe.input_id))
+        owner = Thread('original', frozenset(), str(self.root))
+        turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+    
+        def acquired(messages):
+            values = (text, [{'name': 'read', 'description': text}], messages)
+            originals = tuple(json.dumps(value, ensure_ascii=False, separators=(',', ':')) for value in values)
+            metadata = tuple(dict(tokens=1, utf8_bytes=len(raw.encode()),
+                sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                provenance=(NativeProvenance(self.identity, 1, 'b' * 64),)) for raw in originals)
+            segments = (SystemLayerSegment(content=text, **metadata[0]),
+                ToolCatalogSegment(tools=tuple(values[1]), **metadata[1]),
+                TranscriptSegment(messages=tuple(messages), **metadata[2]))
+            data = NativeContextData('counter', self.identity, segments)
+            manifest = ContextManifest(owner.incarnation, turn,
+                tuple(segment.measured_manifest() for segment in segments), data.counter)
+            selected = replace(probe, sdk_segment_bytes=self.artifact('segments.json', originals))
+            _, captured = selected.serialized_construction(data, manifest)
+            with patch.object(PiMessage, 'from_wire', wraps=PiMessage.from_wire) as decoded:
+                result = selected.probe_input_presence(data, user, captured)
+            self.assertEqual(decoded.call_count, len(messages))
+            return data, manifest, selected, captured, result
+    
+        messages = [{'role': 'assistant', 'content': [{'type': 'text', 'text': text}]},
+                    {'role': 'user', 'content': text, 'inputId': 'b' * 32},
+                    {'role': 'user', 'content': [{'type': 'text', 'text': 'Rendered'},
+                        {'type': 'text', 'text': 'λ/path'}], 'inputId': probe.input_id}]
+>       data, manifest, selected, captured, result = acquired(messages)
+                                                     ^^^^^^^^^^^^^^^^^^
+
+tests/test_recorded_retention_measurements.py:1285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+messages = [{'role': 'assistant', 'content': [{'type': 'text', 'text': 'Rendered\nλ/path'}]}, {'role': 'user', 'content': 'Render...ype': 'text', 'text': 'Rendered'}, {'type': 'text', 'text': 'λ/path'}], 'inputId': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]
+
+    def acquired(messages):
+        values = (text, [{'name': 'read', 'description': text}], messages)
+        originals = tuple(json.dumps(value, ensure_ascii=False, separators=(',', ':')) for value in values)
+        metadata = tuple(dict(tokens=1, utf8_bytes=len(raw.encode()),
+            sha256=hashlib.sha256(raw.encode()).hexdigest(),
+            provenance=(NativeProvenance(self.identity, 1, 'b' * 64),)) for raw in originals)
+        segments = (SystemLayerSegment(content=text, **metadata[0]),
+            ToolCatalogSegment(tools=tuple(values[1]), **metadata[1]),
+            TranscriptSegment(messages=tuple(messages), **metadata[2]))
+        data = NativeContextData('counter', self.identity, segments)
+        manifest = ContextManifest(owner.incarnation, turn,
+            tuple(segment.measured_manifest() for segment in segments), data.counter)
+        selected = replace(probe, sdk_segment_bytes=self.artifact('segments.json', originals))
+        _, captured = selected.serialized_construction(data, manifest)
+>       with patch.object(PiMessage, 'from_wire', wraps=PiMessage.from_wire) as decoded:
+                          ^^^^^^^^^
+E       NameError: name 'PiMessage' is not defined
+
+tests/test_recorded_retention_measurements.py:1276: NameError
+=========================== short test summary info ============================
+FAILED tests/test_recorded_retention_measurements.py::RecordedMeasurementTests::test_sdk_probe_presence_uses_exact_user_text_and_original_coordinates
+================== 1 failed, 3 passed, 36 deselected in 0.40s ==================
