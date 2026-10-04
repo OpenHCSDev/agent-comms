@@ -24,10 +24,6 @@ class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
         if not self.token:
             raise ValueError("Goal mention requires a token")
 
-    @property
-    def resolution(self):
-        return self.declared_name
-
     @abstractmethod
     def project(self, registry, owner, goal, source): ...
 
@@ -44,7 +40,7 @@ class UnresolvedMention:
 
         return (), (
             GoalMentionDiagnostic(
-                owner.name, goal.id, source.text_revision, self.token, self.declared_name
+                owner.name, goal.id, source.text_revision, self.token, type(self)
             ),
         )
 

@@ -374,7 +374,7 @@ class MeasuredNativeSegment(ContextSegment):
                                self.sha256, self.utf8_bytes, self.tokens, self.contributors)
 
     def matches_recorded(self, original: SegmentManifest) -> bool:
-        return (type(self) is original.kind and self.sha256 == original.sha256
+        return (self.__class__ is original.kind and self.sha256 == original.sha256
                 and self.utf8_bytes == original.utf8_bytes)
 
     def source_membership(self):

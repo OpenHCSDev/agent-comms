@@ -104,12 +104,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def protected(self) -> bool:
         return False
 
-    @property
-    def execution_name(self) -> str:
-        return self.declared_name
-
     def presentation(self) -> tuple[str, str]:
-        return "✓", self.execution_name.title()
+        from .goal_presentation import GoalExecutionState
+
+        return "✓", GoalExecutionState.for_domain_state(self).value.title()
 
 
 class FromOpenGoal:
@@ -145,11 +143,6 @@ class ActiveGoal(OpenGoal, FromOpenGoal):
         return PausedGoalAction
 
     toggle_label = "Pause"
-
-    @property
-    def execution_name(self) -> str:
-        return "runnable"
-
 
 @dataclass(frozen=True)
 class PausedGoal(OpenGoal, FromOpenGoal):

@@ -29,10 +29,16 @@ class ExecutionPresentation(ABC):
     @abstractmethod
     def render(self, execution: GoalExecution) -> tuple[str, str]: ...
 
+    def represents(self, state: GoalState) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class StateExecutionPresentation(ExecutionPresentation):
     state: type[GoalState]
+
+    def represents(self, state: GoalState) -> bool:
+        return state.__class__ is self.state
 
     def render(self, execution: GoalExecution) -> tuple[str, str]:
         return FieldCodec.decode(
@@ -60,15 +66,19 @@ class GoalExecutionState(StrEnum):
         obj.view = view
         return obj
 
-    RUNNABLE = (ActiveGoal().execution_name, StateExecutionPresentation(ActiveGoal))
+    RUNNABLE = ("runnable", StateExecutionPresentation(ActiveGoal))
     STANDBY = ("standby", StandbyExecutionPresentation())
-    PAUSED = (PausedGoal.declared_name, StateExecutionPresentation(PausedGoal))
-    BLOCKED = (BlockedGoal.declared_name, StateExecutionPresentation(BlockedGoal))
+    PAUSED = (FieldCodec.encode(PausedGoal), StateExecutionPresentation(PausedGoal))
+    BLOCKED = (FieldCodec.encode(BlockedGoal), StateExecutionPresentation(BlockedGoal))
     UNRECORDED_BLOCK = (
-        UnrecordedBlockGoal.declared_name,
+        FieldCodec.encode(UnrecordedBlockGoal),
         StateExecutionPresentation(UnrecordedBlockGoal),
     )
-    COMPLETED = (CompletedGoal.declared_name, StateExecutionPresentation(CompletedGoal))
+    COMPLETED = (FieldCodec.encode(CompletedGoal), StateExecutionPresentation(CompletedGoal))
+
+    @classmethod
+    def for_domain_state(cls, state: GoalState) -> GoalExecutionState:
+        return next(member for member in cls if member.view.represents(state))
 
 
 @dataclass(frozen=True, slots=True)

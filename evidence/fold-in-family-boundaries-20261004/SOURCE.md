@@ -66,3 +66,19 @@ carry the existing NativeForkCreation declaration; the helper's original externa
 F0 #620 normally joined at 54c896f1a814090d86834bd46d057d49012b171d.
 Remaining non-mechanism F4 sites and original packaged collector integration are
 still in progress; this source batch does not claim installed acceptance.
+
+## Candidate and goal carriers
+
+Candidate.wake_mode and selected-awareness tuples now carry WakePolicy declarations;
+TextStorage derives their original scalar representation through FieldCodec. The
+SQLite column remains TEXT with identical existing constraints/nullable meaning.
+Original candidate producer and all comparison/render consumers migrate together;
+JSON is encoded only at the existing awareness rendering boundary.
+
+GoalExecutionState's existing presentation declarations already bind each domain
+GoalState to its execution refinement. They now derive execution directly from
+that original relation, removing GoalState.execution_name and the goal-wait name
+re-decode. Runnable and standby remain distinct execution facts. Unresolved mention
+diagnostics carry the original GoalMentionBinding declaration, while the separate
+stale-incarnation diagnostic stays explicit; the unused resolution string property
+and its fixture consumers are deleted. No stored goal/binding format changes.

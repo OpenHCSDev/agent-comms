@@ -106,7 +106,11 @@ class TextStorage(SqlStorage):
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
-        return annotation is str
+        return annotation is str or (
+            get_origin(annotation) is type
+            and bool(get_args(annotation))
+            and issubclass(get_args(annotation)[0], DeclaredFamily)
+        )
 
 
 class IntegerStorage(SqlStorage):
