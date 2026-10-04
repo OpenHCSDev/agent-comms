@@ -37,7 +37,16 @@ Bohr subsequently verified230 processes with no actual references/gaps, clear
 import/launcher/cache aliases and no style22 references in public registry/runtime
 records. All defaults remain334. The actual1470/69/390 floor equals originale6f;
 that archive can be reused with no new archive. Style22 is now nonlive eligible
-for sole441, but its specific grant still requires exact source/wheel/control.
+for sole441. Bohr has now issued the specific441 grant76b3f286, after a fresh
+249-process clearance. Exact source/control9d3a151e has automatic
+Debt37232175321 SUCCESS. Parent read its pending leaf/page Mount cancellation,
+projection supersession, late-read fences and release/cancel/join cleanup.
+The grant authorizes one small normal ToAd wheel build first, with exact
+Git/local/ZIP and backend proof before installation, then one installed App.
+Candidate Core6565f1667 genuinely replaces the actual preimage Core1a58a;
+the full1470/69/390 original floor must be returned after terminal. This is
+authorization, not installed acceptance. The new painted-read fence finding
+belongs to a separate source successor and does not alter this frozen control.
 
 On the preceding public436 cohort, corrected tail04 completed with terminal0,
 18 native checks true and owned cleanup empty. Channel opening/return, hidden
@@ -51,11 +60,19 @@ The sampled RichVisual path cannot identify the responsible widget or prove
 Markdown rebuilding: existing Content/Visual/strip owners remain distinct.
 No native patch or repeated capture follows from that ambiguous sample.
 
-Heis owns ordinary affected440 UI verification and full performance441 source;
+Heis has completed ordinary affected440 UI verification and owns full
+performance441 source and its one newly granted affected installed App;
 Einstein owns unfinished W6 wait-lifetime/worker/UI/schema integration. Arendt
 continues fullS4; its completed659 SDK stream qualifies message proof only,
 not whole tool/system projection or clean controller exit. No unqualified
 W6/schema10/7a2e or441 product was installed. The full goal remains active.
+W6's exact attachment-successor operands are now prepared at receipt heads
+Core9fb7f6db/ToAdb20a14cb, source-equal to determining759c821e/69ccc24b.
+The new normal wheels ab640f00/13e2cbd5 match355/319 Git/local/ZIP assets.
+Its control waits original AgentSession settlement and published incarnation;
+the original90s timeout remains unexplained. These prepared files confer no
+holder access. The next W6 purpose follows actual441 whole handback and fresh
+eligibility/readback/clearance, with separate immutable7a2e artifact authority.
 
 Core659 final95bf099c mergedc060ec2d after exact Debt37230240961 passed.
 Parent checked all23 retained raw hashes and seven source hashes; final private
@@ -76,6 +93,10 @@ Mendel is now the active contributor closing that exact tool and its existing
 RetainedIndexCutover/recovery consumers in his reused checkout. Original reset
 file-custody controls are not writer-path acceptance. No package rebuild, old
 consumed cutover replay or current public-store mutation follows from this work.
+His separate draft661 exactb1b59241 has Debt37232366132 SUCCESS. Installed
+current-private inherited-FD/index and refusal acceptance remains pending a
+specific execution-only THIN540 purpose. The historical old-schema installed
+donors are absent; no fabricated schema or new environment replaces them.
 Only open feature scopes are Core627/Toad434 W6 and Toad441 performance;
 native artifact649 and this tracking432 remain separate draft handoffs.
 
