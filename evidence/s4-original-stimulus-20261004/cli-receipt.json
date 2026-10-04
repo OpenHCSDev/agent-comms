@@ -1,0 +1,78 @@
+{
+  "implementation": "044a4804cbb0593097be19daff6abae09740a92f",
+  "scope": "Changed scorer/construction CLI and authored original-source relation controls only; no executed matched intervention or comparative study",
+  "results": [
+    {
+      "case": "construction",
+      "command": [
+        "/usr/bin/python",
+        "tests/compaction_retention_fixture.py",
+        "--construction-plan",
+        "--comparison-design",
+        ".artifacts/s4-construction-plan630/design-0.json",
+        "--sampling-seed",
+        "20261004"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "603d255dbf282d34b1d13daa4462090f5cd59f14f53e85ff9ef978b058d790e5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rounds": 3,
+      "executed_samples": 0,
+      "prospective_samples": 10
+    },
+    {
+      "case": "missing-originals",
+      "command": [
+        "/usr/bin/python",
+        "tests/compaction_retention_fixture.py",
+        "--recorded-run",
+        ".artifacts/s4-original-stimulus631/missing-originals.json"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "06009f084cdea6a85551ea6a6a9f041f3166ba7bbf699f963990d7a6781c456b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "missing_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "reported_total_tokens": null,
+      "recall_missing": 21
+    },
+    {
+      "case": "unknown-stimulus",
+      "command": [
+        "/usr/bin/python",
+        "tests/compaction_retention_fixture.py",
+        "--recorded-run",
+        ".artifacts/s4-original-stimulus631/unknown-stimulus.json"
+      ],
+      "exit_code": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "671c2984633cc0027feb73c440cb284c0c6c77dfe0731fb5a8cc606f653f1bfd",
+      "refused_before_source_read": true
+    }
+  ],
+  "prior630_artifacts_unchanged": {
+    ".artifacts/s4-construction-plan630/oracle-0.json": "71a415b30200f49736fdcf2656cf95ee10c33857ef9625b2e6dfb9c18d908a35",
+    ".artifacts/s4-construction-plan630/oracle-1.json": "6b45bc998b4a4b3f0949258a3c8ab76709350f95f02e166eca1368703ad40fd8",
+    ".artifacts/s4-construction-plan630/oracle-2.json": "bbfd8fbdb7619299848f25c4a957d28fb14e1cdf05e00a2a6f991092c9783d38",
+    ".artifacts/s4-construction-plan630/plan-0.json": "1a3fb8f08201ff0427cbd7651bb17fa3113f9b69a1877679c3686909216ced31",
+    ".artifacts/s4-construction-plan630/plan-1.json": "d685fdb1610552f6d270aeed896af68720c3195bbf1c64c08246d6f70786fa7c",
+    ".artifacts/s4-construction-plan630/plan-2.json": "d103cb0f982e5864fd2e8cf7a2c9853d150fff912d505bbddbf5e2b0f166fd21",
+    ".artifacts/s4-construction-plan630/design-0.json": "11ffdeed68509ce30c4dbc971d67216dd08f85b5cbd0b5614d32b05934ea236b",
+    ".artifacts/s4-construction-plan630/design-2.json": "6576a42fd5578587741d9b279b84337395dcd59e15c08a6cc25b145bf578b1cc",
+    ".artifacts/s4-construction-plan630/design-1.json": "30d963028350ef46a724b33b77d0f0f6a4021858a50c96a449aa39697f2978ab"
+  },
+  "focused_controls": {
+    "passed": 15,
+    "deselected": 15,
+    "subtests": 6,
+    "seconds": 0.27,
+    "log_sha256": "0d40624f149c58a60a5d966fecb7c2e93d5a2b62e98c6705e1423904796a6620"
+  },
+  "provider_calls": 0,
+  "native_processes": 0,
+  "original_native_reads": 0,
+  "study_approved": false
+}
