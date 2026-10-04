@@ -1,0 +1,14 @@
+{
+  "state": "PRESERVED_DRIVER_REFUSAL",
+  "raw_root": "/home/ts/.cache/agent-scratch/context610-sdk02",
+  "exit": {
+    "exit_code": 1,
+    "source_sha256_after": "75354edad8e2f871d4f334873d8e4b9a75ed8379fd9d523d10bc076621f0a164",
+    "source_unchanged": true
+  },
+  "stderr_sha256": "a36c5bf87ad112366ad6790669cfee6ae0559b0bd1385d759df9f184ee7a86f1",
+  "reason": "Comparison child explicit exit truncated stdout before decoded return",
+  "production_changed": false,
+  "provider_requests": 0,
+  "prompt_inputs": 0
+}

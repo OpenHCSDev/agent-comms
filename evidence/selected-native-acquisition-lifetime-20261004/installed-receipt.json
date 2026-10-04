@@ -1,0 +1,111 @@
+{
+  "state": "SCOPED_INSTALLED_SAVED_SDK_ACQUISITION_AND_JOINED_CANCELLATION_PASS",
+  "production_head": "1006822310e6618c70504227783d80cf129164b9",
+  "native_manifest_sha256": "89b56aea0bb128c4bf3e2c979de8a5afa79ac88b1f51a74c49cc1cab46da60d2",
+  "installed": {
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "installed_package": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+    "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native609-wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "wheel_sha256": "f5ca6361879528101913fcf0eaa7fc43f39ae6f6a3755c588174f0113ccc6973",
+    "installed_members_equal": 342,
+    "distributions": {
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "metaclass-registry": "0.2.1",
+      "annotated-types": "0.8.0",
+      "typing_extensions": "4.15.0",
+      "pydantic": "2.13.5",
+      "packaging": "26.2",
+      "agent-comms": "0.1.0",
+      "nominal-refactor-audit": "0.1.0",
+      "agent-client-protocol": "0.12.1"
+    },
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native609-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "test_runner": {
+      "library": "/usr/lib/python3.14/site-packages",
+      "pytest": "/usr/lib/python3.14/site-packages/pytest/__init__.py",
+      "asyncio": "/usr/lib/python3.14/site-packages/pytest_asyncio/__init__.py"
+    }
+  },
+  "actual_saved_sdk": {
+    "preclaim_and_first_verifications": 1,
+    "borrowed_verifications": 0,
+    "independent_verifications": 1,
+    "auth_changed": true,
+    "children_retired": [
+      true,
+      true
+    ],
+    "children": [
+      {
+        "identity": {
+          "pid": 3563915,
+          "start_time": 54822456
+        },
+        "alive": false,
+        "group_members": []
+      },
+      {
+        "identity": {
+          "pid": 3563945,
+          "start_time": 54822674
+        },
+        "alive": false,
+        "group_members": []
+      }
+    ],
+    "cancelled_saved_read_joined": true,
+    "source_bytes": 42376298,
+    "source_sha256": "659a4f3af42b124bac4a50ee2d44b1ef2c58dcf9f7d82def9426781d855a5002",
+    "provider_requests": 0
+  },
+  "original_source": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02/native-forks/2026-10-03T16-01-21-766Z_01a1027f-a366-77f8-8b39-0d4999995f4d.jsonl",
+  "source_hash_rechecked_equal": true,
+  "controls": {
+    "passed": 2,
+    "elapsed_seconds": 15.99,
+    "validation_cancelled_before_claim": true,
+    "controlled_provider_requests": 0,
+    "native_prompts": 0,
+    "public_inputs": 0,
+    "new_environment": false,
+    "native_artifact_changed": false
+  },
+  "owned_execution": {
+    "exec_session": 46370,
+    "terminal_exit_code": 0,
+    "children": [
+      {
+        "identity": {
+          "pid": 3563915,
+          "start_time": 54822456
+        },
+        "alive": false,
+        "group_members": []
+      },
+      {
+        "identity": {
+          "pid": 3563945,
+          "start_time": 54822674
+        },
+        "alive": false,
+        "group_members": []
+      }
+    ],
+    "child_groups_empty": true
+  },
+  "preserved_negatives": [
+    {
+      "log": "installed01.log",
+      "failure": "Test runner library was derived from uv base Python, which has no pytest. Before fixture/native."
+    },
+    {
+      "log": "installed02.log",
+      "failure": "Default xdist/coverage flags require omitted plugins. Before fixture/native; overridden addopts for one bounded batch."
+    }
+  ],
+  "limits": "Actual installed SDK saved-source/two real native children/GetState/auth/header/package refusals plus descriptor and preclaim cancellation. No synthetic input, accepted prompt/ACP turn, physical UI, configured provider or controlled latency improvement is claimed. Historical13.562/13.696/98/99 second evidence remains unchanged."
+}

@@ -22,7 +22,8 @@ from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
-from .turn_context import InputContributionCoordinates
+from .turn_context import InputContributionCoordinates, SegmentManifest
+from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness, PrepareCompactionHelper
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
@@ -474,6 +475,20 @@ class AgentCommsPrepareCompaction(NativeQuery):
 @dataclass(frozen=True, kw_only=True)
 class AgentCommsInspectContext(NativeQuery):
     response_payload = NativeContextData
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsInspectContextSegment(NativeQuery):
+    response_payload = NativeContextData
+    identity: NativeSessionIdentity
+    entries: tuple[str, ...]
+    expected: SegmentManifest
+    parts: tuple[SegmentManifest, ...]
+
+    @classmethod
+    def for_manifest(cls, expected: SegmentManifest):
+        return cls(identity=expected.native_identity(), entries=expected.journal_entries(),
+                   expected=expected, parts=expected.requested_parts())
 
 
 @dataclass(frozen=True, kw_only=True)

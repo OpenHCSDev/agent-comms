@@ -1,0 +1,29 @@
+{
+  "source_checkpoint": "015192f49a3f8d6c0edf05b8fdc06b260fe49133",
+  "builder_source": "015192f49a3f8d6c0edf05b8fdc06b260fe49133",
+  "manifest": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "tree": "61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/turn-context.js",
+      "original_sha256": "143e7335e68e5aa89d15c4cf5c012aed3ddf0d0a23c4194b64d1fcb3b00f8db0",
+      "new_sha256": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906"
+    }
+  ],
+  "all_other_members_equal_native603_d5": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138420896,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; Original610 ordered projection SDK comparison and saved42MB no-provider qualification remains Arendt-owned; artifact only, not Ready/live/S4-complete.",
+  "immutable_d5_original_tree_after_build": "5ff27e716d8adc6cd1a2482fb90d35e24b4c4f837160f262ff05ee2c52769798",
+  "native608_sharing_excluded": true,
+  "normal_prepare_verified": true,
+  "original89_f3_d5_paths_never_written": true
+}

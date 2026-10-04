@@ -1,0 +1,19 @@
+{
+  "state": "COMPLETE_PACKAGE_CODE_HANDBACK",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "installed_production_revision": "90a347622463be29cd538a5dbaa909cf59eb1464",
+  "reviewed_docs_revision": "4f3e989548993face641c5aac1a800a016606f10",
+  "archive": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/retired-env-metadata/540-current603-originals-before-handback.tar.gz",
+  "archive_sha256": "03b25f598f8b51accaa58861b94220575e15f71c225300ce620fa7f7bf074411",
+  "archive_bytes": 1649897,
+  "original_regular_members_readback_equal": 441,
+  "original_symlinks_readback_equal": 3,
+  "original606_archive": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/retired-env-metadata/540-current606-originals-before-Arendt603.tar.gz",
+  "original606_archive_sha256": "efdc6ddb21b269e8f5261865f100d1519c0ac8a5cbc6c456d4c6de3a6142c5fe",
+  "borrower_census_processes": 230,
+  "borrower_census_gaps": 0,
+  "borrower_census_refs": 0,
+  "scope": "Core source/code assets, wheel/directURL, all10 distribution metadata, bin/env metadata, accepted source and installed receipts; no private roots/auth/sessions/proofs/history/UNKNOWN/native package copied or changed",
+  "live_provider_calls": 0,
+  "owned_controller_native_socket_gone": true
+}

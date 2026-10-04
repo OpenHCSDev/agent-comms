@@ -1,0 +1,10 @@
+{
+  "scope": "PACKAGE ONLY original605 preimage; no fixture/auth/history/input/proof inclusion or modification",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "archive": "/home/ts/.cache/agent-scratch/mendel-cold-native606/thin540-605-package-before606.tar.gz",
+  "sha256": "de77f9b9f94e2df4e51db2b924ee599b7efb650a68256b30d5c71c5b5c71c5ce",
+  "file_count": 357,
+  "readback_equal": true,
+  "original605_head": "e580dd08",
+  "cli_children_joined": true
+}

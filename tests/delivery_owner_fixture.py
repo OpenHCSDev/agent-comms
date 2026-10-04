@@ -6,11 +6,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from agent_comms.acp import CommsAgent
-from test_coordinated_runtime import _fake_model, _root
 
 
 def native_model(*, decision="FULL", fail_on=None):
     """Give each fresh simulated session its own durable evidence file."""
+    from test_coordinated_runtime import _fake_model
+
     model, calls = _fake_model(decision=decision, fail_on=fail_on)
 
     async def run(*args, session_file=None, **kwargs):
@@ -28,6 +29,8 @@ def native_model(*, decision="FULL", fail_on=None):
 @asynccontextmanager
 async def canonical_delivery_owner(root, *, direct=False):
     """Only model execution is supplied by tests; routing and persistence are real."""
+    from test_coordinated_runtime import _root
+
     _path, root_id, comms, initial, people = _root(root, direct=direct)
     owner = CommsAgent(
         comms,

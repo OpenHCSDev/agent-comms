@@ -103,7 +103,7 @@ class NativeCustody(ABC):
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
-    async def inspect_context(self, persistent, prepare):
+    async def inspect(self, persistent, prepare, request):
         """Inspect through this custody's legal acquisition/receiver capability."""
         raise NativePiUnavailable("Native context requires an acquired native child")
 
@@ -123,12 +123,12 @@ class NativeCustody(ABC):
 class EmptyNative(NativeCustody):
     available = False
 
-    async def inspect_context(self, persistent, prepare):
+    async def inspect(self, persistent, prepare, request):
         # The runtime owner supplies its existing selected-session preparation:
         # real saved launch/idle attestation/retention, never a priming prompt.
         await prepare()
         acquired = persistent.custody.idle()
-        return await acquired.inspect_context(persistent, prepare)
+        return await acquired.inspect_acquired(persistent, request)
 
 
 class NativeCleanupFailed(RuntimeError):
@@ -195,11 +195,10 @@ class BorrowedNative(NativeCustody):
     successor: NativeCustody
     available = True
 
-    async def inspect_context(self, persistent, prepare):
-        from .pi_commands import AgentCommsInspectContext
+    async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with AgentCommsInspectContext().pending_response(
+        async with request.pending_response(
             self.child.reader,self.child.proc.stdin
         ) as response:
             return (await response).data.require_payload()
@@ -278,11 +277,17 @@ class RetainedNative(NativeCustody):
                 self.revision = SessionRevision.observe(self.identity.session_file).require_available()
                 self.child.attestation = observed
 
-    async def inspect_context(self, persistent, prepare):
-        from .pi_commands import AgentCommsInspectContext
+    async def inspect(self, persistent, prepare, request):
+        # Reobserve this retained child through the same preparation/AgentInfo
+        # owner. An acquired child alone does not publish native usage.
+        await prepare()
+        acquired = persistent.custody.idle()
+        return await acquired.inspect_acquired(persistent, request)
+
+    async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
             current = persistent.custody.idle()
-            response = await AgentCommsInspectContext().exchange(
+            response = await request.exchange(
                 current.child.reader,current.child.proc.stdin
             )
             return response.data.require_payload()

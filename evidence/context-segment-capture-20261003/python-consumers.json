@@ -1,0 +1,753 @@
+{
+  "revision": "31862909ffc9faab71d5835974c29b4a33c2d7ee",
+  "parser": "existing NRA refactor-audit Package",
+  "roots": [
+    "src",
+    "stack",
+    "tests"
+  ],
+  "parsed": 689,
+  "omissions": [],
+  "declarations": [
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 15,
+      "name": "NativeContextManifestData",
+      "bases": [
+        "PiResponseData"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 42,
+      "name": "NativeContextData",
+      "bases": [
+        "PiResponseData"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 26,
+      "name": "Provenance",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 170,
+      "name": "SegmentManifest",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 275,
+      "name": "ContextSegment",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 351,
+      "name": "MeasuredNativeSegment",
+      "bases": [
+        "ContextSegment"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 638,
+      "name": "ContextManifest",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 711,
+      "name": "TurnContext",
+      "bases": []
+    }
+  ],
+  "consumers": [
+    {
+      "file": "src/agent_comms/agent_events.py",
+      "line": 60,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 913,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 422,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 409,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/input_origin.py",
+      "line": 44,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 18,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 20,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 26,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 46,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 47,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 55,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 71,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 80,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 82,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 96,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 51,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 240,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 220,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 349,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 289,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 209,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 477,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 482,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 485,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 486,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 489,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/pi_events.py",
+      "line": 327,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 407,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 256,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 280,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/retained_context.py",
+      "line": 17,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 358,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 386,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 378,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 45,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 48,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 205,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 526,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 535,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 56,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 71,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 80,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 92,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 105,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 119,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 135,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 345,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 351,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 388,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 434,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 439,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 444,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 449,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 463,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 193,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 201,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 302,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 311,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 656,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 661,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 668,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 717,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 730,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 745,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 759,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 762,
+      "name": "TurnContext"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 781,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 172,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 176,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 213,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 237,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 240,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 276,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 288,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 292,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 292,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 304,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 311,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 327,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 355,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 368,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 371,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 383,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 414,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 414,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 641,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 661,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 676,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 700,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 714,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 730,
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 759,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 762,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 782,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 201,
+      "name": "MeasuredNativeSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 681,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 769,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 238,
+      "name": "ContextSegment"
+    },
+    {
+      "file": "src/agent_comms/wire_metadata.py",
+      "line": 63,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "stack/patch-native-turn-context.py",
+      "line": 26,
+      "generated_native": true
+    },
+    {
+      "file": "stack/patch-native-turn-context.py",
+      "line": 70,
+      "generated_native": true
+    },
+    {
+      "file": "stack/patch-native-turn-context.py",
+      "line": 87,
+      "generated_native": true
+    },
+    {
+      "file": "tests/native_context_reader_journey.py",
+      "line": 76,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/native_context_reader_journey.py",
+      "line": 80,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/native_context_reader_journey.py",
+      "line": 92,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "file": "tests/native_context_reader_journey.py",
+      "line": 93,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "file": "tests/native_context_reader_journey.py",
+      "line": 110,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/native_context_reader_journey.py",
+      "line": 123,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 558,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 542,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 35,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 70,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 90,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 119,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 157,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 192,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 47,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 102,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 136,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_context_source_inspection.py",
+      "line": 75,
+      "name": "TurnContext"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 443,
+      "name": "TurnContext"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 431,
+      "name": "TurnContext"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 434,
+      "name": "TurnContext"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 68,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 474,
+      "name": "NativeContextData"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 475,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 213,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 343,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 345,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 214,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 22,
+      "name": "SegmentManifest"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 23,
+      "name": "ContextManifest"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 67,
+      "name": "NativeContextManifestData"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 301,
+      "name": "TurnContext"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 472,
+      "name": "TurnContext"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 460,
+      "name": "TurnContext"
+    }
+  ]
+}

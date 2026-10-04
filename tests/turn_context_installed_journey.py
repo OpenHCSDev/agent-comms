@@ -70,6 +70,68 @@ async def configured_terminal(owner, thread, output, receipt, marker):
     return marker, child
 
 
+async def read_actual_context_publication(owner, thread, child, original_input, output, receipt):
+    """Read the manifest emitted by the one actual model turn, never publish it."""
+    import hashlib
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_pi import NativeContextProof
+    from agent_comms.runtime import RuntimeConnection, socket_path
+    from agent_comms.turn_context import ContextSourceText, NativeProvenance
+
+    service = owner._comms
+    manifest, = (value for value in service.bus.log.context_manifests(thread.name, service.registry)
+                  if value.turn.identity.value == original_input.turn_id)
+    request_id = manifest.require_request_id()
+    proof = NativeContextProof.read_evidence(Path(thread.require_saved_session()), original_input.native_id)
+    native_sources = tuple(source for segment in manifest.segments
+                           for source in segment.provenance if isinstance(source, NativeProvenance))
+    assert native_sources
+    assert all(source.request_generation == proof.request_generation
+               and source.context_digest == proof.llm_context_digest
+               and source.identity.session_id == proof.session_id for source in native_sources)
+    system = next(segment for segment in manifest.segments if segment.kind == 'system_layer')
+    assert system.captured_text and system.public_text_recorded
+    assert any(segment.captured_text for segment in manifest.segments if segment.kind == 'tool_catalog')
+    position = next(i for i, segment in enumerate(manifest.segments)
+                    if segment.kind == 'transcript' and len(segment.contributors) > 1)
+    group = manifest.selected_segment(position)
+    part = next(i for i, part in enumerate(group.contributors) if not part.public_text_recorded)
+    selected = manifest.selected_segment(position, (part,))
+    assert group.sha256 != selected.sha256
+    before = Path(thread.require_saved_session()).read_bytes()
+    connection = RuntimeConnection(service, thread.name,
+        socket_path(service.root, thread.require_process().pid))
+    try:
+        params = dict(turn=FieldCodec.encode(manifest.turn), request_id=request_id, segment=position)
+        root = FieldCodec.decode(ContextSourceText,
+            await connection.request('context_recorded_segment', **params))
+        exact_child = FieldCodec.decode(ContextSourceText,
+            await connection.request('context_recorded_segment', **params, contributors=[part]))
+        original_system = FieldCodec.decode(ContextSourceText,
+            await connection.request('context_recorded_segment', turn=FieldCodec.encode(manifest.turn),
+                request_id=request_id, segment=manifest.segments.index(system)))
+        assert root.text != exact_child.text
+        assert exact_child.text in root.text
+        assert original_system.text == '\n'.join(system.captured_text)
+        assert Path(thread.require_saved_session()).read_bytes() == before
+        assert owner.turns.persistent_backends[thread.name].custody.idle().child is child
+    finally:
+        await connection.close()
+    updates = json.loads((output / 'original-acp-updates.json').read_text())
+    usage = [value for value in updates if value.get('update', value).get('sessionUpdate') == 'usage_update']
+    # Manifest values are the existing public renderer's captured strings; source
+    # message content is recovered and filtered by the same PiMessage renderer.
+    receipt.update(model_onContextReady_publication=True, request_id=request_id,
+        native_request_generation=proof.request_generation, actual_manifest_lease=True,
+        captured_system_text_read=True, transcript_original_root_and_child_read=True,
+        public_renderer_only=True, same_native_child=True, source_query_bytes_unchanged=True,
+        captured_system_utf8_bytes=len(original_system.text.encode()),
+        captured_system_sha256=hashlib.sha256(original_system.text.encode()).hexdigest(),
+        recorded_root_utf8_bytes=len(root.text.encode()),
+        recorded_child_utf8_bytes=len(exact_child.text.encode()),
+        original_acp_usage_updates=len(usage), final_HTTP_evaluated=False)
+
+
 async def run(root, receiving_only=False, authored_operations_only=False):
     from pytest import MonkeyPatch
     from test_backend_native_lifecycle import native_backend
@@ -177,7 +239,7 @@ async def run_configured(options):
             thinking_level=source.thinking_level,
             task='Bounded acceptance only. Do not resume inherited work or use tools.')
         service.registry.declare(thread)
-        if options.terminal_only:
+        if options.terminal_only or options.recorded_publication:
             # The original stopped-source owner populates private participant
             # membership before this controller acquires its own process.
             service.threads.restore_stopped(service.registry.snapshot(), (thread.name,))
@@ -186,7 +248,7 @@ async def run_configured(options):
         await owner.load_session(str(project), thread.name)
         assert thread.name not in owner.turns.persistent_backends
 
-        if options.terminal_only:
+        if options.terminal_only or options.recorded_publication:
             token, child = await configured_terminal(owner, thread, output, receipt,
                                                      options.terminal_marker)
             stored = InputDispositions(service.root / InputDispositions.filename).read()
@@ -202,6 +264,9 @@ async def run_configured(options):
                 original_input=FieldCodec.encode(original), original_native_user=user.id,
                 original_native_reply=replies[-1].id, source_unchanged=True,
                 private_root=str(service.root), fork_file=identity.session_file)
+            if options.recorded_publication:
+                await read_actual_context_publication(owner, service.registry.require(thread.name), child, original, output, receipt)
+                receipt['state'] = 'CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS'
             return
 
         async def query(*arguments):
@@ -275,7 +340,7 @@ async def run_configured(options):
             receipt['original_dispositions'] = FieldCodec.encode(
                 InputDispositions(owner._comms.root / InputDispositions.filename).read())
             await owner.shutdown()
-            if (options.context_only or options.terminal_only) and 'child' in locals():
+            if (options.context_only or options.terminal_only or options.recorded_publication) and 'child' in locals():
                 receipt['native_child_retired'] = child.proc.retired
                 receipt['native_child_exited'] = not child.proc.alive()
                 assert child.proc.retired and not child.proc.alive()
@@ -451,13 +516,14 @@ def complete_history_controls(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
-    parser.add_argument("--test-support-site", type=Path, required=True)
-    parser.add_argument("--toad-driver-dir", type=Path, required=True)
+    parser.add_argument("--test-support-site", type=Path)
+    parser.add_argument("--toad-driver-dir", type=Path)
     parser.add_argument('--configured-source-root', type=Path)
     parser.add_argument('--original-python', type=Path)
     parser.add_argument('--configured-source-name', default='nra-architecture')
     parser.add_argument('--context-only', action='store_true')
     parser.add_argument('--terminal-only', action='store_true')
+    parser.add_argument('--recorded-publication', action='store_true')
     parser.add_argument('--terminal-marker', default='597_CONFIGURED_ORIGINAL_TERMINAL_ONCE')
     parser.add_argument('--complete-goal-controls', action='store_true')
     parser.add_argument('--complete-history-controls', action='store_true')
@@ -467,7 +533,7 @@ if __name__ == "__main__":
     options = parser.parse_args()
     if options.context_only and not options.configured_source_root:
         parser.error('Context-only requires the original configured saved source')
-    if options.terminal_only and (not options.configured_source_root or options.context_only):
+    if (options.terminal_only or options.recorded_publication) and (not options.configured_source_root or options.context_only):
         parser.error('Terminal-only requires a distinct configured saved fork')
     if options.authored_operations_only and (options.configured_source_root or options.complete_goal_controls):
         parser.error('Authored operations use only the original private localhost fixture')
@@ -475,8 +541,10 @@ if __name__ == "__main__":
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
     # Only pytest's fixture decorator/MonkeyPatch is borrowed. Import installed
     # Core first and append the support directory; do not process donor .pth files.
-    sys.path.append(str(options.test_support_site))
-    sys.path.append(str(options.toad_driver_dir))
+    if options.test_support_site is not None:
+        sys.path.append(str(options.test_support_site))
+    if options.toad_driver_dir is not None:
+        sys.path.append(str(options.toad_driver_dir))
     sys.path.append(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     os.environ['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get('PATH', os.defpath)))
     if options.complete_history_controls:
