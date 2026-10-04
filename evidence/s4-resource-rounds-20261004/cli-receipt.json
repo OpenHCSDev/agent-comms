@@ -1,0 +1,32 @@
+{
+  "scope": "Actual original scorer CLI paired export with authored absent-record control; not native/provider/model qualification",
+  "command": [
+    "/usr/bin/python",
+    "tests/compaction_retention_fixture.py",
+    "--recorded-run",
+    ".artifacts/s4-resource-rounds629/empty-run.json",
+    "--compare-recorded-run",
+    ".artifacts/s4-resource-rounds629/empty-run.json",
+    "--condition",
+    "task-memory",
+    "--baseline-condition",
+    "bounded"
+  ],
+  "returncode": 0,
+  "expected_rounds": [
+    "r1",
+    "r2",
+    "r3"
+  ],
+  "both_arms_all_resource_metrics_missing_not_zero": true,
+  "condition_construction_evaluated": false,
+  "study_acceptance_evaluated": false,
+  "provider_calls": 0,
+  "native_processes": 0,
+  "original_record_reads": 0,
+  "artifacts": {
+    "empty-run.json": "390a0030168e026e703fb1614a9a8f764a47021e8d4749d9fd23e30b03f80264",
+    "paired-export.stdout.json": "6855004ddc9ebd8f54e5680f0e84c39bf7640e54df79fd20c52c19fe1e460197",
+    "paired-export.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
