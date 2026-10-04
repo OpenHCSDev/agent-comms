@@ -26,6 +26,22 @@ acceptance is pending exact combined source/control operands, fresh Bohr floor
 and borrower clearance, a new named purpose and separate Sch086 custody.
 No public334 package changes or private imports follow from this source review.
 
+Heis subsequently published joined control ad91724e/operand7725402f. Parent
+read every changed Task acquisition and real mounted provisional, Working,
+Live-tail, filter supersession and pruning-held-Unmount case. It fits the next
+specific installed purpose; backend painted-cursor writes remain explicitly
+unqualified. Bohr has the reviewed exact operands and authority to advance
+fresh eligibility/grant without another parent approval or hosted-check hold.
+
+The existing certified_sequence_channel control only reads saved history and
+channel paint; it submits no input and cannot prove reply/queue/status. The
+configured session-coverage journey already takes InstalledSource/ReviewedArtifact
+and owns an isolated saved fork plus distinct input. Arendt662 now closes the
+remaining source-provenance forwarding gap across configured consumers, using
+that original owner rather than a copied verifier. Its next selected-provider
+functional check remains distinct from the unapproved30-pair/USD75 study.
+No configured input or provider call was submitted during this source review.
+
 Core661's execution-only purpose is also independently closed: lifecycle
 4ee018df/readback13ffdbe8, fresh255 processes with zero references/gaps,
 347 installed assets,94 keepers,69 metadata files/10 distributions and29 compact
