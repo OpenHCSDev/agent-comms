@@ -1,0 +1,47 @@
+{
+  "source": "c6b571fdf0cc3bd38bfc261a9124e9dc030e9bb5",
+  "production_commit": "0238db46",
+  "main": "c159f39e0863448ca621cc567ee131b9c9ffc739",
+  "original_hosted_failure": {
+    "head": "ec9666358fd0d641d2425a5a30aa52e73359d9fb",
+    "run": 37216561322,
+    "positive": {
+      "FamilyFlattened:src/agent_comms/import_records.py": 1
+    },
+    "log": ".artifacts/codex-family-flattened-negative.log",
+    "sha256": "b6481c784197d8f3c944fddef417a4b3063d555ad86c051e0d876f63fbef51fb"
+  },
+  "owner": "CodexItem/MessageRoleCodexItem declarations decode original external roles once. HistoricalInstructionCodexItem owns historical membership; CodexRolloutProvenance owns original raw record authentication and indexed reading.",
+  "deleted": "MessageRoleCodexItem.role string projection, CodexRolloutProvenance.role field, capture role copy, reader string equality and redundant role test; no replacement role catalog or type.",
+  "retained_contract": "Reference holds only original path/record offset/length/SHA256/instruction index. Role and content derive from that authenticated original record; developer/system never become current Pi messages. References remain in snapshot, metadata, receipt and FieldCodec.",
+  "production_diff": {
+    "inserted": 3,
+    "deleted": 10,
+    "files": 2
+  },
+  "ast": {
+    "before_modules": 324,
+    "after_modules": 324,
+    "omissions": 0,
+    "before_sites": 113,
+    "after_sites": 108,
+    "limits": "Lexical source references, not dynamic dispatch proof; Core roots plus targeted Toad consumers read."
+  },
+  "validation": {
+    "initial_setup": "1 passed / 14 tmp_path setup errors: basetemp parent missing; no fixture source/native/provider effects. Raw negative retained.",
+    "corrected_batch": "15 passed in 0.38s",
+    "failure_prevented": "Capture/receipt/metadata codec roundtrip and authenticated historical reads after redundant role removal; checkpoint membership and external item/role admission remain distinct."
+  },
+  "native": "Manifest7a2e unchanged; three native producers byte-equal fcbd; original SDK six-case preview acceptance not repeated.",
+  "unfinished": "Exact final hosted Debt; imported-source Explorer/service membership and installed W6/worker/schema9->10 acceptance; empirical calibration and external disclosure stay OFF.",
+  "installed_changes": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "new_environments": 0,
+  "keepers": {
+    "codex-reference-before.json": "5cd949cc0019a4807c1a73180725edb82e8f6ba618443b907753801cbf2d6343",
+    "codex-reference-after.json": "54cfb399a91c0743b66567005f17d9faaea776d7963d7a4c1f45667e9761fbe7",
+    "codex-reference-setup-negative.log": "d61433d8026510576611c83f118e9b9bc338f35ede837222e236b3694ca69ca1",
+    "codex-reference-final.log": "ef91cfdd05dd1f7d3afffd66dcd3cfdb6407fa4a624df3389d8d49927518e081"
+  }
+}

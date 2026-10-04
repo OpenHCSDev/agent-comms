@@ -238,3 +238,9 @@ decoders, source checkpoint selection, import CLI/receipt, historical proof
 read/refusal, and the added nested-role/envelope boundary case. The previous
 three annotation read checks remain unchanged separate source evidence; no
 SDK, App or provider check is repeated. Exact hosted final Debt remains pending.
+
+## Authenticated record owns the historical role
+
+Exact ec966 hosted Debt37216561322 failed only FamilyFlattened:import_records +1 (BOUND-8). The MessageRole property flattened a decoded member into a second role string in each provenance. Both that property and the stored provenance role are deleted, along with capture copying and reader equality. The existing historical member capability selects original instructions; original record SHA plus index authenticates membership and text. No replacement class, registry, compatibility reader or metric relocation. A source reference cannot establish historical authorship independently of its authenticated record.
+
+Normal currentmain c159f39e (including652 a6567176) joined without conflicts; no main src/stack production delta. Existing NRA Package before/after324 modules, zero omissions,113→108 relevant lexical sites; dependent Toad source has no consumers of the removed role. Final changed importer family15PASS/0.38s after a retained basetemp-parent setup negative. Two production files3+/10−. Actual receipt: codex-reference-owner-receipt.json. Native7a2e, three fcbd producers and accepted SDK six-case scope unchanged; no build, SDK repeat, provider, package holder or original data mutation. Exact new hosted Debt remains a merge requirement. Historical Explorer/service membership, installed worker/W6 and schema9→10 qualification remain unfinished.
