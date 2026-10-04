@@ -1,0 +1,92 @@
+{
+  "implementation": "1e653829d3222d8273891592cc0efe15c105c4bc",
+  "base": "1726be599f691256116831263243e35e0d94ef96",
+  "SDK_execution_source": "2f4583d8",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-full-history-admission",
+  "raw_sha256": {
+    "owner-before.json": "a8b43fec6fbec00dcfd1e500165f60f18f27a442a4d77b0f06ea2c0c4bb34e80",
+    "owner-after.json": "40b3b1310ffe06f171109ef3ea77295fc25b1c63fdbdd063349c490e622eac5d",
+    "trust-before.json": "0da242a8f0f820ceb43386b4139c06d39db4e3f5342b5c68945137c6cbb09b0c",
+    "handback.json": "57a51c3be4459833981825f56c858351b8e9a2e8c4ea9d3326408caa9d5472d4",
+    "focused01.log": "2690ef0e1ed3f683655db61a54963b6082ad587aa56e23dc67a646f3cb30fb22",
+    "focused-consumer01.log": "8e362e2a35f39c69360635cc615bf7dc5519ac905b1c67f10a518ba1c7bddf65",
+    "focused-final.log": "9bef2ff14599e998328c6ec08ab29854b3f89e8952a8aed85e8fc9c0f015fc2c",
+    "focused-last.log": "30af810dc818fc88031ef8fa2c711a9021f5af7419f65c588d03c8f0782e559f",
+    "sdk-receipt.json": "8d0c6a032c225dd16e8b34f3a79fd85509430ea59a659260e18ca01f56c5c07c",
+    "run-sdk.py": "4d58165bde5a2f629d5550b529bd71fb2e0a5e3145f1f2af6c74b385555796f5",
+    "qualify-sdk.py": "7a4338e07d0f930d99700997addddacce4eba69e339846f48e60e3b2f4584d45",
+    "sdk01/operands.json": "1645573e947ce5fe7ffd6fe445b2ab51ed7efe247cc94b13bc8ca17a4bc5dabd",
+    "sdk01/owned-processes.json": "ed14d6d39ff628a6c565a56316864935a12c7851a8756180ec7678e645cbbe76",
+    "sdk01/reader-first-refusal.json": "ed1c31a5b58b823daaa7baced0e6774b8a260705dab269e5948ba62e9730b39f",
+    "sdk01/reader-whole-source-refusal.json": "155f0d58d32e3bbff56b5f6ec33b9a40a9bdc29ac374a0a385eebecbefbe9ab7",
+    "sdk01/sdk.stdout.json": "886ed587fd329c62900f8292e5529e34e48403e1a3d17e0c26197798187a4e95",
+    "sdk01/terminal.json": "a8079c15345f8c30bb16d2800810b7a56291d51e880097db5e9d4689331e0076",
+    "sdk01/observation.jsonl": "b62e742c0fc463c3f556f8efe5f9763b86dda945628b2bdfdadcb5c1fbfb5929",
+    "sdk01/sdk.stderr.txt": "e2d91f0c9344e145350c4727bab0c1e145676e965372d353f91a0539ea9e2be7",
+    "sdk01/observer.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sdk01/sdk/application-observation.jsonl": "5b1d374c8ede6e8be8f6edbf50cbcd5ab86eced54822156f82525a4c60ed9d06",
+    "sdk01/contexts/context-2a911f3906afc01d6e580c0b5c49820b06be8f27607a0122b53709a39df94d86.json": "276b207eaaec62429e7e47adb082ae6c17eaa1e5bd2f01dde907d4cb606189eb",
+    "sdk01/contexts/segments-2a911f3906afc01d6e580c0b5c49820b06be8f27607a0122b53709a39df94d86.json": "4e910bb6d803f61870e67b14b43bfb230f470f179db876f1decec3b0694eb669"
+  },
+  "private_source_sha256": {
+    "tests/compaction_retention_fixture.py": "14e8af46336ede459982a4f739e87907e475ccadee1502323d46213a235203b4",
+    "tests/native_turn_context_contract.mjs": "29f6bd5aaa181e549f090ba5ed754463e25405d312159070595fc1143a68541f",
+    "tests/retained_native_conditions.mjs": "fbc3f9ecae473a04f687366b04b9d2429b9c54c1de528a415f75211d1fe0c7ab",
+    "tests/retained_native_fixture.py": "59a8b6043a35dbe84ca42638ae5999219df52a46e33b1b05ac10b7f53777a9a5",
+    "tests/summary_prefix_native_observer.mjs": "8252474b66db1d9c76739d776ad643f9c8abeb7ed47a5c71f24567c67293e3ad",
+    "tests/test_recorded_retention_measurements.py": "7c67c3821350afd5666dc7b6eafedf00c5a0a300b570246c57f40bc191171c81",
+    "tests/three_cut_retention_configured_journey.py": "0353ea023c157505c9885625be2525102cb8f0841fa51d0745efe370bb46e0bd"
+  },
+  "qualification": {
+    "authored_final": "4 passed,37 deselected,.37s",
+    "SDK": "One original SDK constructor/installation/transform/converter/onContextReady request, one controlled terminal; four complete original message parts preserved; five original full-history entries selected",
+    "request_id": "b05f59c0-cacb-41a3-a6bc-220be635845f",
+    "complete_message_partition": true,
+    "original_history_reference": true,
+    "whole_system_tool_value_projection": false,
+    "controller_clean_exit": false,
+    "controller_negative": "TimeoutExpired45.033s after complete SDK JSON while waiting for debugger disconnect; native/observer then joined",
+    "Pi_decoder": "Existing PiPayload/from_wire used on the SAME original completed records after generic decoder refusal",
+    "observer_source_fixes": "Request-ID-only breakpoint and original JSON normalization; no SDK rerun, corrected future whole-value capture unexecuted",
+    "native_admission_capacity": "Controlled stream did not execute provider ContextBudget admission; source grouping only, not actual capacity",
+    "Python_AST": "736 modules,0 parse omissions, lexical sites only",
+    "JS": "Original SDK/private JS semantic read and syntax checks; JS AST grammar unavailable in current tooling, not counted as Python AST/dynamic resolution"
+  },
+  "operations": {
+    "SDK_streams": 1,
+    "submitted_prompts": 0,
+    "provider_calls": 0,
+    "external_network": 0,
+    "inspector_network": "loopback debugger only",
+    "user_or_donor_source_reads": 0,
+    "package_env_build_native_public_writes": 0
+  },
+  "artifact_handback": {
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+    "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+    "original_whole_tree_after_verification": true,
+    "owned_PIDs": {
+      "SDK": 3524813,
+      "observer": 3524814
+    },
+    "all_owned_processes_absent": true,
+    "loan": "READ/execution HAND BACK",
+    "operations": {
+      "SDK_streams": 1,
+      "provider_calls": 0,
+      "submitted_prompts": 0,
+      "external_network": 0,
+      "debugger": "loopback only",
+      "original_user_or_donor_reads": 0,
+      "env_native_package_public_writes": 0
+    },
+    "controller_negative_preserved": ".artifacts/s4-full-history-admission/sdk01/terminal.json"
+  },
+  "limits": [
+    "Whole SDK system/tool value agreement refused by original reader and remains unqualified",
+    "Raw Timeout/preview/Pi-decoder/tool-value refusals preserved, no second stream",
+    "No admitted native input/custody proof or configured/study/model recall/HTTP/capacity/fullS4 acceptance",
+    "30-pair/USD75 study unapproved"
+  ]
+}
