@@ -1,0 +1,88 @@
+{
+  "source_checkpoint": "670f239883915730c164c720158bae85323149aa",
+  "final_scope": "SOURCE_AND_ORDINARY_INSTALLED_CURRENT_PREVIEW_APP_QUALIFIED",
+  "initial_batch": {
+    "passed": 64,
+    "failed": 9,
+    "seconds": 24.06,
+    "raw": "final-batch.txt"
+  },
+  "final_cold_boundary": {
+    "passed": 1,
+    "seconds": 1.01,
+    "raw": "cold-client-owner-encoded.txt",
+    "producer_encoded_original_DTO": true,
+    "client_no_producer_import": true,
+    "current_unavailable_decoded": true,
+    "all8_external_leaf_kinds_resolved": true,
+    "unknown_kind_still_refused": true
+  },
+  "before": "before.json",
+  "after": "after.json",
+  "native_builds": 0,
+  "provider_calls": 0,
+  "working_memory627_changed": false,
+  "owner_correction": {
+    "discovery_owner": "RegistryConfig retained by original LazyDiscoveryDict._set_config",
+    "deleted_carriers": [
+      "_family_discovery_package",
+      "_GenerationProvenance"
+    ],
+    "captured_generation_owner": "AwarenessClaimGenerations",
+    "selected_receipt_owner": "ClaimBatchReceipts",
+    "wake_context_owner": "Thread",
+    "durable_fields_and_external_names_changed": false,
+    "before": "before-owner-correction.json",
+    "after": "after.json"
+  },
+  "final_affected_batch": {
+    "passed": 25,
+    "failed": 1,
+    "deselected": 3,
+    "seconds": 18.75,
+    "raw": "owner-closure-final.txt",
+    "failure": "Original triage fixture expects body absent; base c29425b9 already emits original body. No production regression inferred; assertion preserved.",
+    "exclusions": "Three previously failed retired _trusted_package fixture cases; no production fallback added."
+  },
+  "registry_config_batch": {
+    "passed": 4,
+    "seconds": 0.9,
+    "raw": "registry-owner-final.txt"
+  },
+  "debt": {
+    "original_failure": 37197587989,
+    "retained_failure_log": "hosted-debt-first.txt",
+    "corrected_source": "670f239883915730c164c720158bae85323149aa",
+    "corrected_run": 37198557937,
+    "conclusion": "success",
+    "url": "https://github.com/OpenHCSDev/agent-comms/actions/runs/37198557937"
+  },
+  "installed_current_preview": {
+    "seconds": 16.28012289002072,
+    "terminal_exit": 0,
+    "raw": "installed-current-preview/terminal-receipt.json",
+    "app": "installed-current-preview/app-receipt.json",
+    "source_proof": "installed-current-preview/source-proof.json",
+    "own_candidate_DTO": "installed-current-preview/candidate-cohort-activation.json",
+    "whole_handback": "installed-current-preview/code-handback.json",
+    "current_contributors": [
+      "coordination",
+      "user_input"
+    ],
+    "unavailable_awareness_emitted": false,
+    "cold_missing_kind_source_proof_retained": true,
+    "saved_public_inputs_sealedmanifest_unchanged": true,
+    "original165_unchanged": true,
+    "actual_borrowers": 0,
+    "permission_gaps": [],
+    "physical": false,
+    "provider_calls": 0,
+    "new_inputs": 0,
+    "new_forks": 0,
+    "priming": 0
+  },
+  "source_phase_package_writes": 0,
+  "package_writes": 1,
+  "source_phase_UI_launches": 0,
+  "ui_launches": 1
+}

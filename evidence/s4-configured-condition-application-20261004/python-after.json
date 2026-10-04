@@ -1,0 +1,116 @@
+{
+  "parsed": 365,
+  "omitted": [],
+  "sites": [
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 480,
+      "declaration": "capture_input"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 510,
+      "declaration": "condition_records"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 910,
+      "call": "self.condition_records"
+    },
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 24,
+      "declaration": "observe_native_requests"
+    },
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 79,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1017,
+      "call": "partial_probe.condition_records"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1022,
+      "call": "selected.condition_records"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1030,
+      "call": "unretired.condition_records"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1033,
+      "call": "selected.condition_records"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 290,
+      "import": "observe_native_requests"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 333,
+      "import": "observe_native_requests"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 298,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 339,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 38,
+      "import": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 48,
+      "declaration": "condition_application"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 167,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 277,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 82,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 184,
+      "call": "RecordedNativeProbe.capture_input"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 103,
+      "call": "RecordedNativeProbe.capture_input"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 360,
+      "call": "RecordedNativeProbe.capture_input"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 396,
+      "call": "condition_application"
+    }
+  ]
+}

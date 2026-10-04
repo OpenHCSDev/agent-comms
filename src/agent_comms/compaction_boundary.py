@@ -59,7 +59,7 @@ class CompactionBoundary:
         grant; future input queue membership and native branch/cut selection are
         exclusively determined by hold/capture during actual compaction.
         """
-        from .retained_context import RetainedSegment
+        from .context_segments.retained import RetainedSegment
 
         with WireLog(self.root / "bus.jsonl").retained_sources(name, self.registry) as (
             owner, snapshot, facts, inputs, export

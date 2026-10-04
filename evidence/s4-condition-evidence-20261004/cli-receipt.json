@@ -1,0 +1,59 @@
+{
+  "implementation": "0d58339604bef9f8abf3327872afde0eb915a402",
+  "scope": "Changed original-record scorer/CLI availability and authored condition reader controls; no executed matched condition or native/provider path",
+  "command": [
+    "/usr/bin/python",
+    "tests/compaction_retention_fixture.py",
+    "--recorded-run",
+    ".artifacts/s4-resource-rounds629/empty-run.json",
+    "--compare-recorded-run",
+    ".artifacts/s4-resource-rounds629/empty-run.json",
+    "--condition",
+    "task-memory",
+    "--baseline-condition",
+    "bounded"
+  ],
+  "exit_code": 0,
+  "stdout_sha256": "ab1b79e53ea0a36bfd0899f752123a7419ca6524e83d40642227c1bf478ee9e7",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "original_parameters_sha256": "390a0030168e026e703fb1614a9a8f764a47021e8d4749d9fd23e30b03f80264",
+  "original_parameters_unchanged": true,
+  "arms": {
+    "candidate": {
+      "declared_condition": "task-memory",
+      "construction_evaluated": false,
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "recall_missing": 21,
+      "workflow_total": null
+    },
+    "baseline": {
+      "declared_condition": "bounded",
+      "construction_evaluated": false,
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "recall_missing": 21,
+      "workflow_total": null
+    }
+  },
+  "focused_controls": {
+    "passed": 5,
+    "deselected": 27,
+    "seconds": 0.22,
+    "log_sha256": "1323784020da6ea05a300ba4c9fd4404684ccc90d2e86a80f69ff514e3c5a201"
+  },
+  "final_availability_control": {
+    "log_sha256": "1a474494a4610672d6640708b831a70371c82a2431ec39553bfd812d2a9388a0",
+    "scope": "Only the changed available_rounds projection was rechecked"
+  },
+  "provider_calls": 0,
+  "native_processes": 0,
+  "original_native_reads": 0,
+  "study_approved": false
+}

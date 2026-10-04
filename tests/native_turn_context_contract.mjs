@@ -5,8 +5,8 @@ import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {constructNativeConditions,applyBoundedNativeCondition,
-    transformBoundedNativeCondition,armBoundedNativeCondition} from './retained_native_conditions.mjs';
+import {constructNativeConditions,applyNativeCondition,
+    transformBoundedNativeCondition,armBoundedNativeCondition,armInstalledNativeCondition} from './retained_native_conditions.mjs';
 
 const [pkg, suppliedRoot] = process.argv.slice(2);
 const root=resolve(suppliedRoot);
@@ -70,7 +70,9 @@ try {
         tools:session.agent.state.tools};
     const captured=await TurnContext.capture(session,provider);
     const full=captured.full();
-    if (process.argv.includes('--condition-agent-loop')) {
+    if (process.argv.includes('--configured-condition-rpc')) {
+        await observeConfiguredPrompt(session,pkg,root,compaction);
+    } else if ((process.argv.includes('--condition-agent-loop') || process.argv.includes('--installed-condition-loop'))) {
         console.log(JSON.stringify(await observeConditionLoop(session,pkg,root,compaction,before)));
     } else {
     // End validation for capture ownership: compare the unchanged public
@@ -271,18 +273,44 @@ try {
             {...source,session:{...source.session,sessionId:'another'}}),/another original native session/);
         await assert.rejects(constructNativeConditions(session,pkg,
             {...source,native_entry_id:old}),/not the selected native compaction/);
-        const applied=await applyBoundedNativeCondition(session,pkg,source);
-        // SDK installation consumes AgentMessages, never converted LLM messages.
-        assert.equal(session.agent.state.messages[0].role,'compactionSummary');
-        assert.equal(session.agent.state.messages[0].summary,source.summary);
-        assert.deepEqual((await TurnContext.next(session)).render(),bounded.context);
-        assert.deepEqual(applied.context,bounded.context);
-        assert.deepEqual(applied.checkpoint_session,full.identity);
-        await assert.rejects(applyBoundedNativeCondition(session,pkg,
-            {evaluated:false,reason:'Original narrative unavailable'}),/eligible narrative/);
         const {SessionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
-        SessionContext.restore(session);
-        assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        // Every intervention uses the same raw SDK installation boundary.
+        // A converted preview is never installed as AgentMessages.
+        for (const selected of Object.values(constructed)) {
+            const applied=await applyNativeCondition(session,pkg,selected);
+            assert.deepEqual(session.agent.state.messages,selected.agent_messages);
+            assert.deepEqual((await TurnContext.next(session)).render(),selected.context);
+            assert.deepEqual(applied.source_witness,selected.source_witness);
+            SessionContext.restore(session);
+            assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        }
+        assert.equal(bounded.agent_messages[0].role,'compactionSummary');
+        assert.equal(bounded.agent_messages[0].summary,source.summary);
+        assert.deepEqual(bounded.checkpoint_session,full.identity);
+        await assert.rejects(applyNativeCondition(session,pkg,
+            {evaluated:false,reason:'Original narrative unavailable'}),/evaluated SDK construction/);
+        await assert.rejects(applyNativeCondition(session,pkg,{...bounded,
+            agent_messages:[{role:'user',content:'Changed construction.',timestamp:500}]}),
+            /construction changed before installation/);
+        await assert.rejects(applyNativeCondition(session,pkg,{...bounded,
+            source_witness:{...bounded.source_witness,sessionId:'another'}}),
+            /selection changed since condition construction/);
+        // Budget belongs to the current selected model, not the preview.
+        const model=session.model;
+        const {BudgetAdmissionError}=await import(pathToFileURL(join(pkg,
+            'node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js')));
+        session.agent.state.model={...model,contextWindow:1};
+        try {
+            await assert.rejects(applyNativeCondition(session,pkg,bounded),BudgetAdmissionError);
+            assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        } finally {session.agent.state.model=model;}
+        const selectedContext=session.storedContext;
+        const {CompactionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
+        session.storedContext=new CompactionContext(manager);
+        try {
+            await assert.rejects(applyNativeCondition(session,pkg,bounded),/did not admit/);
+            assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        } finally {session.storedContext=selectedContext;}
         const fresh={role:'user',content:'Distinct new input preserved.',timestamp:500};
         const raw=[...session.agent.state.messages,fresh];
         const transformed=await transformBoundedNativeCondition(session,pkg,source,raw);
@@ -307,9 +335,19 @@ try {
         restore();
         assert.equal(session.agent.transformContext,originalTransform);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);
+        // Changed selected sources refuse instead of installing stale bytes.
+        // This append affects only this authored SDK fixture, never a donor.
+        const preparedMessages=session.agent.state.messages;
+        manager.appendCustomMessageEntry('source-contract','Distinct later source',true);
+        await assert.rejects(applyNativeCondition(session,pkg,bounded),/selection changed since/);
+        assert.equal(session.agent.state.messages,preparedMessages);
     }
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
-        provider_bytes_identical:true,journal_bytes_unchanged:true,
+        provider_bytes_identical:true,journal_bytes_unchanged:!conditions,
+        ...(conditions ? {condition_constructions_installed:4,
+            construction_scope:'Authored SDK selections/installation/refusals; not submitted inputs or model/provider baselines',
+            original_source_preserved_through_install_and_restore:true,
+            distinct_authored_append_refused:true} : {}),
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
         kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),capture_comparison:captureComparison,
@@ -321,9 +359,65 @@ try {
             recorded_reader_scope:'Authored SDK capture and root/child resolution; no onContextReady model request',
             root_single_projection:true,child_uses_original_coordinates:true,
             mixed_single_projection:true,missing_or_other_session_refused:true} : {}),
-        bounded_construction_scope:conditions ? 'Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline' : undefined}));
+        condition_construction_scope:conditions ? 'Authored SDK four-condition installation and canonical restore; no input or captured model baseline' : undefined}));
     }
 } finally {session.dispose();manager.entryStore.close();}
+
+async function observeConfiguredPrompt(session,pkg,root,compaction) {
+    // This authored SDK host runs the original stdin RPC, prompt, input claim,
+    // persistence and onContextReady publication. Only the transport is controlled;
+    // it does not qualify a configured provider, user lease or study arm.
+    const {AgentSessionRuntime}=await import(pathToFileURL(join(pkg,'dist/core/agent-session-runtime.js')));
+    const {runRpcMode}=await import(pathToFileURL(join(pkg,'dist/modes/rpc/rpc-mode.js')));
+    const {AssistantMessageEventStream}=await import(pathToFileURL(join(pkg,
+        'node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js')));
+    assert(session.model,'Original SDK selection required');
+    const identity={sessionId:session.sessionId,sessionFile:session.sessionFile};
+    writeFileSync(join(root,'condition-source.json'),JSON.stringify({evaluated:true,
+        session:identity,checkpoint_session:identity,native_entry_id:compaction,
+        summary:'Authored uncombined narrative only.',source:{kind:'file',
+            path:new URL(import.meta.url).pathname,sha256:hashFile(new URL(import.meta.url))}}),{mode:0o600});
+    const promptDescriptor=Object.getOwnPropertyDescriptor(session,'prompt');
+    const beforeContext=session.storedContext;
+    const beforeDescriptor=Object.getOwnPropertyDescriptor(beforeContext,'beforeInput');
+    const transform=session.agent.transformContext;
+    let streams=0;
+    if (!process.argv.includes('--preflight-refusal'))
+        await session.modelRuntime.setRuntimeApiKey(session.model.provider,'authored-unused-transport-key');
+    session.agent.streamFunction=(model,context,options)=>{
+        streams++;
+        const stream=new AssistantMessageEventStream();
+        const message={role:'assistant',content:[{type:'text',text:'Authored RPC terminal.'}],
+            api:model.api,provider:model.provider,model:model.id,timestamp:Date.now(),
+            stopReason:'stop',usage:{input:0,output:0,cacheRead:0,cacheWrite:0,
+                totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}};
+        if (process.argv.includes('--abort-stream')) {
+            options.signal.addEventListener('abort',()=>stream.push({type:'error',reason:'aborted',
+                error:{...message,stopReason:'aborted'}}),{once:true});
+        } else stream.push({type:'done',reason:'stop',message});
+        return stream;
+    };
+    const host=new AgentSessionRuntime(session,{cwd:session.sessionManager.getCwd(),
+        agentDir:join(root,'config')},async()=>{
+            throw new Error('This authored prompt control does not replace sessions');
+        });
+    session.subscribe(event=>{
+        if(event.type==='agent_settled') {
+            assert.deepEqual(Object.getOwnPropertyDescriptor(session,'prompt'),promptDescriptor);
+            assert.deepEqual(Object.getOwnPropertyDescriptor(beforeContext,'beforeInput'),beforeDescriptor);
+            assert.equal(session.agent.transformContext,transform);
+        }
+    });
+    process.on('exit',()=>{
+        assert.deepEqual(Object.getOwnPropertyDescriptor(session,'prompt'),promptDescriptor);
+        assert.deepEqual(Object.getOwnPropertyDescriptor(beforeContext,'beforeInput'),beforeDescriptor);
+        assert.equal(session.agent.transformContext,transform);
+        writeFileSync(join(root,'prompt-exit.json'),JSON.stringify({provider_calls:0,
+            authored_RPC_prompts:true,controlled_streams:streams,hook_restored:true,
+            native_identity:identity}),{mode:0o600});
+    });
+    await runRpcMode(host);
+}
 
 async function observeConditionLoop(session,pkg,root,compaction,before) {
     // Authored plumbing control: the original loop/SDK/inspector execute, while
@@ -340,10 +434,18 @@ async function observeConditionLoop(session,pkg,root,compaction,before) {
         source:{kind:'file',path:new URL(import.meta.url).pathname,
             sha256:hashFile(new URL(import.meta.url))}};
     const observation=join(root,'application-observation.jsonl');
-    const inputId='d'.repeat(32);
+    const installed=process.argv.includes('--installed-condition-loop');
     const originalTransform=session.agent.transformContext;
-    const restore=armBoundedNativeCondition(session,pkg,source,
-        transformBoundedNativeCondition,observation,inputId);
+    const originalMessages=Array.from(session.storedContext.messages(session.agent));
+    const constructions=installed ? await constructNativeConditions(session,pkg,source) : {};
+    const selections=installed ? Object.values(constructions) : [undefined];
+    const results=[];
+    try {
+    for (const [index,construction] of selections.entries()) {
+    if (construction) await applyNativeCondition(session,pkg,construction);
+    const inputId='d'.repeat(31)+index.toString(16);
+    const restore=construction ? armInstalledNativeCondition(session,construction,observation,inputId)
+        : armBoundedNativeCondition(session,pkg,source,transformBoundedNativeCondition,observation,inputId);
     const events=[],progress=[];
     let manifest,transportCalls=0;
     try {
@@ -384,10 +486,17 @@ async function observeConditionLoop(session,pkg,root,compaction,before) {
     } finally {restore();}
     assert.equal(session.agent.transformContext,originalTransform);
     assert.deepEqual(readFileSync(session.sessionFile),before);
-    return {scope:'Authored original SDK agent-loop/inspector/onContextReady plumbing',
-        provider_calls:0,submitted_prompts:0,controlled_streams:transportCalls,
+    results.push({condition:construction?.condition, input_id:inputId,manifest,events,progress,
+        controlled_streams:transportCalls});
+    }
+    } finally {session.storedContext.install(session.agent,originalMessages);}
+    assert.deepEqual(session.agent.state.messages,originalMessages);
+    return {scope:'Authored original SDK installation/agent-loop/inspector/onContextReady plumbing',
+        provider_calls:0,submitted_prompts:0,
+        controlled_streams:results.reduce((total,result)=>total+result.controlled_streams,0),
         native_claim_minted:false,journal_bytes_unchanged:true,hook_restored:true,
-        identity,input_id:inputId,manifest,events,progress};
+        installed_conditions:installed ? results.length : 0,canonical_messages_restored:true,
+        identity,results};
 }
 
 function hashFile(path) {

@@ -11,7 +11,7 @@ from typing import Literal
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
@@ -103,6 +103,13 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
     accepted_at_ms: int = field(metadata={"sql": Column(check="accepted_at_ms >= 0")})
     sealed: bool = field(default=False)
     without_rowid = True
+
+    def require_selected_claim(self, assignment: WakeAssignment) -> None:
+        """An awareness contribution borrows this original sealed receipt."""
+        from .wake_candidate_index import ProjectionUnavailableError
+
+        if not self.sealed or self.message_id != assignment.message_id:
+            raise ProjectionUnavailableError("selected source receipt is unsealed or changed")
 
     @classmethod
     def triggers(cls):
@@ -402,6 +409,58 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
         metadata={"sql": Column(check="length(canonical_thread) BETWEEN 1 AND 256")}
     )
     owner_generation: int = field(metadata={"sql": Column(check="owner_generation > 0")})
+
+    def current(self, expected: OwnerGenerations) -> bool:
+        """A historical capture is omitted; a changed current owner refuses."""
+        from .wake_candidate_index import ProjectionUnavailableError
+
+        if self.owner_generation < expected.generation:
+            return False
+        if self.captured_owner != expected:
+            raise ProjectionUnavailableError("captured participant owner changed")
+        return True
+
+    @property
+    def captured_owner(self) -> OwnerGenerations:
+        """The original acceptance's owner observation, not a current lease."""
+        return OwnerGenerations(
+            owner_lookup=self.recipient_lookup, owner_thread=self.canonical_thread,
+            generation=self.owner_generation,
+        )
+
+    def require_selection(self, assignment: WakeAssignment, receipt: ClaimBatchReceipts) -> None:
+        """Verify this immutable acceptance capture against its original claim."""
+        from .wake_candidate_index import ProjectionUnavailableError
+
+        expected = type(self)(
+            claim_id=assignment.assignment_id, wire_root_id=receipt.wire_root_id,
+            wire_seq=assignment.wire_seq, recipient_lookup=assignment.recipient_lookup,
+            canonical_thread=assignment.recipient, owner_generation=self.owner_generation,
+        )
+        if self != expected:
+            raise ProjectionUnavailableError("selected source generation provenance changed")
+
+    def require_obligation(self, execution, link, assignment, obligation) -> None:
+        """Captured ownership and the reply's original relational key agree."""
+        from .coordination_tables.executions import ExecutionOrigin
+        from .wake_candidate_index import ProjectionUnavailableError
+
+        if execution.origin is not ExecutionOrigin.WIRE:
+            raise ProjectionUnavailableError("open obligation has no wire origin")
+        original_owner = OwnerGenerations(
+            owner_lookup=execution.owner_lookup, owner_thread=execution.owner_thread,
+            generation=self.owner_generation,
+        )
+        original_link = type(link)(
+            execution_id=obligation.execution_id, assignment_id=self.claim_id,
+            ordinal=link.ordinal,
+        )
+        if self.captured_owner != original_owner or link != original_link:
+            raise ProjectionUnavailableError("open obligation has no exact owner provenance")
+        if (self.claim_id, assignment.lifecycle.exact_target) != (
+            assignment.assignment_id, obligation.exact_target
+        ):
+            raise ProjectionUnavailableError("open obligation has no exact owner provenance")
 
     @classmethod
     def references(cls):

@@ -286,7 +286,9 @@ class SegmentManifest:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextSegment(DeclaredFamily, affix="Segment"):
+class ContextSegment(
+    DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
+):
     provenance: tuple[Provenance, ...]
 
     def __post_init__(self) -> None:

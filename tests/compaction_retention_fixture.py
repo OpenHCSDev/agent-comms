@@ -42,8 +42,9 @@ class PairedRecallDesign:
     """Supplied analysis parameters, not preregistration or spending authority.
 
     The original oracle file owns questions and round membership. Original
-    native admission owns model selection. This value owns only the requested
-    comparison and inference parameters; it cannot reconstruct missing facts.
+    native admission owns model selection. This value owns the supplied
+    construction, comparison and inference parameters; it cannot reconstruct
+    missing facts or approve execution.
     """
     oracle: FileProvenance
     candidate: Condition
@@ -77,14 +78,40 @@ class PairedRecallDesign:
         result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
         return result
 
+    def construction_plan(self, sampling_seed: int):
+        """Export prospective operands; never grant or launch a native turn.
+
+        The pinned oracle owns source additions and held-out questions. The
+        sampling seed owns this prospective ordering, independently of the
+        bootstrap seed used later for analysis. Recorded inputs must still
+        corroborate what was actually executed; this plan cannot supply them.
+        """
+        scenario = RecordedNativeCheckpoint.read_record(self.oracle, RecallScenario)
+        rounds = scenario.construction_rounds()
+        random = Random(sampling_seed)
+        return {'comparison_design': self, 'scenario': scenario.identity,
+                'rounds': rounds, 'sampling_seed': sampling_seed,
+                'trajectories': tuple({'sample': index + 1,
+                    'condition_order': tuple(random.sample((self.candidate, self.baseline), 2))}
+                    for index in range(self.sample_count)),
+                'scope': 'Prospective authored source/probe operands and randomized arm order only; '
+                         'no native input, checkpoint, intervention, registration, capacity or spending grant'}
+
 
 @dataclass(frozen=True)
 class RecordedNativeProbes:
     rounds: dict[str, RecordedNativeProbe]
     checkpoints: dict[str, RecordedNativeCheckpoint] = field(default_factory=dict)
+    stimuli: dict[str, RecordedNativeProbe] = field(default_factory=dict,
+        metadata={'wire_omit_default': True})
+
+    @property
+    def inputs(self):
+        """All declared original inputs, with source and recall roles distinct."""
+        return chain(self.rounds.values(), self.stimuli.values())
 
     def __post_init__(self):
-        originals = tuple((probe.session, probe.input_id) for probe in self.rounds.values())
+        originals = tuple((probe.session, probe.input_id) for probe in self.inputs)
         if len(set(originals)) != len(originals):
             raise ValueError("A recorded trajectory cannot count the same original input twice")
 
@@ -131,7 +158,7 @@ class RecordedNativeProbes:
         session = NativeSessionIdentity(fork.session_id, fork.session_file)
         document = inputs.read()
         if {row.native_id for row in document.rows.values() if row.has_started} != {
-                probe.input_id for probe in self.rounds.values()} or len(document.rows) != len(self.rounds):
+                probe.input_id for probe in self.inputs} or len(document.rows) != len(self.rounds) + len(self.stimuli):
             raise ValueError("Continuation cannot include an unrecorded or uncertain input")
         with NativeEntry.open_evidence(Path(path)) as evidence:
             _, entries = evidence.observe()
@@ -139,7 +166,7 @@ class RecordedNativeProbes:
             for cut in selected.values():
                 _, entry, _, _ = cut.capture(session, evidence)
                 terminals.append(entry)
-            for probe in self.rounds.values():
+            for probe in self.inputs:
                 session.require_same_session(probe.session)
                 probe.read(evidence, evidence)
                 if probe.sdk_context is None or probe.submitted_inputs is None:
@@ -160,7 +187,7 @@ class RecordedNativeProbes:
     def checkpoints_for(self, rounds):
         """Select this trajectory's original cuts against the complete oracle."""
         identities = {item.identity for item in rounds}
-        unexpected = self.rounds.keys() - identities
+        unexpected = (self.rounds.keys() | self.stimuli.keys()) - identities
         if unexpected:
             raise ValueError(f"Unknown native rounds: {sorted(unexpected)}")
         if self.rounds.keys() & self.checkpoints.keys():
@@ -175,7 +202,7 @@ class RecordedNativeProbes:
         return selected
 
     @staticmethod
-    def observe_runs(runs, rounds):
+    def observe_runs(runs, scenario):
         """Borrow originals for one bounded observation, then release all readers.
 
         A pair shares its parent descriptor/decoded bytes, never a cached proof.
@@ -183,22 +210,27 @@ class RecordedNativeProbes:
         Batch comparison calls this once per pair, not for the entire study.
         """
         runs = tuple(runs)
-        selected = tuple(run.checkpoints_for(rounds) for run in runs)
+        selected = tuple(run.checkpoints_for(scenario.rounds) for run in runs)
         with RecordedNativeProbe.original_readers(
-                chain.from_iterable(run.rounds.values() for run in runs),
+                chain.from_iterable(run.inputs for run in runs),
                 chain.from_iterable(cuts.values() for cuts in selected)) as sources:
-            return tuple(run.observe_acquired(rounds, sources, cuts)
+            return tuple(run.observe_acquired(scenario, sources, cuts)
                          for run, cuts in zip(runs, selected))
 
-    def observe(self, rounds):
+    def observe(self, scenario):
         """Visit one trajectory using the same acquired-reader algorithm."""
-        observed, = self.observe_runs((self,), rounds)
+        observed, = self.observe_runs((self,), scenario)
         return observed
 
-    def observe_acquired(self, rounds, sources, selected):
-        cuts = tuple((item.identity, selected[item.identity]) for item in rounds
+    def observe_acquired(self, scenario, sources, selected):
+        cuts = tuple((item.identity, selected[item.identity]) for item in scenario.rounds
                      if item.identity in selected)
         reports, observations = {}, {}
+        expected = {item['round']: item['source_text'] for item in
+                    scenario.construction_rounds()} if self.stimuli else {}
+        stimuli = {identity: probe.read(sources[Path(probe.session.session_file)],
+                                        sources[probe.checkpoint_source])
+                   for identity, probe in self.stimuli.items()}
         previous = None
         for identity, checkpoint in cuts:
             evidence = sources[Path(checkpoint.reference.session_file)]
@@ -206,6 +238,9 @@ class RecordedNativeProbes:
             session = NativeSessionIdentity(header.id, str(evidence.source.path))
             attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
             report = checkpoint._report(attempt, entry, covered, assembly)
+            if identity in stimuli:
+                stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
+                    expected[identity], stimuli[identity], evidence, entry.id, None)
             if previous is not None:
                 old, prior_attempt, prior_entry, prior_session = previous
                 prior_session.require_same_session(session)
@@ -218,7 +253,16 @@ class RecordedNativeProbes:
         for identity, probe in self.rounds.items():
             observations[identity] = probe.read(sources[Path(probe.session.session_file)],
                                                 sources[probe.checkpoint_source])
-        return reports, observations
+            if identity in stimuli and identity not in selected:
+                observed = observations[identity]
+                stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
+                    expected[identity], stimuli[identity], sources[Path(probe.session.session_file)],
+                    observed['native_input'].session_entry_id, observed['construction']['fork'])
+        for identity, observed in stimuli.items():
+            if 'source_delivery' not in observed:
+                observed['source_delivery'] = {'evaluated': False,
+                    'reason': 'Original stimulus has no selected cut or recall boundary'}
+        return reports, observations, stimuli
 
     def alignment(self, other, observations, baseline, rounds):
         """Compare acquired original facts, never regenerate a control history."""
@@ -249,7 +293,7 @@ class RecordedNativeProbes:
             if a["sdk_manifest"].counter != b["sdk_manifest"].counter:
                 raise ValueError("Matched probes use different native measurement counters")
             catalogs = tuple(tuple(segment for segment in item["sdk_manifest"].segments
-                                   if segment.kind == ToolCatalogSegment.declared_name)
+                                   if segment.kind is ToolCatalogSegment)
                              for item in (a, b))
             if not all(catalogs):
                 pairs[identity] = {"evaluated": False, "reason": "Original tool catalogs unavailable"}
@@ -510,11 +554,18 @@ class ScoredScenario(ScoreView):
                     for question, _ in round_.scored_answers if question.measurement is Measurement.ACTION}
                 for round_ in self.rounds}
 
-    def public_native(self, checkpoints, evidence) -> dict:
+    def public_native(self, checkpoints, evidence, stimuli) -> dict:
         result = self.public()
+        source_delivery = {item.identity: stimuli[item.identity]['source_delivery']
+            if item.identity in stimuli else {'evaluated': False,
+                'reason': 'Original authored-history stimulus not captured'}
+            for item in self.source.rounds}
         return FieldCodec.encode(dict(result, native_probes=evidence,
                     answer_origin="recorded-native",
-                    recorded_resources=self.recorded_resources(checkpoints, evidence),
+                    recorded_resources=self.recorded_resources(checkpoints, evidence, stimuli),
+                    source_delivery=source_delivery,
+                    condition_construction=self.condition_construction(evidence, source_delivery),
+                    original_stimuli=stimuli,
                     quality_denominators=self.support_totals(evidence),
                     proposed_actions=self.proposed_actions(evidence),
                     scope="recorded original native probes; condition label is not construction proof",
@@ -539,7 +590,45 @@ class ScoredScenario(ScoreView):
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
 
-    def recorded_resources(self, checkpoints, evidence):
+    def condition_construction(self, evidence, source_delivery):
+        """Keep submitted SDK evidence distinct from labels and previews.
+
+        The probe owns transform/source/refusal checks. This view only groups
+        its acquired observations against the frozen rounds. It cannot infer
+        an intended experimental arm or complete-history eligibility.
+        """
+        identities = tuple(item.identity for item in self.source.rounds)
+
+        def group(values):
+            unavailable = tuple(identity for identity in identities
+                if identity not in values or not values[identity]['evaluated'])
+            return {'evaluated': not unavailable, 'expected_rounds': identities,
+                    'available_rounds': tuple(identity for identity in identities if identity not in unavailable),
+                    'unavailable_rounds': unavailable}
+
+        applications = {identity: original['construction']['condition_application']
+                        for identity, original in evidence.items()}
+        installations = {identity: original['construction']['condition_installation']
+                         for identity, original in evidence.items()}
+        entry_selections = {identity: installation['entry_selection']
+                            for identity, installation in installations.items()}
+        admissions = {identity: original['construction']['request_budget']
+                      for identity, original in evidence.items()}
+        capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
+                    for identity, original in evidence.items()}
+        return {'evaluated': False, 'declared_condition': self.condition,
+                'bounded_sdk_application': group(applications),
+                'installed_sdk_source': group(installations),
+                'sdk_entry_selection': group(entry_selections),
+                'native_request_admission': group(admissions),
+                'source_delivery': group(source_delivery),
+                'full_history_capacity': group(capacity),
+                'reason': 'Original condition selection and complete-history eligibility are not supplied by a label or SDK preview',
+                'scope': 'Frozen-round availability of original source/transform/request observations; '
+                         'details remain in source_delivery and native_probes; '
+                         'not verified matched interventions, HTTP bytes, registration or study acceptance'}
+
+    def recorded_resources(self, checkpoints, evidence, stimuli):
         """Total acquired original completions, never estimates or billing.
 
         A missing usage/counter leaves that metric unavailable. Summary and
@@ -554,6 +643,8 @@ class ScoredScenario(ScoreView):
             for identity, report in checkpoints.items()}
         assistants = {identity: tuple(step['usage']['value']
             for step in original['model_steps']) for identity, original in evidence.items()}
+        source_inputs = {identity: tuple(step['usage']['value']
+            for step in original['model_steps']) for identity, original in stimuli.items()}
 
         def metric(values, expected, complete_rounds):
             supplied = tuple(value for value in values if value is not None)
@@ -587,8 +678,12 @@ class ScoredScenario(ScoreView):
 
         return {'summaries': total(summaries), 'assistants': total(assistants),
                 'combined': total(summaries, assistants),
+                'source_inputs': total(source_inputs),
+                'recorded_workflow': total(summaries, assistants, source_inputs),
                 'scope': 'Original journaled summary and assistant completions only; '
                          'complete totals require observations for every frozen round; '
+                         'combined retains selected-summary/recall scope; recorded_workflow also requires stimuli; '
+                         'shared source preparation is not independent arm cost; '
                          'observed subtotals do not estimate missing work or prove no summary work; '
                          'SDK-normalized cost is not billed spend; no unjournaled retries, '
                          'cache-saving comparison, HTTP accounting or end-to-end timing'}
@@ -840,6 +935,12 @@ class RecallRound:
                           "questions": [question.public() for question in self.questions]})
         )
 
+    def history_after(self, previous: tuple[str, ...]) -> tuple[str, ...]:
+        """Return only new authored history; never silently rebuild a branch."""
+        if self.history[:len(previous)] != previous:
+            raise ValueError("Construction requires the exact preceding frozen history prefix")
+        return self.history[len(previous):]
+
     def score_native(self, probe: RecordedNativeProbe):
         return self.score_recorded(probe.observe())
 
@@ -876,6 +977,22 @@ class RecallScenario:
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
 
+    def construction_rounds(self):
+        """Derive ordered source additions and public probes from one oracle.
+
+        Native execution still owns checkpoint creation and input admission.
+        These operands do not repeat cumulative source at each cut or disclose
+        scoring metadata as provider instructions.
+        """
+        previous, rounds = (), []
+        for round_ in self.rounds:
+            rounds.append({'round': round_.identity,
+                           'history_additions': round_.history_after(previous),
+                           'probe_text': round_.probe_text()})
+            rounds[-1]['source_text'] = '\n'.join(rounds[-1]['history_additions'])
+            previous = round_.history
+        return tuple(rounds)
+
     def score(self, condition: Condition, answers: RecordedAnswers) -> ScoredScenario:
         unexpected = answers.rounds.keys() - {item.identity for item in self.rounds}
         if unexpected:
@@ -887,11 +1004,11 @@ class RecallScenario:
         )
 
     def observe_native(self, condition: Condition, probes: RecordedNativeProbes):
-        return self.score_observed(condition, probes.observe(self.rounds))
+        return self.score_observed(condition, probes.observe(self))
 
     def score_observed(self, condition, observed):
         """Score acquired original observations with the frozen oracle once."""
-        checkpoints, evidence = observed
+        checkpoints, evidence, stimuli = observed
         scored = []
         for item in self.rounds:
             if item.identity in evidence:
@@ -899,26 +1016,29 @@ class RecallScenario:
             else:
                 score = item.score({})
             scored.append(score)
-        return ScoredScenario(self, condition, tuple(scored)), checkpoints, evidence
+        return ScoredScenario(self, condition, tuple(scored)), checkpoints, evidence, stimuli
 
     def score_native(self, condition: Condition, probes: RecordedNativeProbes) -> dict:
-        score, checkpoints, evidence = self.observe_native(condition, probes)
-        return score.public_native(checkpoints, evidence)
+        score, checkpoints, evidence, stimuli = self.observe_native(condition, probes)
+        return score.public_native(checkpoints, evidence, stimuli)
 
     def compare_native(self, condition, probes, baseline_condition, baseline):
         """The same frozen oracle scores both arms; original records own alignment."""
         if condition == baseline_condition:
             raise ValueError("A comparison requires distinct declared conditions")
-        observed, baseline_observed = RecordedNativeProbes.observe_runs((probes, baseline), self.rounds)
-        score, cuts, original = self.score_observed(condition, observed)
-        control, baseline_cuts, baseline_original = self.score_observed(baseline_condition, baseline_observed)
+        observed, baseline_observed = RecordedNativeProbes.observe_runs((probes, baseline), self)
+        score, cuts, original, stimuli = self.score_observed(condition, observed)
+        control, baseline_cuts, baseline_original, baseline_stimuli = self.score_observed(baseline_condition, baseline_observed)
         alignment = probes.alignment(baseline, original, baseline_original, self.rounds)
-        return {"candidate": score.public_native(cuts, original),
-                "baseline": control.public_native(baseline_cuts, baseline_original),
+        candidate = score.public_native(cuts, original, stimuli)
+        baseline_result = control.public_native(baseline_cuts, baseline_original, baseline_stimuli)
+        constructions = candidate["condition_construction"], baseline_result["condition_construction"]
+        return {"candidate": candidate, "baseline": baseline_result,
                 "alignment": alignment,
                 "paired_quality": score.paired_quality(control, original, baseline_original, alignment),
-                "condition_construction": {"evaluated": False,
-                    "reason": "Condition-specific construction/complete-history eligibility is not supplied by labels"},
+                "condition_construction": {"evaluated": all(item['evaluated'] for item in constructions),
+                    "candidate": constructions[0], "baseline": constructions[1],
+                    "scope": "Matched construction requires both original arm relations; partial SDK evidence is not full eligibility"},
                 "study_acceptance": {"evaluated": False,
                     "reason": "One recorded sample is not a registered comparative study or margin result"}}
 
@@ -1075,12 +1195,16 @@ def main() -> None:
                           help="RecordedNativeProbes with ordered checkpoint and original evidence references")
     recorded.add_argument("--recorded-pairs", type=Path,
                           help="Array of candidate/control RecordedNativeProbes pairs; reads originals only, no study launch")
+    recorded.add_argument("--construction-plan", action="store_true",
+                          help="Export prospective original-oracle history/probe operands and arm order; no native/model launch")
     parser.add_argument("--compare-recorded-run", type=Path,
                         help="Independent original control; requires --recorded-run")
     parser.add_argument("--baseline-condition", type=Condition, choices=tuple(Condition),
                         help="Control label for an unplanned recorded comparison")
     parser.add_argument("--comparison-design", type=Path,
-                        help="PairedRecallDesign for --recorded-pairs; owns oracle, conditions and inference parameters, never launches a study")
+                        help="PairedRecallDesign for --recorded-pairs or --construction-plan; owns oracle, conditions and analysis parameters")
+    parser.add_argument("--sampling-seed", type=int,
+                        help="Explicit prospective arm-order seed for --construction-plan; distinct from bootstrap seed")
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
     parser.add_argument("--fork-journal", type=Path,
@@ -1109,10 +1233,17 @@ def main() -> None:
     if args.compare_recorded_run is not None and args.recorded_run is None:
         parser.error("--compare-recorded-run requires --recorded-run")
     if args.comparison_design is not None:
-        if args.recorded_pairs is None:
-            parser.error("--comparison-design requires --recorded-pairs")
+        if args.recorded_pairs is None and not args.construction_plan:
+            parser.error("--comparison-design requires --recorded-pairs or --construction-plan")
         if any(value is not None for value in (args.scenario_file, args.condition, args.baseline_condition)):
             parser.error("The comparison design owns its oracle and condition labels")
+        design = FieldCodec.decode(PairedRecallDesign, json.loads(
+            args.comparison_design.read_text(), object_pairs_hook=unique_fields))
+    if args.construction_plan:
+        if args.comparison_design is None or args.sampling_seed is None:
+            parser.error("--construction-plan requires --comparison-design and --sampling-seed")
+    elif args.sampling_seed is not None:
+        parser.error("--sampling-seed requires --construction-plan")
     condition = args.condition or Condition.BOUNDED
     baseline_condition = args.baseline_condition or Condition.BOUNDED
     scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
@@ -1142,9 +1273,9 @@ def main() -> None:
         if args.comparison_design is None:
             result = scenario.compare_native_pairs(condition, pairs, baseline_condition)
         else:
-            design = FieldCodec.decode(PairedRecallDesign, json.loads(
-                args.comparison_design.read_text(), object_pairs_hook=unique_fields))
             result = design.compare(pairs)
+    if args.construction_plan:
+        result = design.construction_plan(args.sampling_seed)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.native_checkpoint.read_text(), object_pairs_hook=unique_fields

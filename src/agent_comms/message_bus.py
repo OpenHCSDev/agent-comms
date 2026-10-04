@@ -301,7 +301,7 @@ class MessageBus:
         from .bus_publication import stable_thread_lookup
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
-        from .awareness_context import AwarenessSegment, UnavailableAwarenessSegment
+        from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
 
         try:
             with self.log.locked(blocking=False):

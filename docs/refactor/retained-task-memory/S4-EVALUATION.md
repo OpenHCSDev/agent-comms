@@ -54,6 +54,7 @@ python tests/compaction_retention_fixture.py --condition task-memory --answers a
 python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/research.json --probe-prompts
 python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/goal.json --native-probes original-probes.json
 python tests/compaction_retention_fixture.py --recorded-run original-run.json
+python tests/compaction_retention_fixture.py --construction-plan --comparison-design design.json --sampling-seed 20261004
 ```
 
 All four labels use the same oracle: full-context, bounded, task-memory and
@@ -62,8 +63,18 @@ and record its context digest.
 The scorer accepts recorded responses. Authored answers test the scorer; model
 retention requires actual model responses.
 
+`--construction-plan` uses the existing `PairedRecallDesign` and its pinned
+oracle to export each round's new history and unchanged public probe, plus
+prospective paired-arm order from an explicit sampling seed. It refuses source
+snapshots that rewrite the preceding prefix. History text is emitted once,
+rather than duplicated across every prospective sample and arm. Sampling and
+inference seeds are independent. This source export launches no model, creates
+no native cut/input and proves no intervention/capacity/registration/approval.
+Only the history/probe operands belong in the configured execution fixture;
+the complete plan includes private oracle metadata and is not a provider prompt.
+
 `--recorded-run` uses the existing RecordedNativeProbes input with `rounds` and
-unprobed `checkpoints` maps. It validates distinct ancestor cuts in frozen round
+unprobed `checkpoints` maps, plus optional original `stimuli` references. It validates distinct ancestor cuts in frozen round
 order through one borrowed original native source. Per-probe checkpoint,
 `sdk_context` and `context_manifest` references belong on RecordedNativeProbe.
 Checkpoint `registry_scope` references an original RegistryDocument capture;
@@ -82,6 +93,34 @@ counters retain the codec's omitted-field representation. The former final-only
 `answer_usage` projection is removed. The original
 answer record still retains its own usage. These are journaled completions, not
 a transport-attempt/retry count, actual billed spend or provider-wait duration.
+
+Recorded source inputs reuse `RecordedNativeProbe` in the run's `stimuli` map.
+The existing scenario construction owner supplies exact new-history `source_text`;
+the acquired original user/terminal must precede its cut or probe. An inherited
+probe also needs the original SDK prefix relationship. All stimulus/probe sources
+are borrowed in one reader group; missing original references remain unavailable.
+`source_inputs` reports their model steps separately. `recorded_workflow` requires
+those steps as well as the original summary/recall groups; `combined` retains the
+summary/recall scope. Shared source preparation is not independent arm cost.
+These measurements do not prove a condition installation, complete-history
+capacity, preregistration or a matched study. See
+[original stimulus binding](../../checkpoints/s4-original-stimulus-20261004.md).
+
+The submitted bounded SDK transform is reported only when its existing original
+converter/request binding is complete. Partial transform/source evidence remains
+visible; it does not become a bound request. The scorer groups that observation,
+source delivery and full-history eligibility against all frozen rounds, and the
+paired result retains both arms' evidence. Supplied condition labels and SDK
+previews still do not authenticate intended matched intervention construction.
+See [condition evidence](../../checkpoints/s4-condition-evidence-20261004.md).
+
+SDK construction now retains raw AgentMessages with the original SDK source
+witness. All four conditions use one selected SessionContext installation path,
+with current ContextBudget admission. Authored installed086 construction/restore
+and source/mutation/budget refusals qualify that SDK operation only. Actual
+submitted-condition selection still requires original converter/request binding;
+no matched interventions or model recall follow from installation. See
+[condition installation](../../checkpoints/s4-native-condition-installation-20261004.md).
 
 ## Required next infrastructure and owner boundaries
 

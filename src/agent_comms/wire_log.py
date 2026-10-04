@@ -200,7 +200,7 @@ class WireLog:
         This deliberately excludes unpinned inputs, goals and native artifacts.
         CompactionBoundary inspection owns those separate observation scopes.
         """
-        from .retained_context import RetainedSegment
+        from .context_segments.retained import RetainedSegment
         from .retained_task_facts import RetainedTaskFacts
 
         with self.retained_sources(name, registry) as (owner, snapshot, facts, inputs, export):
