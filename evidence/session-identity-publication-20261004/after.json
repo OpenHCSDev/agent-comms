@@ -1,0 +1,107 @@
+{
+  "head": "3759e2038df431595ec5388273415ca643619d8d",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 370,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 276,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 304,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 48,
+      "kind": "consumer",
+      "source": "runner.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 343,
+      "kind": "consumer",
+      "source": "self.runner.sessions.sync_identity(self.session_id)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 242,
+      "kind": "owner",
+      "source": "async def sync_identity(self, session_id: str) -> str:\n        cached_name = self.require(session_id)\n        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)\n        thread = snapshot.require(cached_name)\n        name = thread.name\n        if (\n            name != cached_name\n            or thread.pid != os.getpid()\n            or not snapshot.status(name).running\n        ):\n            await self.effects.turns.close_idle_backend(session_id)\n        self.bindings[session_id] = name\n        if (\n            self.titles.get(session_id) != name\n            or self.display_titles.get(session_id) != thread.title\n            or self.worktrees.get(session_id) != thread.worktree\n        ):\n            await self.runtime.session_update(\n                session_id=session_id,\n                update=SessionInfoUpdate(\n                    session_update=\"session_info_update\",\n                    title=thread.title or name,\n                    field_meta=await self.metadata(name, session_id=session_id),\n                ),\n            )\n            self.titles[session_id], self.display_titles[session_id] = name, thread.title\n            self.worktrees[session_id] = thread.worktree\n        return name"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 229,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(self.session_id)"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 232,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 83,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity(session)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 268,
+      "kind": "consumer",
+      "source": "owner.sessions.sync_identity(session)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 142,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 147,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 163,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 146,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity('worker')"
+    }
+  ],
+  "method": "existing refactor-audit Package.load; lexical calls, semantically unchanged caller contracts; no dependency/JS change"
+}
