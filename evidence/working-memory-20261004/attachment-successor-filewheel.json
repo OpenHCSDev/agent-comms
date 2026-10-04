@@ -1,0 +1,17 @@
+{
+  "wheel": {
+    "source": "759c821e4cf937d2872a7f7b7a8613f5eb3119aa",
+    "wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-attachment-successor-source/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "ab640f006531a4b45515d1c6319217c2ed010532e37c20d42ac7101b9017b072",
+    "bytes": 901520,
+    "assets": 355,
+    "inventory": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-attachment-successor-source/source-proof.json",
+    "inventory_sha256": "0f84f3ecef6c73336086502ae11aa70f2a94d3b648c39754f14048eb67818469"
+  },
+  "cohort_toad": "69ccc24b91ab64887c9fb77ba16e1d2dc7d4be8c",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "scope": "Own source preparation only; no holder grant or App/native execution; original W6 negatives unchanged",
+  "backend": "Retained hatchling1.28.0, one build, no dependency resolution/environment creation",
+  "all_tracked_assets": "355 Git/local/ZIP exact, no extra package assets",
+  "producer_freeze": "All three native producers unchanged fcbd30a1316ba6c1f4e39719591b39535425e946"
+}
