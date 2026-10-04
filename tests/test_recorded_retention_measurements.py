@@ -41,8 +41,8 @@ from agent_comms.task_sources import CorrectionTaskChange, Decision, UserTaskDro
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
-    ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn,
+    ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, PreviewProvenance, RecordedContextTurn,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn, UserInputSegment,
 )
 from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedConditionInstallation, RecordedNativeCheckpoint, RecordedNativeProbe
@@ -1422,10 +1422,11 @@ const previous=agent.transformContext;
 const session={agent, storedContext:{requireReady(){},messages:()=>prefix},
     sessionManager:{captureCompactionWitness:()=>witness}};
 const source={kind:'file',path:'original-summary',sha256:'b'.repeat(64)};
+const manifest=MANIFEST;
 for (const original of [source,undefined]) {
     const restore=armInstalledNativeCondition(session,{condition:'bounded',
         source_witness:witness,context_sha256:'c'.repeat(64),agent_messages:prefix,
-        narrative_source:original}, OUTPUT,inputId);
+        narrative_source:original,manifest}, OUTPUT,inputId);
     const messages=[...prefix,{role:'user',inputId,content:'Distinct input'}];
     assert.equal(await agent.transformContext(messages),messages);
     callback({type:'agent_end'});
@@ -1435,7 +1436,8 @@ for (const original of [source,undefined]) {
 }
 '''.replace('MODULE', json.dumps(module.as_uri())).replace('OUTPUT', json.dumps(str(output))).replace(
             'WITNESS', json.dumps(FieldCodec.encode(NativeWitness(self.identity.session_id,
-                str(self.session), 'source', 'source', FileRevision.from_stat(self.session.stat())))))
+                str(self.session), 'source', 'source', FileRevision.from_stat(self.session.stat()))))).replace(
+            'MANIFEST', json.dumps(FieldCodec.encode(NativeContextManifestData('counter', ()))))
         completed = subprocess.run(['node', '--input-type=module', '-e', script],
                                    capture_output=True, text=True, check=True)
         self.assertEqual(completed.stderr, '')
@@ -1444,6 +1446,8 @@ for (const original of [source,undefined]) {
             if row['stage'] == 'installed-transform-applied')
         self.assertEqual(applications[0].narrative_source, FileProvenance('original-summary', 'b' * 64))
         self.assertIsNone(applications[1].narrative_source)
+        self.assertEqual(applications[0].construction_manifest, NativeContextManifestData('counter', ()))
+        self.assertEqual(applications[1].construction_manifest, applications[0].construction_manifest)
 
     def test_installed_source_uses_original_witness_ancestry_and_request(self):
         # Installation must precede this input on the same source, and bind its
@@ -1494,6 +1498,79 @@ for (const original of [source,undefined]) {
             self.assertFalse(complete['entry_selection']['evaluated'])
             self.assertNotIn('entry_selection', row)  # Historical absence stays absent.
             self.assertNotIn('narrative_source', row)
+            self.assertNotIn('construction_manifest', row)
+            self.assertFalse(complete['constructed_prefix']['evaluated'])
+            # Acquired source partition, not a summary substring: all original
+            # SDK message parts must appear in order at this request's start.
+            preview = PreviewProvenance(self.identity, 'c' * 64)
+            original_refs = (preview, JournalProvenance(str(self.session), ('prior', 'source')))
+            actual_refs = (NativeProvenance(self.identity, 1, 'b' * 64),
+                           JournalProvenance(str(self.session), ('prior', 'source', 'input')))
+            def part(content, refs=original_refs):
+                raw = json.dumps([{'role': 'user', 'content': content}], ensure_ascii=False)
+                return SegmentManifest(TranscriptSegment, refs,
+                    hashlib.sha256(raw.encode()).hexdigest(), len(raw.encode()), 1)
+            first, second, fresh = (part(content) for content in ('Entire first λ message',
+                'Entire second message with a narrative', 'Distinct input'))
+            def group(parts, refs=original_refs):
+                # Authored metadata tests this original partition contract.
+                # No SDK artifact is borrowed or external record reconstructed.
+                return SegmentManifest(TranscriptSegment, refs, 'e' * 64, 200, 2, parts)
+            constructed = NativeContextManifestData('counter', (group((first, second)),))
+            acquired = replace(installed, construction_manifest=constructed)
+            source_record = FieldCodec.encode(acquired)
+            # A fresh input can split/extend original groups without changing
+            # their complete ordered message values. Original coordinates stay.
+            request = replace(manifest, segments=(group((first,), actual_refs),
+                group((second, fresh), actual_refs)))
+            def partition_observed(selected_request=request, selected=acquired, rows=None):
+                return probe.installed_condition(evidence, branch, context, serialized,
+                    selected_request, rows if rows is not None else
+                    (FieldCodec.encode(selected), conversion, restored), parent=evidence, texts=())
+            partitioned = partition_observed()
+            prefix = partitioned['constructed_prefix']
+            self.assertTrue(prefix['evaluated'])
+            self.assertTrue(prefix['preserved'])
+            source_prefix, = prefix['observations']
+            self.assertEqual(source_prefix['constructed_messages'], 2)
+            self.assertEqual(source_prefix['request_messages'], 3)
+            self.assertEqual(source_prefix['construction_coordinates'], ((0, 0), (0, 1)))
+            self.assertEqual(source_prefix['request_coordinates'], ((0, 0), (1, 0)))
+            self.assertIs(source_prefix['message_binding'], partitioned['message_binding'])
+            self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, source_record), acquired)
+            for changed_parts in ((second, first, fresh), (first, fresh),
+                                  (first, replace(second, sha256='a' * 64), fresh),
+                                  (first, replace(second, utf8_bytes=second.utf8_bytes + 1), fresh)):
+                with self.subTest(changed_parts=changed_parts):
+                    changed = partition_observed(replace(request, segments=(group(changed_parts, actual_refs),)))
+                    self.assertTrue(changed['constructed_prefix']['evaluated'])
+                    self.assertFalse(changed['constructed_prefix']['preserved'])
+            # Logical annotations cannot masquerade as complete message parts.
+            annotation = SegmentManifest(UserInputSegment, original_refs, 'a' * 64, 5, 1)
+            annotated = partition_observed(selected=replace(acquired, construction_manifest=
+                replace(constructed, segments=(group((annotation,)),))))
+            self.assertFalse(annotated['constructed_prefix']['evaluated'])
+            bare = partition_observed(selected=replace(acquired, construction_manifest=
+                replace(constructed, segments=(group(()),))))
+            self.assertFalse(bare['constructed_prefix']['evaluated'])
+            missing_request_parts = partition_observed(replace(request, segments=(group((), actual_refs),)))
+            self.assertFalse(missing_request_parts['constructed_prefix']['evaluated'])
+            missing_binding = partition_observed(rows=(source_record, restored))
+            self.assertFalse(missing_binding['constructed_prefix']['evaluated'])
+            self.assertTrue(missing_binding['constructed_prefix']['observations'][0]['preserved'])
+            mixed = partition_observed(rows=(row, source_record, conversion, restored))
+            self.assertFalse(mixed['constructed_prefix']['evaluated'])
+            empty = partition_observed(selected=replace(acquired, construction_manifest=
+                replace(constructed, segments=())))
+            self.assertTrue(empty['constructed_prefix']['preserved'])
+            self.assertEqual(empty['constructed_prefix']['observations'][0]['constructed_messages'], 0)
+            for wrong in (replace(constructed, request_id='another-request'),
+                          replace(constructed, segments=(group((first, second),
+                              (PreviewProvenance(replace(self.identity, session_id='other'), 'c' * 64),)),)),
+                          replace(constructed, segments=(group((first, second),
+                              (preview, JournalProvenance(str(self.session), ('input',)))),))):
+                with self.subTest(wrong=wrong), self.assertRaises(ValueError):
+                    partition_observed(selected=replace(acquired, construction_manifest=wrong))
             # The installed observer's original reference uses the same fork
             # acquisition/presence behavior as the bounded replacement hook.
             reference = self.artifact('installed-narrative.json', 'Original λ narrative')
@@ -1576,6 +1653,12 @@ for (const original of [source,undefined]) {
                     'construction': {'condition_application': {'evaluated': False},
                     'condition_installation': installation, 'request_budget': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
+            for installation, preserved in ((partitioned, True), (changed, False)):
+                metrics = scored.condition_construction(original(installation), {})['constructed_source_prefix']
+                self.assertTrue(metrics['evaluated'])
+                self.assertEqual(metrics['preserved_rounds'], ('r1',) if preserved else ())
+                self.assertEqual(metrics['changed_rounds'], () if preserved else ('r1',))
+                self.assertFalse(scored.condition_construction(original(installation), {})['evaluated'])
             for installation in (complete, partial, no_request):
                 construction = scored.condition_construction(original(installation), {})
                 self.assertTrue(construction['recorded_constructor_selection']['evaluated'])
@@ -1624,7 +1707,7 @@ for (const original of [source,undefined]) {
         unavailable = {identity: {'evaluated': False} for identity in identities}
         original = {'probe_input_presence': {'evaluated': False},
             'construction': {'condition_application': {'evaluated': True},
-            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}},
+            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
@@ -1635,6 +1718,7 @@ for (const original of [source,undefined]) {
         self.assertEqual(partial['source_delivery']['available_rounds'], ())
         self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
         self.assertEqual(partial['installed_narrative_source']['unavailable_rounds'], identities)
+        self.assertEqual(partial['constructed_source_prefix']['unavailable_rounds'], identities)
         evidence = {identity: original for identity in identities}
         delivered = {identity: {'evaluated': True} for identity in identities}
         observed = scored.condition_construction(evidence, delivered)
@@ -1661,7 +1745,7 @@ for (const original of [source,undefined]) {
         partial_application = {'probe_input_presence': {'evaluated': False},
             'construction': {'condition_application': {
             'evaluated': False, 'transform': {'evaluated': True}},
-            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}},
+            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
@@ -1672,7 +1756,7 @@ for (const original of [source,undefined]) {
         original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
         self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
         original['construction']['condition_installation'] = {
-            'evaluated': True, 'installations': (), 'entry_selection': {'evaluated': True}, 'narrative_source': {'evaluated': False}}
+            'evaluated': True, 'installations': (), 'entry_selection': {'evaluated': True}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}}
         self.assertTrue(scored.condition_construction(evidence, delivered)['sdk_entry_selection']['evaluated'])
         self.assertTrue(scored.condition_construction(evidence, delivered)['installed_sdk_source']['evaluated'])
         self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])
