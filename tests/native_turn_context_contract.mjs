@@ -5,7 +5,7 @@ import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {constructNativeConditions,applyBoundedNativeCondition,
+import {constructNativeConditions,applyNativeCondition,
     transformBoundedNativeCondition,armBoundedNativeCondition} from './retained_native_conditions.mjs';
 
 const [pkg, suppliedRoot] = process.argv.slice(2);
@@ -271,18 +271,44 @@ try {
             {...source,session:{...source.session,sessionId:'another'}}),/another original native session/);
         await assert.rejects(constructNativeConditions(session,pkg,
             {...source,native_entry_id:old}),/not the selected native compaction/);
-        const applied=await applyBoundedNativeCondition(session,pkg,source);
-        // SDK installation consumes AgentMessages, never converted LLM messages.
-        assert.equal(session.agent.state.messages[0].role,'compactionSummary');
-        assert.equal(session.agent.state.messages[0].summary,source.summary);
-        assert.deepEqual((await TurnContext.next(session)).render(),bounded.context);
-        assert.deepEqual(applied.context,bounded.context);
-        assert.deepEqual(applied.checkpoint_session,full.identity);
-        await assert.rejects(applyBoundedNativeCondition(session,pkg,
-            {evaluated:false,reason:'Original narrative unavailable'}),/eligible narrative/);
         const {SessionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
-        SessionContext.restore(session);
-        assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        // Every intervention uses the same raw SDK installation boundary.
+        // A converted preview is never installed as AgentMessages.
+        for (const selected of Object.values(constructed)) {
+            const applied=await applyNativeCondition(session,pkg,selected);
+            assert.deepEqual(session.agent.state.messages,selected.agent_messages);
+            assert.deepEqual((await TurnContext.next(session)).render(),selected.context);
+            assert.deepEqual(applied.source_witness,selected.source_witness);
+            SessionContext.restore(session);
+            assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        }
+        assert.equal(bounded.agent_messages[0].role,'compactionSummary');
+        assert.equal(bounded.agent_messages[0].summary,source.summary);
+        assert.deepEqual(bounded.checkpoint_session,full.identity);
+        await assert.rejects(applyNativeCondition(session,pkg,
+            {evaluated:false,reason:'Original narrative unavailable'}),/evaluated SDK construction/);
+        await assert.rejects(applyNativeCondition(session,pkg,{...bounded,
+            agent_messages:[{role:'user',content:'Changed construction.',timestamp:500}]}),
+            /construction changed before installation/);
+        await assert.rejects(applyNativeCondition(session,pkg,{...bounded,
+            source_witness:{...bounded.source_witness,sessionId:'another'}}),
+            /selection changed since condition construction/);
+        // Budget belongs to the current selected model, not the preview.
+        const model=session.model;
+        const {BudgetAdmissionError}=await import(pathToFileURL(join(pkg,
+            'node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js')));
+        session.agent.setModel({...model,contextWindow:1});
+        try {
+            await assert.rejects(applyNativeCondition(session,pkg,bounded),BudgetAdmissionError);
+            assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        } finally {session.agent.setModel(model);}
+        const selectedContext=session.storedContext;
+        const {CompactionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
+        session.storedContext=new CompactionContext(manager);
+        try {
+            await assert.rejects(applyNativeCondition(session,pkg,bounded),/did not admit/);
+            assert.deepEqual((await TurnContext.next(session)).render(),provider);
+        } finally {session.storedContext=selectedContext;}
         const fresh={role:'user',content:'Distinct new input preserved.',timestamp:500};
         const raw=[...session.agent.state.messages,fresh];
         const transformed=await transformBoundedNativeCondition(session,pkg,source,raw);
@@ -307,9 +333,19 @@ try {
         restore();
         assert.equal(session.agent.transformContext,originalTransform);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);
+        // Changed selected sources refuse instead of installing stale bytes.
+        // This append affects only this authored SDK fixture, never a donor.
+        const preparedMessages=session.agent.state.messages;
+        manager.appendCustomMessageEntry('source-contract','Distinct later source',true);
+        await assert.rejects(applyNativeCondition(session,pkg,bounded),/selection changed since/);
+        assert.equal(session.agent.state.messages,preparedMessages);
     }
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
-        provider_bytes_identical:true,journal_bytes_unchanged:true,
+        provider_bytes_identical:true,journal_bytes_unchanged:!conditions,
+        ...(conditions ? {condition_constructions_installed:4,
+            construction_scope:'Authored SDK selections/installation/refusals; not submitted inputs or model/provider baselines',
+            original_source_preserved_through_install_and_restore:true,
+            distinct_authored_append_refused:true} : {}),
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
         kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),capture_comparison:captureComparison,
@@ -321,7 +357,7 @@ try {
             recorded_reader_scope:'Authored SDK capture and root/child resolution; no onContextReady model request',
             root_single_projection:true,child_uses_original_coordinates:true,
             mixed_single_projection:true,missing_or_other_session_refused:true} : {}),
-        bounded_construction_scope:conditions ? 'Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline' : undefined}));
+        condition_construction_scope:conditions ? 'Authored SDK four-condition installation and canonical restore; no input or captured model baseline' : undefined}));
     }
 } finally {session.dispose();manager.entryStore.close();}
 
