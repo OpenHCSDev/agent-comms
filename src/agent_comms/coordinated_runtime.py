@@ -17,7 +17,7 @@ from .agent_events import CompactionEvent
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
-from .native_pi import NativePiRpcLaunch, _private_session_dir, _trusted_package
+from .native_pi import NativePiRpcLaunch, _private_session_dir
 from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -42,25 +42,20 @@ class SelectedExecution:
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
-    _native_launch: NativePiRpcLaunch | None = field(
-        init=False, default=None, repr=False, compare=False,
+    _tracked_factory: Callable[..., NativePiRpcLaunch] = field(
+        init=False, repr=False, compare=False,
     )
 
     def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
-        """Lend the actual acquired artifact across this execution's stages.
+        """Consume the original pre-claim acquisition for each stage's launch.
 
-        The first child still acquires a fresh launch. Subsequent stages rebuild
-        their complete source/configuration through that immutable acquisition;
+        Every stage rebuilds its complete source/configuration through the
+        executable factory acquired by validate before selecting a participant;
         no native child, input proof or readiness is borrowed from a prior turn.
         """
         if package != self.native_package:
             raise IdentityConflict("Selected launch differs from its execution package")
-        launch = NativePiRpcLaunch.tracked(
-            package, acquired_launch=self._native_launch, **options
-        )
-        if self._native_launch is None:
-            self._native_launch = launch
-        return launch
+        return self._tracked_factory(**options)
 
     def validate(self) -> None:
         if not self.opt_in:
@@ -81,7 +76,6 @@ class SelectedExecution:
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )
-        _trusted_package(self.native_package)  # before any claim or native reservation
         if (
             self.selected_existing_file_write is not None
             and type(self.selected_existing_file_write) is not SelectedExistingFileWrite
@@ -92,6 +86,7 @@ class SelectedExecution:
                 raise TypeError("selected tool requires a nominal owner intent")
             if self.selected_existing_file_write is not None:
                 raise IdentityConflict("selected tool cannot share an operator file plan")
+        self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
 
     def action(self, session: SelectedSession) -> SelectedAction:
         if self.selected_tool_intent is not None:
