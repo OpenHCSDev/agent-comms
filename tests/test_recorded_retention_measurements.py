@@ -110,7 +110,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         questions = (Question('recall', 'Which source?', 'source', 'oracle'),
                      Question('rule', 'Replay?', 'no', 'oracle', measurement=Measurement.PROHIBITION),
                      Question('alternative', 'Other choice?', 'other', 'oracle', measurement=Measurement.ALTERNATIVE))
-        scenario = RecallScenario('mixed', (RecallRound('r1', (), questions),))
+        scenario = RecallScenario('mixed', (RecallRound('r1', ('Source: source; replay: no; alternative: other.',), questions),))
         candidate = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({'r1': {
             'recall': 'wrong', 'rule': 'no', 'alternative': 'other'}}))
         control = scenario.score(Condition.BOUNDED, RecordedAnswers({'r1': {
