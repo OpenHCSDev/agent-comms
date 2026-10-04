@@ -199,7 +199,6 @@ class InstalledSourceProof:
 @dataclass(frozen=True)
 class ReviewedRetainedSummaryCohort:
     target: Annotated[Path, PathText]
-    source_interpreter: Annotated[Path, PathText]
     current_prefix: Annotated[Path, PathText]
     original_route: ActiveRoute
     native: Annotated[Path, PathText]
@@ -212,8 +211,6 @@ class ReviewedRetainedSummaryCohort:
             raise RuntimeError('This reviewed one-use publisher names another public root')
         if sys.executable != str(self.target / 'bin/python'):
             raise RuntimeError('Use the reviewed target interpreter')
-        if not self.source_interpreter.is_absolute() or not self.source_interpreter.is_file():
-            raise RuntimeError('Authentic source interpreter is required')
         self.activation.require_original()
         self.source_proof.require_original()
         activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))
@@ -444,7 +441,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)
     for original in owners:
         original.require_idle()
-        RetainedOwnerLaunch.capture(original, snapshot, interpreter=str(cohort.source_interpreter))
+        RetainedOwnerLaunch.capture(original, snapshot)
     directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -465,7 +462,6 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
         fsync_directory(receipt.parent)
         runtime = RestartEnvironment(path=str(cohort.target / 'bin')+':'+os.environ['PATH'],
                                      virtual_env=str(cohort.target))
-        return service.owners.restart_owners(runtime=runtime,
-            source_interpreter=str(cohort.source_interpreter), cutover=operation)
+        return service.owners.restart_owners(runtime=runtime, cutover=operation)
     finally:
         os.close(directory)
