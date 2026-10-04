@@ -1,5 +1,5 @@
 {
-  "scope": "private controller and authored inspector protocol, not SDK execution",
+  "scope": "Private controller/authored protocol plus one changed original SDK observer completion and whole-JSON reader; not configured provider or study acceptance",
   "source_head": "1a5243ebda71ac8f6c99fbd63812ed31393863e4",
   "main": "c060ec2d7101d3884af86f85e44eadb02d14f871",
   "source_sha256": {
