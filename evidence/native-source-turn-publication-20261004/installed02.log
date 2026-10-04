@@ -1,0 +1,155 @@
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner0/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 692487, "start_time": 59357032}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner1/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 693805, "start_time": 59357647}], "children_retired": true}
+F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner2/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 694678, "start_time": 59358300}], "children_retired": true}
+F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner3/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 695492, "start_time": 59359063}], "children_retired": true}
+
+=================================== FAILURES ===================================
+_________________ test_acp_private_does_not_overlap_owner_turn _________________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fb4b3b81a90>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.messages import Message, MessageType
+        from agent_comms.native_input_record import FullNativeExecution
+        from agent_comms.wake import derive_exact_reply_target
+    
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            async with native.original_input(agent, session, "Current human input") as turn:
+                sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+                native.provider.text = json.dumps(FieldCodec.encode((Message(
+                    session, derive_exact_reply_target(sent), "Selected input acknowledged",
+                    MessageType.INFO, timestamp=0,
+                ),)))
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected execution on the same SDK-authored saved source.
+            # This direct original requires FULL; it is not a relevance probe.
+            # Runtime observation is an actual concurrent consumer; whichever
+            # original drain owns the admission consumes the original assignment.
+            await agent.inputs.drain_inbox(session)
+            async with asyncio.timeout(30):
+                while native.provider.posts != 1 or agent.turns.turn_state(session).busy:
+                    await asyncio.sleep(0.01)
+            assert native.provider.posts == 1
+            with Coordination(str(comms.root / "coordination.sqlite3")) as store, store.session.read():
+                (original,) = NativeRuntimeInput.select(
+                    store.session._connection, where="owner_thread=?", parameters=(session,),
+                )
+                assert original.stage is FullNativeExecution
+                assert original.require_context_proof().input_id == original.input_id
+>           assert comms.bus.log.message_by_id(sent.id) == sent
+                                               ^^^^^^^
+E           AttributeError: 'Message' object has no attribute 'id'
+
+tests/test_acp_private_nk_delivery.py:615: AttributeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:128 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+____ test_native_retry_waits_for_current_response_without_replaying_unknown ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fb4b145cc30>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    async def test_native_retry_waits_for_current_response_without_replaying_unknown(native_backend):
+        native = native_backend
+        await native.author_history()
+        release, finish_goal = asyncio.Event(), asyncio.Event()
+        native.provider.response_gate = release
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            store = owner.turns.goals.open_goal_store()
+            goal = comms.goals.update_goal(
+                session, SetGoalAction(text="Finish native retry objective"), owner_store=store
+            )
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            reservation.fail(store, "Previous native goal attempt failed")
+            blocked = comms.goals.update_goal(
+                session,
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=goal.id),
+                    block_reason="Previous native goal attempt failed",
+                ),
+            )
+            # This retained unconfirmed reservation is input evidence, never a
+            # source of a runnable prompt. It carries no fabricated native start.
+            owner.inputs.dispositions.record(
+                "acp:old-native-unknown", seq=None, owner=session,
+                admission=comms.registry.snapshot().admission_generations[session],
+                target=session, text="Uncertain old native input must never replay",
+            )
+            original = owner.inputs.dispositions.read().lookup("acp:old-native-unknown")
+            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            await proxy.subscribe()
+            turn = asyncio.create_task(proxy.request(
+                "prompt", prompt=[{"type": "text", "text": "Unrelated ordinary native request"}],
+            ))
+            try:
+                async with asyncio.timeout(30):
+                    while native.provider.posts != 1:
+                        assert not turn.done()
+                        await asyncio.sleep(0.01)
+                lease = comms.registry.require(session).require_turn_lease()
+                assert owner.turns.owns_turn(session, lease.turn_id)
+                assert session in owner.inputs.backend_inboxes
+                resumed = await proxy.request(
+                    "retry_goal", goal_id=goal.id, expected_revision=blocked.revision,
+                )
+                resumed_goal = FieldCodec.decode(Goal, resumed["goal"])
+                assert resumed_goal.state.active and resumed_goal.id == goal.id
+                generation = GoalAttemptStore(store.root).snapshot(goal.id)
+                assert (generation.number, generation.lifecycle, generation.attempt_id) == (
+                    2, ReadyGeneration(), None,
+                )
+                await owner.turns.goals.schedule_goal(session)
+                assert native.provider.posts == 1 and not owner.inputs.pending_turns.get(session)
+                # The original localhost response resource supplies both gates;
+                # no alternate model catalog, HTTP server or native event script.
+                native.provider.response_gate = finish_goal
+                release.set()
+                assert (await turn)["stopReason"] == "end_turn"
+                async with asyncio.timeout(30):
+                    while native.provider.posts != 2:
+                        await asyncio.sleep(0.01)
+                next_lease = comms.registry.require(session).require_turn_lease()
+                assert next_lease != lease and owner.turns.owns_turn(session, next_lease.turn_id)
+                paused = await proxy.request(
+                    "update_goal", status=PausedGoalAction, goal_id=resumed_goal.id,
+                    expected_revision=resumed_goal.revision,
+                )
+                assert FieldCodec.decode(Goal, paused["goal"]).state.declared_name == "paused"
+                finish_goal.set()
+                await owner.inputs.wake_tasks[session]
+                assert not owner.turns.turn_state(session).busy
+                assert not owner.inputs.backend_inboxes
+                assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
+                assert owner.inputs.dispositions.read().lookup(original.key) == original
+>               assert all(original.text not in json.dumps(request) for request in native.provider.requests)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_stack_retry_running.py:93: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <list_iterator object at 0x7fb4b44172e0>
+
+>   assert all(original.text not in json.dumps(request) for request in native.provider.requests)
+               ^^^^^^^^^^^^^
+E   AttributeError: 'ReservedInput' object has no attribute 'text'
+
+tests/test_stack_retry_running.py:93: AttributeError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn
+FAILED tests/test_stack_retry_running.py::test_native_retry_waits_for_current_response_without_replaying_unknown
+2 failed, 2 passed, 1 warning in 25.94s

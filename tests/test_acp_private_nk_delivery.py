@@ -612,7 +612,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             )
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
-        assert comms.bus.log.message_by_id(sent.id) == sent
+        assert comms.bus.log.message_by_id(sent.message_id) == sent
         assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
 
 

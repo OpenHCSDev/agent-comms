@@ -90,7 +90,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             assert not owner.inputs.backend_inboxes
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert owner.inputs.dispositions.read().lookup(original.key) == original
-            assert all(original.text not in json.dumps(request) for request in native.provider.requests)
+            assert all(original.source_text not in json.dumps(request) for request in native.provider.requests)
         finally:
             release.set()
             finish_goal.set()
