@@ -26,6 +26,7 @@ from .native_revision_text import NativeRevisionText
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
+    from .compaction_states import NativeCommitPosition
     from .compaction_result import CompactionResult, RefusedCompactionResult
     from .native_entries import NativeEvidenceRead
 
@@ -51,6 +52,17 @@ class NativeWitness(NativeSessionIdentity):
         self.require_session(str(file))
         if self.revision != FileRevision.from_stat(file.stat()):
             raise ValueError("Native retained source changed since preparation")
+
+    def require_committed_cut(self, entry, evidence: NativeEvidenceRead,
+                              position: NativeCommitPosition) -> None:
+        """Corroborate the prepared branch at its original returned commit."""
+        from .compaction_errors import CompactionJournalError
+
+        if not self.covers(evidence, self.revision, position.revision):
+            raise CompactionJournalError("Original committed source cut differs")
+        position.require_entry(entry)
+        if entry.parent_id != self.leaf_id or entry.first_kept_entry_id != self.first_kept_entry_id:
+            raise CompactionJournalError("Original committed source cut differs")
 
     def retained_task_facts(self, reader: NativeEvidenceRead | None = None):
         from .native_entries import NativeEvidenceRead

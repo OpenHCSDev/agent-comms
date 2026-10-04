@@ -50,5 +50,35 @@ Mendel619 session identity publication and Sch trust/build remain disjoint.
 Source reasoning, complete owner/caller implementation and deletion first. Batch
 focused checks and the actual configured saved-compaction/continuation journey last,
 with originals/UNKNOWN preserved and no replay. No environment, provider variant,
-package/native mutation or thin540 loan is implied. This draft is source planning,
-not implementation or live qualification. Failing ratchets do not permit merge.
+package/native mutation or thin540 loan is implied. ## Working implementation
+
+NativeSessionIdentity.covers is the single physical coverage relation: original
+Path and session header, plus each required original FileRevision's inode and
+minimum prefix length. NativeWitness and NativeForkCreation inherit it. The
+required revision argument prevents an identity-only call from claiming coverage.
+The prepared and committed revisions remain separate original observations.
+A prepared prefix must also fit in the held file; later appends remain legitimate.
+
+NativeWitness.require_committed_cut owns the prepared parent/first-kept relation;
+NativeCommitPosition.require_entry owns the returned entry. NativeIntent owns
+journal-file linkage, exact marker and payload/metadata corroboration. These are
+distinct facts, not optional terms selected by coverage callers. The operation
+now calls those owners and retains branch ordering. NativeForkCreation owns its
+SDK parent relationship/count/digest and delegates physical coverage. All original
+field declarations, SQLite columns and native wire names remain unchanged.
+
+NativeEvidenceRead.retained_task_facts uses the inherited session relation between
+its existing exact preparation checks. recorded_source_prefix delegates file
+membership to the existing acquired reader; original admitted-anchor ancestry is
+unchanged. No coverage call settles UNKNOWN or grants admission/replay. The reader,
+entry and managed-entry covered_prefix methods remain orchestration/default hooks.
+
+SelectedSummaryAttempt.transition is untouched. Its declared_name WHERE parameter
+is an SQL scalar projection of the original member; JsonStorage encodes SET values,
+while TypedTable leaves WHERE parameters unchanged. A tagged FieldCodec dict is
+not a substitute for json_extract(state, '$.kind')'s scalar. Shared-site advice was
+sent directly to Mendel; F4 does not need an F2 codec/schema change.
+
+Source checkpoint only: final focused/installed saved-compaction validation and
+hosted Debt result are pending. No original/provider/study run was repeated.
+Failing ratchets do not permit merge.
