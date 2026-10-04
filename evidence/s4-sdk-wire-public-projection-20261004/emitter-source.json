@@ -1,0 +1,21 @@
+{
+  "parsed": 3,
+  "omitted": [],
+  "original_source_sha256": "778c9632b877c0309ce54d7f24940b955d75c143f457071573b71c5136a2583b",
+  "sites": [
+    {
+      "label": "original emitter",
+      "method": "_emit",
+      "line": 470,
+      "parameters": [
+        "event"
+      ]
+    },
+    {
+      "label": "after observer",
+      "line": 102,
+      "condition": "event.type==='turn_context_observed'"
+    }
+  ],
+  "dynamic_binding_qualified": false
+}

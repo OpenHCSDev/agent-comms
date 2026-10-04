@@ -1,0 +1,12 @@
+test_public_manifest_uses_original_event_projection_without_reconstructing_values (test_recorded_retention_measurements.RecordedMeasurementTests.test_public_manifest_uses_original_event_projection_without_reconstructing_values) ... ok
+test_sdk_construction_uses_original_serializations (unittest.loader._FailedTest.test_sdk_construction_uses_original_serializations) ... ERROR
+
+======================================================================
+ERROR: test_sdk_construction_uses_original_serializations (unittest.loader._FailedTest.test_sdk_construction_uses_original_serializations)
+----------------------------------------------------------------------
+AttributeError: type object 'RecordedMeasurementTests' has no attribute 'test_sdk_construction_uses_original_serializations'
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.065s
+
+FAILED (errors=1)

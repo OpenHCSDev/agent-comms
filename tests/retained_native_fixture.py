@@ -29,7 +29,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_payloads import StateData, ToolResultMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
-from agent_comms.native_turn_context import NativeContextData
+from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.request_progress import RequestProgress
 from agent_comms.turn_lease import TurnLeaseFence
@@ -500,6 +500,9 @@ class RecordedNativeProbe:
     # Original diagnostic publication, not a reconstructed request or budget.
     request_observations: FileProvenance | None = None
     condition_observation: FileProvenance | None = None
+    # The original emitted SDK event, before its public-text wire projection.
+    # Historical captures did not retain it; do not synthesize its values.
+    sdk_observation: FileProvenance | None = None
 
     @classmethod
     def capture_input(cls,service,owner,session,row,contexts,output,checkpoint=None,condition_observation=None):
@@ -524,13 +527,15 @@ class RecordedNativeProbe:
             return FileProvenance(str(path),hashlib.sha256(path.read_bytes()).hexdigest())
 
         observed=request_observation_path(service.root,row.turn_id)
+        sdk_observed=contexts/f'observation-{context.request_generation}-{context.llm_context_digest}.json'
         return cls(session,row.native_id,answer.id,checkpoint,
             original(contexts/f'context-{context.llm_context_digest}.json'),
             pin('manifest',manifest),original(contexts/f'segments-{context.llm_context_digest}.json'),
             pin('inputs',InputDispositions(service.root/InputDispositions.filename).read()),
             fork_journal=service.root/'compaction-commits.sqlite3',
             request_observations=original(observed) if observed.is_file() else None,
-            condition_observation=original(condition_observation) if condition_observation is not None else None)
+            condition_observation=original(condition_observation) if condition_observation is not None else None,
+            sdk_observation=original(sdk_observed) if sdk_observed.is_file() else None)
 
     def condition_records(self):
         """Acquire this original observation resource once for both questions."""
@@ -716,8 +721,21 @@ class RecordedNativeProbe:
         if data is None or self.context_manifest is None:
             return None
         manifest = RecordedNativeCheckpoint.read_record(self.context_manifest, ContextManifest)
-        if (data.counter != manifest.counter
-                or tuple(segment.measured_manifest() for segment in data.segments) != manifest.segments):
+        # Raw SDK manifests and wire-public manifests are different views of
+        # the same original event. Only that event owns which values were
+        # captured: never reconstruct its selection from today's SDK/preview.
+        if self.sdk_observation is not None:
+            observed = NativeContextManifestData.from_wire(
+                RecordedNativeCheckpoint.read_json(self.sdk_observation))
+            if observed.for_turn(manifest.thread, manifest.turn) != manifest:
+                raise ValueError("Recorded wire public projection differs from its original SDK observation")
+            counter, segments = observed.counter, observed.segments
+        else:
+            # Exact raw metadata proves its existing narrower relation. Missing
+            # event evidence cannot authorize a different public projection.
+            counter, segments = manifest.counter, manifest.segments
+        if (data.counter != counter
+                or tuple(segment.measured_manifest() for segment in data.segments) != segments):
             raise ValueError("Recorded SDK payload differs from its original context manifest")
         # Existing NativeProvenance identifies this exact request, not merely a
         # same-session get_context preview. Counter/segment metadata alone do not.
