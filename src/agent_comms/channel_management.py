@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from abc import abstractmethod
+from typing import TYPE_CHECKING, ClassVar
 from enum import Enum
 from pathlib import Path
 
 from .active_route import guard_original_root_write
-from .catalog_store import ChannelCatalog
 from .channel_targets import Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
@@ -18,6 +19,68 @@ from .messages import MembershipChange, Message, MessageType
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
+from .thread_identity import ThreadIncarnation
+from .declared_family import DeclaredFamily
+
+if TYPE_CHECKING:
+    from .thread_management import ThreadManagement
+
+
+@dataclass(frozen=True)
+class TagChangeResult:
+    tag: str
+    removed_tag: bool
+    removed_threads: tuple[ThreadIncarnation, ...] = ()
+    archived_threads: tuple[ThreadIncarnation, ...] = ()
+
+
+@dataclass(frozen=True)
+class TagDisposition(DeclaredFamily, affix="TagDisposition"):
+    """Each declared channel operation owns its membership effect and warning."""
+    label: ClassVar[str]
+    requires_confirmation: ClassVar[bool] = True
+
+    @abstractmethod
+    def confirmation(self, tag: str) -> str: ...
+
+    @abstractmethod
+    def apply(self, channels: ChannelManagement, tag: str, cohort: tuple[Thread, ...]) -> TagChangeResult: ...
+
+
+class KeepThreadsTagDisposition(TagDisposition):
+    label = "Remove tag; keep threads"
+    requires_confirmation = False
+
+    def confirmation(self, tag: str) -> str:
+        return f"Remove #{tag} from its threads? Threads, saved views and history remain."
+
+    def apply(self, channels, tag, cohort):
+        channels._change_tag_unlocked(tag, None, cohort)
+        return TagChangeResult(tag, True)
+
+
+class ArchiveThreadsTagDisposition(TagDisposition):
+    label = "Archive tagged threads; keep tag"
+
+    def confirmation(self, tag: str) -> str:
+        return f"Archive all stopped threads tagged #{tag}? Tags and history remain; active owners are refused."
+
+    def apply(self, channels, tag, cohort):
+        channels.threads._archive_unlocked(cohort)
+        return TagChangeResult(tag, False, archived_threads=tuple(thread.incarnation for thread in cohort))
+
+
+class DeleteThreadsTagDisposition(TagDisposition):
+    label = "Delete tagged threads and remove tag"
+
+    def confirmation(self, tag: str) -> str:
+        return f"Delete ALL inactive threads tagged #{tag} and close all their views? Active owners are refused; retained history and uncertain inputs are preserved."
+
+    def apply(self, channels, tag, cohort):
+        channels.threads._delete_unlocked(cohort)
+        with channels.catalog.editing() as document:
+            document.change_tag(tag, None)
+        return TagChangeResult(tag, True, tuple(thread.incarnation for thread in cohort))
 
 
 class TagAction(Enum):
@@ -27,7 +90,8 @@ class TagAction(Enum):
     DELETE = "delete"
 
     def apply(
-        self, channels: ChannelManagement, name: str = "", new_name: str = ""
+        self, channels: ChannelManagement, name: str = "", new_name: str = "", *,
+        disposition: TagDisposition = KeepThreadsTagDisposition(), confirmed: bool = False
     ) -> frozenset[str]:
         match self:
             case self.CREATE:
@@ -35,17 +99,18 @@ class TagAction(Enum):
             case self.RENAME:
                 channels.rename_tag(name, new_name)
             case self.DELETE:
-                channels.delete_tag(name)
+                channels.delete_tag(name, disposition=disposition, confirmed=confirmed)
         return channels.catalog.read().all_tags(channels.registry.all_threads())
 
 
 class ChannelManagement:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, threads: ThreadManagement):
         self.root = root
         self.registry = registry
         self.bus = bus
         self._wire_lock_path = root / "wire"
-        self.catalog = ChannelCatalog(root / ChannelCatalog.filename)
+        self.threads = threads
+        self.catalog = threads.catalog
 
     def channels(self) -> Sequence[str]:
         return list(self.catalog.read().views(self.registry.all_threads()))
@@ -129,6 +194,16 @@ class ChannelManagement:
             with self.catalog.editing() as document:
                 return document.set_metadata(name, threads, parent=parent, archived=archived)
 
+    def set_channel_archived(self, name: str, archived: bool) -> Channel:
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                target = name if name.startswith('#') else f'#{name}'
+                channel = document.views(threads).get(target)
+                if channel is None:
+                    raise ValueError(f'Unknown channel: {target!r}')
+                return document.set_metadata(target, threads, parent=channel.parent, archived=archived)
+
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
         with _store_lock(self._wire_lock_path):
             threads = self.registry.all_threads()
@@ -179,29 +254,35 @@ class ChannelManagement:
             return
         self._change_tag(name, new_name)
 
-    def delete_tag(self, name: str) -> None:
-        self._change_tag(name, None)
+    def delete_tag(self, name: str, *, disposition: TagDisposition = KeepThreadsTagDisposition(),
+                   confirmed: bool = False) -> TagChangeResult:
+        Tag(name)
+        if disposition.requires_confirmation and not confirmed:
+            raise ValueError(disposition.confirmation(name))
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            if name not in self.catalog.read().all_tags(snapshot.threads):
+                raise ValueError(f"Unknown tag: {name!r}")
+            cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)
+            return disposition.apply(self, name, cohort)
 
     def _change_tag(self, name: str, replacement: str | None) -> None:
         Tag(name)
-        with _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")
-            if replacement is None:
-                self.catalog.read().require_unreferenced_tag(name)
-            else:
+            if replacement is not None:
                 self.catalog.read().require_available_tag_name(
                     replacement, self.registry.all_threads(), previous=name
                 )
 
-            def changed(tags: frozenset[str]) -> frozenset[str]:
-                return (tags - {name}) | ({replacement} if name in tags and replacement else set())
+            cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)
+            self._change_tag_unlocked(name, replacement, cohort)
 
-            for thread in self.registry.all_threads().values():
-                if name in thread.tags:
-                    self.registry.register(
-                        replace(thread, tags=changed(thread.tags)),
-                        self.registry.status(thread.name),
-                    )
-            with self.catalog.editing() as document:
-                document.change_tag(name, replacement)
+    def _change_tag_unlocked(self, name: str, replacement: str | None,
+                             cohort: tuple[Thread, ...]) -> None:
+        for thread in cohort:
+            tags = (thread.tags - {name}) | ({replacement} if replacement else set())
+            self.registry.register(replace(thread, tags=tags), self.registry.status(thread.name))
+        with self.catalog.editing() as document:
+            document.change_tag(name, replacement)
