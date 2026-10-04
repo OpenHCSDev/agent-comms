@@ -34,6 +34,23 @@ Corrected442 published35e72d0f; exact required Debt37237228607 passed.
 Parent independently reread its four production changes. This is source/check
 acceptance, not changed installed acceptance.
 
+The original saved-history control alone does not cover MountedMessageHistory's
+wire reader/loading resource. Parent reviewed Heis's coherent extension of the
+two existing controls: channel_visibility_observation_pilot supplies actual
+channel_target/CommsChatView/ChannelHistoryReader initial and restart loading,
+Working admission, accepted Live checkpoint and original reader/history teardown;
+history_page_batch_mount_pilot calls it inside the same original App before whole
+close. The held read calls the original reader after release and the original
+history task is acquired before teardown. No extra App or fake source result is
+introduced. Parent dropped its competing wire-file claim; Heis owns both edits.
+Reviewed file hashes are channel1f496a8956e453c919bfe91b8f3674bac2eb58cc68313356461316cc34cdc1c5
+and history957a8d75d552770e14efca9fd84248af556f4251f5bc47b70db3a161dbacab01.
+At review these edits are uncommitted and have not executed. Heis must publish
+the exact combined command/output and source-equal35e operands before launch.
+Bohr issued7a3787a4 permits build/install, while its separate lifecycle holds
+execution pending final operand binding. Separate Sch086 renewal must bind the
+same final scope. Public334 remains protected; no parent prefix access occurred.
+
 Parent reviewed the coherent four-file checkpoint correction: TranscriptState
 combines its source-admission capability with the original resource fact, and
 the facade delegates. MountedMessageHistory retains reader/loading availability;
