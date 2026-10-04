@@ -14,7 +14,7 @@ from summary_prefix_configured_installed_journey import observe_native_requests
 from agent_comms.native_pi import NativePiRpcLaunch
 
 
-@pytest.mark.parametrize('mode', ('complete', 'setup-error', 'pending-close',
+@pytest.mark.parametrize('mode', ('complete', 'publication', 'setup-error', 'pending-close',
                                   'paused-close', 'shutdown', 'malformed'))
 def test_original_observer_connection_completion(tmp_path, mode):
     # Minimal authored anchor files, not a substitute SDK or copied artifact.
@@ -40,7 +40,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const [module,packageRoot,output,contexts,mode]=process.argv.slice(1);
 const commands=[];
-let socket,contextPoint;
+let socket,contextPoint,publicationPoint;
 globalThis.fetch=async()=>({json:async()=>[{webSocketDebuggerUrl:'ws://authored'}]});
 class AuthoredSocket extends EventTarget {
     static OPEN=1;
@@ -69,6 +69,8 @@ class AuthoredSocket extends EventTarget {
                     contextPoint=result.breakpointId;
                     assert.equal(command.params.condition,'requestId !== undefined');
                 }
+                if (command.params.url.endsWith('/agent-session.js'))
+                    publicationPoint=result.breakpointId;
             }
             if (command.method==='Debugger.evaluateOnCallFrame') {
                 if (mode==='paused-close') {this.close();return;}
@@ -76,10 +78,19 @@ class AuthoredSocket extends EventTarget {
                 // provider JSON omits callbacks, CDP must not expand them to {}.
                 const tool={name:'authored',execute:()=>{},prepareArguments:()=>{}};
                 const value={tools:[tool]};
+                if (mode==='publication') {
+                    const event={context:{segments:[{provenance:[{kind:'native',
+                        request_generation:1,context_digest:'authored'}]}],values:[value]}};
+                    const projected=Function('event','return '+command.params.expression)(event);
+                    assert.deepEqual(projected,JSON.parse(JSON.stringify(event.context)));
+                    assert.deepEqual(projected.values[0].tools,[{name:'authored'}]);
+                    result={result:{value:projected}};
+                } else {
                 const owner={full:()=>({segments:[{provenance:[{kind:'native',
                     request_generation:1,context_digest:'authored'}],value}]}),segments:[{value}]};
                 result={result:{value:Function('return '+command.params.expression).call(owner)}};
                 assert.deepEqual(result.result.value.context.segments[0].value,JSON.parse(result.result.value.serialized[0]));
+                }
             }
             this.receive({id:command.id,result});
             if (command.method==='Runtime.runIfWaitingForDebugger') {
@@ -87,7 +98,7 @@ class AuthoredSocket extends EventTarget {
                 if (mode==='malformed') {
                     this.dispatchEvent(new MessageEvent('message',{data:'{not JSON'}));return;
                 }
-                this.receive({method:'Debugger.paused',params:{hitBreakpoints:[contextPoint],callFrames:[{callFrameId:'original'}]}});
+                this.receive({method:'Debugger.paused',params:{hitBreakpoints:[mode==='publication' ? publicationPoint : contextPoint],callFrames:[{callFrameId:'original'}]}});
             }
             if (command.method==='Debugger.resume')
                 this.receive({method:'NodeRuntime.waitingForDisconnect'});
@@ -101,10 +112,11 @@ try {await import(module);} catch(error) {failure=error.message;}
 assert.equal(socket.readyState,3);
 assert.equal(process.listenerCount('SIGTERM'),0);
 const rows=readFileSync(output,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
-if (mode==='complete') {
+if (mode==='complete' || mode==='publication') {
     assert.equal(failure,undefined);
     assert.equal(process.exitCode,undefined);
-    assert.deepEqual(rows.map(row=>row.stage),['observer-ready','source-context','observer-runtime-complete']);
+    assert.deepEqual(rows.map(row=>row.stage),['observer-ready',
+        mode==='publication' ? 'source-observation' : 'source-context','observer-runtime-complete']);
 } else if (mode==='shutdown') {
     assert.equal(failure,undefined);
     assert.deepEqual(rows.map(row=>row.stage),['observer-ready']);

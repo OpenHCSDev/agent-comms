@@ -69,3 +69,49 @@ Raw observer JSONL, context captures, InputDoc and request diagnostics remain in
 the same private output. Actual configured execution is still **not started**.
 The four source controls do not qualify that path, HTTP bytes, capacity, recall
 or the unapproved USD75/30-pair study.
+
+## Actual configured terminal and preserved reader refusal
+
+The issued Bohr grant SHA `1dcfe620` and Sch conditional086 renewal authorized
+exactly one run of the published command. It used installed Core `c656a64c`,
+344 original Git source assets, the reviewed347-asset5f wheel and immutable086.
+The captured configuration remained `openai-codex/gpt-6.1-sol` / HIGH. It forked
+the completed cut3 source (42,843,233 bytes), installed task-memory, received the
+requested distinct marker through the original ACP router, and closed the native
+child. Original source hashes remained unchanged. No original input was replayed.
+
+The original controller exited1 after35.036s because the strict measurement
+reader refused `Recorded wire public projection differs from its original SDK
+observation`. The raw receipt is preserved unchanged. Canonical original facts
+prove input `765d6c5bf157fe2ec9d5102b0cf9e74e`, terminal native entry `48f9dc14`,
+request `1f0f7c06-d587-424c-a6ff-ce60333956c9`, all15 native progress points and
+original budget admission: estimated input43,653 / window272,000. Native request
+finished in4,382.032ms; this is separate from whole controller time.
+
+Only tool-catalog captured text differs. The observer retrieved `event.context`
+through CDP's direct by-value projection, which replaced SDK tool functions with
+empty objects. Native JSON serialization correctly omitted those properties.
+The raw native request ID, six original segment digests and provenance agree.
+The shared observer now serializes through the child's original JSON boundary
+before CDP projection, as the existing SDK full-value capture already does. No
+measurement refusal, source check, reader or native producer is weakened.
+
+One changed authored publication control passes (0.25s), exercising that shared
+expression with tool callbacks. Syntax passes. The first local pytest command
+was rejected by unavailable xdist options; its log is retained and the same
+changed control then ran serially with the project's addopts disabled. No SDK
+stream or provider input was repeated. The corrected capture has not been
+qualified on another configured turn; original strict measurement stays refused.
+
+After the run, all347 Core assets,94 original environment keepers,69 metadata
+files,10 distributions, truthful origin and original wheel are unchanged. Native
+FullTrust passes after execution. Controller1353043/birth62822095 and native
+1361608/birth62825061 are absent; no matching controller/observer argv remains.
+Original resource scopes joined their children. Bohr owns final privileged
+borrower/lifecycle closure. The specific540 import/execution and086 execution
+claims are returned after this terminal; no subsequent use is inferred.
+
+Full S4, configured corrected-capture acceptance, matched arms, HTTP/token
+capacity and USD75/30-pair study remain unfinished/unapproved at their original
+scope. This checkpoint demonstrates real installed source selection and the
+configured terminal; it does not turn the preserved reader refusal into PASS.

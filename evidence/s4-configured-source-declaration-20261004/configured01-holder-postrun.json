@@ -1,0 +1,37 @@
+{
+  "core_assets_equal": 347,
+  "original_noncore_keepers_equal": 94,
+  "metadata_files_equal": 69,
+  "distributions_equal": 10,
+  "truthful_direct_url_equal": true,
+  "original_wheel_equal": true,
+  "known_process_identities_absent": [
+    {
+      "pid": 1353043,
+      "start_time": 62822095,
+      "argv": [
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "tests/three_cut_retention_configured_journey.py",
+        "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured01",
+        "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+        "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+        "--installed-source",
+        "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/installed-core656.private.json",
+        "--archive",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+        "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+        "--condition-application",
+        "task-memory",
+        "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/cut-3-checkpoint.private.json"
+      ]
+    },
+    {
+      "pid": 1361608,
+      "start_time": 62825061
+    }
+  ],
+  "controller_observer_arguments_absent": true,
+  "process_read_permission_gaps": [],
+  "raw_receipt_unchanged": "3c2cc0849e3050151865cce000691a8e16cb7c30772cbe203201e8c2ed6cadf5",
+  "scope": "Current holder byte/mode/link/origin preservation and exact known controller/native identities; Bohr owns final privileged whole borrower census."
+}
