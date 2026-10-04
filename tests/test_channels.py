@@ -8,8 +8,10 @@ from agent_comms import invoke_tool
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.channel_management import ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition
 from agent_comms.comms import wire
 from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.errors import RelationViolationError
 from agent_comms.presentation import ThreadView
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
@@ -40,6 +42,23 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     with pytest.raises(ValueError, match="cycle"):
         observer.channels.set_channel_metadata("ui", parent="#api", archived=False)
     assert observer.channels.catalog.read().resolve("#ui").parent is None
+
+def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread('inactive', frozenset({'cohort'}), str(tmp_path)), StoppedThreadStatus())
+    comms.registry.declare(Thread('active', frozenset({'cohort'}), str(tmp_path),
+                                 process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
+    original = comms.registry.snapshot()
+    catalog = comms.channels.catalog.read()
+    for disposition in (ArchiveThreadsTagDisposition(), DeleteThreadsTagDisposition()):
+        with pytest.raises(ValueError) as refusal:
+            comms.channels.delete_tag('cohort', disposition=disposition)
+        assert str(refusal.value) == disposition.confirmation('cohort')
+        with pytest.raises(RelationViolationError, match='stopped|Stop a running'):
+            comms.channels.delete_tag('cohort', disposition=disposition, confirmed=True)
+        assert comms.registry.snapshot() == original
+        assert comms.channels.catalog.read() == catalog
+        assert ProcessIdentity.capture(os.getpid()) == original.require('active').process_identity
 
 
 def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
