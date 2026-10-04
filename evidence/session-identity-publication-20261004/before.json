@@ -1,0 +1,185 @@
+{
+  "head": "966e761d7932b4b3a2a54852789dccbf372d6097",
+  "method": "existing refactor-audit Package.load AST; lexical consumer references read semantically",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 370,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 276,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 304,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 48,
+      "kind": "consumer",
+      "source": "runner.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 343,
+      "kind": "consumer",
+      "source": "self.runner.sessions.sync_identity(self.session_id)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 167,
+      "kind": "owner-declaration",
+      "name": "bind_owned",
+      "source": "async def bind_owned(self, thread: Thread, session_id: str) -> None:\n        async with self._attachment_lock:\n            await self.retire_proxy(session_id)\n        self.bindings[session_id] = thread.name\n        self.titles[session_id] = thread.name\n        self.worktrees[session_id] = thread.worktree\n        if self.runtime_enabled:\n            await self.runtime.start()"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 242,
+      "kind": "owner-declaration",
+      "name": "sync_identity",
+      "source": "async def sync_identity(self, session_id: str) -> str:\n        cached_name = self.require(session_id)\n        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)\n        thread = snapshot.require(cached_name)\n        name = thread.name\n        if (\n            name != cached_name\n            or thread.pid != os.getpid()\n            or not snapshot.status(name).running\n        ):\n            await self.effects.turns.close_idle_backend(session_id)\n        self.bindings[session_id] = name\n        if (\n            self.titles.get(session_id) != name\n            or self.display_titles.get(session_id) != thread.title\n        ):\n            await self.runtime.session_update(\n                session_id=session_id,\n                update=SessionInfoUpdate(\n                    session_update=\"session_info_update\",\n                    title=thread.title or name,\n                    field_meta=await self.metadata(name, session_id=session_id),\n                ),\n            )\n            self.titles[session_id], self.display_titles[session_id] = name, thread.title\n        if self.worktrees.get(session_id) != thread.worktree:\n            await self.runtime.session_update(\n                session_id=session_id,\n                update=SessionInfoUpdate(\n                    session_update=\"session_info_update\",\n                    field_meta=await self.metadata(name, session_id=session_id),\n                ),\n            )\n            self.worktrees[session_id] = thread.worktree\n        return name"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 288,
+      "kind": "owner-declaration",
+      "name": "configuration_updates",
+      "source": "def configuration_updates(\n        self, thread_name: str,\n    ) -> tuple[CoordinationChangedUpdate, GoalChangedUpdate]:\n        \"\"\"Capture original store projections before loop/client effects consume them.\"\"\"\n        thread = self.comms.registry.require(thread_name)\n        goal, execution = self.comms.goals.goal_snapshot(thread_name)\n        info = self.comms.agents.agent_info_of(thread_name)\n        usage = (\n            ContextUsage(info.context_used, info.context_size)\n            if info is not None and info.context_used is not None and info.context_size\n            else None\n        )\n        return (\n            CoordinationChangedUpdate(\n                ThreadIncarnation(thread.name, thread.created_at),\n                str(self.comms.root.resolve()),\n                os.getpid(),\n                thread.worktree,\n                thread.model,\n                ThinkingLevel.optional_name(thread.thinking_level),\n                thread.title or thread.name,\n                usage,\n            ),\n            GoalChangedUpdate(goal, execution),\n        )"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 314,
+      "kind": "owner-declaration",
+      "name": "metadata",
+      "source": "async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:\n        configuration = await Coordination.run_worker(partial(\n            self.configuration_updates, thread_name,\n        ))\n        return encode_updates(\n            *configuration,\n            await self.effects.inputs.queue_state(session_id or thread_name),\n            *await self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),\n        )"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 336,
+      "kind": "owner-declaration",
+      "name": "release_registered_owner",
+      "source": "def release_registered_owner(self, name: str) -> None:\n        snapshot = self.comms.registry.snapshot()\n        thread = snapshot.require(name)\n        if thread.pid == os.getpid() and snapshot.status(thread.name).running:\n            self.comms.owners.stop(thread.name)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 59,
+      "kind": "Store",
+      "source": "self.titles"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 60,
+      "kind": "Store",
+      "source": "self.display_titles"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 61,
+      "kind": "Store",
+      "source": "self.worktrees"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 171,
+      "kind": "Load",
+      "source": "self.titles"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 172,
+      "kind": "Load",
+      "source": "self.worktrees"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 275,
+      "kind": "Load",
+      "source": "self.worktrees"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 266,
+      "kind": "Load",
+      "source": "self.titles"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 266,
+      "kind": "Load",
+      "source": "self.display_titles"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 267,
+      "kind": "Load",
+      "source": "self.worktrees"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 255,
+      "kind": "Load",
+      "source": "self.titles"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 256,
+      "kind": "Load",
+      "source": "self.display_titles"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 229,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(self.session_id)"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 232,
+      "kind": "consumer",
+      "source": "self.sessions.sync_identity(session_id)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 82,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity(session)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 197,
+      "kind": "consumer",
+      "source": "owner.sessions.sync_identity(session)"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 146,
+      "kind": "consumer",
+      "source": "agent.sessions.sync_identity('worker')"
+    }
+  ],
+  "ambiguity": "AST method references do not prove dynamic dispatch. SessionLifecycle is the only sync_identity declaration; AttachedSessionLifecycle inherits it. No dependency/native API change."
+}
