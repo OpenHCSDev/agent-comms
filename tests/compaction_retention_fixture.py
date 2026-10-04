@@ -622,8 +622,9 @@ class ScoredScenario(ScoreView):
         """Keep submitted SDK evidence distinct from labels and previews.
 
         The probe owns transform/source/refusal checks. This view only groups
-        its acquired observations against the frozen rounds. It cannot infer
-        an intended experimental arm or complete-history eligibility.
+        its acquired observations against the frozen rounds. An observed
+        constructor must agree with the declared arm; agreement cannot infer
+        complete transformed history or complete-history eligibility.
         """
         identities = tuple(item.identity for item in self.source.rounds)
 
@@ -638,6 +639,9 @@ class ScoredScenario(ScoreView):
                         for identity, original in evidence.items()}
         installations = {identity: original['construction']['condition_installation']
                          for identity, original in evidence.items()}
+        constructors = {identity: tuple(original.require_condition(self.condition.value)
+                                        for original in installation['installations'])
+                        for identity, installation in installations.items()}
         entry_selections = {identity: installation['entry_selection']
                             for identity, installation in installations.items()}
         admissions = {identity: original['construction']['request_budget']
@@ -647,6 +651,8 @@ class ScoredScenario(ScoreView):
         return {'evaluated': False, 'declared_condition': self.condition,
                 'bounded_sdk_application': group(applications),
                 'installed_sdk_source': group(installations),
+                'recorded_constructor_selection': group({identity: {'evaluated': bool(originals)}
+                    for identity, originals in constructors.items()}),
                 'sdk_entry_selection': group(entry_selections),
                 'native_request_admission': group(admissions),
                 'source_delivery': group(source_delivery),
