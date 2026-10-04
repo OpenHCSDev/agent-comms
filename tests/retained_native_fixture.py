@@ -285,6 +285,15 @@ class RecordedNativeCheckpoint:
             creation.session_id,creation.session_file)),
                 'fork_creation':FieldCodec.encode(creation)}
 
+    def fork_request_narrative(self,journal,child,source,texts):
+        """Corroborate the original fork narrative in acquired SDK bytes."""
+        constructed=self.fork_condition_acquired(journal,child,source)
+        if constructed['evaluated']:
+            narrative=json.dumps(constructed['summary'],ensure_ascii=False)[1:-1]
+            if not any(narrative in text for text in texts):
+                raise ValueError('Captured SDK request does not contain the original bounded narrative')
+        return constructed
+
     def capture_for_probe(self,session,evidence,fork_journal,source):
         """A probe may follow the original cut or its corroborated SDK child."""
         if self.reference.session_file==session.session_file:
@@ -446,6 +455,14 @@ class RecordedConditionInstallation:
     # which borrow live SDK messages do not prove a journal entry selection.
     entry_selection: JournalProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
+    # An original constructor resource, not inferred from its condition label.
+    narrative_source: FileProvenance | None = field(default=None,
+        metadata={"wire_omit_default": True})
+
+    def require_narrative_source(self, source: FileProvenance):
+        if self.narrative_source != source:
+            raise ValueError('Recorded SDK installation belongs to another original narrative source')
+        return source
 
     def require_condition(self, selected: str):
         """An observed constructor cannot stand in for a different arm.
@@ -559,22 +576,19 @@ class RecordedNativeProbe:
             return {'evaluated':False,'reason':'Original condition application not captured'}
         if self.checkpoint is None or self.fork_journal is None or not serialized['evaluated']:
             return {'evaluated':False,'reason':'Original checkpoint, fork and SDK bytes required'}
-        source=self.checkpoint.fork_condition_acquired(self.fork_journal,evidence,parent)
-        if not source['evaluated']:
-            return source
         applications=tuple(row for row in records if row.get('stage')=='bounded-transform-applied'
                            and row['input_id']==self.input_id)
         if not applications:
             return {'evaluated':False,'reason':'Original bounded-source hook observation unavailable'}
+        source=self.checkpoint.fork_request_narrative(self.fork_journal,evidence,parent,texts)
+        if not source['evaluated']:
+            return source
         for applied in applications:
             if (applied['session']!=source['session'] or
                     applied['checkpoint_session']!=source['checkpoint_session'] or
                     applied['native_entry_id']!=source['native_entry_id'] or
                     applied['narrative_source']!=source['source']):
                 raise ValueError('Recorded SDK condition belongs to another original source')
-        narrative=json.dumps(source['summary'],ensure_ascii=False)[1:-1]
-        if not any(narrative in text for text in texts):
-            raise ValueError('Captured SDK request does not contain the original bounded narrative')
         if not any(row.get('stage')=='bounded-transform-restored' and row['input_id']==self.input_id for row in records):
             raise ValueError('Original SDK condition hook has not retired')
         binding=self.condition_message_binding(records,applications,serialized,manifest)
@@ -587,13 +601,14 @@ class RecordedNativeProbe:
             'scope':'Original bounded transform joined to this sealed SDK request; not final HTTP bytes, '
                     'complete-history capacity, declared comparison arm or comparative recall'}
 
-    def installed_condition(self,evidence,branch,context,serialized,manifest,records):
+    def installed_condition(self,evidence,branch,context,serialized,manifest,records,*,parent,texts):
         """Join an observed installed source to the same original SDK request."""
         originals=tuple(FieldCodec.decode(RecordedConditionInstallation,row) for row in records
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
         unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
+        narrative = {'evaluated': False, 'reason': 'Original installed narrative source and matching SDK bytes unavailable'}
         if not originals:
-            return {'evaluated':False,'installations':(), 'entry_selection':unavailable,
+            return {'evaluated':False,'installations':(), 'entry_selection':unavailable, 'narrative_source':narrative,
                 'reason':'Original installed-source hook observation unavailable'}
         selections = tuple(original.source_selection(self.session,
             original.require_original(self,evidence,branch,context)) for original in originals)
@@ -605,12 +620,29 @@ class RecordedNativeProbe:
             'scope':'SDK selected source before this original input; source selection is distinct '
                     'from transform/request admission and provider capacity'}
         observation = {'observation': self.condition_observation,
-                       'installations': originals, 'entry_selection': selection}
+                       'installations': originals, 'entry_selection': selection, 'narrative_source':narrative}
         if not serialized['evaluated'] or manifest is None:
             return dict(observation, evaluated=False,
                         reason='Original matching SDK request bytes unavailable')
         applications=tuple(FieldCodec.encode(original) for original in originals)
         binding=self.condition_message_binding(records,applications,serialized,manifest)
+        if (self.checkpoint is not None and self.fork_journal is not None and
+                all(original.narrative_source is not None for original in originals)):
+            source=self.checkpoint.fork_request_narrative(self.fork_journal,evidence,parent,texts)
+            if source['evaluated']:
+                reference=FieldCodec.decode(FileProvenance,source['source'])
+                for original in originals:
+                    original.require_narrative_source(reference)
+                narrative={'evaluated':binding['evaluated'], 'source':reference,
+                    'checkpoint_session':source['checkpoint_session'], 'session':source['session'],
+                    'native_entry_id':source['native_entry_id'],
+                    'message_binding':binding,
+                    'scope':'Original installed narrative resource, fork ancestry and captured SDK presence; '
+                            'request binding requires the original complete converter observation; '
+                            'not narrative-only input, HTTP bytes, capacity or a matched intervention'}
+            else:
+                narrative=source
+        observation['narrative_source']=narrative
         return dict(observation, evaluated=binding['evaluated'], message_binding=binding,
             scope='Original installed source entered configured transform and converter/request; '
                   'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof')
@@ -1060,7 +1092,8 @@ class RecordedNativeProbe:
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
             "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest,records),
-            "condition_installation": self.installed_condition(evidence,branch,context,serialized,manifest,records),
+            "condition_installation": self.installed_condition(evidence,branch,context,serialized,manifest,records,
+                                                              parent=parent,texts=texts),
         }
 
     @staticmethod
