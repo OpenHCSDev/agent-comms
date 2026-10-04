@@ -271,13 +271,17 @@ class RecordedNativeCheckpoint:
     def fork_condition_source(self,journal:Path,session_file:Path):
         """Bind captured narrative through the recorded SDK creation, not input authority."""
         with NativeEntry.open_evidence(session_file) as child, self.original_source() as (_,source):
-            creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child,source)
-            constructed=self._condition_source(original,entry,assembly)
-            if not constructed['evaluated']:
-                return constructed
-            return {**constructed,'session':FieldCodec.encode(NativeSessionIdentity(
-                creation.session_id,creation.session_file)),
-                    'fork_creation':FieldCodec.encode(creation)}
+            return self.fork_condition_acquired(journal,child,source)
+
+    def fork_condition_acquired(self,journal,child,source):
+        """Use the caller's original readers with the same fork/source proof."""
+        creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child,source)
+        constructed=self._condition_source(original,entry,assembly)
+        if not constructed['evaluated']:
+            return constructed
+        return {**constructed,'session':FieldCodec.encode(NativeSessionIdentity(
+            creation.session_id,creation.session_file)),
+                'fork_creation':FieldCodec.encode(creation)}
 
     def capture_for_probe(self,session,evidence,fork_journal,source):
         """A probe may follow the original cut or its corroborated SDK child."""
@@ -468,13 +472,13 @@ class RecordedNativeProbe:
             request_observations=original(observed) if observed.is_file() else None,
             condition_observation=original(condition_observation) if condition_observation is not None else None)
 
-    def applied_condition(self,texts,serialized,manifest):
+    def applied_condition(self,evidence,parent,texts,serialized,manifest):
         """Join this input's SDK hook to the corroborated narrative and actual bytes."""
         if self.condition_observation is None:
             return {'evaluated':False,'reason':'Original condition application not captured'}
         if self.checkpoint is None or self.fork_journal is None or not serialized['evaluated']:
             return {'evaluated':False,'reason':'Original checkpoint, fork and SDK bytes required'}
-        source=self.checkpoint.fork_condition_source(self.fork_journal,Path(self.session.session_file))
+        source=self.checkpoint.fork_condition_acquired(self.fork_journal,evidence,parent)
         if not source['evaluated']:
             return source
         records=self.checkpoint.read_json_lines(self.condition_observation)
@@ -657,17 +661,17 @@ class RecordedNativeProbe:
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
 
-    def request_budget(self, manifest):
-        """Bind admitted calculations through the original manifest request ID.
+    def observed_request(self, manifest) -> tuple[RequestProgress, ...]:
+        """Acquire the selected request's original diagnostic values once.
 
         The manifest already owns the exact native generation/digest relation.
         No same-input, time or present-day catalog join can replace this link.
-        Provider retries can produce more than one original admitted allowance;
-        preserve their order instead of manufacturing one final request value.
+        Keep every correlated stage in original file order. Budget and timing
+        consumers borrow these values, never decode or correlate again.
         """
         if manifest is None or manifest.request_id is None or self.request_observations is None:
-            return {"evaluated": False, "reason": "Original correlated request/manifest observations unavailable"}
-        admitted = []
+            return ()
+        observed = []
         for record in RecordedNativeCheckpoint.read_json_lines(self.request_observations):
             # Existing diagnostic publications also include parent acquisition
             # records. Only their native member is a RequestProgress boundary.
@@ -681,11 +685,36 @@ class RecordedNativeProbe:
                 raise ValueError("Original request observation belongs to another recorded turn")
             if progress.session_id != self.session.session_id or progress.input_id != self.input_id:
                 raise ValueError("Original request observation belongs to another native session/input")
-            if progress.stage == "budget_admission":
-                admitted.append(progress)
+            observed.append(progress)
+        return tuple(observed)
+
+    @staticmethod
+    def request_budget(observed: tuple[RequestProgress, ...]):
+        """Select original allowances without reacquiring their proof source.
+
+        Provider retries may have multiple admitted allowances. Preserve their
+        order; neither the reader nor scorer recomputes a current-model budget.
+        """
+        admitted = tuple(point for point in observed if point.stage == "budget_admission")
         return {"evaluated": bool(admitted), "observations": tuple(admitted),
                 "scope": "Original ContextBudget admission after payload hooks; not provider token counts or HTTP bytes",
                 "reason": "Original admitted request calculations" if admitted else "No original budget admission observation"}
+
+    @staticmethod
+    def request_timing(observed: tuple[RequestProgress, ...]):
+        """Export original native measurements without synthesizing a clock.
+
+        elapsed_ms and callback counters are already measured by the native
+        request owner. Stream closure is not turn settlement. Missing stages
+        stay missing, including timing for earlier tool-step requests or local
+        acquisition/publication whose clock is independently owned.
+        """
+        return {"evaluated": bool(observed), "observations": observed,
+                "whole_turn_evaluated": False,
+                "scope": "Original selected-request native progress, transport and callback measurements; "
+                         "not whole-turn/S1 timing, billed resource use or provider-capacity attribution",
+                "reason": "Original correlated request measurements" if observed else
+                          "Original correlated request/manifest observations unavailable"}
 
     @staticmethod
     def request_completion(budget, answer):
@@ -733,7 +762,7 @@ class RecordedNativeProbe:
         with self.original_readers((self,)) as sources:
             return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
 
-    def construction(self, evidence, branch, manifest, checkpoint, texts, serialized, answer):
+    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -785,7 +814,8 @@ class RecordedNativeProbe:
                 identity = checkpoint["native_entry_id"]
                 coverage["managed_checkpoint"] = {"entry_id": identity,
                     "referenced_in_sdk_sources": identity in included}
-        budget = self.request_budget(manifest)
+        observed_request = self.observed_request(manifest)
+        budget = self.request_budget(observed_request)
         return {
             "fork": fork,
             "journal_settings": {
@@ -798,9 +828,10 @@ class RecordedNativeProbe:
             "sdk_manifest": manifest,
             "serialized_sdk_source": serialized,
             "request_budget": budget,
+            "native_request_timing": self.request_timing(observed_request),
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
-            "condition_application": self.applied_condition(texts,serialized,manifest),
+            "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest),
         }
 
     @staticmethod
@@ -919,7 +950,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source_branch, manifest, checkpoint, texts, serialized, answer),
+            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),

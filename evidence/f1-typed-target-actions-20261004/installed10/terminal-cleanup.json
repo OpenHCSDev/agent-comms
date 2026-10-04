@@ -1,0 +1,15 @@
+{
+  "terminal_exit": 0,
+  "original_receipt": "/home/ts/.cache/agent-scratch/f1-native-delete-installed10/native-view-delete/receipt.json",
+  "original_registry_identities": [
+    {
+      "name": "beta",
+      "pid": 3280316,
+      "birth": 57336319,
+      "original_identity_absent": true
+    }
+  ],
+  "whole_App_and_original_fixture_returned": true,
+  "provider_calls": 0,
+  "native_inputs": 0
+}

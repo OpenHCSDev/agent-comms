@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "closed_current_history_and_hidden_native": true,
+  "actor_connection_and_reader_unchanged": true,
+  "input_bytes_unchanged": true,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "whole_app_shutdown_completed": true,
+  "original_sdk_fixture_cleanup_completed": true
+}

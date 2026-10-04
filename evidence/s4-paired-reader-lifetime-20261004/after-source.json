@@ -1,0 +1,128 @@
+{
+  "head": "1432fbad",
+  "parsed_modules": 365,
+  "omissions": [],
+  "sites": [
+    {
+      "function": "tests/compaction_retention_fixture.py::main",
+      "calls": [
+        "compare_native",
+        "fork_condition_source"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::checkpoints_for",
+      "calls": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::observe_runs",
+      "calls": [
+        "checkpoints_for",
+        "observe_acquired",
+        "original_readers"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::observe",
+      "calls": [
+        "observe_runs"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::observe_acquired",
+      "calls": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::observe_native",
+      "calls": [
+        "score_observed"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::score_observed",
+      "calls": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::score_native",
+      "calls": [
+        "observe_native"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::compare_native",
+      "calls": [
+        "observe_runs",
+        "score_observed"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::compare_native_pairs",
+      "calls": [
+        "compare_native"
+      ]
+    },
+    {
+      "function": "tests/retained_native_fixture.py::fork_condition_source",
+      "calls": [
+        "fork_condition_acquired"
+      ]
+    },
+    {
+      "function": "tests/retained_native_fixture.py::fork_condition_acquired",
+      "calls": []
+    },
+    {
+      "function": "tests/retained_native_fixture.py::applied_condition",
+      "calls": [
+        "fork_condition_acquired"
+      ]
+    },
+    {
+      "function": "tests/retained_native_fixture.py::original_readers",
+      "calls": []
+    },
+    {
+      "function": "tests/retained_native_fixture.py::observe",
+      "calls": [
+        "original_readers"
+      ]
+    },
+    {
+      "function": "tests/retained_native_fixture.py::construction",
+      "calls": [
+        "applied_condition"
+      ]
+    },
+    {
+      "function": "tests/retained_native_fixture.py::read",
+      "calls": [
+        "construction"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_group_reader_shared_once_and_closed_after_second_arm_refuses",
+      "calls": [
+        "observe_runs"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_group_round_membership_refuses_before_reader_acquisition",
+      "calls": [
+        "observe_runs"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_original_reader_group_borrows_parent_once_and_retires_on_consumer_error",
+      "calls": [
+        "original_readers"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_construction_corroborates_segment_references_on_original_branch",
+      "calls": [
+        "construction"
+      ]
+    }
+  ],
+  "limits": "Lexical calls, not proof of dynamic resolution; existing owners read separately"
+}

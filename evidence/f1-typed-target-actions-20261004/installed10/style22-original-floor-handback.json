@@ -1,0 +1,22 @@
+{
+  "state": "Original style422 floor restored; entire SchF1 package/import/read/execution/build purpose CLOSED",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "original_archives": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/retired-env-metadata/style22-current422-originals-before-SchF1.tar.gz",
+      "sha256": "b3a35c648234b38418ce78188048f1994e4ac5fd46c3203f3cefcd8ce80fc664"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/retired-env-metadata/style22-original-NRAd392-before-MendelF4.tar.gz",
+      "sha256": "5cf28b2968dbb074698081803d389c9daf40a031936315e42f0040e2952274b6"
+    }
+  ],
+  "verified_original_unique_members": 1459,
+  "restored_original_metadata_or_bin": [],
+  "native_artifacts_mutated": false,
+  "private_user_history_input_unknown_writes": 0,
+  "original10_terminal": 0,
+  "original10_receipt": "/home/ts/.cache/agent-scratch/f1-native-delete-installed10/native-view-delete/receipt.json",
+  "future_style22_claim": false,
+  "public_packages_changed": false
+}

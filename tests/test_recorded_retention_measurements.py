@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from agent_comms.comms import Comms
 from agent_comms.compaction_identity import SummaryOperationIdentity
@@ -37,7 +38,7 @@ from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
     SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment,
 )
-from compaction_retention_fixture import Condition, Measurement, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
+from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
 from test_task_decisions import admit
@@ -60,6 +61,44 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def test_group_reader_shared_once_and_closed_after_second_arm_refuses(self):
+        # Resource plumbing only: detect duplicated acquisition and a leaked
+        # reader when the later arm refuses. This does not simulate native proof.
+        self.session.write_text(json.dumps({'type': 'session', 'id': self.identity.session_id}) + '\n')
+        self.session.chmod(0o600)
+        probes = tuple(RecordedNativeProbe(self.identity, digit * 32, 'answer')
+                       for digit in ('a', 'b'))
+        runs = tuple(RecordedNativeProbes({'r1': probe}) for probe in probes)
+        readers = []
+        refusal = ValueError('second original arm refused')
+
+        def read(probe, evidence, source):
+            self.assertIs(source, evidence)
+            self.assertEqual(evidence.observe()[0].id, self.identity.session_id)
+            readers.append(evidence)
+            if probe == probes[1]:
+                raise refusal
+            return {}
+
+        with patch.object(NativeEntry, 'open_evidence', wraps=NativeEntry.open_evidence) as opened:
+            with patch.object(RecordedNativeProbe, 'read', read):
+                with self.assertRaises(ValueError) as failed:
+                    RecordedNativeProbes.observe_runs(runs, coding_scenario().rounds)
+            self.assertEqual(opened.call_count, 1)
+        self.assertIs(failed.exception, refusal)
+        self.assertIs(readers[0], readers[1])
+        self.assertTrue(readers[0].source.stream.closed)
+        self.assertFalse(readers[0].entries)
+
+    def test_group_round_membership_refuses_before_reader_acquisition(self):
+        # Reject unknown original inputs at their owner, before opening either arm.
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        runs = (RecordedNativeProbes({}), RecordedNativeProbes({'foreign': probe}))
+        with patch.object(NativeEntry, 'open_evidence') as opened:
+            with self.assertRaisesRegex(ValueError, 'Unknown native rounds'):
+                RecordedNativeProbes.observe_runs(runs, coding_scenario().rounds)
+        opened.assert_not_called()
 
     def test_original_reader_group_borrows_parent_once_and_retires_on_consumer_error(self):
         # Prevent sibling-source acquisition from replacing inheritance with
@@ -132,6 +171,61 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertFalse(unavailable['mean_recall_rate_difference']['evaluated'])
         self.assertIsNone(unavailable['mean_recall_rate_difference']['value'])
 
+    def test_paired_inference_keeps_complete_samples_and_original_model_selection(self):
+        # Detect selection of only favorable/assisted subsets, cut-level
+        # pseudoreplication, and admission models replaced by registry labels.
+        oracle = FileProvenance(str(self.root / 'oracle.json'), '0' * 64)
+        design = PairedRecallDesign(oracle, Condition.TASK_MEMORY, Condition.BOUNDED,
+            'original/model', 2, 0.95, -0.02, 1000, 17)
+        scenario = RecallScenario('paired', (RecallRound('r1', ('source',), (
+            Question('q', 'Source?', 'source', 'oracle'),)),))
+        correct = scenario.score(Condition.BOUNDED, RecordedAnswers({'r1': {'q': 'source'}}))
+        lost = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({'r1': {'q': 'lost'}}))
+        support = {'r1': {'answer_support': {'unassisted_recall': True}}}
+        progress = RequestProgress('request', 'session', 'input', 1, 2, '3',
+            1, 0, 0, 0, 'budget_admission', model=ReportedModel(provider='original', id='model'))
+        alignment = {'r1': {'evaluated': True, 'request_selection': {
+            'candidate': {'observations': (progress,)}}}}
+
+        def comparison(candidate, evidence=support):
+            return {'candidate': candidate.public(), 'alignment': alignment,
+                'paired_quality': candidate.paired_quality(correct, evidence, support, alignment)}
+
+        pairs = (comparison(lost), comparison(correct))
+        result = ScoredScenario.paired_inference(pairs, design)
+        self.assertEqual((result['mean_recall_rate_difference'], result['lower'], result['upper']),
+                         (-0.5, -1, 0))
+        self.assertFalse(result['meets_recall_margin'])
+        assisted = comparison(correct, {'r1': {'answer_support': {'unassisted_recall': False}}})
+        for incomplete in (assisted, dict(pairs[1], alignment={'r1': {'evaluated': False}})):
+            missing = ScoredScenario.paired_inference((pairs[0], incomplete), design)
+            self.assertFalse(missing['evaluated'])
+            self.assertNotIn('lower', missing)
+        with self.assertRaisesRegex(ValueError, 'model does not match'):
+            ScoredScenario.paired_inference(pairs, replace(design, model='another/model'))
+        with self.assertRaisesRegex(ValueError, 'pair count'):
+            ScoredScenario.paired_inference(pairs[:1], design)
+
+    def test_supplied_design_binds_original_oracle_and_rejects_invalid_parameters(self):
+        # Detect changed oracle bytes or an omitted sample before native reads;
+        # decoding a supplied file is never a preregistration/approval grant.
+        path = self.root / 'oracle.json'
+        raw = json.dumps(FieldCodec.encode(coding_scenario())).encode()
+        path.write_bytes(raw)
+        design = PairedRecallDesign(FileProvenance(str(path), hashlib.sha256(raw).hexdigest()),
+            Condition.TASK_MEMORY, Condition.BOUNDED, 'original/model', 2, 0.95, -0.02, 1000, 17)
+        self.assertEqual(FieldCodec.decode(PairedRecallDesign, FieldCodec.encode(design)), design)
+        with self.assertRaisesRegex(ValueError, 'pair count'):
+            design.compare(())
+        path.write_bytes(raw + b' ')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            design.compare((None, None))
+        for changed in ({'sample_count': 1}, {'model': ''}, {'confidence': float('nan')},
+                        {'recall_margin': float('inf')}, {'bootstrap_samples': 2},
+                        {'baseline': design.candidate}):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                replace(design, **changed)
+
     def test_admitted_budget_requires_original_request_and_turn_correlation(self):
         # Prevent same-input/time guesses and historical capacity fabrication.
         owner = Thread('original', frozenset(), str(self.root), created_at=12)
@@ -157,16 +251,37 @@ class RecordedMeasurementTests(unittest.TestCase):
         revised = replace(observed, requested_output_tokens=20, admitted_output_tokens=10)
         selected = capture(({'acquisition': {}}, publication(replace(observed, request_id='other')),
                             publication(observed), publication(revised)))
-        result = selected.request_budget(manifest)
+        observations = selected.observed_request(manifest)
+        result = selected.request_budget(observations)
         self.assertTrue(result['evaluated'])
         self.assertEqual(result['observations'], (observed, revised))
-        self.assertFalse(selected.request_budget(replace(manifest, request_id=None))['evaluated'])
-        self.assertFalse(probe.request_budget(manifest)['evaluated'])
+        self.assertFalse(selected.request_budget(selected.observed_request(replace(manifest, request_id=None)))['evaluated'])
+        self.assertFalse(probe.request_budget(probe.observed_request(manifest))['evaluated'])
         for changed in (replace(observed, session_id='other'), replace(observed, input_id='b' * 32)):
             with self.assertRaises(ValueError):
-                capture((publication(changed),)).request_budget(manifest)
+                capture((publication(changed),)).observed_request(manifest)
         with self.assertRaises(ValueError):
-            capture((publication(observed, replace(lease, turn_id='other')),)).request_budget(manifest)
+            capture((publication(observed, replace(lease, turn_id='other')),)).observed_request(manifest)
+
+        # Timing and budget borrow the same acquisition. Different stages and
+        # real zero callback counters must not be lost or become whole-turn time.
+        headers = replace(observed, stage='headers', elapsed_ms=35, observed_at_ms=36)
+        first = replace(observed, stage='first_event', elapsed_ms=40, observed_at_ms=41)
+        end = replace(observed, stage='stream_end', elapsed_ms=60, observed_at_ms=61,
+                      callback_ms=3, callback_count=2, callback_max_ms=2)
+        selected = capture(tuple(publication(point) for point in (observed, headers, first, end)))
+        with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
+                          wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
+            acquired = selected.observed_request(manifest)
+            timing = selected.request_timing(acquired)
+            budget = selected.request_budget(acquired)
+        self.assertEqual(reads.call_count, 1)
+        self.assertEqual(timing['observations'], (observed, headers, first, end))
+        self.assertEqual(budget['observations'], (observed,))
+        self.assertIs(budget['observations'][0], timing['observations'][0])
+        self.assertEqual(timing['observations'][0].callback_ms, 0)
+        self.assertFalse(timing['whole_turn_evaluated'])
+        self.assertFalse(selected.request_timing(())['evaluated'])
 
     def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
         # Prevent final-answer-only accounting from hiding earlier tool-step
@@ -454,20 +569,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         with NativeEntry.open_evidence(self.session) as evidence:
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
-            measured = probe.construction(evidence, branch,
+            measured = probe.construction(evidence, evidence, branch,
                                          manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
-            partial = probe.construction(evidence, branch,
+            partial = probe.construction(evidence, evidence, branch,
                                          manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1])
-            self.assertFalse(probe.construction(evidence, branch, None, {}, None, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
+                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1])
+            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
