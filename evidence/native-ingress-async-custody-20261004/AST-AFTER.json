@@ -1,0 +1,2292 @@
+{
+  "revision": "9b682cdbb4f099094891c54ce33a885ae49fe60a",
+  "parser": "original audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 212,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 249,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 214,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 215,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 231,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 251,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 252,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 254,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 269,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 278,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 224,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 295,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 322,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 333,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 313,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 314,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 320,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 331,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 331,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 341,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 174,
+      "node": "AsyncFunctionDef",
+      "source": "@asynccontextmanager"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 52,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 314,
+      "node": "Attribute",
+      "source": "self.send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 314,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 315,
+      "node": "Attribute",
+      "source": "self.interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 315,
+      "node": "Name",
+      "source": "interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 186,
+      "node": "Attribute",
+      "source": "MaintenanceBarrier(root / 'registry.json').admit_ingress_async"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 299,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 655,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 657,
+      "node": "Attribute",
+      "source": "self.send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 322,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 254,
+      "node": "keyword",
+      "source": "send_boundary=send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 256,
+      "node": "keyword",
+      "source": "interrupt_boundary=interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 254,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 256,
+      "node": "Name",
+      "source": "interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 48,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 150,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 162,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 155,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 156,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 38,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 205,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 40,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 136,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 213,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 39,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 206,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 137,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 528,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 530,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 532,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 540,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 545,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 568,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 565,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 605,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 550,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 541,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 542,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 39,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 384,
+      "node": "Attribute",
+      "source": "info.directory"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 176,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 189,
+      "node": "AsyncFunctionDef",
+      "source": "@asynccontextmanager"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 17,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 809,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 506,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 783,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 580,
+      "node": "Attribute",
+      "source": "session.directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 781,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 823,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 824,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 839,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 507,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 509,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 783,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 788,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 57,
+      "node": "ClassDef",
+      "source": "class NativeStartupAdmission:"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 128,
+      "node": "ClassDef",
+      "source": "class SelectedNativeStartupAdmission(NativeStartupAdmission):"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 70,
+      "node": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 128,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 77,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 90,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 95,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/native_tool_call.py",
+      "line": 61,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_tool_call.py",
+      "line": 92,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/native_tool_call.py",
+      "line": 145,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 45,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 23,
+      "node": "alias",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 428,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 450,
+      "node": "keyword",
+      "source": "send_boundary=admission"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 451,
+      "node": "keyword",
+      "source": "interrupt_boundary=lambda public_id, native_id, text: admission(public_id, native_id, text, already_bound=True)"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 80,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 79,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 94,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 79,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 81,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 80,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "line": 125,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "line": 126,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 213,
+      "node": "Attribute",
+      "source": "MaintenanceBarrier(self.bus._registry.store.path).admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 124,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 316,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 349,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 138,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 139,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 142,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 264,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 317,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 350,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 125,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 137,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 143,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 157,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 167,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 280,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 294,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 295,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 297,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 299,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 300,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 305,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 335,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 140,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 149,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 272,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 285,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 296,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 296,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 304,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 362,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 364,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 323,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 195,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 196,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 213,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 216,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 212,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 163,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 210,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 222,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 307,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 144,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 293,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 308,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 339,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 146,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 148,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 212,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 315,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 176,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 226,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 277,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 187,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 340,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 322,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 37,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 59,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 279,
+      "node": "alias",
+      "source": "SelectedNativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 90,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 101,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 109,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 128,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 281,
+      "node": "Name",
+      "source": "SelectedNativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 61,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 108,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 174,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 308,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 139,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 158,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 172,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 133,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 138,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 210,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 214,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 115,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 157,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 211,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 212,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 220,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 504,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 210,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 212,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 242,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 315,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 358,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 211,
+      "node": "Attribute",
+      "source": "session.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 117,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 122,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 285,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 143,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 242,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 123,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 124,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 126,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 392,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 395,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 393,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "line": 31,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "line": 34,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "line": 32,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "line": 33,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 36,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 155,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 298,
+      "node": "Attribute",
+      "source": "self.launch.session.directory"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 339,
+      "node": "Attribute",
+      "source": "MaintenanceBarrier(self.maintenance_root / 'registry.json').admit_ingress_async"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 93,
+      "node": "alias",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 123,
+      "node": "alias",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 95,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 97,
+      "node": "Attribute",
+      "source": "session.interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 132,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "session.send_boundary"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 63,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 64,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/guards/test_debt_ratchet.py",
+      "line": 189,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/guards/test_debt_ratchet.py",
+      "line": 187,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 9,
+      "node": "alias",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 56,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 42,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 30,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 145,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 146,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 146,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 157,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 20,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 37,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 111,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1056,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1058,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1057,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 71,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 72,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 70,
+      "node": "AsyncFunctionDef",
+      "source": "async def queue_followup(agent, kwargs):"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 176,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 251,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 121,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 126,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1987,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2814,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2334,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2410,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1994,
+      "node": "keyword",
+      "source": "send_boundary=send_boundary"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2403,
+      "node": "keyword",
+      "source": "send_boundary=lambda *_: nullcontext(False)"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2830,
+      "node": "keyword",
+      "source": "send_boundary=send_boundary"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1994,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2585,
+      "node": "keyword",
+      "source": "send_boundary=revoked_goal"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2830,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "tests/test_channel_coding_tools.py",
+      "line": 25,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_channel_coding_tools.py",
+      "line": 26,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_channel_coding_tools.py",
+      "line": 28,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 257,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 258,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 169,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 170,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 574,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 576,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 576,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 580,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 577,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 60,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 67,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 153,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 155,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 155,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 14,
+      "node": "alias",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 130,
+      "node": "Attribute",
+      "source": "gate.admit_ingress"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 137,
+      "node": "Attribute",
+      "source": "gate.admit_ingress"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 188,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 313,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 344,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 39,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 49,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 51,
+      "node": "keyword",
+      "source": "directory=str(native.project / 'launch-sessions')"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 358,
+      "node": "keyword",
+      "source": "directory=str(native.project / 'replacement-sessions')"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 470,
+      "node": "keyword",
+      "source": "directory=str(native.project / 'writer-sessions')"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 549,
+      "node": "keyword",
+      "source": "directory=str(native.root / 'native-sessions')"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 622,
+      "node": "keyword",
+      "source": "directory=str(native.root / 'native-sessions')"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 170,
+      "node": "Attribute",
+      "source": "observer.queue_followup"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 34,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 51,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 53,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 52,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 269,
+      "node": "Attribute",
+      "source": "launch.session.directory"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 806,
+      "node": "Attribute",
+      "source": "launch.session.directory"
+    },
+    {
+      "path": "tests/test_native_routed_progress.py",
+      "line": 24,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_routed_progress.py",
+      "line": 25,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 174,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 262,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 194,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 284,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 10,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 45,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 64,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 65,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 147,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 131,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 18,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 65,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 204,
+      "node": "Attribute",
+      "source": "self.startup.directory"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 209,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 208,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 36,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 49,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 50,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 222,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 246,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 424,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 224,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 248,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 426,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 429,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 436,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 223,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 247,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 425,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 263,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 233,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 23,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 25,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 24,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 29,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 48,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 37,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 39,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 45,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 81,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 84,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 82,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 87,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 51,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 52,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 53,
+      "node": "Attribute",
+      "source": "self.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 329,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 384,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 387,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 378,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 381,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 382,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 383,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 306,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 328,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 290,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 74,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 76,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway.py",
+      "line": 316,
+      "node": "Attribute",
+      "source": "gateway.directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway_client.py",
+      "line": 85,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway_client.py",
+      "line": 87,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_gateway_client.py",
+      "line": 86,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 492,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 497,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 495,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 504,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 502,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_recovery_projection.py",
+      "line": 505,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 124,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 126,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 126,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 32,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 33,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 34,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 38,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 70,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 72,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 71,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 28,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 29,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 28,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 29,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_inbox_output.py",
+      "line": 26,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_inbox_output.py",
+      "line": 27,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 103,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 104,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 342,
+      "node": "keyword",
+      "source": "interrupt_boundary=lambda *_: nullcontext(surface != 'revoked')"
+    },
+    {
+      "path": "tests/test_tracked_terminal_measurements.py",
+      "line": 8,
+      "node": "alias",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_tracked_terminal_measurements.py",
+      "line": 19,
+      "node": "Name",
+      "source": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 46,
+      "node": "Attribute",
+      "source": "kwargs['send_boundary']._maintenance_wire_locked"
+    },
+    {
+      "path": "tests/test_view_unread.py",
+      "line": 133,
+      "node": "Name",
+      "source": "directory"
+    },
+    {
+      "path": "tests/test_view_unread.py",
+      "line": 134,
+      "node": "Name",
+      "source": "directory"
+    }
+  ]
+}
