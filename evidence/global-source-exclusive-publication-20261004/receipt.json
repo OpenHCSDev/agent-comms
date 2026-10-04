@@ -1,0 +1,15 @@
+{
+  "source": "638852facef7bfc77eae4fd39743cde871de19e0",
+  "original_parent_source": "98df74945ec0718cbf7281e8103569deeeb61f04",
+  "keepers": {
+    "before.json": "82d9c6438040faaf312a5b5e441935c8b69b20905303af5ee5b497af5e34b439",
+    "after.json": "d9d356b347dc7d69c24fad4f8dfe37a19d78db21e249489f6e28229516fd981b",
+    "qualification.json": "4dc8587600c99d86de7f98c58abfbe7b45c7bcb31a27542efa3beac5e0fd3242",
+    "qualify.py": "d26353643a4dfcbfd401c73e5bc203bf4245f9416b6027472f7781e38f203745",
+    "audit_snapshot.py": "6ca770b6bb5ee81bbc81ce1db197fda49f8933e1d078672f417daac6a134c4df"
+  },
+  "runtime_stack_build_metadata_delta": 0,
+  "new_environments_packages_native_provider_operations": 0,
+  "original_sources": "Historical published SourceInstall owner preserved; only its creation/preimage publication and source-text read change. No original or scientific journal touched.",
+  "scope": "Real private filesystem source creation/replacement; no all-owner restart or global/public activation claim"
+}
