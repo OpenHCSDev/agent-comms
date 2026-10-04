@@ -1,0 +1,67 @@
+{
+  "implementation": "47db86c08888d7c07d2252f583720aa16c8502d0",
+  "scope": "Authored installed SDK construction/installation, not enrolled input, provider transport, final capacity, intervention identity, model recall or a matched study",
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "result": {
+    "scope": "actual-sdk-source-contract",
+    "provider_calls": 0,
+    "provider_bytes_identical": true,
+    "journal_bytes_unchanged": false,
+    "condition_constructions_installed": 4,
+    "construction_scope": "Authored SDK selections/installation/refusals; not submitted inputs or model/provider baselines",
+    "original_source_preserved_through_install_and_restore": true,
+    "distinct_authored_append_refused": true,
+    "original_contribution_tokens": 1207,
+    "invalid_coordinates_refused": 5,
+    "transformation_observed_without_input_rejection": true,
+    "preview_not_recorded": true,
+    "kinds": [
+      "system_layer",
+      "compaction_summary",
+      "transcript",
+      "injection_message",
+      "tool_catalog"
+    ],
+    "session_file": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-native-condition-installation634/sdk-source02/sessions/2026-10-04T09-42-10-552Z_01a1064a-d777-777e-a7f1-c7079e8e6216.jsonl",
+    "condition_construction_scope": "Authored SDK four-condition installation and canonical restore; no input or captured model baseline"
+  },
+  "raw_sdk_source01": "Driver TypeError at missing agent.setModel after four installations/restores; retained, no input/provider",
+  "model_control": "Authored private Agent.state.model fixture value changed/restored to exercise original ContextBudget; no configured/public model or request changed",
+  "source_mutation": "Only distinct later custom-message append in authored SDK source02, after installation/restoration checks; stale original construction refused without install. No donor source read or write",
+  "provider_calls": 0,
+  "native_prompt_calls": 0,
+  "original_reads": 0,
+  "original_input_replays": 0,
+  "package_writes": 0,
+  "environments_created": 0,
+  "native_builds": 0,
+  "study_approved": false,
+  "files": {
+    "sdk-source01.stdout.json": {
+      "path": ".artifacts/s4-native-condition-installation634/sdk-source01.stdout.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sdk-source01.stderr.txt": {
+      "path": ".artifacts/s4-native-condition-installation634/sdk-source01.stderr.txt",
+      "sha256": "707332839da52916281b9a954eed2da841032af45129e184b795f35736f2cd52"
+    },
+    "sdk-source02.stdout.json": {
+      "path": ".artifacts/s4-native-condition-installation634/sdk-source02.stdout.json",
+      "sha256": "4ff246ee9c74aa31f955cf399a26e84452df2f2b9ab9b3879739b62572831bea"
+    },
+    "sdk-source02.stderr.txt": {
+      "path": ".artifacts/s4-native-condition-installation634/sdk-source02.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "consumer-before.json": {
+      "path": ".artifacts/s4-native-condition-installation634/consumer-before.json",
+      "sha256": "86692e95558e18342a0d5f57a52d789dc15e5001b776d8b90fcc332bd5da0121"
+    },
+    "consumer-after.json": {
+      "path": ".artifacts/s4-native-condition-installation634/consumer-after.json",
+      "sha256": "6180814a413be7d266f5ee6104e00a0b928e170ced452d4d69762648513a451d"
+    }
+  }
+}
