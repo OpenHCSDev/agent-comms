@@ -1,0 +1,115 @@
+{
+  "threads": {
+    "alpha": {
+      "name": "alpha",
+      "tags": [
+        "team"
+      ],
+      "worktree": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004",
+      "created_at": 1791146370.3301213,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 41320,
+        "start_time": 62200894
+      },
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "beta": {
+      "name": "beta",
+      "tags": [
+        "other"
+      ],
+      "worktree": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004",
+      "created_at": 1791146370.346655,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 41320,
+        "start_time": 62200894
+      },
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 1,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "renamed_sender": {
+      "name": "renamed_sender",
+      "tags": [],
+      "worktree": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004",
+      "created_at": 1791146370.3081086,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 41320,
+        "start_time": 62200894
+      },
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "alpha": {
+      "kind": "running"
+    },
+    "beta": {
+      "kind": "running"
+    },
+    "renamed_sender": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "alpha": 1791146370.3383682,
+    "beta": 1791146370.7189283,
+    "renamed_sender": 1791146370.3108885
+  },
+  "aliases": {
+    "original_sender": "renamed_sender"
+  },
+  "owners": {
+    "counter": 3,
+    "generations": {
+      "alpha": 2,
+      "beta": 3,
+      "renamed_sender": 1
+    }
+  },
+  "admissions": {
+    "counter": 3,
+    "generations": {
+      "alpha": 2,
+      "beta": 3,
+      "renamed_sender": 1
+    }
+  }
+}

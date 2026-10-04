@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/retained_index_writer.py", line 50, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/retained_index_writer.py", line 28, in main
+    raise RelationViolationError('Original private writer proof changed.')
+agent_comms.errors.RelationViolationError: Original private writer proof changed.

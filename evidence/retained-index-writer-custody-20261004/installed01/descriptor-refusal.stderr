@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/install_retained_index.py", line 37, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/install_retained_index.py", line 30, in main
+    bus = require_retained_writer(root, descriptor, root_id)
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/install_retained_index.py", line 18, in require_retained_writer
+    raise ValueError('Inherited descriptor is not the original bus writer lock.')
+ValueError: Inherited descriptor is not the original bus writer lock.
