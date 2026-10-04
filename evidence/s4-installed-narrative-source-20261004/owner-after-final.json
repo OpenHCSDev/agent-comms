@@ -1,0 +1,374 @@
+{
+  "revision": "5da9cb03ecfd74326777b8db5a0459aca9ec4ba3",
+  "modules": 735,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 621,
+      "name": "condition_construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 595,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 436,
+      "name": "RecordedConditionInstallation",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 278,
+      "name": "fork_condition_acquired",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 288,
+      "name": "fork_request_narrative",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 573,
+      "name": "applied_condition",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 604,
+      "name": "installed_condition",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 651,
+      "name": "condition_message_binding",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 459,
+      "name": "narrative_source",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 290,
+      "name": "fork_condition_acquired",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 463,
+      "name": "narrative_source",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 583,
+      "name": "fork_request_narrative",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 594,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 628,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 276,
+      "name": "fork_condition_acquired",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 632,
+      "name": "fork_request_narrative",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1095,
+      "name": "applied_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1096,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 606,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 629,
+      "name": "narrative_source",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 48,
+      "name": "RecordedConditionInstallation",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1445,
+      "name": "narrative_source",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1446,
+      "name": "narrative_source",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1473,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1630,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1640,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1710,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1389,
+      "name": "applied_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1395,
+      "name": "applied_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1476,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1486,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1489,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1612,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1652,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1658,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1724,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1402,
+      "name": "applied_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1406,
+      "name": "applied_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1442,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1508,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1548,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1556,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1580,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1595,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1599,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1610,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1678,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1713,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1714,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1716,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1722,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1511,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1547,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1591,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1667,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1673,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1676,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1677,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1607,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1615,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1537,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    }
+  ],
+  "limits": "Python lexical references, not JavaScript or dynamic resolution proof. Original private JS observer/constructor read directly."
+}
