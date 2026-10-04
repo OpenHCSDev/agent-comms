@@ -18,9 +18,9 @@ from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.native_compaction_request import NativeSummaryPayload
-from agent_comms.native_entries import MessageEntry, NativeEntry, SessionEntry
+from agent_comms.native_entries import MessageEntry, NativeEntry
 from agent_comms.native_input_record import NativeInputCommit
-from agent_comms.native_pi import NativeContextRecord
+from agent_comms.native_pi import NativeContextRecord, NativePiUnavailable
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.native_tools import ReadTool, WriteTool
@@ -114,16 +114,16 @@ class RecordedMeasurementTests(unittest.TestCase):
         # Detect edits, later source and sibling ancestry being credited as
         # delivered construction; native input/terminal corroboration is read's
         # existing obligation, not fabricated by this relation control.
-        rows = (SessionEntry(id=self.identity.session_id),
-                MessageEntry(id='source', message=UserMessage(content='Source: λ/path')),
-                MessageEntry(id='answer', parent_id='source',
-                    message=AssistantMessage(stop_reason='stop')),
-                MessageEntry(id='boundary', parent_id='answer',
-                    message=UserMessage(content='Recall?')),
-                MessageEntry(id='sibling', parent_id='source',
-                    message=UserMessage(content='Unrelated branch')))
-        self.session.write_text(''.join(json.dumps(FieldCodec.encode(row), ensure_ascii=False) + '\n'
-                                        for row in rows))
+        rows = ({'type': 'session', 'id': self.identity.session_id},
+                {'type': 'message', 'id': 'source',
+                 'message': {'role': 'user', 'content': 'Source: λ/path'}},
+                {'type': 'message', 'id': 'answer', 'parentId': 'source',
+                 'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}},
+                {'type': 'message', 'id': 'boundary', 'parentId': 'answer',
+                 'message': {'role': 'user', 'content': 'Recall?'}},
+                {'type': 'message', 'id': 'sibling', 'parentId': 'source',
+                 'message': {'role': 'user', 'content': 'Unrelated branch'}})
+        self.session.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
         self.session.chmod(0o600)
         probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
         original = {'prompt': 'Source: λ/path', 'native_input':
@@ -144,19 +144,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         # Equal copied IDs are insufficient: authenticate child position/bytes
         # through NativeForkCreation, then use the reader's original branch.
         child = self.root / 'child.jsonl'
-        rows = (SessionEntry(id='child', parent_session=self.identity.session_file),
-                MessageEntry(id='source', message=UserMessage(content='Source: λ/path')),
-                MessageEntry(id='answer', parent_id='source',
-                    message=AssistantMessage(stop_reason='stop')))
-        prefix = ''.join(json.dumps(FieldCodec.encode(row), ensure_ascii=False) + '\n' for row in rows)
+        rows = ({'type': 'session', 'id': 'child', 'parentSession': self.identity.session_file},
+                {'type': 'message', 'id': 'source',
+                 'message': {'role': 'user', 'content': 'Source: λ/path'}},
+                {'type': 'message', 'id': 'answer', 'parentId': 'source',
+                 'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}})
+        prefix = ''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows)
         child.write_text(prefix)
         child.chmod(0o600)
         fork = NativeForkCreation(session_id='child', session_file=str(child), source=self.identity,
             source_revision=FileRevision.from_stat(self.session.stat()),
             revision=FileRevision.from_stat(child.stat()), prefix_digest=TextDigest.of(prefix), entry_count=3)
         with child.open('a') as stream:
-            stream.write(json.dumps(FieldCodec.encode(MessageEntry(id='boundary', parent_id='answer',
-                message=UserMessage(content='Recall?')))) + '\n')
+            stream.write(json.dumps({'type': 'message', 'id': 'boundary', 'parentId': 'answer',
+                'message': {'role': 'user', 'content': 'Recall?'}}) + '\n')
         probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
         original = {'prompt': 'Source: λ/path', 'native_input':
             NativeInputCommit(probe.input_id, self.identity.session_id, 'source'),
@@ -172,7 +173,7 @@ class RecordedMeasurementTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 probe.source_delivery(original['prompt'], original, evidence, 'boundary',
                     replace(fork, entry_count=2))
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(NativePiUnavailable, 'original prefix changed'):
                 probe.source_delivery(original['prompt'], original, evidence, 'boundary',
                     replace(fork, prefix_digest=TextDigest.of('edited prefix')))
 
@@ -497,7 +498,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         # independent paired arm. Existing combined scope remains unchanged.
         round_ = replace(coding_scenario().rounds[0], identity='cut')
         scored = RecallScenario('source-resources', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
-        summary = SummaryUsage(input=1, output=2, total_tokens=3)
+        summary = SummaryUsage(input=1, output=2, cache_read=0, cache_write=0,
+            total_tokens=3, cost=SummaryCost(0, 0, 0, 0, 0))
         probe = PiUsage(input=3, output=4, total_tokens=7)
         source = PiUsage(input=8, output=1, total_tokens=9)
         cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}

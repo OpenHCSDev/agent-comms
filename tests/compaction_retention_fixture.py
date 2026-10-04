@@ -293,7 +293,7 @@ class RecordedNativeProbes:
             if a["sdk_manifest"].counter != b["sdk_manifest"].counter:
                 raise ValueError("Matched probes use different native measurement counters")
             catalogs = tuple(tuple(segment for segment in item["sdk_manifest"].segments
-                                   if segment.kind == ToolCatalogSegment.declared_name)
+                                   if segment.kind is ToolCatalogSegment)
                              for item in (a, b))
             if not all(catalogs):
                 pairs[identity] = {"evaluated": False, "reason": "Original tool catalogs unavailable"}
