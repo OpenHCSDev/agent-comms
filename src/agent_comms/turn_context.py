@@ -208,8 +208,7 @@ class SegmentManifest:
         """An annotation retains its original source, not just matching prose."""
         return (span.segment_sha256 == self.sha256
                 and span.coordinates.kind is self.kind
-                and all(source in self.source_membership()
-                        for source in span.coordinates.provenance))
+                and self.kind.contains_contribution(self, span.coordinates))
 
     def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
         selected = self
@@ -327,6 +326,10 @@ class ContextSegment(
         return (ContributionCoordinates.capture(
             type(self), self.provenance, 0, self.public_text()),)
 
+    @classmethod
+    def contains_contribution(cls, original: SegmentManifest, coordinates: ContributionCoordinates) -> bool:
+        return all(source in original.source_membership() for source in coordinates.provenance)
+
     def public_spans(self) -> tuple[ContextSpan, ...]:
         """Address public sentences within this owner's original source ranges."""
         digest = self.manifest(0).sha256
@@ -403,7 +406,9 @@ class ContributionCoordinates:
             byte_offset += len(sentence.encode("utf-8"))
 
     def contains(self, other: ContributionCoordinates) -> bool:
-        return self.offset <= other.offset and other.offset + other.length <= self.offset + self.length
+        return (self.kind is other.kind and self.provenance == other.provenance
+                and self.offset <= other.offset
+                and other.offset + other.length <= self.offset + self.length)
 
 
 @dataclass(frozen=True)
@@ -507,6 +512,13 @@ class SystemLayerSegment(MeasuredNativeSegment):
 
     def assembly_ranges(self) -> tuple[ContributionCoordinates, ...]:
         return self.source_spans
+
+    @classmethod
+    def contains_contribution(cls, original: SegmentManifest, coordinates: ContributionCoordinates) -> bool:
+        if original.source_spans:
+            return any(source.contains(coordinates) for source in original.source_spans)
+        # Historical captures prove wording with no assembly attribution.
+        return coordinates.provenance == (*original.provenance, UnattributedProvenance())
 
     def disclosure_for(self, span: ContextSpan):
         from .working_memory_disclosure import PublicInstructionDisclosure

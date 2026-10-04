@@ -422,10 +422,12 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
     classifier: ClassifierVersion
 
     async def result(self, ctx):
+        from .working_memory_annotations import WorkingMemoryAnnotations
+
         segment = await self.selected_segment(ctx)
-        labels = await Coordination.run_async(
+        labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
             ctx.server.agent._comms.root / "coordination.sqlite3",
-            lambda store: store.annotations.for_segment(segment, self.classifier))
+            segment, self.classifier))
         return FieldCodec.encode(labels)
 
 

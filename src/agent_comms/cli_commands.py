@@ -588,10 +588,10 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
         help="JSON of the original classifier member and pinned release")
 
     def apply(self, ctx: Comms):
-        from .coordinator import Coordination
+        from .working_memory_annotations import WorkingMemoryAnnotations
 
-        with Coordination(str(ctx.root / "coordination.sqlite3")) as store:
-            return store.annotations.calibration(self.question, self.classifier)
+        return WorkingMemoryAnnotations.calibration(
+            ctx.root / "coordination.sqlite3", self.question, self.classifier)
 
     def encode_result(self, result):
         return result.public_report()

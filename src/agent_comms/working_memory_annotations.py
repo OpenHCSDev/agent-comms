@@ -1,7 +1,13 @@
 """Annotation operations borrow the original coordinator connection and clock."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+from pathlib import Path
+
+from .coordination_database import CoordinationStore
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
+from .coordination_tables.metadata import SchemaMeta
+from .typed_table import SQLiteUserVersion
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
 
@@ -20,15 +26,25 @@ class WorkingMemoryAnnotations:
             span.segment_sha256, span.coordinates.offset, span.coordinates.length,
             question.question, question.sha256, classifier.classifier, classifier.pin), strict=True))
 
-    def labels(self, span, question, classifier):
-        key = self.address(span, question, classifier)
-        with self.session.read():
-            return tuple(SpanAnnotationsRow.select(self.session._connection,
+    @staticmethod
+    @contextmanager
+    def reading(path):
+        """Borrow one original committed snapshot; readers never install a store."""
+        with CoordinationStore.observing(Path(path), lock_timeout=0.05) as db:
+            (version,) = SQLiteUserVersion.read(db.execute("PRAGMA user_version"))
+            SchemaMeta.require_current(db, version.user_version)
+            yield db
+
+    @classmethod
+    def labels(cls, path, span, question, classifier):
+        key = cls.address(span, question, classifier)
+        with cls.reading(path) as db:
+            return tuple(SpanAnnotationsRow.select(db,
                 order_by=("id",), **key))
 
-    def calibration(self, question: QuestionVersion, classifier: ClassifierVersion) -> CalibrationReport:
-        with self.session.read():
-            db = self.session._connection
+    @classmethod
+    def calibration(cls, path, question: QuestionVersion, classifier: ClassifierVersion) -> CalibrationReport:
+        with cls.reading(path) as db:
             originals = SpanAnnotationsRow.select(db, order_by=("id",),
                 question=question.question, question_version=question.sha256,
                 classifier=classifier.classifier, classifier_pin=classifier.pin, label_kind=ModelLabel)
@@ -36,42 +52,45 @@ class WorkingMemoryAnnotations:
             for row in originals:
                 original = row.label
                 rows = SpanAnnotationsRow.select(db, order_by=("id",),
-                    **self.address(original.span, question, classifier))
+                    **cls.address(original.span, question, classifier))
                 effective = SpanAnnotationsRow.effective(tuple(rows))
                 cases.extend(effective.evaluate_original(original))
             return CalibrationReport(question, classifier, tuple(cases))
 
-    def for_segment(self, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+    @classmethod
+    def for_segment(cls, path, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
         """Read the complete effective answer family at its original addresses.
 
         A kind answer does not replace its obligation, scope or fulfillment
         evidence. Different question versions remain different recorded facts;
         reading a segment never substitutes today's question definition.
         """
-        return self.for_segments((segment,), classifier)
+        return cls.for_segments(path, (segment,), classifier)
 
-    def for_context(self, manifests, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+    @classmethod
+    def for_context(cls, path, manifests, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
         """Acquire one context's original answers through the segment reader.
 
         Repeated observations can name the same stored answer. Keep that answer
         once; matching text in another source does not supply its provenance.
         """
-        return self.for_segments(tuple(segment for manifest in manifests
+        return cls.for_segments(path, tuple(segment for manifest in manifests
             for root in manifest.segments for segment in root.original_values()), classifier)
 
-    def for_segments(self, segments, classifier) -> tuple[ModelLabel, ...]:
+    @classmethod
+    def for_segments(cls, path, segments, classifier) -> tuple[ModelLabel, ...]:
         """One acquisition serves context and selected-segment readers alike."""
         originals = {}
         for segment in segments:
             originals.setdefault(segment.sha256, []).append(segment)
-        with self.session.read():
-            rows = SpanAnnotationsRow.for_digests(self.session._connection, tuple(originals), classifier)
+        with cls.reading(path) as db:
+            rows = SpanAnnotationsRow.for_digests(db, tuple(originals), classifier)
             grouped = {}
             for row in rows:
                 label = row.label
                 if any(segment.contains_span(label.span)
                        for segment in originals[label.span.segment_sha256]):
-                    key = tuple(self.address(label.span, label.question, label.classifier).values())
+                    key = tuple(cls.address(label.span, label.question, label.classifier).values())
                     grouped.setdefault(key, []).append(row)
             return tuple(SpanAnnotationsRow.effective(tuple(rows)) for rows in grouped.values())
 

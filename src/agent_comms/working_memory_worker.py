@@ -9,7 +9,7 @@ from acp.schema import SessionInfoUpdate
 
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordinator import Coordination
-from .working_memory_annotations import PreviouslyRequestedAnnotation
+from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
 from .working_memory_disclosure import DisclosureState
 from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
@@ -54,7 +54,8 @@ class AnnotationWorker:
             partial(policy.acquire, self.comms, manifest.thread))
         grant.require_segment(segment)
         version = QuestionVersion.current(question, rules)
-        rows = await self.store(lambda owner: owner.labels(span, version, grant.classifier))
+        rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels,
+            self.comms.root / "coordination.sqlite3", span, version, grant.classifier))
         if rows:
             from .coordination_tables.annotations import SpanAnnotationsRow
 

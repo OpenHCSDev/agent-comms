@@ -1,6 +1,6 @@
 # Working memory implementation
 
-Owner: Einstein. Existing released comms-field-codec checkout reused; no new environment, native copy or worker. Source baseline9c297ef4. PR417 remains frozen8f82/DebtPASS with export/distinct-child acceptance unfinished; no package loan transferred.
+Owner: Einstein. Existing released comms-field-codec checkout reused; no new environment, native copy or worker. Source baseline9c297ef4. PR417 is now merged at its accepted registered-App/recorded-reader scope. Its original current-preview negative remains separate from the accepted637 ordinary current-preview correction. All package purposes are closed.
 
 Implement W1-W8 from the unchanged plans/working-memory-2026-10-04 package. Existing ContextSegment/Provenance/InputContributionCoordinates own text and source; annotations address their spans, never rewrite a corpus. The current native producer records loaded-file descriptors but no system-source byte ranges and one flat SystemLayer value. Exact captured assembly spans come first; unmatched text remains visibly unattributed. Today's files cannot stand in for historical request content.
 
@@ -121,3 +121,28 @@ no actual installed reader/controller was launched for this source batch.
 The authenticated annotation reader no longer drops obligation, scope, relation or fulfillment answers behind a KindQuestion-only filter. It reads original answers for the selected segment and pinned classifier, and the existing address/effective row/label owners resolve corrections independently for each original question version. Today's question definition is not substituted for a historical request. This removes the reader's competing question-selection policy; response rows retain original source/question/classifier/version and human review authority.
 
 The existing RuntimeRequest consumer is unchanged. Before/after AST source evidence covers319 modules with zero omissions; lexical references do not establish dynamic dispatch. No new table, JSON codec, native/session access, external call or repeated sanity batch was introduced. W6 frontend mounting/correction and final affected installed qualification remain unfinished; W7's empirical thresholds and W8 remain unimplemented.
+
+## Working-memory consumer and read lifetime
+
+Core627 normally includes merged637. Toad434 extends the original ContextNode,
+recorded source and reader families: answers group by original sources, read
+their exact span through authenticated selected-segment RPC, and correct through
+the existing human-owned CLI operation. The UI stores an acquired projection,
+not classifier authority or a second text corpus. Uncalibrated predictions stay
+Unclassified. Original ContextAnnotated publication refreshes the existing
+CoordinationAccess; the database/WAL revision owner invalidates open readers.
+
+WorkingMemoryAnnotations now acquires its reads through the original
+CoordinationStore.observing snapshot and SchemaMeta. Explorer, selected-segment
+RPC, worker lookup and calibration CLI no longer open an initializing
+Coordination connection. Reservation, completion and human correction retain the
+original writing session. One typed query serves a complete context projection.
+
+SystemLayerSegment owns annotation membership in its actual assembly ranges.
+ContributionCoordinates owns matching source identity and byte containment;
+another file's span cannot borrow a source elsewhere in the system prompt.
+Historical whole captures remain explicitly unattributed; no file attribution
+is reconstructed. No native artifact, installed package or paid request has
+been changed. Source sanity for this complete batch follows implementation;
+installed worker/UI acceptance, genuine native assembly, Codex developer capture,
+empirical calibration and the later sentinel remain unfinished.
