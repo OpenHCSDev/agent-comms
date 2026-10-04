@@ -276,7 +276,7 @@ class Todo(TypedTable):
                 check=(
                     '"state" IN ('
                     + ", ".join(
-                        sql_literal(member.declared_name)
+                        sql_literal(member)
                         for member in TodoState.members_with(TodoState)
                     )
                     + ")"
@@ -294,7 +294,7 @@ class Todo(TypedTable):
                 check=(
                     '"last_transition" IN ('
                     + ", ".join(
-                        sql_literal(member.declared_name)
+                        sql_literal(member)
                         for member in AssignmentChange.members_with(AssignmentChange)
                     )
                     + ")"

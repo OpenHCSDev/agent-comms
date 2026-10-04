@@ -162,7 +162,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
     )
     @projected(view="snapshot", name="status")
     def snapshot_status(self):
-        return self.lifecycle.declared_name
+        return type(self.lifecycle)
 
     @projected(view="snapshot", name="current_attempt_ordinal")
     def snapshot_current_attempt_ordinal(self):

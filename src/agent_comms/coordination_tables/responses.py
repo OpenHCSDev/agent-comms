@@ -51,7 +51,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
 
     @projected(view="snapshot", name="state")
     def snapshot_state(self):
-        return self.lifecycle.declared_name
+        return type(self.lifecycle)
 
     @projected(view="snapshot", name="receipt_message_id")
     def snapshot_receipt_message_id(self):

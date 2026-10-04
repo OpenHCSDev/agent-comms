@@ -28,7 +28,8 @@ class Engagement(DeclaredFamily, affix="Engagement"):
 
     @property
     def mode(self) -> WakePolicy:
-        return WakePolicy.decode(self.declared_name)()
+        return next(policy() for policy in WakePolicy.members_with(WakePolicy)
+                    if policy.active and policy.engagement_type() is type(self))
 
     @property
     @abstractmethod
@@ -37,7 +38,7 @@ class Engagement(DeclaredFamily, affix="Engagement"):
     @classmethod
     def verdict_expression(cls, expression: str) -> str:
         cases = " ".join(
-            f"WHEN {sql_literal(member.declared_name)} THEN {sql_literal(member.verdict)}"
+            f"WHEN {sql_literal(member)} THEN {sql_literal(member.verdict)}"
             for member in cls.members_with(cls)
         )
         return f"CASE json_extract({expression}, '$.kind') {cases} END"
@@ -60,8 +61,12 @@ class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
     @abstractmethod
     def initial_state(cls): ...
 
+    @classmethod
+    @abstractmethod
+    def engagement_type(cls) -> type[Engagement]: ...
+
     def engage(self, execution_id: str, target: str) -> Engagement:
-        return Engagement.decode(self.declared_name)(execution_id, target)
+        return self.engagement_type()(execution_id, target)
 
     @classmethod
     def relevance_instruction(cls):
@@ -85,12 +90,17 @@ class PassiveWake(NoSourceProof, WakePolicy):
 
         return PassiveAssignment
 
-    def engage(self, execution_id, target):
+    @classmethod
+    def engagement_type(cls) -> type[Engagement]:
         raise IntegrityViolationError("passive claim cannot engage")
 
 
 class BoundedTriageWake(TriageSourceProof, WakePolicy):
     triage = True
+
+    @classmethod
+    def engagement_type(cls) -> type[Engagement]:
+        return BoundedTriageEngagement
 
     def triage_expectation(self):
         return "evaluate this original under the shared reply relevance instruction"
@@ -103,6 +113,10 @@ class BoundedTriageWake(TriageSourceProof, WakePolicy):
 
 
 class FullWake(FullSourceProof, WakePolicy):
+    @classmethod
+    def engagement_type(cls) -> type[Engagement]:
+        return FullEngagement
+
     @classmethod
     def initial_state(cls):
         from .assignment_states import FullPendingAssignment

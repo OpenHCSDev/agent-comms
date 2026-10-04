@@ -46,3 +46,23 @@ Pending package dependency: the authoritative .skill archive contains
 does not. The original NRA owner has the publishing request through the existing
 human bus. F4 will import the published original collector and extend Core's
 PerFileOccurrenceMeasure; it will not copy the collector or add a dormant check.
+
+## Wake and SQL projection batch
+
+The original WakePolicy declarations now own their engagement constructor.
+Engagement derives its wake policy from those declarations, deleting both
+name-based cross-family decoders. Passive refusal remains on its original member.
+The original SQL literal owner accepts the declaration through FieldCodec;
+assignment, cohort, Todo and engagement schema generators no longer serialize
+family members themselves. Generated SQL text/constraints remain unchanged.
+
+All five lifecycle snapshot properties (assignment disposition/wake mode, attempt
+phase, execution status, response state) return their original declarations to
+FieldCodec.project. No other caller invokes these projected properties; the
+existing projection owner emits the same external strings. Native fork requests
+carry the existing NativeForkCreation declaration; the helper's original external
+`creation_kind` remains encoded at its existing FieldCodec request boundary.
+
+F0 #620 normally joined at 54c896f1a814090d86834bd46d057d49012b171d.
+Remaining non-mechanism F4 sites and original packaged collector integration are
+still in progress; this source batch does not claim installed acceptance.
