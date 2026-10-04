@@ -1,0 +1,2898 @@
+{
+  "owner_sites": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 18,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 40,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 186,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 304,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 486,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 14,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 21,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 202,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 15,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 51,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 79,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 21,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 36,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 157,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 11,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 43,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/attempt_states.py",
+      "line": 14,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/attempt_states.py",
+      "line": 20,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 23,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 38,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/channels.py",
+      "line": 11,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/channels.py",
+      "line": 108,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 10,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 62,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 30,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 159,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 716,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 909,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1427,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 28,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 252,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 148,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 389,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 409,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 319,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 377,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 69,
+      "node": "ClassDef",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 403,
+      "node": "ClassDef",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 107,
+      "node": "FunctionDef",
+      "expression": "require_selected_claim"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 424,
+      "node": "FunctionDef",
+      "expression": "captured_owner"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 431,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 443,
+      "node": "FunctionDef",
+      "expression": "require_obligation"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 419,
+      "node": "Attribute",
+      "expression": "self.captured_owner"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 431,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 242,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 321,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 458,
+      "node": "Attribute",
+      "expression": "self.captured_owner"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 11,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 16,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 45,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 103,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 312,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 356,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 31,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 25,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 45,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 20,
+      "node": "ImportFrom",
+      "expression": "from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 28,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 30,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 87,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 36,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 39,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 41,
+      "node": "Attribute",
+      "expression": "receipt.require_selected_claim"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 62,
+      "node": "Attribute",
+      "expression": "generation.require_selection"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 96,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 99,
+      "node": "Attribute",
+      "expression": "generation.require_obligation"
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 92,
+      "node": "Attribute",
+      "expression": "owner.wake_context"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 17,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts, assert_cohort_schema, assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 110,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 253,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 258,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 304,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 265,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 215,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 319,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 17,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 22,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from metaclass_registry import AutoRegisterMeta, LazyDiscoveryDict, RegistryConfig"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 12,
+      "node": "ClassDef",
+      "expression": "_FamilyMeta"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 92,
+      "node": "ClassDef",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 22,
+      "node": "Name",
+      "expression": "_FamilyMeta"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 92,
+      "node": "Name",
+      "expression": "_FamilyMeta"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 67,
+      "node": "Name",
+      "expression": "_FamilyMeta"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 70,
+      "node": "Name",
+      "expression": "RegistryConfig"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 52,
+      "node": "Name",
+      "expression": "RegistryConfig"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 104,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 39,
+      "node": "Name",
+      "expression": "LazyDiscoveryDict"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 106,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 26,
+      "node": "Name",
+      "expression": "_FamilyMeta"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 34,
+      "node": "Name",
+      "expression": "_FamilyMeta"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 56,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/delivery_policy.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/delivery_policy.py",
+      "line": 56,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/execution_states.py",
+      "line": 17,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/execution_states.py",
+      "line": 23,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 21,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 29,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 106,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 197,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 27,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 257,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 108,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 297,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 318,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 381,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 395,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 456,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 492,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 239,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 272,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 26,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 98,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 152,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 193,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 13,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 100,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_attempt_phase.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_attempt_phase.py",
+      "line": 15,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_generation.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_generation.py",
+      "line": 22,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "line": 18,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "line": 50,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 17,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 176,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 20,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 35,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 31,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 101,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 188,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 340,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 10,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 49,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 24,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 20,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 29,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 13,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 22,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_arguments.py",
+      "line": 10,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_arguments.py",
+      "line": 14,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 41,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 15,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 45,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_file_artifact.py",
+      "line": 5,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_file_artifact.py",
+      "line": 9,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 15,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 53,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 247,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_tools.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/native_tools.py",
+      "line": 24,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 36,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/obligation_states.py",
+      "line": 10,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/obligation_states.py",
+      "line": 15,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 37,
+      "node": "ImportFrom",
+      "expression": "from .cohort_schema import COHORT_SCHEMA_VERSION, AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts, assert_cohort_schema, assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 378,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 402,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 458,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 20,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 74,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 33,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 104,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 47,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 233,
+      "node": "Attribute",
+      "expression": "request.require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 234,
+      "node": "Attribute",
+      "expression": "cutover.require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 22,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 85,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 13,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 39,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_helper.py",
+      "line": 13,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_helper.py",
+      "line": 27,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 139,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 247,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 346,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 384,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 687,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 763,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 776,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 805,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 835,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 978,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 1055,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 1105,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 1133,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 72,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 98,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 780,
+      "node": "Attribute",
+      "expression": "self.require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 813,
+      "node": "Attribute",
+      "expression": "self.require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 807,
+      "node": "Attribute",
+      "expression": "super().require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 7,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 10,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 121,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 200,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "line": 20,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "line": 48,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "line": 149,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 25,
+      "node": "ImportFrom",
+      "expression": "from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 189,
+      "node": "Name",
+      "expression": "ClaimBatchReceipts"
+    },
+    {
+      "path": "src/agent_comms/recovery_states.py",
+      "line": 8,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/recovery_states.py",
+      "line": 12,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 21,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 300,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/reservation_rules.py",
+      "line": 10,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/reservation_rules.py",
+      "line": 74,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/response_policy.py",
+      "line": 11,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/response_policy.py",
+      "line": 19,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 22,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 43,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/restart_refusals.py",
+      "line": 6,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/restart_refusals.py",
+      "line": 10,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 14,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 33,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 20,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 43,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 27,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 41,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 111,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 22,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 109,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 158,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 35,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 60,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/session_load.py",
+      "line": 8,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/session_load.py",
+      "line": 18,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 27,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 96,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 126,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 170,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/thread_execution.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/thread_execution.py",
+      "line": 26,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "line": 8,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "line": 17,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/thread_status.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/thread_status.py",
+      "line": 17,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 237,
+      "node": "FunctionDef",
+      "expression": "wake_context"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 19,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 91,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 219,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 17,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 50,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 90,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/transcript_events.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/transcript_events.py",
+      "line": 18,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/transcript_updates.py",
+      "line": 18,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/transcript_updates.py",
+      "line": 24,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 27,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 277,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 600,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 18,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 9,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 25,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 200,
+      "node": "Attribute",
+      "expression": "state.model.require_selection"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 30,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 51,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 382,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 178,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 281,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 202,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 10,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 21,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 56,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 12,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 44,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 18,
+      "node": "ImportFrom",
+      "expression": "from .declared_family import DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 91,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 767,
+      "node": "Attribute",
+      "expression": "original.model.require_selection"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 346,
+      "node": "Attribute",
+      "expression": "point.model.require_selection"
+    },
+    {
+      "path": "tests/guards/test_sealed_mechanisms.py",
+      "line": 11,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/guards/test_sealed_mechanisms.py",
+      "line": 34,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/round2/test_nullable_shape_column.py",
+      "line": 8,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/round2/test_nullable_shape_column.py",
+      "line": 13,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 135,
+      "node": "Attribute",
+      "expression": "state.model.require_selection"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 38,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 854,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 915,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tests/test_declared_family.py",
+      "line": 6,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/test_declared_family.py",
+      "line": 9,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_declared_family.py",
+      "line": 59,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_field_codec.py",
+      "line": 6,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/test_field_codec.py",
+      "line": 95,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_field_codec.py",
+      "line": 170,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_field_codec.py",
+      "line": 226,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_field_codec.py",
+      "line": 274,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_json_shape_field_codec.py",
+      "line": 8,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/test_json_shape_field_codec.py",
+      "line": 12,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_json_shape_field_codec.py",
+      "line": 96,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 25,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 39,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 190,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 342,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 436,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 343,
+      "node": "Attribute",
+      "expression": "cutover.require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 437,
+      "node": "Attribute",
+      "expression": "cutover.require_selection"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 103,
+      "node": "Attribute",
+      "expression": "reported.model.require_selection"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 96,
+      "node": "Attribute",
+      "expression": "state.model.require_selection"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 16,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 24,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 352,
+      "node": "Name",
+      "expression": "captured_owner"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 354,
+      "node": "Name",
+      "expression": "captured_owner"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 21,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 565,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tools/cutover/owner_read_projection.py",
+      "line": 8,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tools/cutover/owner_read_projection.py",
+      "line": 14,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 227,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 375,
+      "node": "Attribute",
+      "expression": "operation.require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 309,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 321,
+      "node": "Attribute",
+      "expression": "self.task_carry.require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 455,
+      "node": "Attribute",
+      "expression": "operation.require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 38,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 21,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 22,
+      "node": "Attribute",
+      "expression": "super().require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 29,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 7,
+      "node": "ImportFrom",
+      "expression": "from agent_comms.declared_family import DeclaredFamily"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 15,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 45,
+      "node": "FunctionDef",
+      "expression": "require_selection"
+    }
+  ],
+  "revision": "HEAD",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "declarations": [
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 11,
+      "name": "AwarenessSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "bus: str",
+        "root_id: str",
+        "sources: tuple[DeliverySources, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 33,
+      "name": "UnavailableAwarenessSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 135,
+      "name": "CompleteAwareness",
+      "bases": [
+        "ContextSegment",
+        "OptionalAwarenessResult"
+      ],
+      "annotations": [
+        "recipient_lookup: str",
+        "through_seq: int",
+        "selected: tuple[_SelectedDecision, ...]",
+        "open_obligations: tuple[_OpenObligation, ...]",
+        "omitted_count: int",
+        "instruction: InstructionFile",
+        "content_instruction: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 9,
+      "name": "SelectedResponseSegment",
+      "bases": [
+        "ReplyRouteSegment"
+      ],
+      "annotations": [
+        "sender: str",
+        "example: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 12,
+      "name": "RetainedSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "annotations": [
+        "retained: RetainedTaskFacts",
+        "scope: AuthoredSourceScope",
+        "boundary: WireExportBoundary"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 9,
+      "name": "SelectedTriageSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "participant: SelectedParticipant",
+        "output: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 32,
+      "name": "SelectedWorkSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "participant: SelectedParticipant",
+        "action_instructions: tuple[InstructionFile, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 29,
+      "name": "SelectedWakeSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "sources: tuple[tuple[CommittedDelivery, WakeAssignment], ...]",
+        "owner: Thread",
+        "obligations: tuple[ResponseObligation, ...]",
+        "relevance: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 276,
+      "name": "ContextSegment",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "annotations": [
+        "provenance: tuple[Provenance, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 352,
+      "name": "UserInputSegment",
+      "bases": [
+        "SuppliedSegment",
+        "ContextSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 358,
+      "name": "MeasuredNativeSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "annotations": [
+        "tokens: int",
+        "contributors: tuple[SegmentManifest, ...] = ()"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 395,
+      "name": "SystemLayerSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "annotations": [
+        "content: str",
+        "tokens: int",
+        "sha256: str",
+        "utf8_bytes: int"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 441,
+      "name": "TranscriptSegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 446,
+      "name": "CompactionSummarySegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 451,
+      "name": "InjectionMessageSegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 456,
+      "name": "ToolCatalogSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "annotations": [
+        "tools: tuple[dict[str, Any], ...]",
+        "tokens: int",
+        "sha256: str",
+        "utf8_bytes: int"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 470,
+      "name": "InstructionSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "annotations": [
+        "instruction: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "name": "UserFollowupSegment",
+      "bases": [
+        "InstructionSegment",
+        "UserInputSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 511,
+      "name": "CoordinationSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "response_instruction: InstructionFile",
+        "owner: ThreadIncarnation",
+        "parent: str | None",
+        "project: str",
+        "peers: tuple[PeerState, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 562,
+      "name": "GoalSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "goal: Goal"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 579,
+      "name": "AutomaticTitleSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 585,
+      "name": "ReplyRouteSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "targets: tuple[str, ...]"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 62,
+      "expression": "from .context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 69,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 60,
+      "expression": "from .turn_context import CoordinationSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 64,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 7,
+      "expression": "from ..turn_context import InstructionFile, InstructionSegment, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 11,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 33,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 22,
+      "expression": "from ..turn_context import ContextSegment, InstructionFile, TurnContext",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 135,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 115,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 6,
+      "expression": "from ..turn_context import InstructionFile, ReplyRouteSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 9,
+      "expression": "ReplyRouteSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 9,
+      "expression": "from ..turn_context import ContextSegment, OwnerProvenance, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 12,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 6,
+      "expression": "from ..turn_context import InstructionFile, InstructionSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 9,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 32,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 18,
+      "expression": "from ..turn_context import InstructionFile, InstructionSegment, OwnerProvenance, NextContextTurn, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 29,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 58,
+      "expression": "from .turn_context import TurnContext, UserFollowupSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 404,
+      "expression": "UserFollowupSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 304,
+      "expression": "from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 316,
+      "expression": "AwarenessSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 313,
+      "expression": "UnavailableAwarenessSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 8,
+      "expression": "from .turn_context import ContextManifest, ContextSegment, ContextSourceText, MeasuredNativeSegment, PreviewProvenance, Provenance, SegmentManifest, TurnContext",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 20,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 46,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 47,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 55,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 56,
+      "expression": "from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 58,
+      "expression": "from .context_segments.optional_awareness import _SelectedDecision, _OpenObligation, OptionalAwarenessResult, OmittedAwareness, CompleteAwareness",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 138,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 275,
+      "expression": "CompleteAwareness",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 205,
+      "expression": "from .turn_context import TurnContext, AutomaticTitleSegment, ReplyRouteSegment, InstructionFile, OwnerProvenance, RecordedContextTurn",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 228,
+      "expression": "AutomaticTitleSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 239,
+      "expression": "ReplyRouteSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 9,
+      "expression": "from .context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 16,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 16,
+      "expression": "from .context_segments.response import SelectedResponseSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 95,
+      "expression": "SelectedResponseSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 28,
+      "expression": "from .context_segments.wake import SelectedWakeSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 29,
+      "expression": "from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 50,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 60,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 55,
+      "expression": "SelectedTriageSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 83,
+      "expression": "SelectedWorkSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 232,
+      "expression": "from .turn_context import GoalSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 235,
+      "expression": "GoalSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 352,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 358,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 395,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 441,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 446,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 451,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 456,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 470,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 511,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 562,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 579,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 585,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 483,
+      "expression": "UserFollowupSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 519,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 566,
+      "expression": "GoalSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 172,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 333,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 214,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 721,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 766,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 769,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 202,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 762,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 776,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 761,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 203,
+      "expression": "from .context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 208,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 31,
+      "expression": "from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 296,
+      "expression": "ToolCatalogSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 16,
+      "expression": "from agent_comms.turn_context import UserInputSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 67,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 106,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 14,
+      "expression": "from agent_comms.turn_context import ContextManifest, ContextSourceText, FileProvenance, JournalProvenance, NativeProvenance, PreviewProvenance, RecordedContextTurn, SegmentManifest, SystemLayerSegment, TranscriptSegment, TurnContext",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 249,
+      "expression": "from agent_comms.context_segments.awareness import UnavailableAwarenessSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 24,
+      "expression": "SystemLayerSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 88,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 148,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 186,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 254,
+      "expression": "UnavailableAwarenessSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 69,
+      "expression": "from agent_comms.context_segments.wake import SelectedWakeSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 444,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 432,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 435,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 39,
+      "expression": "from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn, SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 942,
+      "expression": "SystemLayerSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 805,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1151,
+      "expression": "SystemLayerSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1152,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1153,
+      "expression": "InjectionMessageSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 675,
+      "expression": "ToolCatalogSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 9,
+      "expression": "from agent_comms.context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 114,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 207,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 10,
+      "expression": "from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 323,
+      "expression": "from agent_comms.turn_context import CoordinationSegment, InstructionFile",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 22,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 329,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 314,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    }
+  ],
+  "limits": "Lexical AST and transitive named bases; dynamic imports/runtime resolution require semantic reading and final fresh-process boundary checks."
+}

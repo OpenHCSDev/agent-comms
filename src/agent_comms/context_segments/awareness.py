@@ -3,8 +3,8 @@
 import json
 from dataclasses import dataclass
 
-from .private_bus_checkpoint import DeliverySources
-from .turn_context import InstructionFile, InstructionSegment, WireProvenance
+from ..private_bus_checkpoint import DeliverySources
+from ..turn_context import InstructionFile, InstructionSegment, WireProvenance
 
 
 @dataclass(frozen=True, kw_only=True)

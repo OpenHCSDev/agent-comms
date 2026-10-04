@@ -1,0 +1,18 @@
+{
+  "state": "INSTALLED_CURRENT_PREVIEW_APP_PASS",
+  "providers": 0,
+  "native_inputs": 0,
+  "new_forks": 0,
+  "priming_calls": 0,
+  "controller": {
+    "pid": 394713,
+    "start_time": 59011874
+  },
+  "app_pid": 395084,
+  "saved_source_unchanged": true,
+  "public_source_unchanged": true,
+  "original_inputs_unchanged": true,
+  "original_manifests_unchanged": true,
+  "owned_native_children_closed": true,
+  "elapsed_seconds": 16.28012289002072
+}

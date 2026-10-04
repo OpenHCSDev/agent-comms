@@ -1,0 +1,442 @@
+.....................................F.FFF.F.....F....FF.........F...... [ 98%]
+.                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_original_context_wire_captures_are_indexed_not_public_messages ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1131/test_original_context_wire_cap0')
+
+    def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path):
+        comms, _ = _root(tmp_path)
+        owner = comms.registry.require("Alice")
+        captured = replace(recorded((system((NativeProvenance(identity(tmp_path), 1, "a" * 64),))
+                                     .measured_manifest(),)), thread=owner.incarnation)
+        captured = replace(captured, segments=(replace(captured.segments[0],
+                                                      captured_text=("Original request system",)),))
+        comms.bus.log.record_context(captured)
+        assert comms.bus.log.context_manifests(owner.name, comms.registry) == (captured,)
+        assert comms.bus.log.full_history() == []
+        assert comms.bus.log.latest_sequence() == 0
+        assert captured.public_text_recorded
+        assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
+            .public_text_recorded
+        from agent_comms.cli_commands import ContextCliCommand
+    
+        command = ContextCliCommand(thread=owner.name, turn=2)
+>       assert command.encode_result(command.apply(comms))["text_recorded"] is True
+                                     ^^^^^^^^^^^^^^^^^^^^
+
+tests/test_context_source_inspection.py:230: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/cli_commands.py:1030: in apply
+    from .runtime import RuntimeConnection, socket_path
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Local attachment to a thread's single executing ACP owner.
+    
+    Opening another UI subscribes to the owner; it never launches another backend
+    or changes the registry PID. The socket is scoped to the wire and owner PID.
+    """
+    
+    from __future__ import annotations
+    
+    from functools import partial
+    from .coordinator import Coordination
+    
+    import asyncio
+    import json
+    import os
+    import secrets
+    import socket
+    from collections.abc import Coroutine
+    from contextlib import ExitStack, suppress
+    from contextvars import ContextVar
+    from pathlib import Path
+    from typing import Any, cast
+    
+>   from acp.schema import RequestPermissionResponse
+E   ModuleNotFoundError: No module named 'acp'
+
+src/agent_comms/runtime.py:23: ModuleNotFoundError
+___ test_cold_client_acquires_current_and_recorded_contributor_declarations ____
+
+    def test_cold_client_acquires_current_and_recorded_contributor_declarations():
+        """Prevent producer-import order from changing RPC and manifest decoding."""
+        import subprocess
+        import sys
+    
+        result = subprocess.run([sys.executable, "-c", '''
+    import hashlib, json, sys
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_turn_context import NativeContextData
+    from agent_comms.turn_context import ContextSegment, SegmentManifest
+    assert "agent_comms.context_segments.awareness" not in sys.modules
+    source = {"kind": "file", "path": "/original/instructions/awareness-unavailable.md", "sha256": "a" * 64}
+    original = "Original unavailable awareness instruction"
+    wire = {"kind": "unavailable_awareness", "provenance": [source],
+            "instruction": {"content": original, "source": source}}
+    preview = FieldCodec.decode(NativeContextData, {
+        "counter": "pi.estimateTokens", "identity": {"session_id": "original-native", "session_file": "/original/saved.jsonl"},
+        "segments": [], "contributors": [wire]})
+    assert preview.contributors[0].public_text() == original
+    schema = FieldCodec.value_schema(type[ContextSegment])
+    # These original stored spellings span every previously producer-local module.
+    expected = {"awareness", "unavailable_awareness", "retained", "selected_wake",
+                "selected_triage", "selected_work", "selected_response", "complete_awareness"}
+    assert expected <= set(schema["enum"]), schema
+    for name in expected:
+        manifest = FieldCodec.decode(SegmentManifest, {"kind": name, "provenance": [source],
+            "sha256": hashlib.sha256(original.encode()).hexdigest(), "utf8_bytes": len(original), "tokens": 7})
+        assert manifest.kind is ContextSegment.decode(name)
+        assert FieldCodec.encode(manifest)["kind"] == name
+    try:
+        ContextSegment.decode("not_an_original_contributor")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unknown context kind must still refuse")
+    print(json.dumps({"current_preview": "decoded original unavailable contribution", "recorded_declarations": sorted(expected), "schema_members": len(schema["enum"])}))
+    '''], capture_output=True, text=True, timeout=20)
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 11, in <module>
+E             preview = FieldCodec.decode(NativeContextData, {
+E                 "counter": "pi.estimateTokens", "identity": {"session_id": "original-native", "session_file": "/original/saved.jsonl"},
+E                 "segments": [], "contributors": [wire]})
+E           File "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/field_codec.py", line 315, in decode
+E             return cast(T, cls._decode(target, data))
+E                            ~~~~~~~~~~~^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/field_codec.py", line 498, in _decode
+E             raise ValueError(f"Expected a string family {tag}.")
+E         ValueError: Expected a string family kind.
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python', '-c', '\nimport hashlib, json, sys\nfrom agent_comms.field_codec import Fiel...8, in _decode\n    raise ValueError(f"Expected a string family {tag}.")\nValueError: Expected a string family kind.\n').returncode
+
+tests/test_context_source_inspection.py:282: AssertionError
+________ test_installed_context_callbacks_share_original_writer_custody ________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1131/test_installed_context_callbac0')
+
+    @pytest.mark.asyncio
+    async def test_installed_context_callbacks_share_original_writer_custody(tmp_path):
+        """Both real event owners publish original observations without blocking.
+    
+        Run once with the shared receiving interpreter and an original native root.
+        This provider-free recording fixture does not replay an input or claim a new
+        native observation. Its source segments remain the original SDK metadata.
+        """
+        import asyncio
+        from contextlib import ExitStack
+        import os
+        from pathlib import Path
+        import sys
+        import threading
+        import time
+    
+        import agent_comms
+>       from agent_comms.acp import CommsAgent
+
+tests/test_turn_context_wire.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Agent communications — ACP server on the official protocol library.
+    
+    Implements an Agent Client Protocol agent so ACP clients (Toad, Zed, VS Code)
+    attach to the coordination wire natively: each client session is one thread
+    on the wire, prompts are messages on the bus, and replies come back as
+    ``agent_message_chunk`` session updates.
+    
+    Two turn modes share one session:
+    
+    - **agent** (default): the prompt runs a real coding agent (pi, headless
+      ``--print`` mode) and streams its thinking, tools, and response.
+    - **relay**: ``@peer``, ``#channel``, or ``!relay`` sends directly to the
+      coordination wire without launching another coding turn.
+    
+    An explicit ``!agent`` prefix selects the coding turn mode.
+    """
+    
+    from __future__ import annotations
+    
+    import asyncio
+    import json
+    import os
+    import re
+    import sys
+    import time
+    from contextlib import AsyncExitStack
+    from pathlib import Path
+    from functools import partial
+    from typing import TYPE_CHECKING, Any
+    
+>   from acp import RequestError, run_agent
+E   ModuleNotFoundError: No module named 'acp'
+
+src/agent_comms/acp.py:31: ModuleNotFoundError
+_____ test_silent_manifest_continuous_original_message_and_cold_projection _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1131/test_silent_manifest_continuou0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4e5925e120>
+
+    def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path, monkeypatch):
+        comms,root_id=_root(tmp_path)
+        first=comms.messaging.send_initial_cohort('sender','#team','@Alice original question')
+        lookup=stable_thread_lookup(17002.0)
+        prior=_page(comms,lookup)
+        raw=comms.bus.log.path.read_bytes()
+        activity=comms.bus.channel_activity()
+        pending=comms.bus.pending_counts_all(['Alice','Bob'])
+        awareness=comms.bus.awareness_segments(comms.registry.require('Alice'))
+        comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
+        assert comms.bus.log.path.read_bytes().startswith(raw)
+        assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
+        assert comms.bus.log.latest_sequence()==first.seq
+        assert comms.bus.log.total_messages()==1
+        assert _page(comms,lookup)[0].offset>prior[0].offset
+        assert _page(comms,lookup)[1:]==prior[1:]
+        assert comms.bus.channel_activity()==activity
+        assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
+        assert comms.bus.awareness_segments(comms.registry.require('Alice'))==awareness
+        assert comms.bus.log.full_history()==[first]
+        with comms.bus.log.full_history_snapshot() as (_, messages):
+            assert list(messages)==[first]
+        second=comms.messaging.send_initial_cohort('sender','#team','@Alice next original message')
+        assert second.seq==first.seq+1
+        comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
+        reopened=Comms(comms.root)
+        assert reopened.bus.log.full_history()==[first,second]
+        assert len(_page(reopened,lookup)[1])==2
+        monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
+        recent, limited = reopened.relationships._recent_messages()
+        assert recent == (first, second) and not limited
+        assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
+        recorded = ContextCliCommand(thread='Alice',turn=1)
+>       assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_context_wire.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/cli_commands.py:1030: in apply
+    from .runtime import RuntimeConnection, socket_path
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Local attachment to a thread's single executing ACP owner.
+    
+    Opening another UI subscribes to the owner; it never launches another backend
+    or changes the registry PID. The socket is scoped to the wire and owner PID.
+    """
+    
+    from __future__ import annotations
+    
+    from functools import partial
+    from .coordinator import Coordination
+    
+    import asyncio
+    import json
+    import os
+    import secrets
+    import socket
+    from collections.abc import Coroutine
+    from contextlib import ExitStack, suppress
+    from contextvars import ContextVar
+    from pathlib import Path
+    from typing import Any, cast
+    
+>   from acp.schema import RequestPermissionResponse
+E   ModuleNotFoundError: No module named 'acp'
+
+src/agent_comms/runtime.py:23: ModuleNotFoundError
+____ test_recorded_context_history_retains_rename_and_original_predecessor _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1131/test_recorded_context_history_0')
+
+    def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_path):
+        comms, _ = _root(tmp_path)
+        owner = comms.registry.require('Alice')
+        original = manifest(owner)
+        second = manifest(owner, 2)
+        comms.bus.log.record_context(original)
+        comms.bus.log.record_context(second)
+        comms.registry.rename('Alice', 'Renamed-Alice')
+        renamed = comms.registry.require('Renamed-Alice')
+        same_turn = replace(second, thread=renamed.incarnation,
+                            turn=replace(second.turn,
+                                occurrence=replace(second.turn.occurrence,
+                                                   incarnation=renamed.incarnation)))
+        comms.bus.log.record_context(same_turn)
+        future = manifest(renamed, 3)
+        comms.bus.log.record_context(future)
+        raw = comms.bus.log.path.read_bytes()
+        reopened = Comms(comms.root)
+        history = reopened.bus.log.context_manifests('Alice', reopened.registry)
+        assert history == (original, second, same_turn, future)
+        assert reopened.bus.log.context_manifests('Renamed-Alice', reopened.registry) == history
+        recorded = ContextCliCommand(thread='Renamed-Alice', turn=1)
+>       assert recorded.encode_result(recorded.apply(reopened))['manifests'] == FieldCodec.encode((original,))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_context_wire.py:239: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/cli_commands.py:1030: in apply
+    from .runtime import RuntimeConnection, socket_path
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Local attachment to a thread's single executing ACP owner.
+    
+    Opening another UI subscribes to the owner; it never launches another backend
+    or changes the registry PID. The socket is scoped to the wire and owner PID.
+    """
+    
+    from __future__ import annotations
+    
+    from functools import partial
+    from .coordinator import Coordination
+    
+    import asyncio
+    import json
+    import os
+    import secrets
+    import socket
+    from collections.abc import Coroutine
+    from contextlib import ExitStack, suppress
+    from contextvars import ContextVar
+    from pathlib import Path
+    from typing import Any, cast
+    
+>   from acp.schema import RequestPermissionResponse
+E   ModuleNotFoundError: No module named 'acp'
+
+src/agent_comms/runtime.py:23: ModuleNotFoundError
+___________ test_original_input_pin_query_export_correction_and_drop ___________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1131/test_original_input_pin_query_0')
+capsys = <_pytest.capture.CaptureFixture object at 0x7f4e58949d10>
+
+    def test_original_input_pin_query_export_correction_and_drop(tmp_path, capsys):
+        def command(root, args):
+            code = main(["--root", str(root), *args])
+            return code, json.loads(capsys.readouterr().out)
+    
+>       original_input_consumer_journey(tmp_path, command)
+
+tests/test_retained_context_operations.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_retained_context_operations.py:165: in original_input_consumer_journey
+    from test_acp_queue_contract import _owner
+/usr/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Provider-free exact-ID ACP queue projection; no Pi consumption inference."""
+    
+    from __future__ import annotations
+    
+    import asyncio
+    import os
+    from pathlib import Path
+    
+    import pytest
+>   from acp import RequestError
+E   ModuleNotFoundError: No module named 'acp'
+
+tests/test_acp_queue_contract.py:10: ModuleNotFoundError
+_ test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered[missing] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4e5925f8c0>
+damage = 'missing'
+
+    @pytest.mark.parametrize("damage", ["missing", "drift"])
+    async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered(
+        monkeypatch, damage: str
+    ) -> None:
+        if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
+            pytest.skip("private selected runtime requires a real /var/tmp")
+        with tempfile.TemporaryDirectory(prefix="pr94-legacy-optional-", dir="/var/tmp") as temp:
+            root = Path(temp)
+            comms, store, _index, root_id = _root(root)
+            try:
+                initial, assignment = _accepted(comms, store, root_id, "member000", "mandatory work")
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                if damage == "missing":
+                    store.session._connection.execute("DROP TABLE awareness_claim_generations")
+                else:
+                    store.session._connection.execute("DROP TRIGGER awareness_generation_insert_guard")
+                    store.session._connection.execute(
+                        "CREATE TRIGGER awareness_generation_insert_guard BEFORE INSERT "
+                        "ON awareness_claim_generations BEGIN SELECT RAISE(ABORT,'drift'); END"
+                    )
+            finally:
+                store.close()
+>           monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E           AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_optional_awareness_projection.py:250: AttributeError
+_ test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered[drift] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4e594507c0>
+damage = 'drift'
+
+    @pytest.mark.parametrize("damage", ["missing", "drift"])
+    async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered(
+        monkeypatch, damage: str
+    ) -> None:
+        if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
+            pytest.skip("private selected runtime requires a real /var/tmp")
+        with tempfile.TemporaryDirectory(prefix="pr94-legacy-optional-", dir="/var/tmp") as temp:
+            root = Path(temp)
+            comms, store, _index, root_id = _root(root)
+            try:
+                initial, assignment = _accepted(comms, store, root_id, "member000", "mandatory work")
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                if damage == "missing":
+                    store.session._connection.execute("DROP TABLE awareness_claim_generations")
+                else:
+                    store.session._connection.execute("DROP TRIGGER awareness_generation_insert_guard")
+                    store.session._connection.execute(
+                        "CREATE TRIGGER awareness_generation_insert_guard BEFORE INSERT "
+                        "ON awareness_claim_generations BEGIN SELECT RAISE(ABORT,'drift'); END"
+                    )
+            finally:
+                store.close()
+>           monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E           AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_optional_awareness_projection.py:250: AttributeError
+______ test_real_selected_caller_after_rename_injects_only_new_generation ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4e5946fa10>
+
+    async def test_real_selected_caller_after_rename_injects_only_new_generation(
+        monkeypatch,
+    ) -> None:
+        if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
+            pytest.skip("private selected runtime requires a real /var/tmp")
+        with tempfile.TemporaryDirectory(prefix="pr94-renamed-awareness-", dir="/var/tmp") as temp:
+            root = Path(temp)
+            comms, store, index, root_id = _root(root)
+            try:
+                _old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
+                comms.threads._rename_thread("member000", "gamma")
+                current, assignment = _accepted(comms, store, root_id, "gamma", "new original")
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                index.maintain(rebuild=True)
+            finally:
+                store.close()
+>           monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E           AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_optional_awareness_projection.py:510: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_context_source_inspection.py::test_original_context_wire_captures_are_indexed_not_public_messages
+FAILED tests/test_context_source_inspection.py::test_cold_client_acquires_current_and_recorded_contributor_declarations
+FAILED tests/test_turn_context_wire.py::test_installed_context_callbacks_share_original_writer_custody
+FAILED tests/test_turn_context_wire.py::test_silent_manifest_continuous_original_message_and_cold_projection
+FAILED tests/test_turn_context_wire.py::test_recorded_context_history_retains_rename_and_original_predecessor
+FAILED tests/test_retained_context_operations.py::test_original_input_pin_query_export_correction_and_drop
+FAILED tests/test_optional_awareness_projection.py::test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered[missing]
+FAILED tests/test_optional_awareness_projection.py::test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered[drift]
+FAILED tests/test_optional_awareness_projection.py::test_real_selected_caller_after_rename_injects_only_new_generation
+9 failed, 64 passed in 24.06s
