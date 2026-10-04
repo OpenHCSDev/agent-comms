@@ -19,7 +19,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.native_compaction_request import NativeSummaryPayload
 from agent_comms.native_entries import MessageEntry, NativeEntry
-from agent_comms.native_pi import NativeContextRecord
+from agent_comms.native_input_record import NativeInputCommit
+from agent_comms.native_pi import NativeContextRecord, NativePiUnavailable
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.native_tools import ReadTool, WriteTool
@@ -74,6 +75,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                     history += operands['history_additions']
                     self.assertEqual(history, round_.history)
                     self.assertEqual(operands['round'], round_.identity)
+                    self.assertEqual(operands['source_text'], '\n'.join(operands['history_additions']))
                     self.assertEqual(operands['probe_text'], round_.probe_text())
                     self.assertEqual(json.loads(operands['probe_text'].split('\n', 1)[1]),
                         {'round': round_.identity, 'questions': [q.public() for q in round_.questions]})
@@ -108,6 +110,114 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             design.construction_plan(17)
 
+    def test_stimulus_delivery_requires_exact_source_and_original_earlier_branch(self):
+        # Detect edits, later source and sibling ancestry being credited as
+        # delivered construction; native input/terminal corroboration is read's
+        # existing obligation, not fabricated by this relation control.
+        rows = ({'type': 'session', 'id': self.identity.session_id},
+                {'type': 'message', 'id': 'source',
+                 'message': {'role': 'user', 'content': 'Source: λ/path'}},
+                {'type': 'message', 'id': 'answer', 'parentId': 'source',
+                 'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}},
+                {'type': 'message', 'id': 'boundary', 'parentId': 'answer',
+                 'message': {'role': 'user', 'content': 'Recall?'}},
+                {'type': 'message', 'id': 'sibling', 'parentId': 'source',
+                 'message': {'role': 'user', 'content': 'Unrelated branch'}})
+        self.session.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        original = {'prompt': 'Source: λ/path', 'native_input':
+            NativeInputCommit(probe.input_id, self.identity.session_id, 'source'),
+            'submitted_source': {'scope': 'original native user text'}}
+        with NativeEntry.open_evidence(self.session) as evidence:
+            observed = probe.source_delivery(original['prompt'], original, evidence, 'boundary', None)
+            self.assertTrue(observed['evaluated'])
+            self.assertIs(observed['input'], original['native_input'])
+            with self.assertRaisesRegex(ValueError, 'frozen authored source'):
+                probe.source_delivery('Edited source', original, evidence, 'boundary', None)
+            for boundary in ('source', 'answer', 'sibling'):
+                with self.subTest(boundary=boundary):
+                    with self.assertRaisesRegex(ValueError, 'does not precede'):
+                        probe.source_delivery(original['prompt'], original, evidence, boundary, None)
+
+    def test_stimulus_inheritance_requires_existing_exact_sdk_prefix(self):
+        # Equal copied IDs are insufficient: authenticate child position/bytes
+        # through NativeForkCreation, then use the reader's original branch.
+        child = self.root / 'child.jsonl'
+        rows = ({'type': 'session', 'id': 'child', 'parentSession': self.identity.session_file},
+                {'type': 'message', 'id': 'source',
+                 'message': {'role': 'user', 'content': 'Source: λ/path'}},
+                {'type': 'message', 'id': 'answer', 'parentId': 'source',
+                 'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}})
+        prefix = ''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows)
+        child.write_text(prefix)
+        child.chmod(0o600)
+        fork = NativeForkCreation(session_id='child', session_file=str(child), source=self.identity,
+            source_revision=FileRevision.from_stat(self.session.stat()),
+            revision=FileRevision.from_stat(child.stat()), prefix_digest=TextDigest.of(prefix), entry_count=3)
+        with child.open('a') as stream:
+            stream.write(json.dumps({'type': 'message', 'id': 'boundary', 'parentId': 'answer',
+                'message': {'role': 'user', 'content': 'Recall?'}}) + '\n')
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        original = {'prompt': 'Source: λ/path', 'native_input':
+            NativeInputCommit(probe.input_id, self.identity.session_id, 'source'),
+            'submitted_source': {'scope': 'original native user text'}}
+        with NativeEntry.open_evidence(child) as evidence:
+            self.assertTrue(probe.source_delivery(original['prompt'], original,
+                evidence, 'boundary', fork)['evaluated'])
+            with self.assertRaisesRegex(ValueError, 'SDK ancestry'):
+                probe.source_delivery(original['prompt'], original, evidence, 'boundary', None)
+            with self.assertRaises(ValueError):
+                probe.source_delivery(original['prompt'], original, evidence, 'boundary',
+                    replace(fork, source=NativeSessionIdentity('other', str(self.root / 'other.jsonl'))))
+            with self.assertRaises(ValueError):
+                probe.source_delivery(original['prompt'], original, evidence, 'boundary',
+                    replace(fork, entry_count=2))
+            with self.assertRaisesRegex(NativePiUnavailable, 'original prefix changed'):
+                probe.source_delivery(original['prompt'], original, evidence, 'boundary',
+                    replace(fork, prefix_digest=TextDigest.of('edited prefix')))
+
+    def test_stimulus_group_uses_scenario_source_and_same_acquired_reader(self):
+        # Close run/scenario/reader consumers without substituting a native
+        # proof. Spies are observation plumbing only; source_delivery above
+        # exercises the original byte/branch owners.
+        self.session.write_text(json.dumps({'type': 'session', 'id': self.identity.session_id}) + '\n')
+        self.session.chmod(0o600)
+        scenario = coding_scenario()
+        source = RecordedNativeProbe(self.identity, 'a' * 32, 'source-answer')
+        probe = replace(source, input_id='b' * 32, answer_entry_id='probe-answer')
+        run = RecordedNativeProbes({'r1': probe}, stimuli={'r1': source})
+        operand = scenario.construction_rounds()[0]['source_text']
+        readers = []
+
+        def read(selected, evidence, parent):
+            self.assertIs(evidence, parent)
+            readers.append(evidence)
+            return {'prompt': operand if selected == source else scenario.rounds[0].probe_text(),
+                    'native_input': NativeInputCommit(selected.input_id, selected.session.session_id,
+                                                      'source' if selected == source else 'probe'),
+                    'construction': {'fork': None}}
+
+        def delivery(selected, expected, original, evidence, boundary, fork):
+            self.assertIs(selected, source)
+            self.assertEqual(expected, operand)
+            self.assertIs(evidence, readers[0])
+            self.assertEqual(boundary, 'probe')
+            self.assertIsNone(fork)
+            return {'evaluated': True}
+
+        with patch.object(RecordedNativeProbe, 'read', read), patch.object(
+                RecordedNativeProbe, 'source_delivery', delivery):
+            cuts, probes, stimuli = run.observe(scenario)
+        self.assertEqual(cuts, {})
+        self.assertEqual(probes['r1']['prompt'], scenario.rounds[0].probe_text())
+        self.assertTrue(stimuli['r1']['source_delivery']['evaluated'])
+        self.assertTrue(all(reader.source.stream.closed for reader in readers))
+        with patch.object(RecordedNativeProbe, 'read', read):
+            cuts, probes, stimuli = replace(run, rounds={}).observe(scenario)
+        self.assertFalse(stimuli['r1']['source_delivery']['evaluated'])
+        self.assertEqual(FieldCodec.decode(RecordedNativeProbes, FieldCodec.encode(run)), run)
+
     def test_group_reader_shared_once_and_closed_after_second_arm_refuses(self):
         # Resource plumbing only: detect duplicated acquisition and a leaked
         # reader when the later arm refuses. This does not simulate native proof.
@@ -115,7 +225,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.session.chmod(0o600)
         probes = tuple(RecordedNativeProbe(self.identity, digit * 32, 'answer')
                        for digit in ('a', 'b'))
-        runs = tuple(RecordedNativeProbes({'r1': probe}) for probe in probes)
+        stimulus = replace(probes[0], input_id='c' * 32)
+        runs = (RecordedNativeProbes({'r1': probes[0]}, stimuli={'r2': stimulus}),
+                RecordedNativeProbes({'r1': probes[1]}))
         readers = []
         refusal = ValueError('second original arm refused')
 
@@ -130,20 +242,21 @@ class RecordedMeasurementTests(unittest.TestCase):
         with patch.object(NativeEntry, 'open_evidence', wraps=NativeEntry.open_evidence) as opened:
             with patch.object(RecordedNativeProbe, 'read', read):
                 with self.assertRaises(ValueError) as failed:
-                    RecordedNativeProbes.observe_runs(runs, coding_scenario().rounds)
+                    RecordedNativeProbes.observe_runs(runs, coding_scenario())
             self.assertEqual(opened.call_count, 1)
         self.assertIs(failed.exception, refusal)
         self.assertIs(readers[0], readers[1])
+        self.assertIs(readers[1], readers[2])
         self.assertTrue(readers[0].source.stream.closed)
         self.assertFalse(readers[0].entries)
 
     def test_group_round_membership_refuses_before_reader_acquisition(self):
         # Reject unknown original inputs at their owner, before opening either arm.
         probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
-        runs = (RecordedNativeProbes({}), RecordedNativeProbes({'foreign': probe}))
+        runs = (RecordedNativeProbes({}), RecordedNativeProbes({}, stimuli={'foreign': probe}))
         with patch.object(NativeEntry, 'open_evidence') as opened:
             with self.assertRaisesRegex(ValueError, 'Unknown native rounds'):
-                RecordedNativeProbes.observe_runs(runs, coding_scenario().rounds)
+                RecordedNativeProbes.observe_runs(runs, coding_scenario())
         opened.assert_not_called()
 
     def test_original_reader_group_borrows_parent_once_and_retires_on_consumer_error(self):
@@ -173,6 +286,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         run = RecordedNativeProbes({'r1': probe})
         with self.assertRaisesRegex(ValueError, 'same original input'):
             RecordedNativeProbes({'r1': probe, 'r2': probe})
+        with self.assertRaisesRegex(ValueError, 'same original input'):
+            RecordedNativeProbes({'r1': probe}, stimuli={'r1': probe})
         with self.assertRaisesRegex(ValueError, 'reuse original'):
             RecordedNativeProbes.require_distinct((run, run))
         changed = RecordedNativeProbes({'r1': replace(probe, input_id='b' * 32)})
@@ -366,7 +481,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                                              for usage in (assistant, zero))}}
         round_ = replace(coding_scenario().rounds[0], identity='cut')
         scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
-        observed = scored.recorded_resources(cuts, evidence)
+        observed = scored.recorded_resources(cuts, evidence, {})
         combined = observed['combined']
         self.assertEqual(combined['records'], 3)
         self.assertEqual(combined['reported_total_tokens']['value'], 38)
@@ -377,18 +492,55 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertIsNone(combined['cache_read_tokens']['value'])
         self.assertEqual(observed['assistants']['records'], 2)
 
+    def test_workflow_resources_require_stimuli_and_keep_shared_preparation_separate(self):
+        # Detect source-input cost disappearing from a workflow total, missing
+        # evidence becoming zero, or a shared source being counted as an
+        # independent paired arm. Existing combined scope remains unchanged.
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('source-resources', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        summary = SummaryUsage(input=1, output=2, cache_read=0, cache_write=0,
+            total_tokens=3, cost=SummaryCost(0, 0, 0, 0, 0))
+        probe = PiUsage(input=3, output=4, total_tokens=7)
+        source = PiUsage(input=8, output=1, total_tokens=9)
+        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        evidence = {'cut': {'model_steps': ({'usage': {'value': probe}},)}}
+        stimuli = {'cut': {'model_steps': ({'usage': {'value': source}},)}}
+        observed = scored.recorded_resources(cuts, evidence, stimuli)
+        self.assertEqual(observed['combined']['reported_total_tokens']['value'], 10)
+        self.assertEqual(observed['source_inputs']['reported_total_tokens']['value'], 9)
+        self.assertEqual(observed['recorded_workflow']['reported_total_tokens']['value'], 19)
+        self.assertEqual(observed['recorded_workflow']['records'], 3)
+        missing = scored.recorded_resources(cuts, evidence, {})['recorded_workflow']
+        self.assertFalse(missing['reported_total_tokens']['evaluated'])
+        self.assertIsNone(missing['reported_total_tokens']['value'])
+        self.assertEqual(missing['reported_total_tokens']['observed_value'], 10)
+        stimuli['cut']['model_steps'] = ({'usage': {'value': PiUsage(input=0, output=0, total_tokens=0)}},)
+        zero = scored.recorded_resources(cuts, evidence, stimuli)['source_inputs']
+        self.assertTrue(zero['reported_total_tokens']['evaluated'])
+        self.assertEqual(zero['reported_total_tokens']['value'], 0)
+        stimuli['cut']['model_steps'] = ({'usage': {'value': None}},)
+        self.assertFalse(scored.recorded_resources(cuts, evidence, stimuli)
+                         ['recorded_workflow']['reported_total_tokens']['evaluated'])
+        # Shared original source input is allowed; only recall probes establish
+        # distinct experimental samples. No independence grant follows.
+        stimulus = RecordedNativeProbe(self.identity, 'a' * 32, 'source-answer')
+        a = replace(stimulus, input_id='b' * 32, answer_entry_id='answer')
+        b = replace(a, session=NativeSessionIdentity('other', str(self.root / 'other.jsonl')), input_id='c' * 32)
+        RecordedNativeProbes.require_distinct((RecordedNativeProbes({'cut': a}, stimuli={'cut': stimulus}),
+                                             RecordedNativeProbes({'cut': b}, stimuli={'cut': stimulus})))
+
     def test_resource_totals_keep_unreported_and_empty_denominators(self):
         # Detect a perfect zero inferred from absent summary/usage/fields.
         cuts = {'cut': {'summary_usage': {'evaluated': False}}}
         evidence = {'cut': {'model_steps': ({'usage': {'value': None}},)}}
         round_ = replace(coding_scenario().rounds[0], identity='cut')
         scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
-        unavailable = scored.recorded_resources(cuts, evidence)['combined']
+        unavailable = scored.recorded_resources(cuts, evidence, {})['combined']
         self.assertEqual(unavailable['records'], 2)
         self.assertEqual(unavailable['usage_records'], 0)
         self.assertFalse(unavailable['normalized_cost']['evaluated'])
         self.assertIsNone(unavailable['normalized_cost']['value'])
-        empty = scored.recorded_resources({}, {})['combined']
+        empty = scored.recorded_resources({}, {}, {})['combined']
         self.assertEqual(empty['records'], 0)
         self.assertFalse(empty['reported_total_tokens']['evaluated'])
 
@@ -404,7 +556,7 @@ class RecordedMeasurementTests(unittest.TestCase):
             total_tokens=0, reasoning=0, cost=PiCost(total=0))
         cuts = {identities[0]: {'summary_usage': {'evaluated': True, 'usage': summary}}}
         evidence = {identities[0]: {'model_steps': ({'usage': {'value': assistant}},)}}
-        partial = scored.recorded_resources(cuts, evidence)
+        partial = scored.recorded_resources(cuts, evidence, {})
         for group in partial['summaries'], partial['assistants'], partial['combined']:
             self.assertEqual(group['expected_rounds'], identities)
             self.assertEqual(group['observed_rounds'], identities[:1])
@@ -416,13 +568,13 @@ class RecordedMeasurementTests(unittest.TestCase):
                 self.assertIsNone(group[name]['expected_records'])
                 self.assertEqual(group[name]['observed_value'], 0)
         cuts.update({identity: cuts[identities[0]] for identity in identities[1:]})
-        cut_complete = scored.recorded_resources(cuts, evidence)
+        cut_complete = scored.recorded_resources(cuts, evidence, {})
         self.assertTrue(cut_complete['summaries']['normalized_cost']['evaluated'])
         self.assertFalse(cut_complete['combined']['normalized_cost']['evaluated'])
         evidence.update({identity: {'model_steps': ()} for identity in identities[1:]})
-        self.assertEqual(scored.recorded_resources(cuts, evidence)['assistants']['missing_rounds'], identities[1:])
+        self.assertEqual(scored.recorded_resources(cuts, evidence, {})['assistants']['missing_rounds'], identities[1:])
         evidence.update({identity: evidence[identities[0]] for identity in identities[1:]})
-        complete = scored.recorded_resources(cuts, evidence)
+        complete = scored.recorded_resources(cuts, evidence, {})
         self.assertTrue(complete['combined']['normalized_cost']['evaluated'])
         self.assertEqual(complete['combined']['normalized_cost']['value'], 0)
         self.assertEqual(complete['combined']['normalized_cost']['expected_records'], 6)
@@ -763,7 +915,7 @@ class RecordedMeasurementTests(unittest.TestCase):
             {'r1': RecordedNativeProbe(self.identity, 'a' * 32, 'answer', self.checkpoint)},
             {'r1': self.checkpoint})
         with self.assertRaisesRegex(ValueError, 'belongs on its RecordedNativeProbe'):
-            repeated.observe(scenario.rounds)
+            repeated.observe(scenario)
         self.assertFalse(self.checkpoint.summary_usage(NativeSummaryPayload(summary='summary', tokens_before=12))['evaluated'])
         usage = SummaryUsage(input=0, output=0, cache_read=0, cache_write=0, total_tokens=0,
                              cost=SummaryCost(0, 0, 0, 0, 0))
