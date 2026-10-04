@@ -402,8 +402,7 @@ class RegistryDocument(RegistryPresence):
     def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
         """Publish only the source fact of an already admitted original owner."""
         snapshot = self.snapshot()
-        original.require_snapshot(snapshot, "Native source owner changed before publication")
-        current = snapshot.require_active(original.thread.name)
+        current = original.require_source_snapshot(snapshot)
         return NativeSourcePublication(
             thread=replace(current, session_file=session_file),
             status=snapshot.statuses[current.name],
