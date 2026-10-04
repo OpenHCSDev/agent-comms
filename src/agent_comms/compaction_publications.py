@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .compaction_errors import CompactionJournalError
 from .compaction_journal_role import JournalRole
+from .field_codec import FieldCodec
 from .compaction_records import CompactionOperation, CompactionPublication
 from .compaction_states import (
     ObservedPublication,
@@ -21,7 +22,7 @@ class CompactionPublications(JournalRole):
             rows = CompactionPublication.select(
                 db,
                 where="session_file=? AND json_extract(state, '$.kind')=? ORDER BY rowid LIMIT 32",
-                parameters=(canonical, PendingPublication.declared_name),
+                parameters=(canonical, FieldCodec.encode(PendingPublication)),
             )
             for row in rows:
                 operation = CompactionOperation.one(db, commit_id=row.commit_id)

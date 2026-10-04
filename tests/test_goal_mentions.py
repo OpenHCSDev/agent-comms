@@ -19,6 +19,9 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
+from agent_comms.goals import (
+    AliasMentionBinding, LimitExceededMentionBinding, MalformedMentionBinding, NonExecutableMentionBinding, ResolvedMentionBinding, SelfMentionBinding, UnknownMentionBinding,
+)
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
@@ -56,10 +59,10 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
         "owner",
         17001.0,
     )
-    assert [(row.token, row.resolution) for row in source.bindings] == [
-        ("peer", "resolved"),
-        ("owner", "self"),
-        ("unknown", "unknown"),
+    assert [(row.token, type(row)) for row in source.bindings] == [
+        ("peer", ResolvedMentionBinding),
+        ("owner", SelfMentionBinding),
+        ("unknown", UnknownMentionBinding),
     ]
     assert not comms.relationships.store.path.exists()
     owner_rows, diagnostics = _rows(comms, "owner")
@@ -77,8 +80,8 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
         "text_revision": 1,
     }
     assert [(row.token, row.reason) for row in diagnostics] == [
-        ("owner", "self"),
-        ("unknown", "unknown"),
+        ("owner", SelfMentionBinding),
+        ("unknown", UnknownMentionBinding),
     ]
     monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
@@ -102,15 +105,15 @@ def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(
         SetGoalAction(text="@peer.bad @peer/path @peer@host @Peer @other @human @owner @renamed"),
     )
     assert goal is not None and goal.mention_source is not None
-    assert [(row.token, row.resolution) for row in goal.mention_source.bindings] == [
-        ("peer.bad", "malformed"),
-        ("peer/path", "malformed"),
-        ("peer@host", "malformed"),
-        ("Peer", "unknown"),
-        ("other", "alias"),
-        ("human", "non_executable"),
-        ("owner", "self"),
-        ("renamed", "resolved"),
+    assert [(row.token, type(row)) for row in goal.mention_source.bindings] == [
+        ("peer.bad", MalformedMentionBinding),
+        ("peer/path", MalformedMentionBinding),
+        ("peer@host", MalformedMentionBinding),
+        ("Peer", UnknownMentionBinding),
+        ("other", AliasMentionBinding),
+        ("human", NonExecutableMentionBinding),
+        ("owner", SelfMentionBinding),
+        ("renamed", ResolvedMentionBinding),
     ]
     assert [row.target for row in _rows(comms, "owner")[0]] == ["renamed"]
     assert _rows(comms, "peer")[0] == ()
@@ -121,13 +124,13 @@ def test_over_limit_goal_mentions_fail_closed_as_a_whole(tmp_path: Path) -> None
     text = "@peer " + " ".join(f"@unknown{number}" for number in range(129))
     goal = comms.goals.update_goal("owner", SetGoalAction(text=text))
     assert goal is not None and goal.mention_source is not None
-    assert [(row.token, row.resolution) for row in goal.mention_source.bindings] == [
-        ("<goal-mentions>", "limit_exceeded")
+    assert [(row.token, type(row)) for row in goal.mention_source.bindings] == [
+        ("<goal-mentions>", LimitExceededMentionBinding)
     ]
     rows, diagnostics = _rows(comms, "owner")
     assert rows == ()
     assert [(row.token, row.reason) for row in diagnostics] == [
-        ("<goal-mentions>", "limit_exceeded")
+        ("<goal-mentions>", LimitExceededMentionBinding)
     ]
     assert _rows(comms, "peer")[0] == ()
 

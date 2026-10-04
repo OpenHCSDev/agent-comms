@@ -46,6 +46,7 @@ from agent_comms.coordination_tables.publications import (
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.native_admission_rules import RegistryAdmissionCheck
@@ -194,7 +195,7 @@ def install_private_response_schema(store: Coordination) -> None:
         exists = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",
-                (ResponseSchemaMeta.declared_name,),
+                (FieldCodec.encode(ResponseSchemaMeta),),
             )
         )
         if not exists:

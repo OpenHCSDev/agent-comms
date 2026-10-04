@@ -61,10 +61,13 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
     reason: str
 
     @property
-    def completion_event(self) -> CompactionSkipped:
+    def explanation(self) -> str:
+        return f"Selected native compaction skipped: {self.reason}. Original context preserved."
+
+    def completion_event(self, reason: type[CompactionReason]) -> CompactionSkipped:
         return CompactionSkipped(
-            reason="adaptive",
-            explanation=f"Selected native compaction skipped: {self.reason}. Original context preserved.",
+            reason=reason,
+            explanation=self.explanation,
         )
 
     async def commit_with(
@@ -73,7 +76,7 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
         return None
 
     def compaction_result(self, operation: CompactionOperation | None) -> RefusedCompactionResult:
-        return RefusedCompactionResult(self.completion_event.explanation)
+        return RefusedCompactionResult(self.explanation)
 
     def admit_original(
         self,
@@ -134,7 +137,7 @@ async def compact_owner_once(
             if not await settings.boundary_current(source.retained, owner, bridge.registry):
                 return RefusedCompactionResult("Authored subtask boundary changed; optional compaction skipped")
             if on_event is not None:
-                await on_event(CompactionStart(reason="adaptive"))
+                await on_event(CompactionStart(reason=settings.reason))
             await Coordination.run_worker(partial(
                 bridge.require_source_current, owner, owner_generation, source
             ))
@@ -156,7 +159,7 @@ async def compact_owner_once(
                     raise ValueError("Selected summary requires its original-input owner")
                 on_admission(admission)
             if on_event is not None:
-                await on_event(result.completion_event)
+                await on_event(result.completion_event(settings.reason))
             return result.compaction_result(operation)
         return await settings.prepare(prepared).compact_owner(at_cut)
 

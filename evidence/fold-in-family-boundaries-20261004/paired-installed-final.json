@@ -1,0 +1,16 @@
+{
+  "source_core": "497352d04ce698f43b7f2e9d8921c204aa08ade7",
+  "source_toad": "11e138357982af03f4f20cf18d571d3665958a38",
+  "paired_pr": 425,
+  "paired_receipts": {
+    "RECEIPT.json": "7b0b7c2e31b63d746b71a6139bbf65e4cdd62214b69658f5297652440395f85c",
+    "style22-original-floor-handback.json": "5d52edf5b75c22b8b0cc5b062d40d23b541f314706dd0792c896a9403b5d7d08",
+    "distribution-comparison.json": "5dd7072bfde1259f03347bcaeee17ab53e4ba45f9db20d93af608b3b3d58544b",
+    "app06/terminal-receipt.json": "e83fa26a7392e47637944482cd1b404fda2a1ea4851cc981cb0a6f195a4db0f0",
+    "app06/physical-receipt.json": "c5aa90eec5d7d59b0733561b4be66ec0f0d3c196757f8e22cc9446b735648d96"
+  },
+  "state": "READY: affected saved installed App and labels pass; exact holder handback complete",
+  "provider_inputs": 0,
+  "public_writes": 0,
+  "repeat_controls": 0
+}

@@ -155,7 +155,7 @@ class _SelectedDecision(_GenerationProvenance):
         return (
             self.assignment.wire_seq,
             self.assignment.message_id,
-            self.assignment.lifecycle.mode.declared_name,
+            type(self.assignment.lifecycle.mode),
             self.receipt.exact_target,
         )
 
@@ -164,8 +164,8 @@ class _SelectedDecision(_GenerationProvenance):
             "source_seq": self.assignment.wire_seq,
             "message_id": self.assignment.message_id,
             "claim_id": self.assignment.assignment_id,
-            "wake_mode": self.assignment.lifecycle.mode.declared_name,
-            "disposition": self.assignment.lifecycle.declared_name,
+            "wake_mode": type(self.assignment.lifecycle.mode),
+            "disposition": type(self.assignment.lifecycle),
             "target": self.receipt.exact_target,
         }
 
@@ -263,7 +263,7 @@ class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
         }
 
     def require_resource_budget(self, max_text_bytes: int) -> None:
-        text = json.dumps(self.context(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        text = json.dumps(FieldCodec.encode(self.context()), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         if len(text.encode("utf-8")) > max_text_bytes:
             raise ProjectionUnavailableError("binding awareness exceeds the byte budget")
 
@@ -272,10 +272,10 @@ class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
             dict(
                 sequence=self.through_seq,
                 selected=json.dumps(
-                    [row.context() for row in self.selected], ensure_ascii=False, sort_keys=True
+                    FieldCodec.encode([row.context() for row in self.selected]), ensure_ascii=False, sort_keys=True
                 ),
                 obligations=json.dumps(
-                    [row.context() for row in self.open_obligations],
+                    FieldCodec.encode([row.context() for row in self.open_obligations]),
                     ensure_ascii=False,
                     sort_keys=True,
                 ),

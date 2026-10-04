@@ -10,6 +10,7 @@ from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, e
 from .agent_events import ManualCompactionEnd, CompactionSkipped
 from .declared_family import DeclaredFamily
 from .owner_compaction_provider import OwnerSummaryOutcome
+from .pi_vocabulary import CompactionReason
 
 
 class CompactionResult(DeclaredFamily, affix="CompactionResult"):
@@ -69,9 +70,8 @@ class RefusedCompactionResult(CompactionResult, OwnerSummaryOutcome):
     async def commit_with(self, writer):
         return None
 
-    @property
-    def completion_event(self):
-        return CompactionSkipped(reason="adaptive", explanation=self.error)
+    def completion_event(self, reason: type[CompactionReason]):
+        return CompactionSkipped(reason=reason, explanation=self.error)
 
     def compaction_result(self, operation):
         return self

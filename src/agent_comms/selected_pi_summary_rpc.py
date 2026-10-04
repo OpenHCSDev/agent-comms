@@ -25,6 +25,7 @@ from .owner_compaction_prepare import NativeWitness
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
+from .pi_vocabulary import CompactionReason
 from .threads import Thread
 from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
 from .request_progress import RequestProgress
@@ -90,7 +91,7 @@ class SelectedSummarySlot:
         native_reader: NativeEvidenceRead | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
-        reason: str = "adaptive",
+        reason: type[CompactionReason],
     ) -> SelectedSummaryData:
         """Reserve durably, exchange once, and leave settlement to the owner.
 

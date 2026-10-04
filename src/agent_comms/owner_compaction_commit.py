@@ -85,7 +85,6 @@ class OwnerCompactionCommit:
         pending_input_keys: tuple[str, ...] = (),
         on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
-        reason: str = "adaptive",
     ) -> CompactionResult:
         """One selected provider/source/commit operation for every owner caller.
 
@@ -130,7 +129,7 @@ class OwnerCompactionCommit:
                 custom_instructions=instructions,
                 future_queue=self.boundary.future_queue,
                 native_reader=self.boundary.native_reader,
-                on_event=on_event, reason=reason,
+                on_event=on_event, reason=settings.reason,
             )
             attestation.require_registry(self.registry, owner)
             settings.require_current(await decision())
