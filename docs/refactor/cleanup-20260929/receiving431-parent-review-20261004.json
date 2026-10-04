@@ -61,7 +61,7 @@
   "publication_receipt_absent": true,
   "preimages_absent": true,
   "public_effects": 0,
-  "remaining": "Originalclient1240175/birth56113954 mustclose normally before a later originalfreshguard/solepublication/defaultacceptance. Do not retryguard merelywaiting; keep431style22,428334and421485frozen. F3export/distinctchild,JeV,430/59,S4and633 continue independently.",
+  "remaining": "Current-preview shared source risk requires bounded affected installed closure through637. Preserve exact frozen431159/head/Ready and all old428165 original files; no package/publisher/guard retry. Original client must close normally before any later original fresh guard and sole publication/default acceptance. Recorded reader14 scoped positive and current negative remain separate.638 send self-lock remedy and430/59/S4/633 continue under their original owners.",
   "full_cohort_require_original": "PASS",
   "native_full_trust": "PASS",
   "normal_package_versions_readback_equal": 69,
@@ -86,5 +86,31 @@
     "reason": "Unretired or unclassified client: exact process ProcessIdentity(pid=1240175, start_time=56113954)"
   },
   "fresh_original_guard_sha256": "7962e2a776f9d345304910ac708437a15d807f0c77069d5d945f9ccbdce08013",
-  "publication_called": false
+  "publication_called": false,
+  "current_preview_source_risk": {
+    "observed_original": "Reader14 actual status: Unknown ContextSegment name unavailable_awareness; recorded reader itself passed",
+    "shared_production_path": [
+      "ContextRuntimeRequest.inspect",
+      "NativeContextData.with_current_contributors",
+      "TurnContext.for_inspection",
+      "MessageBus.awareness_segments",
+      "ordinary ContextInspection.native FieldCodec.decode"
+    ],
+    "classification": "shared cold declaration-loading counterexample; c603-only scope unsupported; no new public live query or failure reproduction",
+    "owner": "Einstein / Core637",
+    "corrected_source": "670f239883915730c164c720158bae85323149aa",
+    "exact_debt_run": 37199086799,
+    "exact_debt": "SUCCESS",
+    "installed_current_preview": "PENDING; actual334 floor archive and specific fresh grant required before Core-only replacement",
+    "frozen431_mutations": false,
+    "publication_called": false,
+    "final_source": "69e6019be9c92b3ce37f11c75de2e9a37c284690",
+    "affected_source_controls": {
+      "passed": 25,
+      "preserved_obsolete_body_assertion": 1,
+      "excluded_old_fixtures": 3,
+      "seconds": 18.75,
+      "installed": false
+    }
+  }
 }
