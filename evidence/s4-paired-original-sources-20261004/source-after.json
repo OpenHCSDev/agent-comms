@@ -1,0 +1,64 @@
+{
+  "parser": "existing refactor-audit Package",
+  "roots": {
+    "src": {
+      "parsed": 311,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 364,
+      "omissions": []
+    }
+  },
+  "sites": {
+    "tests/compaction_retention_fixture.py": [
+      "49 declaration require_distinct",
+      "356 declaration by_measurement",
+      "514 declaration paired_quality",
+      "553 declaration paired_batch",
+      "774 declaration compare_native",
+      "790 declaration compare_native_pairs",
+      "353 call self.by_measurement",
+      "798 call RecordedNativeProbes.require_distinct",
+      "998 call scenario.compare_native_pairs",
+      "133 call RecordedNativeProbe.original_readers",
+      "784 call score.paired_quality",
+      "802 call ScoredScenario.paired_batch",
+      "994 call scenario.compare_native",
+      "799 call self.compare_native",
+      "534 call self.by_measurement",
+      "89 acquired read inputs.read arguments=0",
+      "974 acquired read RecallScenario.read arguments=1",
+      "101 acquired read probe.read arguments=2",
+      "151 acquired read probe.read arguments=2"
+    ],
+    "tests/retained_native_fixture.py": [
+      "248 declaration _fork_capture",
+      "282 declaration capture_for_probe",
+      "712 declaration checkpoint_source",
+      "719 declaration original_readers",
+      "288 call self._fork_capture",
+      "274 call self._fork_capture",
+      "733 call self.original_readers",
+      "891 call self.checkpoint.capture_for_probe",
+      "734 acquired read self.read arguments=2",
+      "466 acquired read InputDispositions(service.root / InputDispositions.filename).read arguments=0",
+      "75 acquired read NativeIntent.read arguments=1"
+    ],
+    "tests/test_recorded_retention_measurements.py": [
+      "99 call RecordedNativeProbes.require_distinct",
+      "121 call candidate.paired_quality",
+      "122 call control.paired_quality",
+      "129 call control.paired_quality",
+      "283 call score.paired_quality",
+      "288 call score.paired_quality",
+      "92 call RecordedNativeProbes.require_distinct",
+      "95 call RecordedNativeProbes.require_distinct",
+      "101 call coding_scenario().compare_native_pairs",
+      "126 call ScoredScenario.paired_batch",
+      "130 call ScoredScenario.paired_batch",
+      "76 call RecordedNativeProbe.original_readers"
+    ]
+  },
+  "limits": "Lexical references, not dynamic resolution; no native/production change"
+}
