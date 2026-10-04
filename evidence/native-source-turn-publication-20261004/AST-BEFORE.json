@@ -1,0 +1,631 @@
+{
+  "revision": "f373c99dc9ddf39d924972235dfe57c689208710",
+  "parser": "original audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 175,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 186,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 74,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 139,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 373,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 235,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 238,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 245,
+      "node": "Attribute",
+      "source": "self.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "line": 26,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "line": 47,
+      "node": "Attribute",
+      "source": "self.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 331,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 338,
+      "node": "Attribute",
+      "source": "owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 298,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 26,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 31,
+      "node": "ClassDef",
+      "source": "class RegistryAdmissionCheck(RegistryIdentityCheck):\n    \"\"\"A send also requires the captured active turn to remain unchanged.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 39,
+      "node": "ClassDef",
+      "source": "class GoalRegistryAdmissionCheck(GoalRegistryIdentityCheck, RegistryAdmissionCheck):\n    \"\"\"Selected input/awareness also captures the goal; reply settlement does not.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 39,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 111,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 114,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 35,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)\nclass RegistryOwner:\n    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck\n    thread: Thread\n    admission_gener"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 101,
+      "node": "FunctionDef",
+      "source": "def _require_current(self, actual: Thread, admission: int | None, reason: str) -> None:\n    try:\n        self.check_type(expected=self.thread, actual=actual, expected_admission=sel"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 113,
+      "node": "FunctionDef",
+      "source": "def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:\n    try:\n        actual = snapshot.require_active(self.thread.name)\n    except RelationViolationError a"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 120,
+      "node": "FunctionDef",
+      "source": "def require_registry(self, registry: Registration) -> None:\n    try:\n        actual, admission = registry.live_owner_with_admission(self.thread.name)\n    except (RelationViolationE"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 128,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 36,
+      "node": "Name",
+      "source": "GoalRegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 46,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 92,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 98,
+      "node": "Attribute",
+      "source": "owner.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 118,
+      "node": "Attribute",
+      "source": "self._require_current"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 125,
+      "node": "Attribute",
+      "source": "self._require_current"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 136,
+      "node": "Attribute",
+      "source": "canonical.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "RegistryOwner(thread=expected, admission_generation=self.admission_generation).require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 60,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 205,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 514,
+      "node": "Attribute",
+      "source": "RegistryOwner(thread=owner, admission_generation=self.expected_admission_generation).require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 514,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 63,
+      "node": "AsyncFunctionDef",
+      "source": "async def attach_native_session(self, session_file):\n    \"\"\"Publish through the owner returned by this original begin operation.\"\"\"\n    self.registry_owner = await Coordination.run"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 107,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 66,
+      "node": "Attribute",
+      "source": "self.runner.comms.registry.attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 47,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 113,
+      "node": "Attribute",
+      "source": "attestation.require_registry"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "attestation.require_registry"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 74,
+      "node": "FunctionDef",
+      "source": "def require_registry(self, registry: Registration, expected: Thread) -> None:\n    \"\"\"Recheck source custody without holding the registry during provider work.\"\"\"\n    with registry."
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 65,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 54,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 168,
+      "node": "FunctionDef",
+      "source": "def prepare_native_source(package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int, retained_text: str='') -> NativePreparationResult:\n    \"\"\"Derive"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 75,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "self.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 249,
+      "node": "Attribute",
+      "source": "self.owner.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 69,
+      "node": "Attribute",
+      "source": "owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 48,
+      "node": "FunctionDef",
+      "source": "def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:\n    \"\"\"Publish an observed native source under its original executable lease.\n\n       "
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 48,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 48,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 56,
+      "node": "Attribute",
+      "source": "edit.document.prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 58,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 222,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 228,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 239,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 260,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 290,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 305,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 152,
+      "node": "ClassDef",
+      "source": "class NativeSourcePublication(UpdatedRegistration):\n    \"\"\"The leased owner keeps identity/heartbeat/goal; only its source is published.\n\n    The existing identity-change property "
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 402,
+      "node": "FunctionDef",
+      "source": "def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:\n    \"\"\"Publish only the source fact of an already admitted original owner.\"\""
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 402,
+      "node": "Name",
+      "source": "NativeSourcePublication"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 402,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 405,
+      "node": "Attribute",
+      "source": "original.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 407,
+      "node": "Name",
+      "source": "NativeSourcePublication"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 40,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 70,
+      "node": "Attribute",
+      "source": "self.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 163,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 164,
+      "node": "Attribute",
+      "source": "owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 147,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 186,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 186,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 201,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 202,
+      "node": "Attribute",
+      "source": "current.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 66,
+      "node": "Attribute",
+      "source": "self.comms.registry.attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 56,
+      "node": "Attribute",
+      "source": "self.participant.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 150,
+      "node": "Attribute",
+      "source": "participant.owner.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 265,
+      "node": "Attribute",
+      "source": "participant.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 216,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 235,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 222,
+      "node": "Attribute",
+      "source": "self.turn.attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 435,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 36,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 140,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 58,
+      "node": "Attribute",
+      "source": "comms.registry.attach_native_session"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 31,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "rules.GoalRegistryAdmissionCheck"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 103,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 106,
+      "node": "Attribute",
+      "source": "proof.require_snapshot"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 989,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1002,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 77,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 93,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 105,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 115,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 53,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 56,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 569,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 183,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 65,
+      "node": "Name",
+      "source": "prepare_native_source"
+    }
+  ],
+  "limits": "AST candidate names are not proof of dynamic dispatch; complete named call sites read semantically. No omitted roots."
+}
