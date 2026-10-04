@@ -1,0 +1,93 @@
+{
+  "started_utc": "2026-10-04T01:29:08.320635+00:00",
+  "source_head": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "pin": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "donor": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "receiver": "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/receiver/node_modules/@earendil-works/pi-coding-agent",
+  "assemblies": 1,
+  "second_sdk_payload": false,
+  "provider_calls": 0,
+  "public_changes": false,
+  "old_artifacts_used_as_donors": false,
+  "receiver_attempt": 2,
+  "original_pre_sdk_refusal": "attempt01 private umask changed directory execute bits; original negative retained, receiver retired, canonical donor unchanged",
+  "receiver_resources": {
+    "regular_files": 19190,
+    "shared_logical_bytes": 138420949,
+    "receiver_exclusive_regular_file_allocated_bytes": 0,
+    "directory_metadata_bytes_not_counted": true,
+    "old_payload_reclaimed_bytes": 0,
+    "measurement": "st_size for shared logical content; st_blocks only for receiver-exclusive regular inodes"
+  },
+  "existing_sharing_hook": {
+    "shared_files": 19190,
+    "shared_content_bytes": 138420949
+  },
+  "whole_trust_before_sdk": true,
+  "sdk-receiver": {
+    "args": [
+      "node",
+      "/home/ts/wt/comms-task-aware-native-bundle-20261002/tests/native_turn_context_contract.mjs",
+      "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/receiver/node_modules/@earendil-works/pi-coding-agent",
+      "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/sdk-state",
+      "--recorded-readers",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.9664736860431731,
+    "stdout_sha256": "8f3509116bb2e18fd054fea2ff0f557959522e382dadc5f2b035fb0d26d72611",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sdk": {
+    "scope": "actual-sdk-source-contract",
+    "provider_calls": 0,
+    "provider_bytes_identical": true,
+    "journal_bytes_unchanged": true,
+    "original_contribution_tokens": 1207,
+    "invalid_coordinates_refused": 5,
+    "transformation_observed_without_input_rejection": true,
+    "preview_not_recorded": true,
+    "kinds": [
+      "system_layer",
+      "compaction_summary",
+      "transcript",
+      "injection_message",
+      "tool_catalog"
+    ],
+    "session_file": "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/sdk-state/sessions/2026-10-04T01-29-18-536Z_01a10487-9bc7-7166-94e4-c9d85fde1a04.jsonl"
+  },
+  "import-refusals": {
+    "args": [
+      "node",
+      "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/test-native-import-fence.mjs"
+    ],
+    "exit_code": 0,
+    "duration_s": 1.0164360089693218,
+    "stdout_sha256": "1cd95dc15024f7351e37b1a1ee414c8c0ec6709dc8cc7647b65570b19e5e827b",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "trust-refusals": {
+    "args": [
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "tests/test_native_package.py",
+      "-k",
+      "new_build_shares or previous_import_fence or readonly_resource_borrow or complete_tree_rejects or unsafe_filesystem_shape",
+      "--basetemp=/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/pytest"
+    ],
+    "exit_code": 4,
+    "duration_s": 2.4694847769569606,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "bcf3b27e35d81c1c5ae329a484a5cc39c0201c9ef21a1647fc36c0351b2f17a8"
+  },
+  "state": "FAILED",
+  "failure": "AssertionError({'args': ['python', '-m', 'pytest', '-q', '-p', 'no:cacheprovider', 'tests/test_native_package.py', '-k', 'new_build_shares or previous_import_fence or readonly_resource_borrow or complete_tree_rejects or unsafe_filesystem_shape', '--basetemp=/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/pytest'], 'exit_code': 4, 'duration_s': 2.4694847769569606, 'stdout_sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'stderr_sha256': 'bcf3b27e35d81c1c5ae329a484a5cc39c0201c9ef21a1647fc36c0351b2f17a8'})",
+  "receiver_and_authored_fixture_removed_after_joined_exit": true,
+  "duration_s": 14.070449505001307,
+  "canonical_donor_single_links_after_receiver_retirement": true
+}

@@ -1,0 +1,27 @@
+{
+  "args": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-o",
+    "addopts=",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_native_package.py",
+    "-k",
+    "new_build_shares or previous_import_fence or readonly_resource_borrow or complete_tree_rejects or unsafe_filesystem_shape",
+    "--basetemp=/home/ts/.cache/agent-scratch/native-resource608-refusals-20261004/pytest"
+  ],
+  "exit_code": 0,
+  "duration_s": 1.9678976139985025,
+  "source_controls_only": true,
+  "sdk_repeated": false,
+  "provider_calls": 0,
+  "original_exit4_argparse_log_retained": true,
+  "reason": "Bounded serial system-pytest invocation; configured xdist plugin unavailable; no install or dependency changes",
+  "stdout_sha256": "d4ae9fa4845ae4099f3f5d9ca92ce1cee8a2c9af754e8af780045a53e82368c4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "owned_scratch_removed_after_joined_exit": true
+}

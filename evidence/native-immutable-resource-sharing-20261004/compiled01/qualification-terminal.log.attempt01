@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-compiled-20261004/qualify_receiver.py", line 80, in <module>
+    owner.verify_native_package(receiver)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/src/agent_comms/native_package.py", line 189, in verify_native_package
+    raise NativePackageError("Native package tree differs from pinned artifact")
+native_package.NativePackageError: Native package tree differs from pinned artifact

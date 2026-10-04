@@ -1,0 +1,34 @@
+[
+  {
+    "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent",
+    "original_tree": "4b7f66f396a342e523d631c753686789b61313c34c30d894ddf24b5a861caa26",
+    "tree_matches_original_after_608": true,
+    "regular_files": 19190,
+    "all_original_single_links": true,
+    "new_fence_donor_excluded": true
+  },
+  {
+    "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-f3dd185eb4b1394e/node_modules/@earendil-works/pi-coding-agent",
+    "original_tree": "fd4f6c7e57bd8f19fc4a14a8a8c3d6a196f68dc765de1538ba34443f0feab780",
+    "tree_matches_original_after_608": true,
+    "regular_files": 19190,
+    "all_original_single_links": true,
+    "new_fence_donor_excluded": true
+  },
+  {
+    "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-d5efa0d56e7ad396/node_modules/@earendil-works/pi-coding-agent",
+    "original_tree": "5ff27e716d8adc6cd1a2482fb90d35e24b4c4f837160f262ff05ee2c52769798",
+    "tree_matches_original_after_608": true,
+    "regular_files": 19190,
+    "all_original_single_links": true,
+    "new_fence_donor_excluded": true
+  },
+  {
+    "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+    "original_tree": "61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b",
+    "tree_matches_original_after_608": true,
+    "regular_files": 19190,
+    "all_original_single_links": true,
+    "new_fence_donor_excluded": true
+  }
+]

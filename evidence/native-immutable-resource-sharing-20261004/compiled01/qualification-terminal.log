@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-compiled-20261004/qualify_receiver.py", line 96, in <module>
+    run('trust-refusals', ['python', '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         'tests/test_native_package.py',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         '-k', 'new_build_shares or previous_import_fence or readonly_resource_borrow or complete_tree_rejects or unsafe_filesystem_shape',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         '--basetemp=' + str(scratch / 'pytest')], extra_env=test_env)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-compiled-20261004/qualify_receiver.py", line 54, in run
+    assert result.returncode == 0, entry
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'args': ['python', '-m', 'pytest', '-q', '-p', 'no:cacheprovider', 'tests/test_native_package.py', '-k', 'new_build_shares or previous_import_fence or readonly_resource_borrow or complete_tree_rejects or unsafe_filesystem_shape', '--basetemp=/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/pytest'], 'exit_code': 4, 'duration_s': 2.4694847769569606, 'stdout_sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'stderr_sha256': 'bcf3b27e35d81c1c5ae329a484a5cc39c0201c9ef21a1647fc36c0351b2f17a8'}

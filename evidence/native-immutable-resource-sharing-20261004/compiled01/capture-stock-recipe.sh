@@ -6,7 +6,7 @@ umask 077
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
 
-stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+stack_root=/home/ts/wt/comms-task-aware-native-bundle-20261002/stack
 repo_root=$(cd -- "$stack_root/.." && pwd)
 stock=${PI_STOCK_DIR:-$HOME/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
 manifest="$stack_root/pi-native.sha256"
@@ -20,14 +20,6 @@ verify() (
         python3 "$repo_root/src/agent_comms/native_package.py" "$PWD"
 )
 
-if [[ -e "$target" ]]; then
-    if verify "$target"; then
-        printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
-        exit 0
-    fi
-    printf 'Existing native Pi copy differs from the pinned build: %s\n' "$target" >&2
-    exit 1
-fi
 
 # The experiment validates stock bytes, applies the pinned native ID patch with
 # zero fuzz, and checks JS syntax. Its Bedrock transport edit is intentionally
@@ -99,12 +91,15 @@ python3 "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$repo_root/src/agent_comms/native_package.py" --share-resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
-verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
-mv -- "$stage" "$target"
-printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+capture_root=/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-compiled-20261004/fresh-unverified
+[[ ! -e "$capture_root" ]]
+mv -- "$stage" "$capture_root"
+trap - EXIT
+rmdir -- "$scratch_root"
+printf 'FRESH_UNVERIFIED_ROOT=%s\n' "$capture_root"

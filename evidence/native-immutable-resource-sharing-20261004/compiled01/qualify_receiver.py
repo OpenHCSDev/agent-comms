@@ -1,0 +1,123 @@
+"""One new sealed SDK assembly; receiver namespace uses hardlinks only."""
+from pathlib import Path
+import datetime
+import hashlib
+import importlib.util
+import json
+import os
+import shutil
+import stat
+import subprocess
+import time
+
+wt = Path(__file__).resolve().parents[2]
+out = Path(__file__).resolve().parent
+pin = json.loads((out / 'pin-derivation.json').read_text())
+donor = Path(pin['canonical_package'])
+scratch = Path('/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004')
+assert not scratch.exists(), scratch
+os.umask(0o077)
+scratch.mkdir(mode=0o700)
+receiver = scratch / 'receiver/node_modules/@earendil-works/pi-coding-agent'
+receiver.mkdir(parents=True, mode=0o700)
+receiver.chmod(stat.S_IMODE(donor.stat().st_mode))
+spec = importlib.util.spec_from_file_location('native_package', wt / 'src/agent_comms/native_package.py')
+owner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(owner)
+owner.verify_native_package(donor)
+started = time.monotonic()
+receipt = {
+    'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    'source_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=wt, text=True).strip(),
+    'pin': pin['manifest'], 'tree': pin['tree'], 'donor': str(donor),
+    'receiver': str(receiver), 'assemblies': 1,
+    'second_sdk_payload': False, 'provider_calls': 0, 'public_changes': False,
+    'old_artifacts_used_as_donors': False,
+    'receiver_attempt': 2,
+    'original_pre_sdk_refusal': 'attempt01 private umask changed directory execute bits; original negative retained, receiver retired, canonical donor unchanged',
+}
+env = dict(os.environ)
+for key in ('NODE_OPTIONS', 'NODE_PATH', 'NODE_COMPILE_CACHE'):
+    env.pop(key, None)
+env['NODE_DISABLE_COMPILE_CACHE'] = '1'
+env['TMPDIR'] = str(scratch)
+
+def run(name, args, *, extra_env=None):
+    begun = time.monotonic()
+    with (out / (name + '-stdout.log')).open('wb') as stdout, (out / (name + '-stderr.log')).open('wb') as stderr:
+        result = subprocess.run(args, cwd=wt, env=extra_env or env,
+                                stdout=stdout, stderr=stderr, timeout=90)
+    entry = {'args': args, 'exit_code': result.returncode, 'duration_s': time.monotonic() - begun,
+             'stdout_sha256': hashlib.sha256((out / (name + '-stdout.log')).read_bytes()).hexdigest(),
+             'stderr_sha256': hashlib.sha256((out / (name + '-stderr.log')).read_bytes()).hexdigest()}
+    receipt[name] = entry
+    assert result.returncode == 0, entry
+
+try:
+    files = logical = exclusive = 0
+    for source in sorted(donor.rglob('*')):
+        info = source.lstat()
+        target = receiver / source.relative_to(donor)
+        if stat.S_ISDIR(info.st_mode):
+            target.mkdir(mode=stat.S_IMODE(info.st_mode))
+            target.chmod(stat.S_IMODE(info.st_mode))
+        else:
+            assert stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and not info.st_mode & 0o222, source
+            os.link(source, target, follow_symlinks=False)
+            observed = target.lstat()
+            assert observed.st_ino == info.st_ino and observed.st_dev == info.st_dev
+            assert observed.st_nlink == 2 and not observed.st_mode & 0o222
+            files += 1
+            logical += info.st_size
+            if observed.st_nlink == 1:
+                exclusive += observed.st_blocks * 512
+    receipt['receiver_resources'] = {
+        'regular_files': files, 'shared_logical_bytes': logical,
+        'receiver_exclusive_regular_file_allocated_bytes': exclusive,
+        'directory_metadata_bytes_not_counted': True,
+        'old_payload_reclaimed_bytes': 0,
+        'measurement': 'st_size for shared logical content; st_blocks only for receiver-exclusive regular inodes',
+    }
+    # Exercise the existing final build hook against the NEW whole-trust donor.
+    receipt['existing_sharing_hook'] = owner.share_native_resources(receiver, wt / 'stack')
+    assert receipt['existing_sharing_hook'] == {'shared_files': files, 'shared_content_bytes': logical}
+    owner.verify_native_package(receiver)
+    owner.verify_native_package(donor)
+    receipt['whole_trust_before_sdk'] = True
+    run('sdk-receiver', ['node', str(wt / 'tests/native_turn_context_contract.mjs'),
+                        str(receiver), str(scratch / 'sdk-state'), '--recorded-readers', '--summary-only'])
+    receipt['sdk'] = json.loads((out / 'sdk-receiver-stdout.log').read_text())
+    assert receipt['sdk']['provider_calls'] == 0
+    assert receipt['sdk']['journal_bytes_unchanged'] is True
+    # Filesystem/module controls use their original small private fixtures.
+    # They never alter the canonical donor or a handed artifact.
+    run('import-refusals', ['node', str(wt / 'stack/test-native-import-fence.mjs')])
+    test_env = dict(env, PYTHONPATH=str(wt / 'src'), PYTHONDONTWRITEBYTECODE='1')
+    run('trust-refusals', ['python', '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
+         'tests/test_native_package.py',
+         '-k', 'new_build_shares or previous_import_fence or readonly_resource_borrow or complete_tree_rejects or unsafe_filesystem_shape',
+         '--basetemp=' + str(scratch / 'pytest')], extra_env=test_env)
+    owner.verify_native_package(receiver)
+    owner.verify_native_package(donor)
+    receipt['whole_trust_after_sdk'] = True
+    state_files = [p for p in (scratch / 'sdk-state').rglob('*') if p.is_file()]
+    assert state_files and all(p.stat().st_nlink == 1 for p in state_files)
+    receipt['private_state'] = {'regular_files': len(state_files), 'all_single_links': True,
+                                'outside_immutable_code_roots': True}
+    receipt['state'] = 'PASS'
+except BaseException as error:
+    receipt['state'] = 'FAILED'
+    receipt['failure'] = repr(error)
+    raise
+finally:
+    # subprocess.run joins each owned process before its scratch is retired.
+    shutil.rmtree(scratch)
+    receipt['receiver_and_authored_fixture_removed_after_joined_exit'] = not scratch.exists()
+    receipt['duration_s'] = time.monotonic() - started
+    owner.verify_native_package(donor)
+    assert all(p.stat().st_nlink == 1 for p in donor.rglob('*') if p.is_file())
+    receipt['canonical_donor_single_links_after_receiver_retirement'] = True
+    (out / 'shared-receiver-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+print(json.dumps({'state': receipt['state'], 'resources': receipt['receiver_resources'],
+                  'sdk_exit': receipt['sdk-receiver']['exit_code'],
+                  'duration_s': receipt['duration_s']}, indent=2))

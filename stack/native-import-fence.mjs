@@ -17,7 +17,8 @@ function checkedFile(path) {
     const lexical = resolve(path);
     if (!contained(lexical)) throw deny('outside committed deployment root');
     const stat = lstatSync(lexical);
-    if (!stat.isFile() || stat.nlink !== 1) throw deny('not an independent regular file');
+    if (!stat.isFile() || (stat.nlink !== 1 && (stat.mode & 0o222)))
+        throw deny('not an independent or read-only shared regular file');
     const actual = realpathSync(lexical);
     if (actual !== lexical || !contained(actual)) throw deny('noncanonical file path');
     return actual;
