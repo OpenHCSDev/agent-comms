@@ -35,7 +35,7 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.retained_task_facts import (
     ConstraintTaskFact, DecisionTaskFact, HumanConstraintTaskFact, RetainedTaskFacts,
 )
-from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn
+from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeMessages, NativeProvenance, RecordedContextTurn
 from agent_comms.wire_log import WireLog
 
 
@@ -466,7 +466,7 @@ class RecordedNativeProbe:
             request_observations=original(observed) if observed.is_file() else None,
             condition_observation=original(condition_observation) if condition_observation is not None else None)
 
-    def applied_condition(self,serialized):
+    def applied_condition(self,texts,serialized,manifest):
         """Join this input's SDK hook to the corroborated narrative and actual bytes."""
         if self.condition_observation is None:
             return {'evaluated':False,'reason':'Original condition application not captured'}
@@ -486,7 +486,6 @@ class RecordedNativeProbe:
                     applied['native_entry_id']!=source['native_entry_id'] or
                     applied['narrative_source']!=source['source']):
                 raise ValueError('Recorded SDK condition belongs to another original source')
-        texts=FieldCodec.decode(tuple[str,...],self.checkpoint.read_json(self.sdk_segment_bytes))
         narrative=json.dumps(source['summary'],ensure_ascii=False)[1:-1]
         if not any(narrative in text for text in texts):
             raise ValueError('Captured SDK request does not contain the original bounded narrative')
@@ -495,7 +494,38 @@ class RecordedNativeProbe:
         return {'evaluated':True,'narrative_source':source['source'],
             'checkpoint_session':source['checkpoint_session'],'session':source['session'],
             'native_entry_id':source['native_entry_id'],
+            'message_binding':self.condition_message_binding(records,applications,serialized,manifest),
             'scope':'Original transform and narrative present in this recorded SDK input; not final HTTP bytes or comparative recall'}
+
+    def condition_message_binding(self,records,applications,serialized,manifest):
+        """Bind one actual converter result to the sealed SDK request bytes.
+
+        The inspector observes the original agent-loop frame after conversion;
+        no converter is called again. Only that request's transformation joins
+        its complete message sequence. Historical missing observations cannot
+        be reconstructed from narrative presence or today's SDK converter.
+        """
+        if manifest.request_id is None:
+            return {'evaluated':False,'reason':'Original request ID not captured'}
+        conversions=tuple(row for row in records
+            if row.get('stage')=='bounded-conversion-observed'
+            and row['request_id']==manifest.request_id)
+        if not conversions:
+            return {'evaluated':False,'reason':'Original SDK conversion not captured'}
+        conversion,=conversions
+        if (conversion['session_id']!=self.session.session_id or
+                conversion['input_id']!=self.input_id):
+            raise ValueError('Original SDK conversion belongs to another session/input')
+        applied=tuple(row for row in applications
+            if row.get('agent_messages_sha256')==conversion['agent_messages_sha256'])
+        if not applied:
+            raise ValueError('Original SDK conversion differs from the applied condition')
+        if conversion['provider_messages_sha256']!=serialized['provider_messages_sha256']:
+            raise ValueError('Original SDK conversion differs from the captured request messages')
+        return {'evaluated':True,'request_id':manifest.request_id,
+            'agent_messages_sha256':conversion['agent_messages_sha256'],
+            'provider_messages_sha256':conversion['provider_messages_sha256'],
+            'scope':'Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall'}
 
     def submitted_prompt(self, user):
         """Bind an original submitted source to its exact recorded native write.
@@ -586,11 +616,24 @@ class RecordedNativeProbe:
             if (len(raw) != segment.utf8_bytes
                     or hashlib.sha256(raw).hexdigest() != segment.sha256):
                 raise ValueError("Recorded SDK segment bytes differ from measured source")
+        # NativeMessages owns which SDK segments carry provider messages. Join
+        # their ORIGINAL JSON array interiors in order: Python reserialization
+        # can change Unicode, number and opaque-provider-field representation.
+        # The private SDK capture writes these arrays with JSON.stringify.
+        message_parts=[]
+        for segment,text in zip(data.segments,texts):
+            if isinstance(segment,NativeMessages):
+                if not text.startswith('[') or not text.endswith(']'):
+                    raise ValueError('Recorded SDK message segment is not its original JSON array')
+                if text[1:-1]:
+                    message_parts.append(text[1:-1])
+        messages='['+','.join(message_parts)+']'
         return texts, {"evaluated": True, "stage": "recorded SDK provider input",
                 "artifact": self.sdk_segment_bytes,
                 "context_digest": self.sdk_request(data).context_digest,
                 "segments": len(data.segments),
                 "utf8_bytes": sum(segment.utf8_bytes for segment in data.segments),
+                "provider_messages_sha256": hashlib.sha256(messages.encode()).hexdigest(),
                 "final_transport_evaluated": False,
                 "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"}
 
@@ -667,7 +710,7 @@ class RecordedNativeProbe:
         with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
             return self.read(evidence)
 
-    def construction(self, evidence, branch, manifest, checkpoint, serialized, answer):
+    def construction(self, evidence, branch, manifest, checkpoint, texts, serialized, answer):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -734,7 +777,7 @@ class RecordedNativeProbe:
             "request_budget": budget,
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
-            "condition_application": self.applied_condition(serialized),
+            "condition_application": self.applied_condition(texts,serialized,manifest),
         }
 
     @staticmethod
@@ -853,7 +896,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source_branch, manifest, checkpoint, serialized, answer),
+            "construction": self.construction(evidence, source_branch, manifest, checkpoint, texts, serialized, answer),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),

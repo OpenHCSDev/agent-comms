@@ -35,7 +35,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment,
 )
 from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -347,19 +347,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             measured = probe.construction(evidence, branch,
-                                         manifest(str(self.session), ('first', 'probe')), {}, {'evaluated': False}, branch[-1])['source_coverage']
+                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
             partial = probe.construction(evidence, branch,
-                                         manifest(str(self.session), ('probe',)), {}, {'evaluated': False}, branch[-1])['source_coverage']
+                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, branch, manifest(path, ids), {}, {'evaluated': False}, branch[-1])
-            self.assertFalse(probe.construction(evidence, branch, None, {}, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
+                    probe.construction(evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1])
+            self.assertFalse(probe.construction(evidence, branch, None, {}, None, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
@@ -507,6 +507,52 @@ class RecordedMeasurementTests(unittest.TestCase):
         Path(probe.sdk_context.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
+
+    def test_condition_binding_uses_complete_original_messages_and_request(self):
+        # A narrative in system/tools or one matching message cannot establish
+        # that the entire converted SDK sequence is this request's input.
+        owner = Thread('fixture-owner', frozenset(), str(self.root))
+        provenance = (NativeProvenance(self.identity, 1, 'b' * 64),)
+        first = '[{"role":"user","content":"Original λ 🙂","opaque":1e+21}]'
+        second = '[{"role":"user","content":[{"type":"image","data":"original","mimeType":"image/png"}]}]'
+        system = '"Original λ 🙂"'
+        def segment(declaration, raw, **values):
+            return declaration(provenance=provenance, tokens=1,
+                sha256=hashlib.sha256(raw.encode()).hexdigest(), utf8_bytes=len(raw.encode()), **values)
+        segments = (
+            segment(SystemLayerSegment, system, content='Original λ 🙂'),
+            segment(TranscriptSegment, first, messages=tuple(json.loads(first))),
+            segment(InjectionMessageSegment, second, messages=tuple(json.loads(second))),
+        )
+        data = NativeContextData('counter', self.identity, segments)
+        manifest = ContextManifest(owner.incarnation,
+            RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1)),
+            tuple(s.measured_manifest() for s in segments), data.counter, request_id='request')
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer',
+            sdk_segment_bytes=self.artifact('segments.json', (system,first,second)))
+        _, captured = probe.serialized_construction(data, manifest)
+        expected = hashlib.sha256(('['+first[1:-1]+','+second[1:-1]+']').encode()).hexdigest()
+        self.assertEqual(captured['provider_messages_sha256'],expected)
+        applied = {'agent_messages_sha256':'c' * 64}
+        conversion = {'stage':'bounded-conversion-observed','request_id':manifest.request_id,
+            'session_id':self.identity.session_id,'input_id':probe.input_id,
+            'agent_messages_sha256':applied['agent_messages_sha256'],
+            'provider_messages_sha256':expected}
+        observed = probe.condition_message_binding((conversion,), (applied,), captured, manifest)
+        self.assertTrue(observed['evaluated'])
+        self.assertEqual(observed['request_id'],manifest.request_id)
+        self.assertFalse(probe.condition_message_binding((),(applied,),captured,manifest)['evaluated'])
+        self.assertFalse(probe.condition_message_binding((conversion,),(applied,),captured,
+            replace(manifest,request_id=None))['evaluated'])
+        self.assertFalse(probe.condition_message_binding((dict(conversion,request_id='other'),),
+            (applied,),captured,manifest)['evaluated'])
+        for changed in (dict(conversion,input_id='d'*32), dict(conversion,session_id='other'),
+                        dict(conversion,agent_messages_sha256='e'*64),
+                        dict(conversion,provider_messages_sha256=hashlib.sha256(first.encode()).hexdigest())):
+            with self.assertRaises(ValueError):
+                probe.condition_message_binding((changed,),(applied,),captured,manifest)
+        with self.assertRaises(ValueError):
+            probe.condition_message_binding((conversion,conversion),(applied,),captured,manifest)
 
     def test_scope_original_publication_and_drop_own_revision_measurement(self):
         comms = Comms(self.root / 'wire')

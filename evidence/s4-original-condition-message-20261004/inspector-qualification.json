@@ -1,0 +1,48 @@
+{
+  "complete": true,
+  "scope": "Authored original SDK agent-loop/inspector/onContextReady plumbing",
+  "original_run_seconds": 1.5508286750409752,
+  "child_exit": 0,
+  "owned_children_joined": true,
+  "provider_calls": 0,
+  "submitted_prompts": 0,
+  "controlled_streams": 1,
+  "native_claim_minted": false,
+  "journal_bytes_unchanged": true,
+  "hook_restored": true,
+  "inspector_frame_executed": true,
+  "on_context_ready_manifest_observed": true,
+  "request_generation": 1,
+  "context_digest": "9fc4c2288ceb5b0312b6a5311855cb2285ee85a6092cb46187e06a996a79bd9e",
+  "binding": {
+    "evaluated": true,
+    "request_id": "8dabf466-9a9e-413a-bfe6-2c946b60b8aa",
+    "agent_messages_sha256": "05a99401e0743a4d11fc824866b6f035ea23b4d7bd1677f195a444960bdc5756",
+    "provider_messages_sha256": "bd475f6833dd66dbab859882a564ccbe76cb5498dcfe447a0fd4700cf86074bd",
+    "scope": "Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall"
+  },
+  "sdk_bytes": {
+    "segments": 5,
+    "utf8_bytes": 6678
+  },
+  "compiled_turn_context_unchanged": true,
+  "compiled_sha256": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+  "code_head": "1c9f464dd75ecb110668978224fe2c59458cad2a",
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+  "raw_stage": "/home/ts/.cache/agent-scratch/s4-condition612-inspector01",
+  "read_correction": "Original SDK process terminal0; initial postprocessor used generic FieldCodec.decode instead of existing Pi boundary. Original failure retained; this read uses RecordedNativeProbe.read_sdk_context. No loop/stream/provider repeat.",
+  "raw_sha256": {
+    "sdk-result.json": "8a6247e2f97c1782d58b8c70e54dde6f19aef94fa0a1d1124b663fded6e3ad72",
+    "sdk/application-observation.jsonl": "7174f99a3e6ec4a790c2b99bad8ffc6ab3c66c7b63285d1059bbb1cc01bf5cab",
+    "contexts/context-9fc4c2288ceb5b0312b6a5311855cb2285ee85a6092cb46187e06a996a79bd9e.json": "7f407933f658c68b029ba36c2da6175208e14c37957cc92a993345a6c6e5d788",
+    "contexts/segments-9fc4c2288ceb5b0312b6a5311855cb2285ee85a6092cb46187e06a996a79bd9e.json": "36e8320090e3814a4b987277aeb8910ed95ef16d00d5fca3419bf70e5ad4bd06",
+    "failure.json": "b65497ac15de33e1c0762e06e2d67ab200af3bd8b60087a6de003e4e3e5a16a7"
+  },
+  "limits": "Authored original SDK loop and controlled stream, not provider/model execution, admitted input, HTTP bytes or comparative recall",
+  "consumer_source_sha256": {
+    "tests/native_turn_context_contract.mjs": "eb111c3f9a156417c2d5d837860333d3317b1a471f2a7b6d35697f054946f242",
+    "tests/summary_prefix_native_observer.mjs": "64f9d1fbad9b04b324e9b47685769ffcde10e5d9606fe7df612a831cac71f589",
+    "tests/retained_native_conditions.mjs": "9b8b27252eb8faf0f2781cf2977515895e300274464afae19156cf0b965c3ec6",
+    "tests/retained_native_fixture.py": "0988fc6678e2df9268682a2ab23a6b8b4e6c16d544250a66602f374e4b19368d"
+  }
+}

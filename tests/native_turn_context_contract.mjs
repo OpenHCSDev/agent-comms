@@ -70,6 +70,9 @@ try {
         tools:session.agent.state.tools};
     const captured=await TurnContext.capture(session,provider);
     const full=captured.full();
+    if (process.argv.includes('--condition-agent-loop')) {
+        console.log(JSON.stringify(await observeConditionLoop(session,pkg,root,compaction,before)));
+    } else {
     // End validation for capture ownership: compare the unchanged public
     // contract against the original immutable SDK on the same acquired values.
     const comparisonIndex=process.argv.indexOf('--comparison-package');
@@ -295,6 +298,12 @@ try {
         const hooked=await session.agent.transformContext(raw.slice(0,-1));
         assert.deepEqual(hooked.at(-1),fresh);
         assert.equal(hooked[0].summary,source.summary);
+        const applicationRecords=readFileSync(join(root,'application-observation.jsonl'),'utf8')
+            .trim().split('\n').map(line=>JSON.parse(line));
+        const appliedRecords=applicationRecords.filter(row=>row.stage==='bounded-transform-applied');
+        assert.equal(appliedRecords.length,1);
+        assert.equal(appliedRecords[0].agent_messages_sha256,
+            createHash('sha256').update(JSON.stringify(hooked)).digest('hex'));
         restore();
         assert.equal(session.agent.transformContext,originalTransform);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);
@@ -313,7 +322,73 @@ try {
             root_single_projection:true,child_uses_original_coordinates:true,
             mixed_single_projection:true,missing_or_other_session_refused:true} : {}),
         bounded_construction_scope:conditions ? 'Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline' : undefined}));
-} finally {session.dispose();}
+    }
+} finally {session.dispose();manager.entryStore.close();}
+
+async function observeConditionLoop(session,pkg,root,compaction,before) {
+    // Authored plumbing control: the original loop/SDK/inspector execute, while
+    // an SDK event stream supplies one terminal. No Agent.prompt, input proof,
+    // enrolled input, provider transport or model-selection change is made.
+    const {runAgentLoop}=await import(pathToFileURL(join(pkg,
+        'node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js')));
+    const {AssistantMessageEventStream}=await import(pathToFileURL(join(pkg,
+        'node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js')));
+    assert(session.model,'Existing SDK selected model required');
+    const identity={sessionId:session.sessionId,sessionFile:session.sessionFile};
+    const source={evaluated:true,session:identity,checkpoint_session:identity,
+        native_entry_id:compaction,summary:'Authored uncombined narrative only.',
+        source:{kind:'file',path:new URL(import.meta.url).pathname,
+            sha256:hashFile(new URL(import.meta.url))}};
+    const observation=join(root,'application-observation.jsonl');
+    const inputId='d'.repeat(32);
+    const originalTransform=session.agent.transformContext;
+    const restore=armBoundedNativeCondition(session,pkg,source,
+        transformBoundedNativeCondition,observation,inputId);
+    const events=[],progress=[];
+    let manifest,transportCalls=0;
+    try {
+        const messages=[...session.agent.state.messages,
+            {role:'user',content:'Authored SDK input context, not a submitted prompt.',
+                timestamp:500,inputId}];
+        const output=await runAgentLoop([],{systemPrompt:session.systemPrompt,
+            messages,tools:session.agent.state.tools},{model:session.model,
+            sessionId:session.sessionId,
+            transformContext:session.agent.transformContext,
+            convertToLlm:session.agent.convertToLlm,
+            onRequestProgress:record=>progress.push(record),
+            onContextReady:async(context,requestId)=>{
+                // Authored source descriptor only, not a minted native claim.
+                // The original TurnContext publishes the original request ID.
+                const view=await TurnContext.capture(session,context,{
+                    request_generation:1,context_digest:createHash('sha256')
+                        .update(`pi-assembled-context-v1\n${JSON.stringify(context)}`).digest('hex')});
+                manifest=view.manifest(requestId);
+            }},event=>{events.push(event.type);},undefined,
+            (model,context,options)=>{
+                transportCalls++;
+                assert.equal(options.sessionId,identity.sessionId);
+                const message={role:'assistant',content:[{type:'text',text:'Authored terminal.'}],
+                    api:model.api,provider:model.provider,model:model.id,timestamp:501,
+                    stopReason:'stop',usage:{input:0,output:0,cacheRead:0,cacheWrite:0,
+                        totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}};
+                const stream=new AssistantMessageEventStream();
+                stream.push({type:'done',reason:'stop',message});
+                return stream;
+            });
+        assert.equal(transportCalls,1);
+        assert.equal(output.length,1);
+        assert.equal(output[0].stopReason,'stop');
+        assert.equal(events.at(-1),'agent_end');
+        assert(progress.every(row=>row.requestId===manifest.requestId
+            && row.sessionId===identity.sessionId && row.inputId===inputId));
+    } finally {restore();}
+    assert.equal(session.agent.transformContext,originalTransform);
+    assert.deepEqual(readFileSync(session.sessionFile),before);
+    return {scope:'Authored original SDK agent-loop/inspector/onContextReady plumbing',
+        provider_calls:0,submitted_prompts:0,controlled_streams:transportCalls,
+        native_claim_minted:false,journal_bytes_unchanged:true,hook_restored:true,
+        identity,input_id:inputId,manifest,events,progress};
+}
 
 function hashFile(path) {
     return createHash('sha256').update(readFileSync(path)).digest('hex');
