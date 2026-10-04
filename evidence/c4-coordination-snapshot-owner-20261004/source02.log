@@ -1,0 +1,198 @@
+.FF..                                                                    [100%]
+=================================== FAILURES ===================================
+___________ test_reopened_viewer_snapshot_decodes_only_appended_rows ___________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-snapshot-corrected-20261004/test_reopened_viewer_snapshot_0')
+
+    def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
+        comms = wire(tmp_path)
+        comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+        for number in range(100):
+            comms.messaging.send("bob", "#team", f"message {number}")
+        expected = comms.views.viewer_snapshot(str(tmp_path))
+        assert expected.channel_unread["#team"] == 100
+    
+        fresh = wire(tmp_path)
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+>           assert FieldCodec.encode(fresh.views.viewer_snapshot(str(tmp_path))) == FieldCodec.encode(expected)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_viewer_snapshot_index.py:29: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:275: in encode
+    result.update(
+src/agent_comms/field_codec.py:276: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:308: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:275: in encode
+    result.update(
+src/agent_comms/field_codec.py:276: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:275: in encode
+    result.update(
+src/agent_comms/field_codec.py:276: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+value = <agent_comms.activity.ReadyDrainReadiness object at 0x7ff5ecff7ad0>
+annotation = <class 'agent_comms.activity.DrainReadiness'>
+
+    @classmethod
+    def encode(cls, value: object, annotation: object = None) -> Any:
+        representation = cls._value_representation(value, annotation)
+        if representation is not None and value is not None:
+            return representation.encode(value)
+        if is_dataclass(value) and not isinstance(value, type):
+            hints = cls._types(type(value))
+            result = (
+                {value.family_discriminator: value.declared_name}
+                if isinstance(value, DeclaredFamily)
+                else {}
+            )
+            result.update(
+                (key, cls.encode(getattr(value, field.name), hints[field.name]))
+                for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
+                )
+            )
+            result.update(
+                (member.wire_name, cls.encode(getattr(value, name)))
+                for name, member in cls._projections(type(value), "wire").items()
+            )
+            return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return cls.encode(value.value)
+        if value is None or type(value) in (str, int, bool):
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
+        if isinstance(value, (list, tuple)):
+            return [cls.encode(item) for item in value]
+        if isinstance(value, dict) and all(type(key) is str for key in value):
+            return {key: cls.encode(item) for key, item in value.items()}
+>       raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+E       TypeError: Unsupported JSON value: ReadyDrainReadiness
+
+src/agent_comms/field_codec.py:311: TypeError
+_______ test_mounted_coordination_snapshot_reopens_without_scanning_bus ________
+
+wired = <agent_comms.comms.Comms object at 0x7ff5ecffc180>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff5ed0083b0>
+
+    def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
+        wired.messaging.send("PR111", "#base", "channel activity")
+        wired.messaging.send("PR111", "fixer", "direct activity")
+        expected = wired.views.coordination_snapshot()
+        fresh = wire(wired.root)
+    
+        def forbidden_scan():
+            raise AssertionError("mounted snapshot reparsed historical bus rows")
+    
+        monkeypatch.setattr(fresh.bus.log, '_iter_log_unlocked', forbidden_scan)
+>       assert FieldCodec.encode(fresh.views.coordination_snapshot()) == FieldCodec.encode(expected)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_threads_scaling.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:275: in encode
+    result.update(
+src/agent_comms/field_codec.py:276: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:308: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:275: in encode
+    result.update(
+src/agent_comms/field_codec.py:276: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:275: in encode
+    result.update(
+src/agent_comms/field_codec.py:276: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+value = <agent_comms.activity.ReadyDrainReadiness object at 0x7ff5eccef2f0>
+annotation = <class 'agent_comms.activity.DrainReadiness'>
+
+    @classmethod
+    def encode(cls, value: object, annotation: object = None) -> Any:
+        representation = cls._value_representation(value, annotation)
+        if representation is not None and value is not None:
+            return representation.encode(value)
+        if is_dataclass(value) and not isinstance(value, type):
+            hints = cls._types(type(value))
+            result = (
+                {value.family_discriminator: value.declared_name}
+                if isinstance(value, DeclaredFamily)
+                else {}
+            )
+            result.update(
+                (key, cls.encode(getattr(value, field.name), hints[field.name]))
+                for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
+                )
+            )
+            result.update(
+                (member.wire_name, cls.encode(getattr(value, name)))
+                for name, member in cls._projections(type(value), "wire").items()
+            )
+            return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return cls.encode(value.value)
+        if value is None or type(value) in (str, int, bool):
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
+        if isinstance(value, (list, tuple)):
+            return [cls.encode(item) for item in value]
+        if isinstance(value, dict) and all(type(key) is str for key in value):
+            return {key: cls.encode(item) for key, item in value.items()}
+>       raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+E       TypeError: Unsupported JSON value: ReadyDrainReadiness
+
+src/agent_comms/field_codec.py:311: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_viewer_snapshot_index.py::test_reopened_viewer_snapshot_decodes_only_appended_rows
+FAILED tests/test_threads_scaling.py::test_mounted_coordination_snapshot_reopens_without_scanning_bus
+2 failed, 3 passed in 6.06s

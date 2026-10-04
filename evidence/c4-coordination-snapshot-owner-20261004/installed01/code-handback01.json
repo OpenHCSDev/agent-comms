@@ -1,0 +1,21 @@
+{
+  "state": "WHOLE Parent654 original purpose closed; actual436 floor restored; no future package/import/read/execution claim",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "members": 1470,
+  "all_bytes_modes_links_equal": true,
+  "packages": 69,
+  "protected": 390,
+  "all_protected_equal": true,
+  "pipcheck": "pipcheck-restored01.log",
+  "borrowers": {
+    "processes": 185,
+    "refs": 0,
+    "gaps": 0,
+    "sha256": "d4ea5c2d75b998b95d89d3721b18788f9d17f43dc3d7a7f5152ed737fbbd1dbc"
+  },
+  "scratch_removed": true,
+  "owned_controller_absent": true,
+  "terminal": "terminal01.json",
+  "result": "FAIL pre-App external test demanded unsupported Mapping decoding; no product patch",
+  "issued_grant_sha256": "b6ed32a126ce14df3bf8b49e4d6ac7e6966e3ed39b80b5141b12e5bf53451149"
+}
