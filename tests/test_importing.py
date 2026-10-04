@@ -66,6 +66,14 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     result = json.loads(capsys.readouterr().out)
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
     assert result["scope"].startswith("historical-imported-instructions")
+    # Native configuration records can precede the same original import metadata;
+    # conversation remains outside this prefix-only metadata read.
+    session_path = Path(receipt.session_file)
+    saved.insert(1, {"type": "model_change", "id": "native-config",
+                     "provider": "authored", "modelId": "authored"})
+    session_path.write_text("".join(json.dumps(record) + "\n" for record in saved)
+                            + "not part of the metadata prefix\n")
+    assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
     messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
     assert "Historical base π." not in messages and "Historical developer λ." not in messages
     assert "Private guardian wording" not in Path(receipt.session_file).read_text()

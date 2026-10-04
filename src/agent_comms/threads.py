@@ -199,7 +199,7 @@ class Thread(ThreadProvenance):
 
         if self.session_file is None:
             return ()
-        return NativeTranscript(Path(self.session_file)).import_metadata().imported_sources()
+        return NativeTranscript(Path(self.session_file)).imported_sources()
 
     def require_idle(self) -> None:
         if self.active_turn is not None:
