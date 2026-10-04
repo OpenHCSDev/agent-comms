@@ -1,0 +1,148 @@
+{
+  "revision": "91953251",
+  "parsed": 11,
+  "omitted": [],
+  "sites": [
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 8,
+      "import": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 8,
+      "import": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 9,
+      "import": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 9,
+      "import": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 74,
+      "call": "observeConditionLoop"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 232,
+      "call": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 256,
+      "call": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 267,
+      "call": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 270,
+      "call": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 272,
+      "call": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 278,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 288,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 290,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 293,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 302,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 309,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 314,
+      "call": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 318,
+      "call": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 321,
+      "call": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 340,
+      "call": "applyNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 364,
+      "declaration": "observeConditionLoop"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 381,
+      "call": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 62,
+      "declaration": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 73,
+      "declaration": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 107,
+      "declaration": "applyNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 134,
+      "declaration": "constructNativeConditions"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 130,
+      "embedded": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 131,
+      "embedded": "armBoundedNativeCondition"
+    }
+  ],
+  "limit": "Static lexical references; inspector declaration embedding is not resolved execution evidence"
+}

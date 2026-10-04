@@ -78,8 +78,9 @@ if (output && packageRoot) {
             '        await this.storedContext.beforeInput(this);'),
     });
     // Observe the existing converter's result, not a second conversion. The
-    // original request ID joins this frame to the later sealed manifest.
-    const conversionPoint = conditionSource && await post('Debugger.setBreakpointByUrl', {
+    // original request ID joins this frame to the later sealed manifest. Both
+    // bounded replacement and installed-source observations use this result.
+    const conversionPoint = (conditionSource || contexts) && await post('Debugger.setBreakpointByUrl', {
         url:pathToFileURL(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`).href,
         lineNumber:line(source.readFileSync(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`,'utf8').split('\n'),
             '    await config.onContextReady?.(llmContext, request.requestId);'),
@@ -114,7 +115,7 @@ if (output && packageRoot) {
                 return;
             }
             if (conditionPoint && params.hitBreakpoints.includes(conditionPoint.breakpointId)) {
-                const {armBoundedNativeCondition,boundedMessages,transformBoundedNativeCondition}
+                const {armNativeCondition,armBoundedNativeCondition,boundedMessages,transformBoundedNativeCondition}
                     =await import('./retained_native_conditions.mjs');
                 const originalSource=JSON.parse(source.readFileSync(conditionSource,'utf8'));
                 const armed=await post('Debugger.evaluateOnCallFrame', {
@@ -126,6 +127,7 @@ if (output && packageRoot) {
                         const {join}=process.getBuiltinModule('node:path');
                         const {pathToFileURL}=process.getBuiltinModule('node:url');
                         const {isDeepStrictEqual}=process.getBuiltinModule('node:util');
+                        const armNativeCondition=(${armNativeCondition.toString()});
                         const boundedMessages=(${boundedMessages.toString()});
                         const transform=(${transformBoundedNativeCondition.toString()});
                         (${armBoundedNativeCondition.toString()})(this,${JSON.stringify(packageRoot)},
