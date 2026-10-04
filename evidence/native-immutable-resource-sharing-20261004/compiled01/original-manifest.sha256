@@ -53,5 +53,4 @@ b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tool
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
 31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
 8209e570ef6044ce26f2ee7c95a1bcfda926457cf90b83d3356e10f54355004e  node_modules/@earendil-works/pi-ai/dist/utils/retry.d.ts
-b732b504a3d92177443fc0c983dd8d0cca4c6d7f1c51c7393be6e5d057e759ec  dist/agent-comms-import-fence.mjs
-# agent-comms-native-tree-v1 dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac
+# agent-comms-native-tree-v1 61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b

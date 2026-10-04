@@ -1,0 +1,26 @@
+{
+  "source_checkpoint": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "builder_source": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/agent-comms-import-fence.mjs",
+      "original_sha256": "f005662a026ddac9009c92d3af6a45818fe773b9f70528064e9f658fd1831ddb",
+      "new_sha256": "b732b504a3d92177443fc0c983dd8d0cca4c6d7f1c51c7393be6e5d057e759ec"
+    }
+  ],
+  "all_other_members_equal_immutable610_2ea": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138420949,
+  "new_donor_regular_files_single_links": true,
+  "new_donor_regular_files_readonly": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Sealed independent resources renamed into manifest-derived target; original prepare-pi-native verifies it. Sharing receiver uses only this NEW same-fence donor.",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Artifact-only capture; compiled receiver sharing and SDK read qualification pending. No installed/public/UI/model/prompt/wholeturn/S4 claim."
+}
