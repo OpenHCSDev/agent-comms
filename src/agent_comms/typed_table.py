@@ -310,6 +310,14 @@ class TypedRow:
         return tuple(item.name for item in cls._fields())
 
     @classmethod
+    def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
+        """Resolve a declared field subset, including an unfiltered query."""
+        unknown = set(names).difference(cls.columns())
+        if unknown:
+            raise ValueError(f"Unknown fields for {cls.__name__}: {sorted(unknown)}")
+        return tuple(item for item in cls._fields() if item.name in names)
+
+    @classmethod
     def _positions(cls, cursor: sqlite3.Cursor, extra: tuple[str, ...] = ()) -> dict[str, int]:
         if cursor.description is None:
             raise ValueError("Typed read requires a result set")
@@ -400,8 +408,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
 
     @classmethod
     def _column_list(cls, names: tuple[str, ...]) -> str:
-        if not names or not set(names) <= set(cls.columns()):
-            raise ValueError(f"Unknown or empty column list for {cls.declared_name}: {names}")
+        if not names:
+            raise ValueError(f"Empty column list for {cls.declared_name}")
+        cls._fields_named(names)
         return ", ".join(map(_identifier, names))
 
     @classmethod
@@ -480,8 +489,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
         order_by: tuple[str, ...] = (),
         **key: object,
     ) -> list[Self]:
-        cls._column_list(tuple(key))
-        selected = tuple(item for item in cls._fields() if item.name in key)
+        selected = cls._fields_named(tuple(key))
         if selected:
             where = "(" + where + ") AND " + " AND ".join(
                 f"{_identifier(item.name)} IS ?" for item in selected)
@@ -540,8 +548,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
         parameters: tuple = (),
         **changes: object,
     ) -> sqlite3.Cursor:
-        cls._column_list(tuple(changes))
-        selected = tuple(item for item in cls._fields() if item.name in changes)
+        selected = cls._fields_named(tuple(changes))
+        if not selected:
+            raise ValueError(f"Update requires fields for {cls.declared_name}")
         if any(item.column.generated is not None for item in selected):
             raise ValueError("Generated columns cannot be updated")
         return db.execute(
