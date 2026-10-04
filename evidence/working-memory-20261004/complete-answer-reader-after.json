@@ -1,0 +1,92 @@
+{
+  "head": "f269e37ad38123f4a0aa910c961d8813c3348fed",
+  "parsed": 319,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 420,
+      "node": "ClassDef",
+      "name": "ContextAnnotationsRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 427,
+      "node": "Attribute",
+      "name": "for_segment"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 18,
+      "node": "FunctionDef",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 44,
+      "node": "FunctionDef",
+      "name": "for_segment"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 19,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 40,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 40,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 60,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 41,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 58,
+      "node": "Attribute",
+      "name": "address"
+    }
+  ],
+  "semantic_result": "Authenticated segment reads effective original answers for every question/version; no current-kind-only filter or current question version substitution. Existing address/effective owners unchanged. No runtime/local/external check repeated; W6 and installed path remain unfinished."
+}

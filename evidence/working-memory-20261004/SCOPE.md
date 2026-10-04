@@ -115,3 +115,9 @@ kind correction can place an item in Obeys/Promised immediately. Other questions
 cannot manufacture a kind group. No caller decides authority from probability
 or guesses source authorship. The W6 frontend consumer is still unfinished and
 no actual installed reader/controller was launched for this source batch.
+
+## Complete question-family read
+
+The authenticated annotation reader no longer drops obligation, scope, relation or fulfillment answers behind a KindQuestion-only filter. It reads original answers for the selected segment and pinned classifier, and the existing address/effective row/label owners resolve corrections independently for each original question version. Today's question definition is not substituted for a historical request. This removes the reader's competing question-selection policy; response rows retain original source/question/classifier/version and human review authority.
+
+The existing RuntimeRequest consumer is unchanged. Before/after AST source evidence covers319 modules with zero omissions; lexical references do not establish dynamic dispatch. No new table, JSON codec, native/session access, external call or repeated sanity batch was introduced. W6 frontend mounting/correction and final affected installed qualification remain unfinished; W7's empirical thresholds and W8 remain unimplemented.
