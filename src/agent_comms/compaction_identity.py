@@ -25,6 +25,13 @@ class SummaryOperationIdentity:
 
 
 @dataclass(frozen=True)
+class NativeCommitIdentity:
+    commit_id: str = field(metadata={"wire_name": "commitId"})
+    payload_digest: str = field(metadata={"wire_name": "payloadDigest"})
+    metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
+
+
+@dataclass(frozen=True)
 class SelectedCommitReference:
     """The selected-summary portion of the journal's native commit intent.
 
@@ -61,6 +68,11 @@ class FreshCoverageIdentity:
     incarnation: ThreadIncarnation
     creator: ProcessIdentity
     owner_lookup: str
+
+    def require_owner(self, source) -> None:
+        """The returned enrollment, not its directory, owns the stable lookup."""
+        if source.incarnation != self.incarnation or source.owner != self.creator:
+            raise CompactionJournalError("Fresh private owner coverage differs: owner identity")
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,101 @@
+FF..                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody _
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-batch616-installed01/test_original_batch_publicatio0')
+
+    def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
+        store = InputDispositions(tmp_path / InputDispositions.filename)
+        args = dict(seq=1, owner="worker", admission=1, target="#comms", text="Prior input")
+>       assert store.record("prior", **args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_input_documents.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_disposition.py:246: in record
+    row = ReservedInput(key, seq, owner, admission, target, text,
+<string>:12: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ReservedInput(key='prior', sequence=1, owner='worker', admission=1, target='#comms', source_text='Prior input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})
+
+    def __post_init__(self) -> None:
+        try:
+            for value in (self.key, self.owner, self.target, self.source_text):
+                if not FieldCodec.decode(str, value):
+                    raise ValueError("Input identity text cannot be empty")
+            GenerationCounter.require_positive(self.admission)
+        except ValueError as error:
+            raise ValueError("Invalid ACP input identity") from error
+        if self.sequence is not None and (
+            FieldCodec.decode(int, self.sequence) <= 0
+            or (
+                self.key != f"bus:{self.sequence}"
+                and not self.key.startswith(f"bus:{self.sequence}:owner:")
+            )
+        ):
+>           raise ValueError("Bus input key and sequence disagree")
+E           ValueError: Bus input key and sequence disagree
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_attempt.py:178: ValueError
+___ test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-batch616-installed01/test_original_publication_ack_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe78f228e90>
+
+    def test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback(tmp_path, monkeypatch):
+        store = InputDispositions(tmp_path / InputDispositions.filename)
+        publish = LockedStore._publish_unlocked
+    
+        def lose_ack(self, document):
+            publish(self, document)
+            if self.path == store.path and any(isinstance(row, ReservedInput)
+                                              for row in document.rows.values()):
+                raise OSError("Original publication acknowledgement lost")
+    
+        monkeypatch.setattr(LockedStore, "_publish_unlocked", lose_ack)
+>       rows = tuple(ReservedInput(f"original:{seq}", seq, "worker", 1, "#comms", "Original")
+               ^^^^^
+                     for seq in (1, 2))
+
+tests/test_input_documents.py:70: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_input_documents.py:70: in <genexpr>
+    rows = tuple(ReservedInput(f"original:{seq}", seq, "worker", 1, "#comms", "Original")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:12: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ReservedInput(key='original:1', sequence=1, owner='worker', admission=1, target='#comms', source_text='Original', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})
+
+    def __post_init__(self) -> None:
+        try:
+            for value in (self.key, self.owner, self.target, self.source_text):
+                if not FieldCodec.decode(str, value):
+                    raise ValueError("Input identity text cannot be empty")
+            GenerationCounter.require_positive(self.admission)
+        except ValueError as error:
+            raise ValueError("Invalid ACP input identity") from error
+        if self.sequence is not None and (
+            FieldCodec.decode(int, self.sequence) <= 0
+            or (
+                self.key != f"bus:{self.sequence}"
+                and not self.key.startswith(f"bus:{self.sequence}:owner:")
+            )
+        ):
+>           raise ValueError("Bus input key and sequence disagree")
+E           ValueError: Bus input key and sequence disagree
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_attempt.py:178: ValueError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio.plugin
+    self.import_plugin(arg, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_input_documents.py::test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody
+FAILED tests/test_input_documents.py::test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback
+2 failed, 2 passed, 1 warning in 8.65s

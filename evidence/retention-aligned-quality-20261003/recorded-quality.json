@@ -1,0 +1,85 @@
+{
+  "source_head": "221627d5d3403cf7d192a2340ac53148e5299533",
+  "scope": "Existing installed scorer over the same completed three-cut configured native records; no new provider or native input",
+  "installed_core": "6a1dad1db068aeb65c6feb2a11d75d4923c942eb",
+  "runtime_prefix": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001",
+  "scorer_exit_code": 0,
+  "scorer_command": "PYTHONPATH=tests <runtime>/bin/python tests/compaction_retention_fixture.py --scenario-file <original frozen oracle> --recorded-run <original continued-run> --condition task-memory",
+  "original_artifact_hash_matches": {
+    "continuation-2-receipt.json": true,
+    "continued-run.private.json": true,
+    "original-measurements.private.json": true,
+    "cut-3-checkpoint.private.json": true,
+    "cut-3-registry.private.json": true,
+    "cut-3-manifest.private.json": true,
+    "cut-3-inputs.private.json": true
+  },
+  "original_file_provenance_hash_matches": {
+    "cut-1-registry.private.json": true,
+    "sdk-contexts/context-7a610b4b933f20f7430d3ed47bfd1d769bb47690914a0b664a142a9fc1ce35f6.json": true,
+    "cut-1-manifest.private.json": true,
+    "continuation-original-inputs.private.json": true,
+    "cut-2-registry.private.json": true,
+    "sdk-contexts/context-beb718715e0360b3bc1a888d468d3d5430bf923ee0c3fb37774d8fca713352f6.json": true,
+    "cut-2-original-manifest.private.json": true,
+    "cut-3-registry.private.json": true,
+    "sdk-contexts/context-09919c9f2f042633a5f1f7a64656ccbfa7305232fe1b508cb54dd659080422d6.json": true,
+    "cut-3-manifest.private.json": true,
+    "sdk-contexts/segments-09919c9f2f042633a5f1f7a64656ccbfa7305232fe1b508cb54dd659080422d6.json": true,
+    "cut-3-inputs.private.json": true
+  },
+  "prior_input_row_matches": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "prior_input_disposition": "Started / ACP_UNCONFIRMED retained; no replay or reclassification",
+  "original_five_model_completion_report_hash_matches": true,
+  "report_sha256": "9f4b5cd056ec94f7f9cde9ab50f1d88d466048582186f1fbb904e0491dc855c7",
+  "questions": 9,
+  "correct": 9,
+  "stale": 0,
+  "missing": 0,
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "three_original_cuts_observed": true,
+  "model_steps": {
+    "cut-1": 1,
+    "cut-2": 2,
+    "cut-3": 2
+  },
+  "validation": {
+    "initial_batch": {
+      "controls": 21,
+      "passed": 20,
+      "failure": "New control attempted an illegal self-message; changed its original route to #team"
+    },
+    "related_controls_passed": 3,
+    "final_affected_controls_passed": 2,
+    "test_dependencies": "Borrowed existing pytest source for unittest controls only; installed scorer used tests path only; no package installation"
+  },
+  "unqualified": [
+    "complete condition construction/intervention alignment",
+    "per-request provider model observation",
+    "constraint-backed executed actions",
+    "matched comparative study and quality margins"
+  ],
+  "native_journal_wire_proof": "Read-only source use. This receipt checks original recorded capture hashes and prior input rows; it does not assert a new whole-file before/after hash proof for every live native/journal/wire/proof file."
+}

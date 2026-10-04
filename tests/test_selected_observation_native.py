@@ -9,12 +9,80 @@ import pytest
 
 from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.owner_compaction_prepare import prepare_native_source
+from agent_comms.coordinator import Coordination
+from functools import partial
 from agent_comms.selected_pi_route import (
     SelectedPiProbeUnknownError,
-    read_selected_compaction_decision,
+    observe_selected_compaction_decision,
+    prepare_selected_native_source,
 )
 
 pytest_plugins = ("test_backend_native_lifecycle",)
+
+
+async def test_actual_selected_preparation_uses_owned_store_and_preserves_source(
+    native_backend, monkeypatch,
+):
+    native = native_backend
+    path = native.config / "settings.json"
+    settings = json.loads(path.read_text())
+    settings["compaction"]["keepRecentTokens"] = 1
+    path.write_text(json.dumps(settings))
+    assert (await native.run("Original first task " + "retain original history " * 100))[-1].ok
+    assert (await native.run("Distinct next task"))[-1].ok
+    retained = native.persistent.custody.idle()
+    model = retained.child.attestation.state.model
+    selected = SelectedModel(model.provider, model.id, model.context_window)
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    original = native.session.read_bytes()
+    decision = await observe_selected_compaction_decision(
+        native.persistent, session_file=str(native.session), expected_package=package,
+        selected=selected,
+    )
+
+    async def prepare(text=""):
+        return await prepare_selected_native_source(
+            native.persistent, session_file=str(native.session), expected_package=package,
+            selected=selected, settings=decision.summary_settings(), retained_text=text,
+        )
+
+    initial = (await prepare()).require_ready()
+    allocated = (await prepare("Original unresolved goal and correction")).require_ready()
+    standalone = await Coordination.run_worker(partial(
+        prepare_native_source, package, str(native.session), settings=decision.summary_settings(),
+        context_window=selected.context_window,
+        retained_text="Original unresolved goal and correction",
+    ))
+    assert allocated == standalone
+    assert initial.witness.same_session(allocated.witness)
+    assert native.persistent.custody.idle() is retained
+    assert native.session.read_bytes() == original and native.provider.posts == 2
+
+    # Hold only delivery of the actual native receipt, then cancel its borrower.
+    read = retained.child.reader.readline
+    received, release = asyncio.Event(), asyncio.Event()
+
+    async def held_receipt(**options):
+        raw = await read(**options)
+        received.set()
+        await release.wait()
+        return raw
+
+    monkeypatch.setattr(retained.child.reader, "readline", held_receipt)
+    attempt = asyncio.create_task(prepare())
+    try:
+        await asyncio.wait_for(received.wait(), 5)
+        attempt.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await attempt
+        assert not retained.child.proc.alive() and not native.persistent.available
+        assert native.session.read_bytes() == original and native.provider.posts == 2
+        assert len(native.saved_inputs()) == 2
+    finally:
+        release.set()
+        attempt.cancel()
+        await asyncio.gather(attempt, return_exceptions=True)
 
 
 async def test_actual_selected_observation_retirement_without_input_replay(
@@ -30,7 +98,7 @@ async def test_actual_selected_observation_retirement_without_input_replay(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
 
     async def observe(expected_package=package):
-        return await read_selected_compaction_decision(
+        return await observe_selected_compaction_decision(
             native.persistent,
             session_file=str(native.session),
             expected_package=expected_package,
@@ -105,7 +173,7 @@ async def test_actual_selected_observation_retirement_without_input_replay(
         (("data", "selected", "provider"), "foreign-provider"),
         (("data", "selected", "contextWindow"), True),
         (("data", "decision", "reserveTokens"), True),
-        (("data", "decision", "trigger"), "yes"),
+        (("data", "decision", "reason"), "foreign"),
         (("data", "decision", "keepRecentTokens"), 0),
         (("data", "summary"), "unauthorized extra field"),
         ((), None),  # Received from native, but not delivered before the deadline.
@@ -147,7 +215,7 @@ async def test_actual_selected_observation_untrusted_receipt_retires_without_rep
 
     monkeypatch.setattr(retained.child.reader, "readline", damaged_receipt)
     with pytest.raises(SelectedPiProbeUnknownError):
-        await read_selected_compaction_decision(
+        await observe_selected_compaction_decision(
             native.persistent,
             session_file=str(native.session),
             expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),

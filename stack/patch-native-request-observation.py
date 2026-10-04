@@ -24,12 +24,10 @@ def main(package):
     try {
     // Apply context transform""", 1)
     function = function.replace("...config,\n        apiKey:", "...request.options(config),\n        apiKey:", 1)
-    function = function.replace("    for await (const event of response) {", """    let firstDelta = true;
-    for await (const event of response) {
-        if (firstDelta && event.type.endsWith("_delta")) {
-            firstDelta = false;
-            request.observe({ stage: "first_delta_consumed", detail: "Receiving model response" });
-        }""", 1)
+    function = function.replace("await config.onContextReady?.(llmContext);",
+                                "await config.onContextReady?.(llmContext, request.requestId);", 1)
+    function = function.replace("    for await (const event of response) {",
+                                "    for await (const event of request.events(response)) {", 1)
     function = function.replace("await emit(", "await publish(")
     # Even a failed provider/callback closes the same acquired diagnostic scope.
     ending = "    return finalMessage;\n}\n"
@@ -48,13 +46,39 @@ def main(package):
     replace_once(agent, "            onContextReady: this.onContextReady,",
                  "            onContextReady: this.onContextReady,\n            onRequestProgress: this.onRequestProgress,")
     session = package / "dist/core/agent-session.js"
-    replace_once(session, "        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);",
-                 """        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);
-        this.agent.onRequestProgress = progress => this._emitNativePresentation({
-            type: "model_request_progress", progress });""")
+    replace_once(session, "        this.agent.onContextReady = ",
+                 """        this.agent.onRequestProgress = progress => this._emitNativePresentation({
+            type: "model_request_progress", progress });
+        this.agent.onContextReady = """)
+    replace_once(session, """    _summarizationRetryCallbacks(source) {
+        return {""", """    _summarizationRetryCallbacks(source) {
+        return {
+            onRequestProgress: this.agent.onRequestProgress,""")
+    summary = package / "dist/core/compaction/compaction.js"
+    summary.write_text(
+        'import { NativeRequestObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
+        + summary.read_text()
+    )
+    replace_once(summary, """    const produce = async () => {
+        const stream = await (streamFn ?? streamSimple)(model, context, requestOptions);
+        for await (const event of stream) {""", """    const request = new NativeRequestObservation({ ...requestOptions,
+        onRequestProgress: callbacks?.onRequestProgress }, context);
+    request.observe({ stage: "preparing", detail: "Preparing compaction request" });
+    try {
+    const produce = async () => {
+        const stream = await (streamFn ?? streamSimple)(model, context, request.options(requestOptions));
+        for await (const event of request.events(stream)) {""")
+    replace_once(summary, """    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
+    return response;
+}""", """    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
+    return response;
+    } finally { request.observe({ stage: "finished", detail: "Compaction request finished" }); }
+}""")
     helper = package / "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js"
     helper.write_bytes(Path(__file__).with_name("native-request-observation.mjs").read_bytes())
     helper.with_suffix(".d.ts").write_bytes(Path(__file__).with_name("native-request-observation.d.ts").read_bytes())
+    replace_once(helper.with_name("retry.d.ts"), "export interface RetryCallbacks {",
+                 'export interface RetryCallbacks {\n    onRequestProgress?: (progress: import("./agent-comms-request-observation.js").NativeRequestProgress) => void;')
     retry = helper.with_name("provider-retry.js")
     replace_once(retry, "const DEFAULT_MAX_RETRY_DELAY_MS",
                  'import { observeRequest } from "./agent-comms-request-observation.js";\nconst DEFAULT_MAX_RETRY_DELAY_MS')
@@ -77,7 +101,9 @@ def main(package):
         anchor = '    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;\n'
         if anchor not in source:
             raise ValueError(f"Native context declaration changed: {name}")
-        path.write_text(source.replace(anchor, anchor + declaration))
+        correlated = anchor.replace("assembledContext: import(\"@earendil-works/pi-ai\").Context)",
+                                    "assembledContext: import(\"@earendil-works/pi-ai\").Context, requestId: string)")
+        path.write_text(source.replace(anchor, correlated + declaration))
     path = package / "dist/core/agent-session.d.ts"
     replace_once(path, '    type: "context_committed";',
         '    type: "model_request_progress";\n    progress: import("../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress;\n} | {\n    type: "context_committed";')

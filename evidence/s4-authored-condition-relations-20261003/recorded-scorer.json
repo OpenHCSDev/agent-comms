@@ -1,0 +1,141 @@
+{
+  "source_head": "2fbb6dc0400c23324e5c4766ae84b0d53d8bed64",
+  "scope": "Original recorded scorer and already-completed configured request; no new native/provider execution",
+  "sanity": {
+    "controls": 6,
+    "passed": 6,
+    "seconds": 0.364,
+    "risks": [
+      "Certified publication identity and captured scope survive classification/correction/drop",
+      "Decision membership is distinct from all-constraint validity",
+      "Missing summary configuration cannot replace actual request selection",
+      "Different or absent request/terminal facts cannot grant pairing",
+      "Missing output intent and SDK byte artifacts remain unavailable",
+      "SDK selected and returned-model metadata remain distinct"
+    ]
+  },
+  "installed_scorer_exit_code": 0,
+  "existing_measurements_unchanged": true,
+  "questions": 9,
+  "correct": 9,
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "canonical_revision_mass": {
+    "cut-1": {
+      "evaluated": false,
+      "reason": "An original scope and authorized correction evidence are required, not content differences"
+    },
+    "cut-2": {
+      "evaluated": true,
+      "scope": "Original captured scopes and certified authored task publications",
+      "constraints": {
+        "evaluated": true,
+        "eligible": 3,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": 0.0,
+        "authorized_supersessions": [
+          {
+            "seq": 1,
+            "message_id": "4a73874488ce"
+          }
+        ],
+        "scope_or_explicit_drop": [],
+        "additions": [],
+        "reason": "Original scoped lineages compared"
+      },
+      "decisions": {
+        "evaluated": false,
+        "eligible": 0,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": null,
+        "authorized_supersessions": [],
+        "scope_or_explicit_drop": [],
+        "additions": [],
+        "reason": "No eligible authored identities"
+      }
+    },
+    "cut-3": {
+      "evaluated": true,
+      "scope": "Original captured scopes and certified authored task publications",
+      "constraints": {
+        "evaluated": true,
+        "eligible": 3,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": 0.0,
+        "authorized_supersessions": [],
+        "scope_or_explicit_drop": [
+          {
+            "seq": 1,
+            "message_id": "4a73874488ce"
+          }
+        ],
+        "additions": [],
+        "reason": "Original scoped lineages compared"
+      },
+      "decisions": {
+        "evaluated": false,
+        "eligible": 0,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": null,
+        "authorized_supersessions": [],
+        "scope_or_explicit_drop": [],
+        "additions": [],
+        "reason": "No eligible authored identities"
+      }
+    }
+  },
+  "serialized_sdk_source_available": {
+    "cut-1": false,
+    "cut-2": false,
+    "cut-3": true
+  },
+  "historical_request_completion": {
+    "cut-1": {
+      "evaluated": false,
+      "reason": "Original request admission unavailable"
+    },
+    "cut-2": {
+      "evaluated": false,
+      "reason": "Original request admission unavailable"
+    },
+    "cut-3": {
+      "evaluated": false,
+      "reason": "Original request admission unavailable"
+    }
+  },
+  "prior_started_rows_unchanged": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "provider_inputs": 0,
+  "input_replays": 0,
+  "native_changes": 0,
+  "model_study_evaluated": false,
+  "condition_intervention_evaluated": false,
+  "constraint_validity_evaluated": false,
+  "full_history_capacity_evaluated": false,
+  "limits": "Recorded source and original lineage/correction/drop metrics qualify their declared scope. The separate existing configured request verifies actual budget-to-SDK-terminal selection. Applied experiment recipes and executable action-to-all-constraints relations are absent; not inferred from labels, captured settings, journal membership, authored answers or study approval.",
+  "report_sha256": "ef7dfdd63ed31f470485bd4a5f1f052feb388f0b06b1f67dbf76231e864686d9"
+}

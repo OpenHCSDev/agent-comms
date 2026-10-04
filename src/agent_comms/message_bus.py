@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus_activity_index import ActivitySnapshot, BusActivityIndex, ChannelActivity
+from .bus_activity_index import BusActivityIndex, ChannelActivity
 from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
@@ -21,10 +21,7 @@ from .read_basis import (
     ViewUnread,
 )
 from .routing import DeliveryMessage, DeliveryScope, PendingCounts
-from .store_files import (
-    _iter_jsonl_records,
-    file_revision,
-)
+from .store_files import file_revision
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -100,16 +97,15 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
-    def _activity_clocks_unlocked(self) -> ActivitySnapshot:
-        """The original index resource owns activity revision and reuse policy."""
-        revision = file_revision(self.log.path)
-        return self._activity.snapshot(revision, self._bus_activity_fields)
+    def _activity_clocks(self):
+        """The existing index borrows the original captured source after release."""
+        with self.log.projection_snapshot() as (_, revision, stream, _records):
+            return self._activity.snapshot(revision, stream, self._bus_activity_fields)
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate clocks from the single existing append-aware source cache."""
-        with self.log.locked():
-            channels, _ = self._activity_clocks_unlocked()
-            return {name: ChannelActivity(*clocks) for name, clocks in channels.items()}
+        channels, _ = self._activity_clocks()
+        return {name: ChannelActivity(*clocks) for name, clocks in channels.items()}
 
     @staticmethod
     def _bus_activity_fields(record: Mapping[str, object]):
@@ -125,7 +121,7 @@ class MessageBus:
 
     def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None) -> DeliveryScope:
         snapshot = snapshot or self._registry.snapshot()
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         thread = snapshot.threads[canonical]
@@ -133,27 +129,15 @@ class MessageBus:
             thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
         )
 
-    def _delivery_decoder(self) -> Callable[[Mapping], Iterator[DeliveryMessage]]:
-        from functools import partial
-
-        return partial(
-            DeliveryMessage.from_wire, root_id=self.log.read_metadata_unlocked().wire_root_id
-        )
-
-    def _iter_delivery_messages_unlocked(self) -> Iterator[DeliveryMessage]:
-        decode = self._delivery_decoder()
-        for record, _ in _iter_jsonl_records(self.log.path):
-            yield from decode(record)
-
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         snapshot = self._registry.snapshot()
         delivery = self._delivery_scope(name, snapshot)
         selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
-        with self.log.locked():
+        with self.log.delivery_snapshot() as originals:
             return [
                 item.message
-                for item in self._iter_delivery_messages_unlocked()
+                for item in originals
                 if delivery.current(item, snapshot)
                 and selection.includes(item.message)
                 and item.message.seq not in seen
@@ -183,7 +167,7 @@ class MessageBus:
         """Capture one registry/read snapshot and sync the route index once."""
         snapshot = self._registry.snapshot()
         catalog = self._channels.read()
-        actors = {name: snapshot.aliases.get(name, name) for name in names}
+        actors = {name: snapshot.canonical_name(name) for name in names}
         deliveries = {}
         channel_members: dict[str, set[str]] = {}
         for actor in set(actors.values()):
@@ -218,7 +202,7 @@ class MessageBus:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
 
         def recipients(target: str):
-            direct = snapshot.aliases.get(target, target)
+            direct = snapshot.canonical_name(target)
             return channel_members.get(target, {direct} if direct in deliveries else set())
 
         def add(actor: str, sender: str, target: str, count: int):
@@ -227,10 +211,13 @@ class MessageBus:
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
         indexed = False
-        with self.log.locked():
+        with self.log.projection_snapshot() as (metadata, source, stream, records):
+            from functools import partial
+
+            decode = partial(DeliveryMessage.from_wire, root_id=metadata.root_id)
             try:
                 with BusRouteCounts(self.log.path) as index:
-                    if index.sync(self._delivery_decoder()):
+                    if index.sync(stream, source, decode):
                         requests = []
                         for route in index.routes():
                             for actor in recipients(route.target):
@@ -257,7 +244,9 @@ class MessageBus:
                 # A disposable index outage still uses exactly the same identity filter.
                 pass
             if not indexed:
-                for item in self._iter_delivery_messages_unlocked():
+                if stream is not None:
+                    stream.seek(0)
+                for item in (item for record in records for item in record.delivery_messages()):
                     message = item.message
                     for actor in recipients(message.target):
                         if (
@@ -387,9 +376,8 @@ class MessageBus:
 
     def last_sent_timestamps(self) -> Mapping[str, float]:
         """Reuse the same verified activity source; no second projection or body cache."""
-        with self.log.locked():
-            _, sent = self._activity_clocks_unlocked()
-            return dict(sent)
+        _, sent = self._activity_clocks()
+        return dict(sent)
 
     def full_history_page(
         self,

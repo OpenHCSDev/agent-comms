@@ -1,0 +1,1053 @@
+{
+  "state": "actual native RequestProgress dispatch/stream_end confirms all3 provider request streams overlap for BOTH TRIAGE and FULL",
+  "requests": [
+    {
+      "owner": "purechannel-owner-1",
+      "input_id": "a7381adc71a95b3582ce4261ee1cd9af",
+      "native_stage": "triage",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908624280,
+          "native_monotonic_ns": "384263457389367",
+          "local_recorded_monotonic_ns": 384263482426281,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908624318,
+          "native_monotonic_ns": "384263495394915",
+          "local_recorded_monotonic_ns": 384263520265673,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908624318,
+          "native_monotonic_ns": "384263495526173",
+          "local_recorded_monotonic_ns": 384263530986872,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908624320,
+          "native_monotonic_ns": "384263497382408",
+          "local_recorded_monotonic_ns": 384263540670016,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "connected",
+          "observed_at_ms": 1790908624693,
+          "native_monotonic_ns": "384263870441346",
+          "local_recorded_monotonic_ns": 384263875767470,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "dispatch",
+          "observed_at_ms": 1790908624693,
+          "native_monotonic_ns": "384263870506189",
+          "local_recorded_monotonic_ns": 384263891870258,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "first_event",
+          "observed_at_ms": 1790908625110,
+          "native_monotonic_ns": "384264287516051",
+          "local_recorded_monotonic_ns": 384264291603510,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908625110,
+          "native_monotonic_ns": "384264287955613",
+          "local_recorded_monotonic_ns": 384264309244159,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908625111,
+          "native_monotonic_ns": "384264288223130",
+          "local_recorded_monotonic_ns": 384264331743088,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "first_delta_consumed",
+          "observed_at_ms": 1790908627669,
+          "native_monotonic_ns": "384266846617506",
+          "local_recorded_monotonic_ns": 384266849966717,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "stream_end",
+          "observed_at_ms": 1790908627767,
+          "native_monotonic_ns": "384266944850876",
+          "local_recorded_monotonic_ns": 384266956730287,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908627768,
+          "native_monotonic_ns": "384266945688962",
+          "local_recorded_monotonic_ns": 384266983737000,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908627771,
+          "native_monotonic_ns": "384266948554919",
+          "local_recorded_monotonic_ns": 384267008874204,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        },
+        {
+          "stage": "finished",
+          "observed_at_ms": 1790908627771,
+          "native_monotonic_ns": "384266948598942",
+          "local_recorded_monotonic_ns": 384267022434227,
+          "transport": "",
+          "native_process": {
+            "pid": 2894023,
+            "start_time": 38426259
+          }
+        }
+      ],
+      "dispatch_observed": true,
+      "finished_observed": true
+    },
+    {
+      "owner": "purechannel-owner-1",
+      "input_id": "19e8957e871a7cb6ea3bb9a352718e6f",
+      "native_stage": "full",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908629610,
+          "native_monotonic_ns": "384268787398280",
+          "local_recorded_monotonic_ns": 384268827100881,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908629637,
+          "native_monotonic_ns": "384268815018164",
+          "local_recorded_monotonic_ns": 384268853034782,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908629638,
+          "native_monotonic_ns": "384268815102784",
+          "local_recorded_monotonic_ns": 384268866656613,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908629639,
+          "native_monotonic_ns": "384268816525407",
+          "local_recorded_monotonic_ns": 384268883906313,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "connected",
+          "observed_at_ms": 1790908630051,
+          "native_monotonic_ns": "384269228582192",
+          "local_recorded_monotonic_ns": 384269238792243,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "dispatch",
+          "observed_at_ms": 1790908630051,
+          "native_monotonic_ns": "384269228632868",
+          "local_recorded_monotonic_ns": 384269255345795,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "first_event",
+          "observed_at_ms": 1790908630269,
+          "native_monotonic_ns": "384269446845189",
+          "local_recorded_monotonic_ns": 384269455245374,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908630270,
+          "native_monotonic_ns": "384269447336660",
+          "local_recorded_monotonic_ns": 384269471565002,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908630270,
+          "native_monotonic_ns": "384269447551787",
+          "local_recorded_monotonic_ns": 384269488246907,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "first_delta_consumed",
+          "observed_at_ms": 1790908632476,
+          "native_monotonic_ns": "384271653341144",
+          "local_recorded_monotonic_ns": 384271662048430,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "stream_end",
+          "observed_at_ms": 1790908634088,
+          "native_monotonic_ns": "384273265154742",
+          "local_recorded_monotonic_ns": 384273271355893,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908634088,
+          "native_monotonic_ns": "384273265806847",
+          "local_recorded_monotonic_ns": 384273286380109,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908634091,
+          "native_monotonic_ns": "384273268692611",
+          "local_recorded_monotonic_ns": 384273308355717,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "finished",
+          "observed_at_ms": 1790908634091,
+          "native_monotonic_ns": "384273268776509",
+          "local_recorded_monotonic_ns": 384273322312031,
+          "transport": "",
+          "native_process": {
+            "pid": 2894209,
+            "start_time": 38426794
+          }
+        }
+      ],
+      "dispatch_observed": true,
+      "finished_observed": true
+    },
+    {
+      "owner": "purechannel-owner-0",
+      "input_id": "d64245064c006ac76e9d8a5580594526",
+      "native_stage": "triage",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908624201,
+          "native_monotonic_ns": "384263378142456",
+          "local_recorded_monotonic_ns": 384263398982813,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908624236,
+          "native_monotonic_ns": "384263413732079",
+          "local_recorded_monotonic_ns": 384263458274283,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908624236,
+          "native_monotonic_ns": "384263413811279",
+          "local_recorded_monotonic_ns": 384263483023852,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908624237,
+          "native_monotonic_ns": "384263415032200",
+          "local_recorded_monotonic_ns": 384263502343601,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "connected",
+          "observed_at_ms": 1790908624601,
+          "native_monotonic_ns": "384263778564822",
+          "local_recorded_monotonic_ns": 384263784037905,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "dispatch",
+          "observed_at_ms": 1790908624601,
+          "native_monotonic_ns": "384263778608615",
+          "local_recorded_monotonic_ns": 384263801717979,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "first_event",
+          "observed_at_ms": 1790908624822,
+          "native_monotonic_ns": "384263999415558",
+          "local_recorded_monotonic_ns": 384264011880308,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908624822,
+          "native_monotonic_ns": "384263999927287",
+          "local_recorded_monotonic_ns": 384264056489749,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908624823,
+          "native_monotonic_ns": "384264000208119",
+          "local_recorded_monotonic_ns": 384264065784116,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "first_delta_consumed",
+          "observed_at_ms": 1790908626347,
+          "native_monotonic_ns": "384265524182934",
+          "local_recorded_monotonic_ns": 384265527992097,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "stream_end",
+          "observed_at_ms": 1790908626439,
+          "native_monotonic_ns": "384265616060961",
+          "local_recorded_monotonic_ns": 384265619665556,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908626439,
+          "native_monotonic_ns": "384265616835367",
+          "local_recorded_monotonic_ns": 384265632770478,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908626447,
+          "native_monotonic_ns": "384265624369001",
+          "local_recorded_monotonic_ns": 384265645947396,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        },
+        {
+          "stage": "finished",
+          "observed_at_ms": 1790908626447,
+          "native_monotonic_ns": "384265624405801",
+          "local_recorded_monotonic_ns": 384265658812805,
+          "transport": "",
+          "native_process": {
+            "pid": 2894015,
+            "start_time": 38426254
+          }
+        }
+      ],
+      "dispatch_observed": true,
+      "finished_observed": true
+    },
+    {
+      "owner": "purechannel-owner-0",
+      "input_id": "c048e2e8a2baf74288cbf7e8162f278c",
+      "native_stage": "full",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908628148,
+          "native_monotonic_ns": "384267325409744",
+          "local_recorded_monotonic_ns": 384267362390191,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908628179,
+          "native_monotonic_ns": "384267356061358",
+          "local_recorded_monotonic_ns": 384267391579706,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908628179,
+          "native_monotonic_ns": "384267356151669",
+          "local_recorded_monotonic_ns": 384267402150741,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908628180,
+          "native_monotonic_ns": "384267357592447",
+          "local_recorded_monotonic_ns": 384267412958454,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "connected",
+          "observed_at_ms": 1790908628505,
+          "native_monotonic_ns": "384267682992180",
+          "local_recorded_monotonic_ns": 384267690549779,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "dispatch",
+          "observed_at_ms": 1790908628506,
+          "native_monotonic_ns": "384267683049939",
+          "local_recorded_monotonic_ns": 384267706365875,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "first_event",
+          "observed_at_ms": 1790908628709,
+          "native_monotonic_ns": "384267886939633",
+          "local_recorded_monotonic_ns": 384267893579484,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908628710,
+          "native_monotonic_ns": "384267887258777",
+          "local_recorded_monotonic_ns": 384267913292808,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908628710,
+          "native_monotonic_ns": "384267887472582",
+          "local_recorded_monotonic_ns": 384267930825163,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "first_delta_consumed",
+          "observed_at_ms": 1790908630612,
+          "native_monotonic_ns": "384269789294834",
+          "local_recorded_monotonic_ns": 384269797050608,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "stream_end",
+          "observed_at_ms": 1790908632475,
+          "native_monotonic_ns": "384271652185647",
+          "local_recorded_monotonic_ns": 384271661731510,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908632475,
+          "native_monotonic_ns": "384271653011530",
+          "local_recorded_monotonic_ns": 384271688731460,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908632483,
+          "native_monotonic_ns": "384271660894846",
+          "local_recorded_monotonic_ns": 384271705617371,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        },
+        {
+          "stage": "finished",
+          "observed_at_ms": 1790908632483,
+          "native_monotonic_ns": "384271660967684",
+          "local_recorded_monotonic_ns": 384271721901803,
+          "transport": "",
+          "native_process": {
+            "pid": 2894121,
+            "start_time": 38426649
+          }
+        }
+      ],
+      "dispatch_observed": true,
+      "finished_observed": true
+    },
+    {
+      "owner": "purechannel-owner-2",
+      "input_id": "98a7215931f02f3cd3c65347d38e5efc",
+      "native_stage": "triage",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908624408,
+          "native_monotonic_ns": "384263585257165",
+          "local_recorded_monotonic_ns": 384263602027446,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908624457,
+          "native_monotonic_ns": "384263634482465",
+          "local_recorded_monotonic_ns": 384263661457147,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908624457,
+          "native_monotonic_ns": "384263634588195",
+          "local_recorded_monotonic_ns": 384263673872193,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908624459,
+          "native_monotonic_ns": "384263636310516",
+          "local_recorded_monotonic_ns": 384263683225703,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "connected",
+          "observed_at_ms": 1790908624828,
+          "native_monotonic_ns": "384264005398265",
+          "local_recorded_monotonic_ns": 384264011558799,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "dispatch",
+          "observed_at_ms": 1790908624828,
+          "native_monotonic_ns": "384264005455534",
+          "local_recorded_monotonic_ns": 384264025013033,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "first_event",
+          "observed_at_ms": 1790908625115,
+          "native_monotonic_ns": "384264292629112",
+          "local_recorded_monotonic_ns": 384264308720959,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908625115,
+          "native_monotonic_ns": "384264292972381",
+          "local_recorded_monotonic_ns": 384264330500405,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908625116,
+          "native_monotonic_ns": "384264293185485",
+          "local_recorded_monotonic_ns": 384264353638864,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "first_delta_consumed",
+          "observed_at_ms": 1790908627692,
+          "native_monotonic_ns": "384266869992202",
+          "local_recorded_monotonic_ns": 384266876250652,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "stream_end",
+          "observed_at_ms": 1790908627749,
+          "native_monotonic_ns": "384266926108199",
+          "local_recorded_monotonic_ns": 384266929189503,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908627751,
+          "native_monotonic_ns": "384266928358450",
+          "local_recorded_monotonic_ns": 384266944200234,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908627754,
+          "native_monotonic_ns": "384266931652256",
+          "local_recorded_monotonic_ns": 384266957179107,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        },
+        {
+          "stage": "finished",
+          "observed_at_ms": 1790908627754,
+          "native_monotonic_ns": "384266931713512",
+          "local_recorded_monotonic_ns": 384266983326062,
+          "transport": "",
+          "native_process": {
+            "pid": 2894031,
+            "start_time": 38426266
+          }
+        }
+      ],
+      "dispatch_observed": true,
+      "finished_observed": true
+    },
+    {
+      "owner": "purechannel-owner-2",
+      "input_id": "aa36dc73a2afecd2bf8b693a38822851",
+      "native_stage": "full",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908629758,
+          "native_monotonic_ns": "384268935430345",
+          "local_recorded_monotonic_ns": 384268974867654,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908629808,
+          "native_monotonic_ns": "384268985883741",
+          "local_recorded_monotonic_ns": 384269023941708,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908629809,
+          "native_monotonic_ns": "384268986069903",
+          "local_recorded_monotonic_ns": 384269037318054,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908629811,
+          "native_monotonic_ns": "384268988611375",
+          "local_recorded_monotonic_ns": 384269050463382,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "connected",
+          "observed_at_ms": 1790908630199,
+          "native_monotonic_ns": "384269376398059",
+          "local_recorded_monotonic_ns": 384269390451036,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "dispatch",
+          "observed_at_ms": 1790908630199,
+          "native_monotonic_ns": "384269376466138",
+          "local_recorded_monotonic_ns": 384269416657824,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "first_event",
+          "observed_at_ms": 1790908630417,
+          "native_monotonic_ns": "384269594722011",
+          "local_recorded_monotonic_ns": 384269603239197,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908630418,
+          "native_monotonic_ns": "384269595197361",
+          "local_recorded_monotonic_ns": 384269624616201,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908630418,
+          "native_monotonic_ns": "384269595425633",
+          "local_recorded_monotonic_ns": 384269642068674,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "first_delta_consumed",
+          "observed_at_ms": 1790908631908,
+          "native_monotonic_ns": "384271085655701",
+          "local_recorded_monotonic_ns": 384271095478118,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "stream_end",
+          "observed_at_ms": 1790908633651,
+          "native_monotonic_ns": "384272828671509",
+          "local_recorded_monotonic_ns": 384272838262127,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908633652,
+          "native_monotonic_ns": "384272829660091",
+          "local_recorded_monotonic_ns": 384272857449756,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908633660,
+          "native_monotonic_ns": "384272837628688",
+          "local_recorded_monotonic_ns": 384272876816374,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        },
+        {
+          "stage": "finished",
+          "observed_at_ms": 1790908633660,
+          "native_monotonic_ns": "384272837700364",
+          "local_recorded_monotonic_ns": 384272895792763,
+          "transport": "",
+          "native_process": {
+            "pid": 2894211,
+            "start_time": 38426794
+          }
+        }
+      ],
+      "dispatch_observed": true,
+      "finished_observed": true
+    },
+    {
+      "owner": "purechannel-owner-0",
+      "input_id": "ca7c897fcf58e36e4220193233adccf6",
+      "native_stage": "triage",
+      "progress": [
+        {
+          "stage": "preparing",
+          "observed_at_ms": 1790908637128,
+          "native_monotonic_ns": "384276305937532",
+          "local_recorded_monotonic_ns": 384276320306187,
+          "transport": "",
+          "native_process": {
+            "pid": 2894457,
+            "start_time": 38427549
+          }
+        },
+        {
+          "stage": "callback",
+          "observed_at_ms": 1790908637170,
+          "native_monotonic_ns": "384276347306047",
+          "local_recorded_monotonic_ns": 384276368040395,
+          "transport": "",
+          "native_process": {
+            "pid": 2894457,
+            "start_time": 38427549
+          }
+        },
+        {
+          "stage": "callback_end",
+          "observed_at_ms": 1790908637170,
+          "native_monotonic_ns": "384276347462253",
+          "local_recorded_monotonic_ns": 384276378937296,
+          "transport": "",
+          "native_process": {
+            "pid": 2894457,
+            "start_time": 38427549
+          }
+        },
+        {
+          "stage": "connecting",
+          "observed_at_ms": 1790908637171,
+          "native_monotonic_ns": "384276348873194",
+          "local_recorded_monotonic_ns": 384276390164774,
+          "transport": "websocket",
+          "native_process": {
+            "pid": 2894457,
+            "start_time": 38427549
+          }
+        }
+      ],
+      "dispatch_observed": false,
+      "finished_observed": false
+    }
+  ],
+  "all_three_owner_overlap_windows": {
+    "triage": {
+      "owners": 3,
+      "latest_native_dispatch_ms": 1790908624828,
+      "earliest_native_stream_end_ms": 1790908626439,
+      "all_owner_provider_stream_overlap_ms": 1611
+    },
+    "full": {
+      "owners": 3,
+      "latest_native_dispatch_ms": 1790908630199,
+      "earliest_native_stream_end_ms": 1790908632475,
+      "all_owner_provider_stream_overlap_ms": 2276
+    }
+  },
+  "completed_observed_requests": 6,
+  "extra_connecting_without_observed_dispatch": 1,
+  "proof_limit": "Extra unproven admitted input has preparing/connecting progress only; lack of observed dispatch does not establish absence of provider side effects or authorize replay."
+}

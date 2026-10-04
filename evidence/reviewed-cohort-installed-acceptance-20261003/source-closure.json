@@ -1,0 +1,34 @@
+{
+  "owner": "ReviewedRetainedSummaryCohort.actual_gates / require_original",
+  "declaration_count": 1,
+  "declared_roots": {
+    "src/agent_comms": 311,
+    "tools": 53,
+    "tests": 361
+  },
+  "parse_omissions": [],
+  "removed_decisions": [
+    "minimum two journeys from path cardinality",
+    "both-gates documentation policy",
+    "narrow generated preparation admission"
+  ],
+  "retained_requirements": [
+    "nonempty distinct original journey paths",
+    "separate activation/sourceproof provenance",
+    "original content hashes",
+    "full package/source/native and source-interpreter/route/default checks"
+  ],
+  "caller_closure": [
+    "publish original entry",
+    "PublishRetainedSummary.require_selection",
+    "FieldCodec execute reader",
+    "existing control constructors",
+    "new prepare_review full require_original"
+  ],
+  "later_phase": "PublishRetainedSummary.after_stopped and Cohort.publish intentionally require publication-originals only; they are not static-review producers",
+  "new_classes": 0,
+  "new_policies": 0,
+  "new_stores": 0,
+  "frozen_history": "Failed360 operator/sourceproof/refusal untouched",
+  "verification": "Original full readonly admission passed with ONE actual563 acceptance; final batch rejects absent, duplicate, packaging-only, changed original hash; no journey/package/provider/public repeats"
+}

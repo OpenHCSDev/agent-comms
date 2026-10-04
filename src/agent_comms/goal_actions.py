@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
@@ -105,6 +106,28 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
+
+    @classmethod
+    async def submit_control(
+        cls,
+        observe: Callable[[], Awaitable[tuple[Goal | None, object]]],
+        invoke: Callable[..., Awaitable[dict]],
+        text: str = "",
+    ) -> dict:
+        goal, _ = await observe()
+        if goal is None:
+            raise ValueError("The goal changed; refresh its state.")
+        return await cls.submit_checkpoint(invoke, goal)
+
+    @classmethod
+    async def submit_checkpoint(cls, invoke: Callable[..., Awaitable[dict]], goal: Goal) -> dict:
+        from .field_codec import FieldCodec
+        from .runtime_requests import UpdateGoalRuntimeRequest
+
+        return await invoke(
+            FieldCodec.encode(UpdateGoalRuntimeRequest), status=cls,
+            goal_id=goal.id, expected_revision=goal.revision,
+        )
 
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is not None:
@@ -258,7 +281,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         snapshot = ctx.goals.registry.snapshot()
         if not any(
             GoalWaits.target_has_active_turn(target, snapshot)
-            and snapshot.threads[snapshot.aliases.get(target.name, target.name)].process_alive
+            and snapshot.threads[snapshot.canonical_name(target.name)].process_alive
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.name}" for target in wait_targets)
@@ -307,7 +330,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 target_turn_generations=tuple(
                     (
                         snapshot.threads[
-                            snapshot.aliases.get(target.name, target.name)
+                            snapshot.canonical_name(target.name)
                         ].turn_generation
                         if GoalWaits.target_has_active_turn(target, snapshot)
                         else None
@@ -373,6 +396,13 @@ class ReplacementGoalAction(GoalAction):
 class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     text: str
 
+    @classmethod
+    async def submit_control(cls, observe, invoke, text: str = "") -> dict:
+        from .field_codec import FieldCodec
+        from .runtime_requests import SetGoalRuntimeRequest
+
+        return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
+
     def check_grant(self, ctx: GoalActionContext) -> None:
         pass
 
@@ -431,6 +461,16 @@ def required_block_reason(reason: str | None) -> str:
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalAction(GoalAction, OwnerInvocable):
     """Explicit owner retry; existing store grants still fence every attempt."""
+
+    @classmethod
+    async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
+        from .field_codec import FieldCodec
+        from .runtime_requests import RetryGoalRuntimeRequest
+
+        return await invoke(
+            FieldCodec.encode(RetryGoalRuntimeRequest),
+            goal_id=goal.id, expected_revision=goal.revision,
+        )
 
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is None or self.expect.expected_owner is None:

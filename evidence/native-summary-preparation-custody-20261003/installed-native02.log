@@ -1,0 +1,14 @@
+INSTALLED_MODULE /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/__init__.py
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/test_selected_summary_exchange.py::test_retained_native_summary_preserves_source_and_blocks_replay PASSED [ 50%]
+tests/test_selected_summary_exchange.py::test_actual_selected_mismatch_refuses_without_provider_or_replay[settings] PASSED [100%]
+
+============================== 2 passed in 15.16s ==============================

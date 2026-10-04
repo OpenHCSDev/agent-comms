@@ -1,0 +1,30 @@
+{
+  "started_utc": "2026-10-04T01:28:08.706560+00:00",
+  "source_head": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "pin": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "donor": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "receiver": "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/receiver/node_modules/@earendil-works/pi-coding-agent",
+  "assemblies": 1,
+  "second_sdk_payload": false,
+  "provider_calls": 0,
+  "public_changes": false,
+  "old_artifacts_used_as_donors": false,
+  "receiver_resources": {
+    "regular_files": 19190,
+    "shared_logical_bytes": 138420949,
+    "receiver_exclusive_regular_file_allocated_bytes": 0,
+    "directory_metadata_bytes_not_counted": true,
+    "old_payload_reclaimed_bytes": 0,
+    "measurement": "st_size for shared logical content; st_blocks only for receiver-exclusive regular inodes"
+  },
+  "existing_sharing_hook": {
+    "shared_files": 19190,
+    "shared_content_bytes": 138420949
+  },
+  "state": "FAILED",
+  "failure": "NativePackageError('Native package tree differs from pinned artifact')",
+  "receiver_and_authored_fixture_removed_after_joined_exit": true,
+  "duration_s": 8.42336980602704,
+  "canonical_donor_single_links_after_receiver_retirement": true
+}

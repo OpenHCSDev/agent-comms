@@ -23,7 +23,9 @@ def main(path: Path) -> None:
     source = replace_once(source,
         'import * as crypto from "node:crypto";',
         'import * as crypto from "node:crypto";\n'
-        'import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";\n'
+        'import { CompactionPolicy } from "../../core/compaction/agent-comms-policy.js";\n'
+        'import { SessionContext } from "../../core/session-context.js";\n'
+        'import { compact, prepareCompaction } from "../../core/compaction/index.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()
     source = replace_once(source, "export async function runRpcMode(runtimeHost) {", helper + "\nexport async function runRpcMode(runtimeHost) {")
@@ -39,7 +41,7 @@ def main(path: Path) -> None:
         '''        const id = command.id;
         // Reserve synchronously before ANY await: RPC dispatches concurrent lines.
         if (acSummarySlot && !["agent_comms_cancel_summary", "agent_comms_summarize_compaction",
-            "agent_comms_compaction_settings", "get_state"].includes(command.type))
+            "agent_comms_compaction_settings", "agent_comms_prepare_compaction", "get_state"].includes(command.type))
             return error(id, command.type, "Selected summary in flight; mutation denied");
         switch (command.type) {''')
     source = replace_once(source, '''                void session
@@ -58,10 +60,25 @@ def main(path: Path) -> None:
                     }
                 })
                     .finally(() => { acOtherCommandInFlight--; });''')
-    source = replace_once(source, '''            case "get_state": {''', '''            case "agent_comms_compaction_settings": {
+    source = replace_once(source, '''            case "get_state": {''', '''            case "agent_comms_restore_compaction": {
+                // The existing command resource includes this invocation itself.
+                if (acSummarySlot !== null || acOtherCommandInFlight !== 1 ||
+                    !acExactObject(command, ["id", "type", "reconciliation", "expected", "reason"]) ||
+                    typeof command.reason !== "string" || !command.reason.length)
+                    return error(id, command.type, "Known compaction restoration conflicts with native work");
+                await session.restoreCompaction(command.reconciliation, command.expected, command.reason);
+                return success(id, command.type, {});
+            }
+            case "agent_comms_compaction_settings": {
                 if (!acValidCompactionSettingsRequest(command))
                     return error(id, command.type, "Invalid selected compaction settings request");
                 return success(id, command.type, acSelectedCompactionSettings(command, session,
+                    acSummarySlot !== null || acOtherCommandInFlight !== 0));
+            }
+            case "agent_comms_prepare_compaction": {
+                if (!acValidCompactionPreparationRequest(command))
+                    return error(id, command.type, "Invalid selected preparation request");
+                return success(id, command.type, acSelectedCompactionPreparation(command, session,
                     acSummarySlot !== null || acOtherCommandInFlight !== 0));
             }
             case "agent_comms_summarize_compaction": {
@@ -105,7 +122,7 @@ def main(path: Path) -> None:
         try {
             const response = await handleCommand(command);''', '''        const command = parsed;
         const acCountCommand = !["agent_comms_summarize_compaction", "agent_comms_cancel_summary",
-            "agent_comms_compaction_settings", "get_state"].includes(command?.type);
+            "agent_comms_compaction_settings", "agent_comms_prepare_compaction", "get_state"].includes(command?.type);
         if (acCountCommand) acOtherCommandInFlight++;
         try {
             const response = await handleCommand(command);''')

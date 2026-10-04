@@ -1,0 +1,16 @@
+{
+  "source_head": "b02a57ff",
+  "base_main": "e1c399d7a1a93411e8eba14b62c1b7ebce17dcf0",
+  "production_diff_from_base": "empty; fixture-only",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/input-drain611-wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "4e3ff32503360fe7975ec71da19479774c0ff04ac6b0a2aa09ee38a1521219ba",
+  "bytes": 871914,
+  "source_members": 342,
+  "forced_assets": {
+    ".pi/APPEND_SYSTEM.md": "agent_comms/_native/APPEND_SYSTEM.md",
+    "stack/pi-native.sha256": "agent_comms/_native/pi-native.sha256",
+    "stack/native-compaction-commit-child.mjs": "agent_comms/_native/native-compaction-commit-child.mjs"
+  },
+  "native_manifest_sha256": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent"
+}

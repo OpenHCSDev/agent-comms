@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .agent_events import CompactionEnd
-from .compaction_result import CompactionResult, CommittedCompactionResult
+from .pi_vocabulary import CompactionReason
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 
 if TYPE_CHECKING:
+    from .compaction_result import CompactionResult, CommittedCompactionResult
     from .compaction_records import CompactionOperation
     from .compaction_source import CompactionSource
     from .owner_compaction_commit import OwnerCompactionCommit
@@ -28,9 +29,8 @@ class OwnerSummaryOutcome(ABC):
     ) -> CompactionOperation | None:
         """Write a summary or preserve the unchanged source on a clean decline."""
 
-    @property
     @abstractmethod
-    def completion_event(self) -> CompactionEnd:
+    def completion_event(self, reason: type[CompactionReason]) -> CompactionEnd:
         """Report only a completed, authoritative outcome."""
 
     @abstractmethod
@@ -62,13 +62,14 @@ class NativeSummary(OwnerSummaryOutcome):
         return operation
 
     def compaction_result(self, operation: CompactionOperation | None) -> CommittedCompactionResult:
+        from .compaction_result import CommittedCompactionResult
+
         assert operation is not None
         operation.state.require_committed(operation.commit_id)
         return CommittedCompactionResult(self.text, operation.commit_id)
 
-    @property
-    def completion_event(self) -> CompactionEnd:
-        return CompactionEnd(reason="adaptive", summary=self.text)
+    def completion_event(self, reason: type[CompactionReason]) -> CompactionEnd:
+        return CompactionEnd(reason=reason, summary=self.text)
 
     def commit_options(self) -> dict[str, Any]:
         """Additional owner-commit binding supplied by a selected summary."""

@@ -1,0 +1,9 @@
+actual_selected_launch_custody {"preclaim_and_first_verifications": 2, "borrowed_verifications": 0, "independent_verifications": 1, "auth_changed": true, "children_retired": [true, true], "source_bytes": 1424, "source_sha256": "ef33a91135a4a6550aa0a7dfb5a8a806d1625d608ffd0fc2a73d5ee12b1b0cb7", "provider_requests": 0}
+.
+=============================== warnings summary ===============================
+tests/test_native_catalog_discovery.py:237
+  /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_native_catalog_discovery.py:237: PytestUnknownMarkWarning: Unknown pytest.mark.refactor_guard - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.refactor_guard
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 1 warning in 6.64s

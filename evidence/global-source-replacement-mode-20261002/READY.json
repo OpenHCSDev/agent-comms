@@ -1,0 +1,19 @@
+{
+  "state": "READY source and mode-byte behavior for550; final normal wheel mode import check follows merged pin",
+  "production_head": "34b7932b990ee014c51482d5935b1bd4d2df4807",
+  "source_primitive_sha256": "897f5940e8839db9dbd0d92601408cf65b28ba97def00697bcb1769f56525ae7",
+  "parent_granted_source": "/home/ts/wt/comms-cleanup-live-integration-20260929/tools/cutover/global_extension_activation.py",
+  "parent_granted_source_sha256": "5f299f5d246e6ad73f0e76f1ec822466e79f429105412a3632a64c6621030754",
+  "private_mode_owner": "existing PrivateFileRole.permissions",
+  "mode_set_before_write_fsync_replace": true,
+  "portable_chmod": true,
+  "actual_mode_batch": "/home/ts/wt/comms-task-aware-native-bundle-20261002/evidence/global-source-replacement-mode-20261002/final-source-file-mode-receipt.json",
+  "initial_installed992_actual_mode_batch": "/home/ts/wt/comms-task-aware-native-bundle-20261002/evidence/global-source-replacement-mode-20261002/qualified992-installed-file-mode-receipt.json",
+  "new_classes": 0,
+  "duplicate_atomic_writers": 0,
+  "new_env_or_native": false,
+  "provider_calls": 0,
+  "public_effects": 0,
+  "bootstrap_deployed": false,
+  "original_actual_bootstrap_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+}

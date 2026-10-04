@@ -1,0 +1,864 @@
+{
+  "parser_path": "/home/ts/.local/share/opencode/bin/node_modules/prettier/plugins/typescript.js",
+  "scope": "Original owner classes and direct calls; patch-generated adapter sites separately traced in source",
+  "revisions": {
+    "9a88db01": {
+      "parse_omissions": [],
+      "classes": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "BudgetAdmissionError",
+          "methods": [
+            "constructor"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudget",
+          "methods": [
+            "constructor",
+            "available",
+            "fits",
+            "compactionRequired",
+            "allowance",
+            "admit"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ProviderRejection",
+          "methods": [
+            "formats",
+            "decode",
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "UnrecoverableRejection",
+          "methods": [
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudgetRejection",
+          "methods": [
+            "constructor",
+            "decodeCounts",
+            "valid",
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "InputCompletionRejection",
+          "methods": [
+            "pattern",
+            "fromMatch"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "TextToolOutputRejection",
+          "methods": [
+            "pattern",
+            "fromMatch"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudgetRequest",
+          "methods": [
+            "constructor",
+            "allowance",
+            "send"
+          ]
+        },
+        {
+          "path": "stack/native-request-observation.mjs",
+          "name": "NativeRequestObservation",
+          "methods": [
+            "constructor",
+            "observe",
+            "callback",
+            "options",
+            "events",
+            "emit"
+          ]
+        },
+        {
+          "path": "stack/native-request-observation.d.ts",
+          "name": "NativeRequestObservation",
+          "methods": [
+            "constructor",
+            "observe",
+            "callback",
+            "options",
+            "events",
+            "emit"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputByteRange",
+          "methods": [
+            "constructor",
+            "requireCoordinate",
+            "capture",
+            "bytes",
+            "matches",
+            "requireDigest"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputImages",
+          "methods": [
+            "constructor",
+            "capture",
+            "preserved",
+            "content"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputContribution",
+          "methods": [
+            "constructor",
+            "capture",
+            "preserved",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "NativeInputClaim",
+          "methods": [
+            "constructor",
+            "capture",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "ContextSegment",
+          "methods": [
+            "constructor",
+            "manifest",
+            "full"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "SystemLayerSegment",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "NativeMessages",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TranscriptSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "CompactionSummarySegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InjectionMessageSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TransformedInputSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "ToolCatalogSegment",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TurnContext",
+          "methods": [
+            "constructor",
+            "capture",
+            "next",
+            "render",
+            "manifest",
+            "full"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "SessionContext",
+          "methods": [
+            "constructor",
+            "restore",
+            "sourceMessages",
+            "sourceBudget",
+            "sourceContext",
+            "prefixContext",
+            "compactionRequired",
+            "install",
+            "requireReady",
+            "messages",
+            "messageCount",
+            "beforeInput"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "ReadyContext",
+          "methods": [
+            "requireReady",
+            "messages",
+            "messageCount",
+            "install"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "CompactionContext",
+          "methods": [
+            "messages",
+            "messageCount",
+            "install",
+            "beforeInput"
+          ]
+        }
+      ],
+      "model_assignments": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "line": 15
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "line": 136
+        }
+      ],
+      "budget_calls": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "allowance",
+          "line": 54
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "admit",
+          "line": 142
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "method": "compactionRequired",
+          "line": 16
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "method": "compactionRequired",
+          "line": 41
+        }
+      ]
+    },
+    "e88f332d": {
+      "parse_omissions": [],
+      "classes": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "BudgetAdmissionError",
+          "methods": [
+            "constructor"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudget",
+          "methods": [
+            "constructor",
+            "available",
+            "fits",
+            "compactionRequired",
+            "allowance",
+            "admit",
+            "observeAdmission"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ProviderRejection",
+          "methods": [
+            "formats",
+            "decode",
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "UnrecoverableRejection",
+          "methods": [
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudgetRejection",
+          "methods": [
+            "constructor",
+            "decodeCounts",
+            "valid",
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "InputCompletionRejection",
+          "methods": [
+            "pattern",
+            "fromMatch"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "TextToolOutputRejection",
+          "methods": [
+            "pattern",
+            "fromMatch"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudgetRequest",
+          "methods": [
+            "constructor",
+            "allowance",
+            "send"
+          ]
+        },
+        {
+          "path": "stack/native-request-observation.mjs",
+          "name": "NativeRequestObservation",
+          "methods": [
+            "constructor",
+            "observe",
+            "callback",
+            "options",
+            "events",
+            "emit"
+          ]
+        },
+        {
+          "path": "stack/native-request-observation.d.ts",
+          "name": "NativeRequestObservation",
+          "methods": [
+            "constructor",
+            "observe",
+            "callback",
+            "options",
+            "events",
+            "emit"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputByteRange",
+          "methods": [
+            "constructor",
+            "requireCoordinate",
+            "capture",
+            "bytes",
+            "matches",
+            "requireDigest"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputImages",
+          "methods": [
+            "constructor",
+            "capture",
+            "preserved",
+            "content"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputContribution",
+          "methods": [
+            "constructor",
+            "capture",
+            "preserved",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "NativeInputClaim",
+          "methods": [
+            "constructor",
+            "capture",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "ContextSegment",
+          "methods": [
+            "constructor",
+            "manifest",
+            "full"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "SystemLayerSegment",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "NativeMessages",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TranscriptSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "CompactionSummarySegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InjectionMessageSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TransformedInputSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "ToolCatalogSegment",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TurnContext",
+          "methods": [
+            "constructor",
+            "capture",
+            "next",
+            "render",
+            "manifest",
+            "full"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "SessionContext",
+          "methods": [
+            "constructor",
+            "restore",
+            "sourceMessages",
+            "sourceBudget",
+            "sourceContext",
+            "prefixContext",
+            "compactionRequired",
+            "install",
+            "requireReady",
+            "messages",
+            "messageCount",
+            "beforeInput"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "ReadyContext",
+          "methods": [
+            "requireReady",
+            "messages",
+            "messageCount",
+            "install"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "CompactionContext",
+          "methods": [
+            "messages",
+            "messageCount",
+            "install",
+            "beforeInput"
+          ]
+        }
+      ],
+      "model_assignments": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "line": 16
+        }
+      ],
+      "budget_calls": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "allowance",
+          "line": 56
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "observeAdmission",
+          "line": 58
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "admit",
+          "line": 156
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "observeAdmission",
+          "line": 174
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "method": "compactionRequired",
+          "line": 16
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "method": "compactionRequired",
+          "line": 41
+        }
+      ]
+    },
+    "74f67b000c1b769e9c033dbf0cf64d78b2dcd835": {
+      "parse_omissions": [],
+      "classes": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "BudgetAdmissionError",
+          "methods": [
+            "constructor"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudget",
+          "methods": [
+            "constructor",
+            "available",
+            "fits",
+            "compactionRequired",
+            "allowance",
+            "admit",
+            "observeAdmission"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ProviderRejection",
+          "methods": [
+            "formats",
+            "decode",
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "UnrecoverableRejection",
+          "methods": [
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudgetRejection",
+          "methods": [
+            "constructor",
+            "decodeCounts",
+            "valid",
+            "revisedAllowance"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "InputCompletionRejection",
+          "methods": [
+            "pattern",
+            "fromMatch"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "TextToolOutputRejection",
+          "methods": [
+            "pattern",
+            "fromMatch"
+          ]
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "name": "ContextBudgetRequest",
+          "methods": [
+            "constructor",
+            "allowance",
+            "send"
+          ]
+        },
+        {
+          "path": "stack/native-request-observation.mjs",
+          "name": "NativeRequestObservation",
+          "methods": [
+            "constructor",
+            "observe",
+            "callback",
+            "options",
+            "events",
+            "emit"
+          ]
+        },
+        {
+          "path": "stack/native-request-observation.d.ts",
+          "name": "NativeRequestObservation",
+          "methods": [
+            "constructor",
+            "observe",
+            "callback",
+            "options",
+            "events",
+            "emit"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputByteRange",
+          "methods": [
+            "constructor",
+            "requireCoordinate",
+            "capture",
+            "bytes",
+            "matches",
+            "requireDigest"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputImages",
+          "methods": [
+            "constructor",
+            "capture",
+            "preserved",
+            "content"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InputContribution",
+          "methods": [
+            "constructor",
+            "capture",
+            "preserved",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "NativeInputClaim",
+          "methods": [
+            "constructor",
+            "capture",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "ContextSegment",
+          "methods": [
+            "constructor",
+            "manifest",
+            "full"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "SystemLayerSegment",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "NativeMessages",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TranscriptSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "CompactionSummarySegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "InjectionMessageSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TransformedInputSegment",
+          "methods": []
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "ToolCatalogSegment",
+          "methods": [
+            "tokens",
+            "payload",
+            "render"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.mjs",
+          "name": "TurnContext",
+          "methods": [
+            "constructor",
+            "capture",
+            "next",
+            "render",
+            "manifest",
+            "full"
+          ]
+        },
+        {
+          "path": "stack/native-turn-context.d.ts",
+          "name": "NativeInputClaim",
+          "methods": [
+            "digest",
+            "contributions",
+            "capture",
+            "observe"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "SessionContext",
+          "methods": [
+            "constructor",
+            "restore",
+            "sourceMessages",
+            "sourceBudget",
+            "sourceContext",
+            "prefixContext",
+            "compactionRequired",
+            "install",
+            "requireReady",
+            "messages",
+            "messageCount",
+            "beforeInput"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "ReadyContext",
+          "methods": [
+            "requireReady",
+            "messages",
+            "messageCount",
+            "install"
+          ]
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "name": "CompactionContext",
+          "methods": [
+            "messages",
+            "messageCount",
+            "install",
+            "beforeInput"
+          ]
+        }
+      ],
+      "model_assignments": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "line": 16
+        }
+      ],
+      "budget_calls": [
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "allowance",
+          "line": 56
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "observeAdmission",
+          "line": 58
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "admit",
+          "line": 156
+        },
+        {
+          "path": "stack/native-context-budget.mjs",
+          "method": "observeAdmission",
+          "line": 174
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "method": "compactionRequired",
+          "line": 16
+        },
+        {
+          "path": "stack/native-session-context.mjs",
+          "method": "compactionRequired",
+          "line": 41
+        }
+      ]
+    }
+  }
+}

@@ -7,11 +7,12 @@ and asks declared admission rules before recovering any unused READY grant.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .goal_actions import (
     EditGoalAction,
@@ -48,10 +49,9 @@ GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 
 
 class GoalScheduler:
-    def __init__(self, comms: Comms, effects: TurnEffects, turn_busy: Callable[[str], bool]):
+    def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
-        self.turn_busy = turn_busy
         self.goal_store: GoalAttemptStore | None = None
         self.pending_goal_origins: dict[str, str] = {}
         self.goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
@@ -60,18 +60,35 @@ class GoalScheduler:
         self.sessions = sessions
         self.inputs = inputs
 
-    def schedule_goal(self, session_id: str) -> None:
-        """Only the existing thread owner may schedule another goal turn."""
+    async def schedule_goal(self, session_id: str) -> None:
+        """Join durable goal admission before binding its existing loop queue."""
+        check = GoalScheduleCheck(
+            session_id=session_id, inputs=self.inputs, turns=self.effects.turns,
+        )
         try:
-            GoalScheduleCheck(
-                session_id=session_id, inputs=self.inputs, turn_busy=self.turn_busy,
-            ).require_valid()
+            check.require_valid()
         except ReservationViolationError:
             return
-        thread = self.comms.registry.require(self.sessions.require(session_id))
+        scheduled = await Coordination.run_worker(partial(self.prepare_goal, session_id))
+        if scheduled is None:
+            return
+        # A worker wait cannot reserve the process-local queue. Its original
+        # rules recheck that resource before the admitted work is bound.
+        try:
+            check.require_valid()
+        except ReservationViolationError:
+            return
+        self.inputs.pending_turns.setdefault(session_id, []).append(scheduled)
+        WakeScheduleCheck(session_id=session_id, inputs=self.inputs).schedule()
+
+    def prepare_goal(self, session_id: str) -> ScheduledTurn | None:
+        """Read/recover the original READY grant in its joined storage worker."""
+        snapshot = self.comms.registry.snapshot()
+        thread = snapshot.require(self.sessions.require(session_id))
         try:
             thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-            self.comms.registry.status(thread.name).require_running()
+            snapshot.status(thread.name).require_running()
+            thread.require_idle()
         except RelationViolationError:
             return
         goal = thread.active_goal
@@ -118,10 +135,7 @@ class GoalScheduler:
                     diagnostic="Goal launch grant unavailable; explicit Retry required.",
                 )
                 return
-            self.inputs.pending_turns.setdefault(session_id, []).append(
-                ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
-            )
-            WakeScheduleCheck(session_id=session_id, inputs=self.inputs).schedule()
+            return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -153,14 +167,14 @@ class GoalScheduler:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("A goal requires text.")
         name = self.sessions.require(session_id)
-        goal = self.comms.goals.update_goal(
+        goal = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
             owner_store=self.open_goal_store(),
-        )
+        ))
         assert goal is not None
-        self.schedule_goal(session_id)
+        await self.schedule_goal(session_id)
         return goal
 
     async def edit_goal(
@@ -168,12 +182,11 @@ class GoalScheduler:
     ) -> Goal:
         """Edit the current objective without replacing its identity or execution state."""
         name = self.sessions.require(session_id)
-        goal = self.comms.registry.require(name).require_goal_checkpoint(
-            GoalRevision(goal_id, expected_revision)
-        )
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
         # update_goal owns the wire lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
-        edited = self.comms.goals.update_goal(
+        edited = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,
             EditGoalAction(
                 text=text,
@@ -184,24 +197,22 @@ class GoalScheduler:
                 ),
             ),
             actor=OwnerInvocable,
-        )
+        ))
         assert edited is not None
         await self.sessions.config.sync_thread(session_id)
         return edited
 
     async def update_goal(
-        self, session_id: str, status: str, goal_id: str, expected_revision: int
+        self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
     ) -> Goal | None:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
-        action = GoalAction.decode(status)
         if not issubclass(action, OwnerControlInvocable):
             raise ValueError("Goal updates support only active, paused, or clear.")
         name = self.sessions.require(session_id)
-        goal = self.comms.registry.require(name).require_goal_checkpoint(
-            GoalRevision(goal_id, expected_revision)
-        )
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
         try:
-            updated = self.comms.goals.update_goal(
+            updated = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
                 name,
                 action(
                     expect=GoalPrecondition(
@@ -212,23 +223,23 @@ class GoalScheduler:
                 ),
                 actor=OwnerInvocable,
                 owner_store=self.open_goal_store() if action.owner_grant else None,
-            )
+            ))
         finally:
             # Resume can discover that a paused attempt failed. Publish the
             # reconciled BLOCKED state even when the action returns an error.
             await self.sessions.config.sync_thread(session_id)
         if action.schedules_goal:
-            self.schedule_goal(session_id)
+            await self.schedule_goal(session_id)
         return updated
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self.sessions.require(session_id)
-        thread = self.comms.registry.require(name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
         if self.pending_goal_origins.get(name) == goal_id:
             raise ValueError("Wait for the goal origin turn to finish.")
-        resumed = self.comms.goals.update_goal(
+        resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,
             RetryGoalAction(
                 expect=GoalPrecondition(
@@ -239,19 +250,20 @@ class GoalScheduler:
             ),
             actor=OwnerInvocable,
             owner_store=self.open_goal_store(),
-        )
+        ))
         assert resumed is not None
         # READY records the accepted owner decision even during an unrelated
         # turn. The scheduler's existing busy fences defer launch until that
         # turn finishes; reserved/claimed attempts remain unretryable above.
-        self.schedule_goal(session_id)
+        await self.schedule_goal(session_id)
         await self.sync_goal_execution(session_id, name)
         return resumed
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = self.comms.goals.goal_changed(
-            thread_name, self.goal_execution_signatures.get(session_id)
-        )
+        event = await Coordination.run_worker(partial(
+            self.comms.goals.goal_changed,
+            thread_name, self.goal_execution_signatures.get(session_id),
+        ))
         if event is None:
             return
         await self.effects._emit_event(session_id, event)

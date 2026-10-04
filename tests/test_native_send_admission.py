@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_pi, native_prompt_send
+from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
@@ -107,7 +108,7 @@ else:
 
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("revoke", [False, True])
-async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, direct, revoke):
+async def test_actual_raw_writes_follow_committed_admission_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
@@ -130,7 +131,7 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
     write = native_prompt_send._write_fenced
     observed = []
 
-    def probe(fd, payload, boundary, cancelled, deadline):
+    def probe(fd, payload, boundary, cancelled, deadline, measurements):
         @contextmanager
         def scope():
             with boundary():
@@ -138,7 +139,7 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
                 yield
                 observed.append(_held(root))
 
-        result = write(fd, payload, scope, cancelled, deadline)
+        result = write(fd, payload, scope, cancelled, deadline, measurements)
         # The same production admission cannot write twice even after all locks
         # are released. Its UNKNOWN journal reservation survives the first send.
         with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
@@ -155,7 +156,7 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
         assert not received.exists() or not received.read_text()
     else:
         assert json.loads(received.read_text())["type"] == "prompt"
-        assert observed == [["wire", "bus.jsonl", "registry.json", "sql"]] * 2
+        assert observed == [[], []]
     assert all(child.returncode is not None for child in children)
     assert _held(root) == []
 
@@ -218,8 +219,8 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
 
         def lifecycle():
             # This is intentionally a synchronous ordinary callback on the SAME
-            # loop that awaits native send. Worker deadline must free admission
-            # even while this callback blocks waiting for the registry lock.
+            # loop that awaits native send. The grant has already released
+            # registry custody; pipe backpressure cannot block this retirement.
             comms.registry.unregister(owner.name)
             lifecycle_done.append(True)
 
@@ -354,7 +355,7 @@ async def test_short_admission_contention_sends_once_after_release(
     write = native_prompt_send._write_fenced
     admissions = []
 
-    def probe(fd, payload, boundary, cancelled, deadline):
+    def probe(fd, payload, boundary, cancelled, deadline, measurements):
         held, release = threading.Event(), threading.Event()
 
         def contend():
@@ -383,7 +384,7 @@ async def test_short_admission_contention_sends_once_after_release(
                 yield
 
         try:
-            return write(fd, payload, scope, cancelled, deadline)
+            return write(fd, payload, scope, cancelled, deadline, measurements)
         finally:
             release.set()
             competitor.join(3)
@@ -428,12 +429,12 @@ def test_busy_admission_does_not_spend_write_budget_and_cancel_proves_no_bytes(c
         start = time.monotonic()
         if cancel:
             with pytest.raises(native_prompt_send.PromptSendNotWritten,match="before writing") as caught:
-                native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02)
+                native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02,PublicationMeasurements())
             assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
             with pytest.raises(BlockingIOError):
                 os.read(read_fd,10)
         else:
-            native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02)
+            native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02,PublicationMeasurements())
             assert os.read(read_fd,100)==b"prompt\n"
         assert time.monotonic() - start < 1
         assert len(calls) > 1
@@ -464,7 +465,7 @@ def test_admitted_write_never_reenters_after_busy_post_write_failure():
             match="PromptAdmissionBusy: post-write failure is not retryable",
         ) as caught:
             native_prompt_send._write_fenced(
-                write_fd, b"one prompt\n", boundary, threading.Event(), 1
+                write_fd, b"one prompt\n", boundary, threading.Event(), 1, PublicationMeasurements()
             )
         assert entered == [1]
         assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
@@ -507,6 +508,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
                     historical_admission,
                     threading.Event(),
                     1,
+                    PublicationMeasurements(),
                 )
             assert caught.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
             assert entered == [1]
@@ -525,7 +527,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
+async def test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers(
     tmp_path, monkeypatch, direct
 ):
     root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
@@ -548,7 +550,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     write = native_prompt_send._write_fenced
     observations = []
 
-    def probe(fd, payload, boundary, cancelled, deadline):
+    def probe(fd, payload, boundary, cancelled, deadline, measurements):
         path = root / "coordination.sqlite3"
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         reader.execute("BEGIN")
@@ -559,15 +561,18 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
             try:
                 with boundary():
                     assert observations == ["reader refused before bytes"]
-                    # A late feedback reader cannot sneak in after admission.
+                    # The exact epoch has committed before any raw byte. A
+                    # later reader borrows it without blocking this pipe writer.
                     late = sqlite3.connect(path, isolation_level=None, timeout=0)
                     try:
-                        with pytest.raises(sqlite3.OperationalError) as blocked:
-                            late.execute("SELECT * FROM native_runtime_input").fetchall()
-                        assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                        epochs = late.execute(
+                            "SELECT sent_owner_admission_generation FROM native_runtime_input"
+                        ).fetchall()
+                        assert len(epochs) == 1 and epochs[0][0] is not None
                     finally:
                         late.close()
-                    observations.append("late reader excluded")
+                    assert _held(root) == []
+                    observations.append("original admission committed and released")
                     yield
             except native_prompt_send.PromptAdmissionBusy:
                 assert observations == []
@@ -577,7 +582,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
                 raise
 
         try:
-            write(fd, payload, checked_admission, cancelled, deadline)
+            write(fd, payload, checked_admission, cancelled, deadline, measurements)
             observations.append("sent and committed once")
         finally:
             reader.close()
@@ -592,7 +597,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     assert "post-write" not in str(caught.value)
     assert observations == [
         "reader refused before bytes",
-        "late reader excluded",
+        "original admission committed and released",
         "sent and committed once",
     ]
     assert json.loads(received.read_text())["type"] == "prompt"

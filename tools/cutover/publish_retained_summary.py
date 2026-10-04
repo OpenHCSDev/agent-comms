@@ -6,7 +6,9 @@ signal, native input or alternative owner-stop/launch implementation.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from abc import ABC, abstractmethod
+from contextlib import ExitStack
 import fcntl
 import json
 import os
@@ -14,6 +16,7 @@ from pathlib import Path
 import sys
 import time
 from typing import Annotated
+from urllib.parse import unquote, urlsplit
 
 from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked
 from agent_comms.comms import Comms
@@ -21,14 +24,17 @@ from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import PrivateDirectoryRole
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.threads import Thread
 from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
-from retained_summary_reset import RuntimeCompactionFiles
+from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
+from native_schema_carry import RuntimeNativeFiles
 from runtime_installation import RuntimeInstallation
+from cutover_child import restore_stopped_batch
 
 
 @dataclass(frozen=True)
@@ -71,9 +77,56 @@ class PackageVcsInfo:
 
 
 @dataclass(frozen=True)
-class PackageDirectUrl:
+class PackageDirectUrl(ABC):
     url: str
+
+    @abstractmethod
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
+        """Validate the installer origin; source bytes are owned by InstalledSource."""
+
+
+@dataclass(frozen=True)
+class VcsPackageDirectUrl(PackageDirectUrl):
     vcs_info: PackageVcsInfo
+
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
+        if self.vcs_info.commit_id != source_head:
+            raise RuntimeError('Installed VCS origin differs from the declared source')
+
+
+@dataclass(frozen=True)
+class PackageArchiveInfo:
+    hashes: dict[str, str] = field(default_factory=dict, metadata={'wire_omit_default': True})
+    hash: str | None = field(default=None, metadata={'wire_omit_default': True})
+
+    def require_original(self, artifact: ReviewedArtifact):
+        hashes = dict(self.hashes)
+        if self.hash is not None:
+            algorithm, separator, value = self.hash.partition('=')
+            if not separator or not algorithm or not value:
+                raise RuntimeError('Installed archive has a malformed legacy hash')
+            if algorithm in hashes and hashes[algorithm] != value:
+                raise RuntimeError('Installed archive has conflicting hash provenance')
+            hashes[algorithm] = value
+        sha256 = hashes.get('sha256')
+        if sha256 is not None and sha256 != artifact.sha256:
+            raise RuntimeError('Installed archive SHA256 differs from the reviewed artifact')
+        artifact.require_original()
+
+
+@dataclass(frozen=True)
+class ArchivePackageDirectUrl(PackageDirectUrl):
+    archive_info: PackageArchiveInfo
+
+    def require_original(self, source_head: str, artifacts: tuple[ReviewedArtifact, ...]):
+        origin = urlsplit(self.url)
+        if origin.scheme != 'file' or origin.netloc not in ('', 'localhost'):
+            raise RuntimeError('Installed archive requires its original local artifact')
+        path = Path(unquote(origin.path))
+        originals = tuple(artifact for artifact in artifacts if artifact.path == path)
+        if len(originals) != 1:
+            raise RuntimeError('Installed archive requires one reviewed original artifact')
+        self.archive_info.require_original(originals[0])
 
 
 @dataclass(frozen=True)
@@ -84,8 +137,23 @@ class InstalledSource:
     files: int
     python_files: int
     byte_equal: bool
-    direct_url: PackageDirectUrl
+    direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl
     inventory_sha256: str
+
+    def require_original(self, artifacts: tuple[ReviewedArtifact, ...] = ()):
+        if not self.byte_equal:
+            raise RuntimeError('Installed source bytes are not verified')
+        self.direct_url.require_original(self.head, artifacts)
+
+    def require_package(self, module: str, location: Path, direct_url: dict,
+                        artifacts: tuple[ReviewedArtifact, ...]) -> str:
+        """Bind the declared source to the actual imported installer origin."""
+        if (self.module, self.location) != (module, str(location)):
+            raise RuntimeError('Installed source names another imported package')
+        if FieldCodec.encode(self.direct_url) != direct_url:
+            raise RuntimeError('Installed source names another installer origin')
+        self.require_original(artifacts)
+        return self.head
 
 
 @dataclass(frozen=True)
@@ -110,6 +178,8 @@ class InstalledSourceProof:
     dependency_bypass: bool
     journey_owners: tuple[str, ...]
     journey_assessment: str
+    archive_artifacts: tuple[ReviewedArtifact, ...] = field(
+        default=(), metadata={'wire_omit_default': True})
 
     def require_activation(self, activation: CohortActivation):
         actual = {source.module: source.head for source in self.sources}
@@ -121,8 +191,7 @@ class InstalledSourceProof:
                 activation.native_package, activation.native_manifest, activation.native_tree):
             raise RuntimeError('Source proof names another native artifact')
         for source in self.sources:
-            if not source.byte_equal or source.direct_url.vcs_info.commit_id != source.head:
-                raise RuntimeError('Unverified source/native proof')
+            source.require_original(self.archive_artifacts)
         if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
             raise RuntimeError('Package/source/native trust is incomplete')
 
@@ -156,7 +225,8 @@ class ReviewedRetainedSummaryCohort:
         proof = FieldCodec.decode(InstalledSourceProof, json.loads(self.source_proof.path.read_text()))
         proof.require_activation(activation)
         gates = {gate.path for gate in self.actual_gates}
-        if len(gates) < 2 or gates.intersection((self.activation.path, self.source_proof.path)):
+        if not gates or len(gates) != len(self.actual_gates) or gates.intersection(
+                (self.activation.path, self.source_proof.path)):
             raise RuntimeError('Distinct reviewed actual installed journey gates are required')
         for gate in self.actual_gates:
             gate.require_original()
@@ -201,6 +271,32 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
     runtime_installation: RuntimeInstallation
     route_directory: int
     receipt: Path
+    recovery_originals: tuple[ReviewedArtifact, ...] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        # This witness precedes EVERY fence/signal. A failure before stopped
+        # capture still has evidence; later installation cannot redefine it.
+        object.__setattr__(self, 'recovery_originals', tuple(
+            ReviewedArtifact(path, digest(path)) for path in sorted(self.recovery_paths())
+        ))
+
+    def recovery_paths(self) -> frozenset[Path]:
+        """Include payloads the installation may replace, not only invariants."""
+        from agent_comms.wire_log import WireLog
+
+        bus = WireLog(ROOT / 'bus.jsonl')
+        paths = self.protected_files().union(
+            RuntimeCompactionFiles(ROOT).paths, RuntimeNativeFiles(ROOT).paths,
+            (bus.path, bus.metadata_path),
+            self.task_carry.recovery_paths(),
+        )
+        return frozenset(path for path in paths if path.exists() or path.is_symlink())
+
+    def require_recovery_originals(self):
+        if self.recovery_paths() != frozenset(item.path for item in self.recovery_originals):
+            raise RuntimeError('Original recovery membership changed; remain stopped')
+        for original in self.recovery_originals:
+            original.require_original()
 
     def note(self, phase, **facts):
         previous = json.loads(self.receipt.read_text())
@@ -208,8 +304,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         _atomic_write_text(self.receipt, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
 
     def require_selection(self, snapshot, owners):
-        live = {thread.name for thread in snapshot.threads.values()
-                if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive}
+        live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if live != {thread.name for thread in owners} or live != {item.name for item in self.audience}:
             raise RuntimeError('Complete original owner audience changed; recapture/review required')
         for selection, original in zip(self.audience, self.originals, strict=True):
@@ -222,7 +317,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         InputDispositions(ROOT / InputDispositions.filename).read()
         self.task_carry.require_selection(snapshot, owners)
 
-    def protected_files(self):
+    def protected_files(self) -> frozenset[Path]:
         # Original uncertainty and evidence stay in their OWN stores. Runtime
         # compaction rows and task-carry bus rows are not competing authorities.
         paths = set()
@@ -241,7 +336,9 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                     proof = Path(str(session) + suffix)
                     if proof.exists() or proof.is_symlink():
                         paths.add(proof)
-        return paths
+        paths.update(path for path in RuntimeGoalFiles(ROOT).paths
+                     if path.exists() or path.is_symlink())
+        return frozenset(paths)
 
     def after_stopped(self, lifecycle):
         self.cohort.require_original()
@@ -255,29 +352,64 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         PrivateDirectoryRole.require(directory.lstat())
         paths = self.protected_files()
         protected = {str(path): digest(path) for path in sorted(paths)}
-        unchanged = self.runtime_installation.unchanged_protected(paths)
-        invariant = {str(path): protected[str(path)] for path in unchanged}
         # No decoding of old input records from a target-compaction journal.
-        with RuntimeCompactionFiles(ROOT).acquire() as runtime:
+        with ExitStack() as custody:
+            runtime = custody.enter_context(RuntimeCompactionFiles(ROOT).acquire())
+            goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
+            # Freeze original membership before deriving the byte-preserved
+            # partition. Goal members have their own preimage/row/DDL proof.
+            unchanged = self.runtime_installation.unchanged_protected(paths, runtime).difference(goals.paths)
+            invariant = {str(path): protected[str(path)] for path in unchanged}
             original_files = self.runtime_installation.retain_protected(paths, directory)
             retain_file(ROOT / 'registry.json', directory / 'registry.json')
             fsync_directory(directory)
             fsync_directory(directory.parent)
             self.note('all-original-owners-stopped-originals-audited',
-                      protected_original_sha256=protected, protected_preimages=original_files)
+                      protected_original_sha256=protected, protected_preimages=original_files,
+                      registry_original_sha256=digest(directory / 'registry.json'))
+            goal_installation = self.runtime_installation.synchronize_goal(
+                goals, directory / 'goal-ledger')
+            installed_goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
             # The carry and runtime member share the ORIGINAL stopped wire custody.
             self.task_carry.after_stopped(lifecycle)
             installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
             if self.protected_files() != paths or {str(path): digest(path) for path in unchanged} != invariant:
                 raise RuntimeError('Original input/native/proof/goal bytes changed; remain stopped')
+            installed_goals.require_original()
             self.note('runtime-installed-protected-originals-unchanged', runtime_installation=installed,
-                      byte_invariant_originals=invariant)
+                      goal_installation=goal_installation, byte_invariant_originals=invariant)
         self.cohort.publish(self.route_directory)
         self.note('target-route-and-defaults-published-before-retained-launch')
 
+    def failed(self, failure):
+        # Disposition completes INSIDE this operation, before its caller closes
+        # the route-directory resource or exits. Installation is never retried.
+        self.restore_unchanged(failure)
+
+    def recover(self, stopped):
+        """Only byte-identical originals may return to their original runtime.
+
+        These physical proofs precede ANY original registry decoder. A committed
+        #514 ledger or changed route therefore cannot be read/reverted by #508.
+        The same RAM handoff and original wire OFD cross the existing child.
+        """
+        self.cohort.require_publication_originals()
+        self.require_recovery_originals()
+        # The original handoff owns fenced identity/admission, rather than a
+        # raw registry hash minted only after stopped validation. Full stored
+        # settings must also remain the captured originals before source restore.
+        snapshot = stopped.lifecycle.registry.snapshot()
+        for original in self.originals:
+            if snapshot.threads[original.name] != original:
+                raise RuntimeError('Original stopped configuration changed; remain stopped')
+
+        restored = restore_stopped_batch(stopped)
+        self.note('failed-install-original-runtime-restored',
+                  restored=FieldCodec.encode(restored), finished=time.time())
+        return restored
+
     def complete(self, stopped):
-        self.after_stopped(stopped.lifecycle)
-        results = stopped.launch()
+        results = super().complete(stopped)
         snapshot = stopped.lifecycle.registry.snapshot()
         for original, result in zip(self.originals, results, strict=True):
             current = snapshot.threads[result.thread]
@@ -288,10 +420,14 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                   results=FieldCodec.encode(results), finished=time.time())
         return results
 
+    def bind_target_launch(self, lifecycle):
+        lifecycle.pin_private_nk_launch(ROOT, self.cohort.original_route.wire_root_id,
+                                       self.cohort.native)
+
 
 def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInstallation,
             runtime_installation: RuntimeInstallation, receipt: Path):
-    """Parent-only EXECUTION entry, once both reviewed gates/carry are supplied.
+    """Parent-only EXECUTION entry, with the reviewed affected journey gates and carry.
 
     A retry never happens here. Any existing receipt/preimage refuses before
     admission, and the only stop/fence/launch implementation is the original one.
@@ -301,8 +437,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
     cohort.require_original()
     service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
-    owners = tuple(thread for thread in snapshot.threads.values()
-                   if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive)
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
         raise RuntimeError('Empty original audience requires review')
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)
@@ -322,11 +457,11 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
             json.dump({'phase':'preflight-complete', 'started':time.time(),
                        'cohort':FieldCodec.encode(cohort),
                        'runtime_installation':FieldCodec.encode(runtime_installation),
+                       'recovery_originals':FieldCodec.encode(operation.recovery_originals),
                        'owners_before':FieldCodec.encode(audience)}, opened, indent=2)
             opened.flush()
             os.fsync(opened.fileno())
         fsync_directory(receipt.parent)
-        service.owners.pin_private_nk_launch(ROOT, cohort.original_route.wire_root_id, cohort.native)
         runtime = RestartEnvironment(path=str(cohort.target / 'bin')+':'+os.environ['PATH'],
                                      virtual_env=str(cohort.target))
         return service.owners.restart_owners(runtime=runtime, cutover=operation)

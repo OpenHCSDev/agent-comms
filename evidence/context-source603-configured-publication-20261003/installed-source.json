@@ -1,0 +1,14 @@
+{
+  "installed_production_revision": "40f557d44fec3e7b7c97b47d8f498609af48a361",
+  "private_driver_revision": "7a41125aae7c7fdbc3b3326f92669cfd34b0b3bb",
+  "code_assets_equal": 342,
+  "wheel": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/context603/605-union-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "756daad83f5747aff6d10a90a3f2f83d3797248f93aba4365124b872daf7753a",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/context603/605-union-wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "native_manifest_sha256": "d5efa0d56e7ad3962bf3efc009adf1569167a260f1ceb46824c9271a0e7542a2",
+  "typed_original_input_matches_sealed_manifest": true,
+  "actual_main605_registry_files_equal": true
+}

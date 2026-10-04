@@ -62,13 +62,12 @@ class GoalWait:
         )
 
     def has_reply(self, bus: WireLog) -> bool:
-        with bus.certified_read() as source:
-            return any(
-                self.matches(original)
-                for original in source.addressed_deliveries(
-                    stable_thread_lookup(self.owner_created_at), self.after_seq, frozenset()
-                )
+        return any(
+            self.matches(original)
+            for original in bus.addressed_sources(
+                stable_thread_lookup(self.owner_created_at), self.after_seq
             )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,7 +145,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
 
     @staticmethod
     def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
-        canonical = snapshot.aliases.get(target.name, target.name)
+        canonical = snapshot.canonical_name(target.name)
         thread = snapshot.threads.get(canonical)
         status = snapshot.statuses.get(canonical)
         return bool(
@@ -189,7 +188,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
-                canonical = snapshot.aliases.get(target.name, target.name)
+                canonical = snapshot.canonical_name(target.name)
                 peer = snapshot.threads.get(canonical)
                 if peer is None or peer.created_at != target.created_at:
                     continue
@@ -232,7 +231,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             return None
         if wait := GoalWaits.for_goal(goal, rows):
             targets = tuple(
-                replace(target, name=snapshot.aliases.get(target.name, target.name))
+                replace(target, name=snapshot.canonical_name(target.name))
                 for target in wait.targets
             )
             inactive = tuple(
@@ -242,7 +241,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             )
             return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
         return GoalExecution(
-            GoalExecutionState(goal.state.execution_name),
+            GoalExecutionState.for_domain_state(goal.state),
             goal.id,
             block_reason=goal.state.reason,
         )

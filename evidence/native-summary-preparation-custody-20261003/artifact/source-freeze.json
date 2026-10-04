@@ -1,0 +1,11 @@
+{
+  "parent_approved_source": "02b0eea4",
+  "integrated_builder_head": "3837bfea355c5f1ede1ed4a9f8e302dbca25c148",
+  "native_source_sha256": "e6ccd0bb4fb90eb3094f8c89c417517c8b1da64c6ab5e59897c0fcb7a4e5c45e",
+  "protected_original_native": [
+    "de16647979cbad28",
+    "960296fdddafb01c"
+  ],
+  "provider_calls": 0,
+  "new_environment": false
+}

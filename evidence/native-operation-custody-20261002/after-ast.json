@@ -1,0 +1,392 @@
+{
+  "source": "13f8fa33c54ca286bafe6e3164f5b23f15cc3875",
+  "parser": "refactor-audit audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "parse_omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 360,
+      "parse_omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "parse_omissions": []
+    }
+  ],
+  "declarations": [
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 72,
+      "name": "NativeCustody",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        {
+          "name": "inspect_context",
+          "line": 87,
+          "arguments": "self, persistent"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 104,
+      "name": "EmptyNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": []
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "name": "ReopenNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": []
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 142,
+      "name": "RetiringNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": []
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 167,
+      "name": "BorrowedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        {
+          "name": "inspect_context",
+          "line": 172,
+          "arguments": "self, persistent"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 195,
+      "name": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        {
+          "name": "inspect_context",
+          "line": 216,
+          "arguments": "self, persistent"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 327,
+      "name": "ContextRuntimeRequest",
+      "bases": [
+        "ResultRuntimeRequest"
+      ],
+      "methods": []
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 92,
+      "name": "TurnRunner",
+      "bases": [],
+      "methods": [
+        {
+          "name": "prepare_selected_session",
+          "line": 174,
+          "arguments": "self, session_id: str, thread: Thread"
+        },
+        {
+          "name": "inspect_context",
+          "line": 192,
+          "arguments": "self, session_id, thread"
+        }
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 131,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 93,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 93,
+      "source": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 126,
+      "source": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 112,
+      "source": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 115,
+      "source": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 115,
+      "source": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/input_effects.py",
+      "line": 16,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 20,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 60,
+      "source": "runner.prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 104,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 142,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 167,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 195,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 84,
+      "source": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 94,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 97,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 100,
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 136,
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 145,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 169,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 211,
+      "source": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 101,
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 182,
+      "source": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 191,
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 232,
+      "source": "RetiringNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 240,
+      "source": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 94,
+      "source": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 234,
+      "source": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 71,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 368,
+      "source": "self.runner.prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 146,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 331,
+      "source": "agent.turns.inspect_context"
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "line": 20,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 194,
+      "source": "persistent.custody.inspect_context"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 97,
+      "source": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 106,
+      "source": "RetiringNative"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 268,
+      "source": "RetiringNative"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 134,
+      "source": "TurnRunner.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 134,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 152,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 62,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 145,
+      "source": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 189,
+      "source": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 142,
+      "source": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 55,
+      "source": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 203,
+      "source": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 51,
+      "source": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_s10_boundary_guards.py",
+      "line": 129,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 67,
+      "source": "TurnRunner"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 123,
+      "source": "owner.turns.prepare_selected_session"
+    }
+  ],
+  "limits": [
+    "Nominal/member/literal spelling candidates do not prove dynamic receiver resolution or runtime C3 MRO. Native JS separately read."
+  ]
+}

@@ -1,0 +1,7 @@
+# Borrowed dispatch context
+
+Ready: the existing MroDispatch owns handler selection, missing-handler behavior and invocation. Its async/sync hooks now pass borrowed positional/keyword arguments without retaining context. Original DurableTurn forwards this call context through the same acquired Coordination worker resource; original event/replacement identity and attempt lifetime are unchanged. No new registry, wrapper type, semantic state or provider/native protocol.
+
+Two production files,13 added/12 deleted. Existing declaration parser covered311 Core modules with no omissions; reference ambiguity is qualified in the evidence. The original dispatcher declaration is unique. Normal merge of qualified559 into this branch changes only its separately accepted history read family; these dispatcher methods are byte-identical to tested ebf.
+
+Final validation: focused installed async/sync diamond dispatch borrows exact context and visits each inherited handler once. Toad356 actual installed permission/PTY path passed2.360s: diff and inline approval, same future reattachment/reject, terminal0/7/SIGKILL;0provider requests. READY.json cites exact native/source/receipt. No repeated native/provider gate. This proves this capability's affected path, not full headless/physical UI readiness. Frontend pin conflict and newly found retired Explorer signal consumers remain owned in356 and do not change these Core methods. CI deferred; parent owns publication.

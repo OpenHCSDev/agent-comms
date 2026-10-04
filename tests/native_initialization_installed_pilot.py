@@ -14,11 +14,11 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from agent_comms.backend import auth_revision
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.native_startup import NativeStartupAdmission
+from agent_comms.selected_session import SelectedSession
 
 
 async def run(root: Path, package: Path) -> dict:
@@ -29,7 +29,7 @@ async def run(root: Path, package: Path) -> dict:
     launch = NativePiRpcLaunch.tracked(
         package,
         worktree=project,
-        session_dir=root / "native",
+        session=SelectedSession(root / "native"),
         provider="openrouter",
         model="z-ai/glm-5.3-flash",
         thinking_level="off",
@@ -37,7 +37,7 @@ async def run(root: Path, package: Path) -> dict:
     admission = NativeStartupAdmission(root)
     started = time.monotonic()
     await admission.acquire()
-    child = await PiSessionChild.start((launch, auth_revision()), None)
+    child = await PiSessionChild.start((launch, launch.configuration.auth_revision()), None)
     spawned = time.monotonic()
     request = child.attestation.request
     receipt = {

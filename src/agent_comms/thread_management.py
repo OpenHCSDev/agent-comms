@@ -23,7 +23,7 @@ from .thread_status import StoppedThreadStatus
 if TYPE_CHECKING:
     pass
 from .agent_activity import AgentActivity
-from .channel_management import ChannelManagement
+from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
@@ -91,7 +91,7 @@ class ThreadManagement:
         root: Path,
         registry: Registration,
         bus: MessageBus,
-        channels: ChannelManagement,
+        catalog: ChannelCatalog,
         agents: AgentActivity,
         owners: OwnerLifecycle,
         ledger: CollaborationLedger,
@@ -99,7 +99,7 @@ class ThreadManagement:
         self.root = root
         self.registry = registry
         self.bus = bus
-        self.channels = channels
+        self.catalog = catalog
         self.agents = agents
         self.owners = owners
         self.ledger = ledger
@@ -408,7 +408,7 @@ class ThreadManagement:
         self.agents.activity.rename_thread(previous, current)
         self.agents.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
-        with self.channels.catalog.editing() as document:
+        with self.catalog.editing() as document:
             document.rename_thread(previous, current)
         if intent_created:
             # Persist completion only after both authorities and ancillary
@@ -476,10 +476,12 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return (info.model if info else None) or default
 
-    def attach_session(self, name: str, session_file: str, *, pid: int | None = None) -> Thread:
+    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""
         with _store_lock(self._wire_lock_path):
-            current = self.registry.require(name)
+            current = self.registry.require(original.name)
+            if current != original:
+                raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
                 current,
                 process_identity=(
@@ -497,11 +499,21 @@ class ThreadManagement:
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
         with _store_lock(self._wire_lock_path):
-            canonical = self.registry.require(name).name
-            if not self.registry.status(canonical).stopped:
-                raise RelationViolationError("Stop a running thread before archiving it.")
-            self.registry.archive(canonical)
-            self.agents.runtime_info.remove(canonical)
+            self._archive_unlocked((self.registry.require(name),))
+
+    def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
+        self.registry.archive_originals(originals)
+        for original in originals:
+            self.agents.runtime_info.remove(original.name)
+
+    def _delete_unlocked(self, originals: Sequence[Thread]) -> None:
+        """Remove stopped declarations, preserving histories and uncertain inputs."""
+        self.registry.delete_originals(originals)
+        with self.catalog.editing() as document:
+            for original in originals:
+                document.remove_thread(original.name)
+        for original in originals:
+            self.agents.runtime_info.remove(original.name)
 
 
     def fork(self, spec: ForkSpec, pi_bin: str | None = None) -> Thread:
@@ -528,7 +540,10 @@ class ThreadManagement:
                 f"Parent thread {spec.parent!r} has no session file to fork."
             )
 
-        session = fork_native_session(parent.session_file, parent.worktree, pi_bin)
+        from .compaction_journal import CompactionJournal
+
+        session = fork_native_session(parent.session_file, parent.worktree, pi_bin,
+            private_inputs=CompactionJournal(self.root / "compaction-commits.sqlite3").private_inputs)
         child = Thread(
             name=spec.name,
             tags=parent.tags if spec.tags is None else spec.tags,

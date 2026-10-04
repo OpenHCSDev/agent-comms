@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .field_codec import FieldCodec
-from .owner_compaction_prepare import NativeWitness
+from .compaction_identity import NativeCommitIdentity
+from .owner_compaction_prepare import NativePreparationResult, NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
 
@@ -46,6 +47,22 @@ class SummaryFiles(PiPayload):
             [path.encode("utf-8").hex() for path in paths]
             for paths in (self.read_files, self.modified_files)
         ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ManagedSummaryMetadata(PiPayload):
+    """A marker-only native commit preserves absent file-operation metadata."""
+
+    strict_fields = True
+    agent_comms_commit: NativeCommitIdentity = field(metadata={"wire_name": "agentCommsCommit"})
+
+    def commit_metadata(self):
+        return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ManagedSummaryFiles(SummaryFiles, ManagedSummaryMetadata):
+    """Published file operations reuse the original summary file algorithm."""
 
 
 @dataclass(frozen=True)
@@ -146,7 +163,7 @@ class SelectedSummaryData(PiResponseData):
     def require_result(self):
         return self
 
-    def manual_summary(self, journal):
+    def manual_summary(self, journal, reason, settle_refusal):
         raise ValueError("Selected summary has no manual result")
 
     def adaptive_summary(self, journal, identity):
@@ -166,24 +183,29 @@ class SummaryDeclinedData(SelectedSummaryData, declared_name="summary_declined")
     def response(self, request, tokens_before):
         return self
 
+    @property
+    def clean_prestart(self):
+        return self.reason in {"split_turn", "unsupported"}
+
+    def require_clean_prestart(self):
+        from .owner_compaction_settings import PiSettingsEvidenceError
+
+        if not self.clean_prestart:
+            raise PiSettingsEvidenceError(
+                f"Selected Pi declined summary ({self.reason}); original remains unbound")
+
     def settle(self, journal):
-        if self.reason not in {"split_turn", "unsupported"}:
+        if not self.clean_prestart:
             journal.summaries.refuse(self.operation_id, self.reason)
 
-    def manual_summary(self, journal):
-        journal.summaries.refuse(self.operation_id, self.reason)
-        raise ValueError(f"Selected Pi declined manual summary ({self.reason})")
+    def manual_summary(self, journal, reason, settle_refusal):
+        return reason.declined_manual(self, journal, settle_refusal)
 
     def adaptive_summary(self, journal, identity):
         from .owner_compaction_runtime import SelectedSummaryDecline
-        from .owner_compaction_settings import PiSettingsEvidenceError
-
-        if self.reason in {"split_turn", "unsupported"}:
-            return SelectedSummaryDecline(
-                journal.summaries.get(self.operation_id), identity, self.reason
-            )
-        raise PiSettingsEvidenceError(
-            f"Selected Pi declined summary ({self.reason}); original remains unbound"
+        self.require_clean_prestart()
+        return SelectedSummaryDecline(
+            journal.summaries.get(self.operation_id), identity, self.reason
         )
 
     def __post_init__(self):
@@ -243,7 +265,7 @@ class SummarySummarizedData(WitnessedSummaryData, declared_name="summary_summari
             raise ValueError("Selected summary result source changed")
         return self
 
-    def manual_summary(self, journal):
+    def manual_summary(self, journal, reason, settle_refusal):
         from .owner_compaction_manual import ManualSelectedSummary
 
         return ManualSelectedSummary(
@@ -299,7 +321,7 @@ class CompactionSettingsData(PiResponseData):
     from .owner_compaction_settings import PiCompactionDecision
 
     strict_fields = True
-    version: Literal[1]
+    version: Literal[2]
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
@@ -312,4 +334,32 @@ class CompactionSettingsData(PiResponseData):
         observed = NativeSessionIdentity(self.session_id, self.session_file)
         if observed != original or self.selected != request.selected:
             raise ValueError("Selected settings source changed")
+        if self.decision.boundary != request.boundary:
+            raise ValueError("Selected timing source changed")
         return self.decision
+
+
+@dataclass(frozen=True)
+class CompactionPreparationData(PiResponseData):
+    """The selected child's original store supplies a read-only prepared cut."""
+
+    strict_fields = True
+    version: Literal[1]
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    selected: SelectedModel
+    settings: PiCompactionSettings
+    preparation: NativePreparationResult
+
+    def require_request(self, request):
+        from pathlib import Path
+        from .native_session_reopen import NativeSessionIdentity
+        from .private_path import FileRevision
+
+        original = NativeSessionIdentity(request.session_id, request.session_file)
+        observed = NativeSessionIdentity(self.session_id, self.session_file)
+        if observed != original or self.selected != request.selected or self.settings != request.settings:
+            raise ValueError("Selected preparation source or settings changed")
+        self.preparation.require_source(original)
+        file = Path(original.session_file)
+        return self.preparation.checked(file, FileRevision.from_stat(file.stat()))

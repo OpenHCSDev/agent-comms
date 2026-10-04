@@ -1,0 +1,242 @@
+{
+  "parser": "Node built-in Acorn 8.18.0",
+  "scope": "Changed private observer plus actual installed compact/source/RPC dependencies; inspector expressions and debugger binding are dynamic and were read semantically",
+  "before": [
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "sites": [
+        {
+          "kind": "call",
+          "name": "paused",
+          "line": 42
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 45
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 57
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 60
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 64
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "paused",
+          "line": 70
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 77
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 112
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 121
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 129
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 132
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "sites": [
+        {
+          "kind": "call",
+          "name": "paused",
+          "line": 42
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 45
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 57
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 60
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 64
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 68
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 76
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "paused",
+          "line": 82
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 87
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 96
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 122
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 157
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 166
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 174
+        },
+        {
+          "kind": "call",
+          "name": "post",
+          "line": 177
+        }
+      ]
+    }
+  ],
+  "installed": [
+    {
+      "file": "dist/modes/rpc/rpc-mode.js",
+      "sites": [
+        {
+          "kind": "FunctionDeclaration",
+          "name": "acExecuteSummary",
+          "line": 257
+        },
+        {
+          "kind": "call",
+          "name": "compact",
+          "line": 376
+        },
+        {
+          "kind": "call",
+          "name": "acExecuteSummary",
+          "line": 799
+        },
+        {
+          "kind": "call",
+          "name": "compact",
+          "line": 897
+        }
+      ]
+    },
+    {
+      "file": "dist/core/compaction/compaction.js",
+      "sites": [
+        {
+          "kind": "call",
+          "name": "generateSummaryWithUsage",
+          "line": 380
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateSummaryWithUsage",
+          "line": 407
+        },
+        {
+          "kind": "call",
+          "name": "generateSummaryWithUsage",
+          "line": 437
+        },
+        {
+          "kind": "call",
+          "name": "generateSummaryWithUsage",
+          "line": 457
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "compact",
+          "line": 573
+        },
+        {
+          "kind": "call",
+          "name": "packSummary",
+          "line": 579
+        },
+        {
+          "kind": "call",
+          "name": "generateSummaryWithUsage",
+          "line": 598
+        },
+        {
+          "kind": "call",
+          "name": "packSummary",
+          "line": 614
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "TurnPrefixSummarySource",
+          "line": 636
+        }
+      ]
+    },
+    {
+      "file": "dist/core/compaction/agent-comms-source.js",
+      "sites": [
+        {
+          "kind": "ClassDeclaration",
+          "name": "SummarySource",
+          "line": 34
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "HistorySummarySource",
+          "line": 73
+        }
+      ]
+    }
+  ],
+  "omissions": [],
+  "excluded": "TypeScript declarations unchanged by596; not parsed by Acorn"
+}

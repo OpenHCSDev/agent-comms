@@ -1,0 +1,19 @@
+{
+  "complete": false,
+  "public_inputs": 0,
+  "input_replays": 0,
+  "installed_UI": false,
+  "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "source_bytes": 42416650,
+  "original_sha256": "9c038ea0e0e84cd10710d36eec2d65804c44f11c57f4e8d481726f8df2fd34f9",
+  "fork_bytes": 42416659,
+  "error": {
+    "type": "RequestError",
+    "detail": "Internal error"
+  },
+  "elapsed_seconds": 159.77223973697983,
+  "original_source_unchanged": true,
+  "native_children_closed": true
+}

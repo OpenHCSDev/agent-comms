@@ -6,15 +6,17 @@ import json
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .compaction_source import CompactionSource
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue, InputDispositions
+from .native_entries import NativeEvidenceRead
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativeWitness
+from .private_bus_checkpoint import CertifiedSourceRead
 from .registration import Registration
 from .retained_task_facts import ExactTaskFact, RetainedTaskFacts
 from .session_fence import idle_session_writer_fence
@@ -29,10 +31,60 @@ class CompactionBoundary:
     registry: Registration
     inputs: InputDispositions
     future_queue: FutureInputQueue | None = None
+    native_reader: NativeEvidenceRead | None = field(default=None, kw_only=True)
 
     @property
     def root(self) -> Path:
         return self.registry.store.path.parent.resolve(strict=True)
+
+    def retained_history(self, owner: Thread, *, diff: bool = False):
+        """Inspect original attempts without constructing a journal writer."""
+        from .compaction_journal import CompactionJournal
+
+        try:
+            session_file = owner.require_saved_session()
+        except ValueError as error:
+            return dict(available=False, reason=str(error),
+                        scope="no canonical saved session; native facts cannot be inferred")
+        path = self.root / "compaction-commits.sqlite3"
+        if diff:
+            return CompactionJournal.retained_changes(path, session_file)
+        return CompactionJournal.retained_history(path, session_file)
+
+    def inspect(self, name: str):
+        """Observe current sources and original compaction cuts separately.
+
+        The current wire/registry/input cut is certified by its existing reader.
+        The journal has its own read transaction. Neither cut is an owner/writer
+        grant; future input queue membership and native branch/cut selection are
+        exclusively determined by hold/capture during actual compaction.
+        """
+        from .retained_context import RetainedSegment
+
+        with WireLog(self.root / "bus.jsonl").retained_sources(name, self.registry) as (
+            owner, snapshot, facts, inputs, export
+        ):
+            pinned = facts.original_input_facts(inputs)
+            authored = RetainedTaskFacts((*facts.facts, *pinned)).for_owner(owner, snapshot)
+            segment = RetainedSegment.capture(authored, owner, snapshot, export)
+            keys = tuple(dict.fromkeys((*inputs.owner_originals(owner),
+                                        *(row.key for fact in pinned for row in fact.input_sources()))))
+            originals = inputs.retained_task_facts(keys)
+            observed = RetainedTaskFacts((*facts.facts, *owner.retained_task_facts(),
+                                         *originals)).for_owner(owner, snapshot)
+        return dict(segment.inspection(),
+                    observations=dict(
+                        scope="current certified wire/registry/input read; durable owner inputs and pinned originals including queued and UNKNOWN; not a compaction admission",
+                        facts=observed,
+                    ),
+                    compaction=self.retained_history(owner),
+                    native_source_contract=(
+                        "NativeWitness.retained_task_facts reads only its exact session, leaf and file revision; "
+                        "NativeEvidenceRead preserves original request/result entry pairs. Current native leaf, "
+                        "uncaptured tool results and filesystem state are not inferred by this inspection. "
+                        "Original attempt requests/intents retain the facts captured by HeldCompaction; "
+                        "operation and summary states retain failures and UNKNOWN without replay."
+                    ))
 
     @contextmanager
     def hold(
@@ -42,7 +94,7 @@ class CompactionBoundary:
         witness: NativeWitness,
         *,
         settled: bool = True,
-        pending_input_key: str | None = None,
+        pending_input_keys: tuple[str, ...] = (),
     ) -> Iterator[HeldCompaction]:
         expected = owner.compaction_attestation(owner_generation, witness)
         # Existing bus publication acquires bus BEFORE registry. Never invert
@@ -50,7 +102,7 @@ class CompactionBoundary:
         with idle_session_writer_fence(expected.session_file) as executor_fd:
             # Read the original journal before taking any bus/registry/input
             # locks. The existing writer fence retains this exact source cut.
-            native_facts = witness.retained_task_facts()
+            native_facts = witness.retained_task_facts(self.native_reader)
             with (
                 _store_lock(self.root / "wire") as wire_lock,
                 _store_lock(self.root / "bus.jsonl") as bus_lock,
@@ -59,12 +111,12 @@ class CompactionBoundary:
             ):
                 if settled:
                     self.inputs._read_unlocked().compaction_rows(
-                        owner, pending_input_key, self.future_queue
+                        owner, pending_input_keys, self.future_queue
                     )
                 yield HeldCompaction(
                     self, witness, receipt, fd,
                     (executor_fd, wire_lock.descriptor, bus_lock.descriptor, input_fd),
-                    native_facts,
+                    native_facts, bus_lock.certified_read(),
                 )
 
 
@@ -113,10 +165,11 @@ class HeldCompaction:
     authority_fd: int
     retained_fds: tuple[int, ...]
     native_facts: tuple[ExactTaskFact, ...]
+    wire_source: CertifiedSourceRead
 
     def capture(
         self,
-        pending_input_key: str | None,
+        pending_input_keys: tuple[str, ...],
         settings_paths: tuple[str, ...] | None,
     ) -> CompactionSource:
         root = self.boundary.root.stat()
@@ -125,11 +178,9 @@ class HeldCompaction:
         owner = snapshot.threads[self.receipt.thread]
         inputs = self.boundary.inputs._read_unlocked()
         rows, input_facts = inputs.compaction_material(
-            owner, pending_input_key, self.boundary.future_queue
+            owner, pending_input_keys, self.boundary.future_queue
         )
-        bus_revision, facts = WireLog(
-            self.boundary.root / "bus.jsonl"
-        ).compaction_messages_unlocked(owner.incarnation)
+        facts = tuple(self.wire_source.retained_task_facts(owner.incarnation))
         facts += owner.retained_task_facts()
         facts += input_facts
         facts += self.native_facts
@@ -141,10 +192,9 @@ class HeldCompaction:
             self.receipt.turn_id,
             self.receipt.goal_id,
             self.receipt.goal_revision,
-            bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
             RetainedTaskFacts(facts).for_owner(owner, snapshot),
-            pending_input_key,
-            settings_paths,
-            self.boundary.settings_revision(settings_paths),
+            pending_inputs=inputs.original_provenances(pending_input_keys),
+            settings_paths=settings_paths,
+            settings_revision=self.boundary.settings_revision(settings_paths),
         )

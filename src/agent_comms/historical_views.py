@@ -174,7 +174,7 @@ class HistoricalMessage(Message):
         cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
     ) -> HistoricalMessage:
         def creation(name: str) -> float | None:
-            declaration = snapshot.threads.get(snapshot.aliases.get(name, name))
+            declaration = snapshot.threads.get(snapshot.canonical_name(name))
             # A later source declaration cannot certify a row from an earlier
             # incarnation. The original registry remains available for inspection.
             return (
@@ -344,6 +344,13 @@ class HistoryArchive:
                 # composition as well as public paging. This existing installer
                 # changes destination metadata/index only, never original bytes.
                 install_private_bus_checkpoint(archived)
+                # This still-private stage owns creation of its disposable
+                # offsets. Published archives only read them; later runtimes
+                # never rewrite either the index or the original certificate.
+                from .bus_page_index import BusPageIndex
+
+                with BusPageIndex(archived.path) as index:
+                    index.sync()
                 source = HistorySource(
                     str(stage.resolve()),
                     str(source_root),

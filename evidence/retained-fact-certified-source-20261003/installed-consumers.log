@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+plugins: asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 9 items
+
+tests/test_compaction_recipient_scope.py ..                              [ 22%]
+tests/test_current_input_origin.py .                                     [ 33%]
+tests/test_task_decisions.py ......                                      [100%]
+
+============================== 9 passed in 4.26s ===============================

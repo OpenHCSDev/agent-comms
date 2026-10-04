@@ -1,0 +1,9 @@
+{
+  "pid": 3762195,
+  "birth": 41176536,
+  "action": "SIGINT once to owned asyncio runner for normal finally/shutdown",
+  "reason": "Owner explicitly stops repeated mandatory-compaction setup; preserved102 continuation is required",
+  "timestamp": 1790936184.881888,
+  "reserved_summary": "b4d00ab5ae0b4c05880134c58c5cc844",
+  "input_replay": false
+}

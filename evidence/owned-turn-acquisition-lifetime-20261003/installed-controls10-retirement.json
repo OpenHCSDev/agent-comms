@@ -1,0 +1,9 @@
+{
+  "identity": {
+    "pid": 2050198,
+    "start_time": 53690204
+  },
+  "signal": "SIGINT",
+  "purpose": "retire unchanged private provider-free diagnostic control only",
+  "actual_exit": true
+}

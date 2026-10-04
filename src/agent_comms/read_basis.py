@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
 from .field_codec import FieldCodec
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
@@ -130,7 +130,6 @@ class DMDisplayBasis:
     viewer_names: frozenset[str]
     peer_identity: ThreadIncarnation
     peer_names: frozenset[str]
-    marker_revision: tuple[int, int, int, int] | None
     bus_identity: tuple[int, int] | None
     newest_seq: int | None
     older_unread: bool
@@ -158,17 +157,14 @@ class DMDisplayBasis:
         """
         if not isinstance(peer, str) or is_channel_target(peer):
             raise ValueError("A DM page requires a registered peer.")
-        marker_path = bus.reads.path
-        with _store_lock(root / "wire"):
+        with _store_lock(root / "wire", shared=True):
             snapshot = registry.snapshot()
-            revision = file_revision(registry.store.path)
-            viewer_name = snapshot.aliases.get(viewer, viewer)
-            peer_name = snapshot.aliases.get(peer, peer)
+            viewer_name = snapshot.canonical_name(viewer)
+            peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.threads[peer_name]
             viewer_names, peer_names = scope.first_names, scope.second_names
-            marker_revision = file_revision(marker_path)
             bus_identity = bus.reads.bus_identity(bus.log.path)
         # Native admission uses this same wire lock. Page preparation and the
         # older-unread scan use opened source boundaries, outside admission.
@@ -183,38 +179,24 @@ class DMDisplayBasis:
                     scope.unread_before(message, page.messages[0].seq, seen)
                     for message, _ in records
                 )
-        with _store_lock(root / "wire"):
-            if (
-                file_revision(registry.store.path) != revision
-                or file_revision(marker_path) != marker_revision
-                or bus.reads.bus_identity(bus.log.path) != bus_identity
-            ):
-                raise ValueError("DM display changed while paging; refresh the page.")
+        with _store_lock(root / "wire", shared=True), registry.store.reading() as document:
             root_info = root.stat()
-            try:
-                bus_info = bus.log.path.stat()
-            except FileNotFoundError:
-                bus_identity = None
-            else:
-                bus_identity = (bus_info.st_dev, bus_info.st_ino)
-            return replace(
-                page,
-                display_basis=cls(
-                    root=str(root.resolve()),
-                    root_identity=(root_info.st_dev, root_info.st_ino),
-                    worktree=str(Path(worktree).resolve()),
-                    requested_peer=peer,
-                    viewer_identity=viewer_thread.incarnation,
-                    viewer_names=viewer_names,
-                    peer_identity=peer_thread.incarnation,
-                    peer_names=peer_names,
-                    marker_revision=marker_revision,
-                    bus_identity=bus_identity,
-                    newest_seq=page.newest_seq,
-                    older_unread=older_unread,
-                    displayed=bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path),
-                ),
+            basis = cls(
+                root=str(root.resolve()),
+                root_identity=(root_info.st_dev, root_info.st_ino),
+                worktree=str(Path(worktree).resolve()),
+                requested_peer=peer,
+                viewer_identity=viewer_thread.incarnation,
+                viewer_names=viewer_names,
+                peer_identity=peer_thread.incarnation,
+                peer_names=peer_names,
+                bus_identity=bus_identity,
+                newest_seq=page.newest_seq,
+                older_unread=older_unread,
+                displayed=bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path),
             )
+            basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
+            return replace(page, display_basis=basis)
 
     @property
     def viewer(self) -> str:
@@ -250,7 +232,7 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(root / "wire"), _store_lock(registry.store.path):
+        with _store_lock(root / "wire", shared=True), _store_lock(registry.store.path):
             snapshot = registry.store._read_unlocked().snapshot()
             self.validate_for(
                 root,
@@ -287,13 +269,22 @@ class DMDisplayBasis:
         info = root.stat()
         if (info.st_dev, info.st_ino) != self.root_identity:
             raise ValueError("DM root was replaced; refresh the page.")
+        self.validate_identity(snapshot, bus_identity)
+
+    def validate_identity(
+        self, snapshot: RegistrySnapshot, bus_identity: tuple[int, int] | None
+    ) -> None:
+        """Fetch and painted acknowledgement share actual identity/scope validation.
+
+        Heartbeat, turn state and another view's read progress are not identity.
+        """
         try:
             selected = next(
                 thread for thread in snapshot.threads.values() if not thread.role.executable
             )
             viewer = snapshot.threads[self.viewer]
-            target = snapshot.threads[snapshot.aliases.get(peer, peer)]
-            scope = DMDisplayScope.capture_human(self.viewer, peer, snapshot)
+            target = snapshot.threads[snapshot.canonical_name(self.requested_peer)]
+            scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
         except (KeyError, StopIteration, ValueError) as error:
             raise ValueError("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
@@ -328,7 +319,7 @@ class DMDisplayScope(MessageDisplayScope):
 
     @staticmethod
     def names_for(name: str, snapshot: RegistryProvenance) -> frozenset[str]:
-        canonical = snapshot.aliases.get(name, name)
+        canonical = snapshot.canonical_name(name)
         return frozenset(
             {canonical, *(alias for alias, owner in snapshot.aliases.items() if owner == canonical)}
         )
@@ -340,8 +331,8 @@ class DMDisplayScope(MessageDisplayScope):
     @classmethod
     def capture_human(cls, viewer: str, peer: str, snapshot: RegistrySnapshot) -> DMDisplayScope:
         try:
-            first = snapshot.threads[snapshot.aliases.get(viewer, viewer)]
-            second = snapshot.threads[snapshot.aliases.get(peer, peer)]
+            first = snapshot.threads[snapshot.canonical_name(viewer)]
+            second = snapshot.threads[snapshot.canonical_name(peer)]
         except KeyError as error:
             raise ValueError("DM display identity changed; refresh the page.") from error
         if first.role.executable or first.incarnation == second.incarnation:

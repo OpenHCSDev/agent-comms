@@ -1,0 +1,50 @@
+{
+  "scope": "548 route/resource/recovery source only; excludes integrated547 contribution",
+  "source": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+  "base": "732e86708de477ab0406775529bf878f0f3e7ea6",
+  "added": 141,
+  "deleted": 100,
+  "paths": [
+    {
+      "added": "67",
+      "deleted": "64",
+      "path": "src/agent_comms/acp.py"
+    },
+    {
+      "added": "24",
+      "deleted": "20",
+      "path": "src/agent_comms/active_route.py"
+    },
+    {
+      "added": "4",
+      "deleted": "4",
+      "path": "src/agent_comms/cli.py"
+    },
+    {
+      "added": "2",
+      "deleted": "1",
+      "path": "src/agent_comms/comms.py"
+    },
+    {
+      "added": "8",
+      "deleted": "0",
+      "path": "stack/bin/toad-comms"
+    },
+    {
+      "added": "36",
+      "deleted": "11",
+      "path": "tools/cutover/publish_retained_summary.py"
+    }
+  ],
+  "deleted_authorities": [
+    "thread-local _route_write_owner held-route identity/lifetime mirror and re-entry bypass",
+    "recovery dependency on later proof[protected_original_sha256] and proof[registry_original_sha256] fields",
+    "CLI second route.bind_owners after the service factory already bound its original route"
+  ],
+  "sole_existing_owners": [
+    "CommsRoute.admit_client delegates existing guard_default_route_write route-directory resource",
+    "PublishRetainedSummary original payload witness + original StoppedOwnerBatch handoff",
+    "AgentProcess/CoordinationAccess ExitStack and existing PreparationRuntime lifetime"
+  ],
+  "limits": "Line counts include ACP indentation movement and do not measure semantic decision deletion; shell runtime closure comes from separate installed controls. Existing unrelated ACP private launch binding remains outside claimed deletion."
+}

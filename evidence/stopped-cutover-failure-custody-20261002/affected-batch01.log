@@ -1,0 +1,216 @@
+.FF..FFF                                                                 [100%]
+=================================== FAILURES ===================================
+_________ test_released_process_must_exit_before_replacement[restart] __________
+
+releasing_owner = (<agent_comms.comms.Comms object at 0x7f1fd83a9850>, <agent_comms.child_process.ParentedProcess object at 0x7f1fd8577e10>)
+mode = 'restart'
+
+    @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])
+    def test_released_process_must_exit_before_replacement(releasing_owner, mode):
+        comms, child = releasing_owner
+        original = comms.registry.require("worker")
+        arguments = {}
+        if mode == "guarded":
+            snapshot = comms.registry.snapshot()
+            arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
+        if mode == "stop":
+            comms.owners.stop("worker")
+        else:
+>           (result,) = comms.owners.restart_owners(
+                ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments
+            )
+
+tests/test_owner_release_restart.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_lifecycle.py:267: in restart_owners
+    return cutover.restart(self, request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_cutover.py:29: in restart
+    return AdmittedOwnerBatch.restart(lifecycle, request, self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_restart.py:249: in restart
+    launches = tuple(RetainedOwnerLaunch.capture(
+               ^^^^^
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_restart.py:249: in <genexpr>
+    launches = tuple(RetainedOwnerLaunch.capture(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_launch.RetainedOwnerLaunch'>
+thread = Thread(name='worker', tags=frozenset(), worktree='/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifact...n.NativeThreadExecution'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+snapshot = RegistrySnapshot(threads={'worker': Thread(name='worker', tags=frozenset(), worktree='/home/ts/wt/comms-stopped-cutove...atus()}, last_seen={'worker': 1790928981.174082}, owner_generations={'worker': 1}, admission_generations={'worker': 1})
+interpreter = None
+
+    @classmethod
+    def capture(
+        cls, thread: Thread, snapshot: RegistrySnapshot, *, interpreter: str | None = None
+    ) -> RetainedOwnerLaunch:
+        process = thread.require_process()
+        platform = Platform.current()
+        platform.require(process)
+        command = Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
+        observed_interpreter = os.fsdecode(command)
+        if not observed_interpreter or (
+            interpreter is not None and observed_interpreter != interpreter
+        ):
+            raise RelationViolationError("Selected source owner interpreter changed")
+        raw = Path(f"/proc/{process.pid}/environ").read_bytes()
+        values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
+        environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
+        platform.require(process)
+        route = environment.get(RestartEnvironment.owner_key)
+        if not route or not environment.get(RestartEnvironment.binary_key):
+>           raise RelationViolationError("Owner launch configuration cannot be verified")
+E           agent_comms.errors.RelationViolationError: Owner launch configuration cannot be verified
+
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_launch.py:112: RelationViolationError
+_________ test_released_process_must_exit_before_replacement[guarded] __________
+
+releasing_owner = (<agent_comms.comms.Comms object at 0x7f1fd8408350>, <agent_comms.child_process.ParentedProcess object at 0x7f1fd860e450>)
+mode = 'guarded'
+
+    @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])
+    def test_released_process_must_exit_before_replacement(releasing_owner, mode):
+        comms, child = releasing_owner
+        original = comms.registry.require("worker")
+        arguments = {}
+        if mode == "guarded":
+            snapshot = comms.registry.snapshot()
+            arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
+        if mode == "stop":
+            comms.owners.stop("worker")
+        else:
+>           (result,) = comms.owners.restart_owners(
+                ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments
+            )
+
+tests/test_owner_release_restart.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_lifecycle.py:267: in restart_owners
+    return cutover.restart(self, request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_cutover.py:29: in restart
+    return AdmittedOwnerBatch.restart(lifecycle, request, self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_restart.py:249: in restart
+    launches = tuple(RetainedOwnerLaunch.capture(
+               ^^^^^
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_restart.py:249: in <genexpr>
+    launches = tuple(RetainedOwnerLaunch.capture(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_launch.RetainedOwnerLaunch'>
+thread = Thread(name='worker', tags=frozenset(), worktree='/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifact...n.NativeThreadExecution'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+snapshot = RegistrySnapshot(threads={'worker': Thread(name='worker', tags=frozenset(), worktree='/home/ts/wt/comms-stopped-cutove...Status()}, last_seen={'worker': 1790928981.7708}, owner_generations={'worker': 1}, admission_generations={'worker': 1})
+interpreter = None
+
+    @classmethod
+    def capture(
+        cls, thread: Thread, snapshot: RegistrySnapshot, *, interpreter: str | None = None
+    ) -> RetainedOwnerLaunch:
+        process = thread.require_process()
+        platform = Platform.current()
+        platform.require(process)
+        command = Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
+        observed_interpreter = os.fsdecode(command)
+        if not observed_interpreter or (
+            interpreter is not None and observed_interpreter != interpreter
+        ):
+            raise RelationViolationError("Selected source owner interpreter changed")
+        raw = Path(f"/proc/{process.pid}/environ").read_bytes()
+        values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
+        environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
+        platform.require(process)
+        route = environment.get(RestartEnvironment.owner_key)
+        if not route or not environment.get(RestartEnvironment.binary_key):
+>           raise RelationViolationError("Owner launch configuration cannot be verified")
+E           agent_comms.errors.RelationViolationError: Owner launch configuration cannot be verified
+
+.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms/owner_launch.py:112: RelationViolationError
+__ test_changed_owner_after_release_refuses_escalation_and_replacement[birth] __
+
+releasing_owner = (<agent_comms.comms.Comms object at 0x7f1fd8378f30>, <agent_comms.child_process.ParentedProcess object at 0x7f1fd864f450>)
+change = 'birth'
+
+    @pytest.mark.parametrize("change", ["birth", "admission", "receipt"])
+    def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
+        comms, child = releasing_owner
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=sys.executable)
+>           wait_for(comms.root / "released")
+
+tests/test_owner_release_restart.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-fixture01/test_changed_owner_after_relea0/wire/released')
+
+    def wait_for(path: Path) -> None:
+        deadline = time.monotonic() + 5
+        while not path.exists():
+>           assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
+E           AssertionError: Owner did not produce released
+E           assert 404629.83955874 < 404629.830616903
+E            +  where 404629.83955874 = <built-in function monotonic>()
+E            +    where <built-in function monotonic> = time.monotonic
+
+tests/test_owner_release_restart.py:27: AssertionError
+_ test_changed_owner_after_release_refuses_escalation_and_replacement[admission] _
+
+releasing_owner = (<agent_comms.comms.Comms object at 0x7f1fd8452c10>, <agent_comms.child_process.ParentedProcess object at 0x7f1fd8409350>)
+change = 'admission'
+
+    @pytest.mark.parametrize("change", ["birth", "admission", "receipt"])
+    def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
+        comms, child = releasing_owner
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=sys.executable)
+>           wait_for(comms.root / "released")
+
+tests/test_owner_release_restart.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-fixture01/test_changed_owner_after_relea1/wire/released')
+
+    def wait_for(path: Path) -> None:
+        deadline = time.monotonic() + 5
+        while not path.exists():
+>           assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
+E           AssertionError: Owner did not produce released
+E           assert 404635.375570851 < 404635.366257884
+E            +  where 404635.375570851 = <built-in function monotonic>()
+E            +    where <built-in function monotonic> = time.monotonic
+
+tests/test_owner_release_restart.py:27: AssertionError
+_ test_changed_owner_after_release_refuses_escalation_and_replacement[receipt] _
+
+releasing_owner = (<agent_comms.comms.Comms object at 0x7f1fd8cfe9c0>, <agent_comms.child_process.ParentedProcess object at 0x7f1fd8a61a90>)
+change = 'receipt'
+
+    @pytest.mark.parametrize("change", ["birth", "admission", "receipt"])
+    def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
+        comms, child = releasing_owner
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=sys.executable)
+>           wait_for(comms.root / "released")
+
+tests/test_owner_release_restart.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-fixture01/test_changed_owner_after_relea2/wire/released')
+
+    def wait_for(path: Path) -> None:
+        deadline = time.monotonic() + 5
+        while not path.exists():
+>           assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
+E           AssertionError: Owner did not produce released
+E           assert 404640.919148887 < 404640.918355324
+E            +  where 404640.919148887 = <built-in function monotonic>()
+E            +    where <built-in function monotonic> = time.monotonic
+
+tests/test_owner_release_restart.py:27: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_owner_release_restart.py::test_released_process_must_exit_before_replacement[restart]
+FAILED tests/test_owner_release_restart.py::test_released_process_must_exit_before_replacement[guarded]
+FAILED tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement[birth]
+FAILED tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement[admission]
+FAILED tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement[receipt]
+5 failed, 3 passed in 47.60s

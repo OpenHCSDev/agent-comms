@@ -16,10 +16,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.retained_task_facts import RetainedTaskFacts
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.selected_source import SessionRevision
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 
@@ -68,20 +71,18 @@ async def retained_summary(native_backend):
             model=model.display_name,
         )
     )
-    lease = comms.agents.begin_turn("owner", "native-summary-negative")
-    owner = comms.registry.require("owner")
-    envelope = dict(
-        source=FieldCodec.encode(
-            ManualSource(
-                owner=owner.require_process(),
-                incarnation=owner.incarnation,
-                turn=TurnId(lease.turn_id),
-                reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
-            )
+    admitted = comms.agents.begin_turn("owner", "native-summary-negative")
+    lease, owner = admitted.turn_lease, admitted.thread
+    envelope = SelectedSummarySource(
+        source=ManualSource(
+            owner=owner.require_process(),
+            incarnation=owner.incarnation,
+            turn=TurnId(lease.turn_id),
+            reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
         ),
-        selected=SelectedModel(model.provider, model.id, model.context_window).to_wire(),
-        settings=FieldCodec.encode(settings),
-        retained=FieldCodec.encode(RetainedTaskFacts(())),
+        selected=SelectedModel(model.provider, model.id, model.context_window),
+        settings=settings,
+        retained=RetainedTaskFacts(()),
     )
     journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
     slot = SelectedSummarySlot("owner", preparation.witness.session_id)
@@ -92,8 +93,10 @@ async def retained_summary(native_backend):
             journal,
             preparation.witness,
             source,
+            owner=owner,
             expected_package=expected_package,
             tokens_before=preparation.tokens_before,
+            reason=ManualCompactionReason,
             **options,
         )
 
@@ -144,13 +147,13 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
         native.saved_inputs(),
         native.provider.posts,
     )
-    source = FieldCodec.decode(SelectedSummarySource, envelope)
+    source = envelope
     source = (
         replace(source, selected=replace(source.selected, model_id="unselected-model"))
         if changed == "model"
         else replace(source, settings=replace(source.settings, reserve_tokens=2049))
     )
-    result = await run(source=FieldCodec.encode(source))
+    result = await run(source=source)
     assert isinstance(result, SummaryDeclinedData)
     assert result.reason == changed + "_mismatch"
     attempt = journal.summaries.get(result.operation_id)
@@ -162,7 +165,7 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
     assert native.session.read_bytes() == original
     assert native.saved_inputs() == inputs
     with pytest.raises(CompactionJournalError, match="never replay"):
-        await run(source=FieldCodec.encode(source))
+        await run(source=source)
     assert native.provider.posts == calls
     journal.summaries.refuse(result.operation_id, result.reason)
     assert journal.summaries.get(result.operation_id) == attempt
@@ -170,12 +173,16 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
         journal.summaries.refuse(result.operation_id, "different native reason")
     with pytest.raises(CompactionJournalError, match="commit reservation"):
         attempt.state.require_commit_reservation()
-    journal.summaries.retire_refused(attempt)
+    check = attempt.request.reservation_check(
+        SessionRevision.observe(str(native.session)),
+        InputDispositions(native.root / "input_dispositions.json").read(),
+    )
+    journal.summaries.retire_unchanged(attempt, check)
     retired = journal.summaries.get(result.operation_id)
     assert isinstance(retired.state, RetiredRefusalSummary)
     assert retired.state.decline_reason == result.reason
     with pytest.raises(CompactionJournalError, match="changed"):
-        journal.summaries.retire_refused(attempt)
+        journal.summaries.retire_unchanged(attempt, check)
     assert journal.summaries.get(result.operation_id) == retired
     assert native.provider.posts == calls
     assert native.session.read_bytes() == original
@@ -247,6 +254,80 @@ async def test_actual_joined_provider_failure_preserves_source_without_replay(re
     assert native.provider.posts == calls + 1
     assert native.session.read_bytes() == original
     assert native.saved_inputs() == inputs
+
+
+async def test_actual_reservation_cancellation_joins_before_releasing_native_custody(
+    retained_summary, monkeypatch,
+):
+    import threading
+    from agent_comms.store_files import _store_lock
+
+    native, _, _, journal, run = retained_summary
+    original, calls = native.session.read_bytes(), native.provider.posts
+    entered = threading.Event()
+    reserve = journal.summaries.reserve
+
+    def observe(*args, **kwargs):
+        assert threading.current_thread() is not threading.main_thread()
+        entered.set()
+        return reserve(*args, **kwargs)
+
+    monkeypatch.setattr(journal.summaries, "reserve", observe)
+    with _store_lock(native.root / "wire"):
+        task = asyncio.create_task(run())
+        assert await asyncio.to_thread(entered.wait, 10)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done(), "original reservation worker must join before custody exits"
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    attempts = journal.summaries.history(str(native.session))
+    assert len(attempts) == 1 and attempts[0].state.declared_name == "reserved"
+    assert journal.summaries.blocking(str(native.session))
+    assert native.provider.posts == calls and native.session.read_bytes() == original
+    assert native.persistent.custody.idle().current
+    print("actual_reservation_cancel_joined_no_summary_send", attempts[0].operation_id)
+
+
+async def test_actual_failure_settlement_cancel_preserves_known_native_result(
+    retained_summary, monkeypatch,
+):
+    import threading
+
+    native, preparation, _, journal, run = retained_summary
+    original, calls = native.session.read_bytes(), native.provider.posts
+    entered, release = threading.Event(), threading.Event()
+    fail = journal.summaries.fail
+
+    def observe(*args):
+        assert threading.current_thread() is not threading.main_thread()
+        entered.set()
+        assert release.wait(10)
+        return fail(*args)
+
+    monkeypatch.setattr(journal.summaries, "fail", observe)
+    native.provider.status = 400
+    task = asyncio.create_task(run())
+    try:
+        assert await asyncio.to_thread(entered.wait, 15)
+        task.cancel()
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    attempts = journal.summaries.history(str(native.session))
+    assert len(attempts) == 1 and attempts[0].state.declared_name == "failed"
+    assert attempts[0].state.terminal and attempts[0].state.settled_without_original
+    assert not attempts[0].state.original_eligible
+    # This actual SDK cut splits the second native turn. The original compact
+    # owner concurrently requests history and turn-prefix summaries; they are
+    # distinct sources, not a replay of one provider request.
+    assert preparation.is_split_turn
+    requests = native.provider.requests[calls:]
+    assert len(requests) == 2 and requests[0]["messages"] != requests[1]["messages"]
+    assert native.provider.posts == calls + 2 and native.session.read_bytes() == original
+    assert native.persistent.custody.idle().current
+    print("actual_known_failure_settled_despite_cancel", attempts[0].operation_id)
 
 
 async def test_actual_native_progress_extends_idle_deadline_without_total_cap(retained_summary):
@@ -503,8 +584,8 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
             model=model.display_name,
         )
     )
-    lease = comms.agents.begin_turn("summary-owner", "native-summary-exchange")
-    owner = comms.registry.require("summary-owner")
+    admitted = comms.agents.begin_turn("summary-owner", "native-summary-exchange")
+    lease, owner = admitted.turn_lease, admitted.thread
     source = ManualSource(
         owner=owner.require_process(),
         incarnation=owner.incarnation,
@@ -513,11 +594,11 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
     )
     journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
     slot = SelectedSummarySlot(owner.name, preparation.witness.session_id)
-    envelope = dict(
-        source=FieldCodec.encode(source),
-        selected=selected_model.to_wire(),
-        settings=FieldCodec.encode(settings),
-        retained=FieldCodec.encode(RetainedTaskFacts(())),
+    envelope = SelectedSummarySource(
+        source=source,
+        selected=selected_model,
+        settings=settings,
+        retained=RetainedTaskFacts(()),
     )
     events = []
 
@@ -531,11 +612,13 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
                 journal,
                 preparation.witness,
                 envelope,
+                owner=owner,
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
                 custom_instructions="Preserve the two original retained questions",
                 idle_timeout_seconds=15,
                 on_event=observed,
+                reason=ManualCompactionReason,
             )
         assert isinstance(result, SummarySummarizedData)
         assert result.result.summary.strip()
@@ -558,8 +641,10 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
                 journal,
                 preparation.witness,
                 envelope,
+                owner=owner,
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
+                reason=ManualCompactionReason,
             )
         assert native.provider.posts == calls
         assert native.session.read_bytes() == before

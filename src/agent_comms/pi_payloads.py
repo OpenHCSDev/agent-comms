@@ -256,7 +256,7 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
         return member()
 
     def to_text(self) -> str:
-        return self.declared_name
+        return FieldCodec.encode(type(self))
 
     @property
     @abstractmethod
@@ -425,7 +425,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @classmethod
     def normalize_field(cls, target, key, value, record):
         if key == "stopReason":
-            return PiStopReason.from_external(value).declared_name
+            return FieldCodec.encode(PiStopReason.from_external(value))
         return super().normalize_field(target, key, value, record)
 
     @property
@@ -487,6 +487,14 @@ class AssistantMessage(PiMessage):
 
     # Pi's assistant record always carries an array, including failed terminals.
     content: tuple[PiContent, ...] = field(default=(), metadata={"wire_required": True})
+    # Original Pi completion metadata. These are observations, not registry
+    # configuration or permission to select a model for a later request.
+    api: str | None = wire_field("api")
+    provider: str | None = wire_field("provider")
+    model: str | None = wire_field("model")
+    response_model: str | None = wire_field("responseModel")
+    response_id: str | None = wire_field("responseId")
+    provider_thinking_level: str | None = wire_field("providerThinkingLevel")
     assistant = True
 
     def tracked_end(self, session) -> None:
@@ -620,11 +628,15 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         return NativeTool.for_name(self.tool_name).result_artifacts(
             ProvidedToolResult(content=self.parts, details=self.details), not self.is_error)
 
-    def require_artifact_request(self, request):
+    def require_tool_request(self, request):
         calls = tuple(call for call in request.retained_tool_calls()
                       if call.id == self.tool_call_id)
         if len(calls) != 1 or calls[0].name != self.tool_name:
-            raise ValueError("Completed file operation lacks its exact original SDK call")
+            raise ValueError("Native tool result lacks its exact original SDK call")
+        return calls[0]
+
+    def require_artifact_request(self, request):
+        self.require_tool_request(request)
         if not self.completed_artifacts():
             raise ValueError("Native result has no successful original file operation evidence")
 
@@ -697,7 +709,6 @@ class TextDelta(PiDelta, declared_name="text_delta"):
         return bool(self.delta)
 
     def emit(self, session):
-        session.watchdog.output_started |= bool(self.delta)
         session.output.append(self.delta)
         from .agent_events import Chunk
 
@@ -715,7 +726,6 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
     def emit(self, session):
         if not self.delta:
             return ()
-        session.watchdog.output_started = True
         from .agent_events import Thinking
 
         return (Thinking(text=self.delta),)
@@ -725,7 +735,6 @@ class ToolDelta:
     progress = True
 
     def emit(self, session):
-        session.watchdog.output_started = True
         return ()
 
 
@@ -784,6 +793,7 @@ class ReportedModel(PiModel):
     id: str | None = None
     name: str | None = None
     context_window: int | None = wire_field("contextWindow")
+    max_tokens: int | None = wire_field("maxTokens")
 
     @property
     def identity(self):
@@ -853,6 +863,18 @@ class MissingData(PiResponseData):
 
     def require_payload(self):
         raise ValueError("Native response has no data")
+
+
+@dataclass(frozen=True)
+class SessionSwitchData(PiResponseData):
+    """The SDK's actual session-replacement outcome, not a local readiness flag."""
+
+    strict_fields = True
+    cancelled: bool
+
+    def require_switched(self) -> None:
+        if self.cancelled:
+            raise ValueError("Native saved-session replacement was cancelled")
 
 
 @dataclass(frozen=True)

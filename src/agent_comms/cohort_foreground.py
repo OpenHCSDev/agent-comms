@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import AsyncExitStack
 import json
 import math
 import os
@@ -23,6 +24,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
@@ -69,10 +71,10 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     return cli
 
 
-def _accept_visible_deliveries(
+async def _accept_visible_deliveries(
     bus: MessageBus,
     root_id: str,
-    store: Coordination,
+    store_path: Path,
     lookup: str,
     after_seq: int,
     *,
@@ -85,35 +87,39 @@ def _accept_visible_deliveries(
     before the SQL transaction. All N identities must already be registered.
     Never infer a cohort from an ordinary public message or its body.
     """
-    sealed = sealed_cohort_sequences(store, root_id)
-    with bus.log.certified_read() as source:
-        _require_no_private_owner_rename(bus.log.path.parent)
-        marker = bus.log._private_marker_unlocked()
-        if marker.root_id != root_id:
-            raise IdentityConflict("private initial wire root changed")
-        after_seq = max(after_seq, marker.admission_after_seq)
-        initials = tuple(
-            initial
-            for initial in source.addressed_deliveries(lookup, after_seq, sealed)
-            if initial.message.seq > after_seq
-            and any(
+    def accept(resource: Coordination) -> int:
+        sealed = sealed_cohort_sequences(resource, root_id)
+        with bus.log.certified_read() as source:
+            _require_no_private_owner_rename(bus.log.path.parent)
+            marker = bus.log._private_marker_unlocked()
+            if marker.root_id != root_id:
+                raise IdentityConflict("private initial wire root changed")
+            admitted_after = max(after_seq, marker.admission_after_seq)
+        visited_after = admitted_after
+        unaccepted = []
+        for initial in bus.log.addressed_sources(lookup, admitted_after):
+            # Progress comes from every original actually visited in the fixed
+            # source cut, including already sealed/historical recipient rows.
+            visited_after = initial.message.seq
+            if initial.message.seq not in sealed and any(
                 r.recipient_lookup == lookup and r.canonical_thread == owner_name
                 for r in initial.audience.recipients
-            )
-        )
-    unaccepted = initials
-    if len(unaccepted) > 100:
-        raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
-    if unaccepted and native_package is not None:
-        # An ACP observation with new originals must still validate the package
-        # before SQL acceptance. Sealed receipts require no repeated preflight.
-        _preflight(bus.log.path.parent, root_id, native_package, True)
-    for initial in unaccepted:
-        # A prior canonical name is historical after a private owner rename.
-        # Never create a NEW generation's selected attempt from that old
-        # frozen recipient, or infer it was consumed.
-        accept_delivery_cohort(bus, root_id, initial.message.seq, store)
-    return initials[-1].message.seq if initials else after_seq
+            ):
+                unaccepted.append(initial)
+        if len(unaccepted) > 100:
+            raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
+        if unaccepted and native_package is not None:
+            # An ACP observation with new originals must still validate the package
+            # before SQL acceptance. Sealed receipts require no repeated preflight.
+            _preflight(bus.log.path.parent, root_id, native_package, True)
+        for initial in unaccepted:
+            # A prior canonical name is historical after a private owner rename.
+            # Never create a NEW generation's selected attempt from that old
+            # frozen recipient, or infer it was consumed.
+            accept_delivery_cohort(bus, root_id, initial.message.seq, resource)
+        return visited_after
+
+    return await Coordination.run_async(store_path, accept)
 
 
 async def run_foreground_once(
@@ -144,60 +150,76 @@ async def run_foreground_once(
         or not worktree.is_dir()
     ):
         raise ValueError("wait must be in [0,300] and worktree must exist")
-    _preflight(root, wire_root_id, native_package, opt_in)
+    await Coordination.run_worker(partial(
+        _preflight, root, wire_root_id, native_package, opt_in,
+    ))
     if (
         selected_existing_file_write is not None
         and type(selected_existing_file_write) is not SelectedExistingFileWrite
     ):
         raise TypeError("foreground selected write needs a trusted explicit plan")
     comms = Comms(root)
-    if selected_existing_file_write is not None:
-        # Refuse an uninitialized claim protocol or permanently invalid
-        # resource before owner registration or an irreversible native send.
-        with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
-        if not marker.claims:
-            raise PublicationActivationBlocked("selected file write needs a private claim protocol")
-        selected_existing_file_write.resource.normalized(worktree)
-    thread = Thread(
-        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
-    )
-    # The registry name reservation and registration must be ONE wire-locked
-    # operation; `claim_thread` silently chooses a suffix on a collision.
-    with _store_lock(comms._wire_lock_path):
-        if comms.registry.name_reserved(name):
-            raise IdentityConflict("recipient name already reserved; no takeover")
-        comms.channels._require_available_new_tags(tags)
-        comms.registry.register(thread)
-    try:
+    def retire(thread):
+        with _store_lock(comms._wire_lock_path):
+            try:
+                current, _generation = comms.registry.live_owner_with_admission(name)
+            except (RelationViolationError, ValueError):
+                return
+            if current.pid == os.getpid() and current.created_at == thread.created_at:
+                comms.registry.unregister(name)
+
+    def admit(resources):
+        if selected_existing_file_write is not None:
+            # Refuse an uninitialized claim protocol or permanently invalid
+            # resource before owner registration or an irreversible native send.
+            with comms.bus.log.locked():
+                marker = comms.bus.log._private_marker_unlocked()
+            if not marker.claims:
+                raise PublicationActivationBlocked("selected file write needs a private claim protocol")
+            selected_existing_file_write.resource.normalized(worktree)
+        thread = Thread(
+            name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+        # The registry name reservation and registration must be ONE wire-locked
+        # operation; `claim_thread` silently chooses a suffix on a collision.
+        with _store_lock(comms._wire_lock_path):
+            if comms.registry.name_reserved(name):
+                raise IdentityConflict("recipient name already reserved; no takeover")
+            comms.channels._require_available_new_tags(tags)
+            resources.push_async_callback(Coordination.run_worker, partial(retire, thread))
+            comms.registry.register(thread)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.install_private_runtime()
             lookup = stable_thread_lookup(comms.registry.require(name).created_at)
             store.participants.register(lookup, name, name, committed=True)
+        return thread, lookup
+
+    async with AsyncExitStack() as resources:
+        thread, lookup = await Coordination.run_worker(partial(admit, resources))
         if ready is not None:
             ready(thread)
         deadline = time.monotonic() + wait_seconds
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
         cursor = 0
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            while True:
-                cursor = _accept_visible_deliveries(
-                    bus, wire_root_id, store, lookup, cursor, owner_name=thread.name
-                )
-                # Even an empty scan checks this PID against the live registry.
-                # A terminal claim cannot be replayed by this foreground owner.
-                result = await SelectedExecution(
-                    root=root,
-                    wire_root_id=wire_root_id,
-                    owner_name=name,
-                    native_package=native_package,
-                    opt_in=True,
-                    selected_existing_file_write=selected_existing_file_write,
-                ).run()
-                if result is not None:
-                    return result
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
+        while True:
+            cursor = await _accept_visible_deliveries(
+                bus, wire_root_id, root / "coordination.sqlite3", lookup, cursor, owner_name=thread.name
+            )
+            # Even an empty scan checks this PID against the live registry.
+            # A terminal claim cannot be replayed by this foreground owner.
+            result = await SelectedExecution(
+                root=root,
+                wire_root_id=wire_root_id,
+                owner_name=name,
+                native_package=native_package,
+                opt_in=True,
+                selected_existing_file_write=selected_existing_file_write,
+            ).run()
+            if result is not None:
+                return result
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                def read_observers(store):
                     with store.session.read():
                         observers = CohortDeliveryReceipts.read(
                             store.session._connection.execute(
@@ -210,20 +232,10 @@ async def run_foreground_once(
                                 (wire_root_id, lookup, cursor),
                             )
                         )
-                    return NoWakeReceipt(observers[0].wire_seq) if observers else None
-                await asyncio.sleep(min(0.1, remaining))
-    finally:
-        # Do not stop a replacement owner. A killed process may leave a stale
-        # RUNNING PID: that state requires explicit manual disposition, not an
-        # automatic takeover of an uncertain claim.
-        with _store_lock(comms._wire_lock_path):
-            try:
-                current, _generation = comms.registry.live_owner_with_admission(name)
-            except (RelationViolationError, ValueError):
-                pass
-            else:
-                if current.pid == os.getpid() and current.created_at == thread.created_at:
-                    comms.registry.unregister(name)
+                    return observers
+                observers = await Coordination.run_async(root / "coordination.sqlite3", read_observers)
+                return NoWakeReceipt(observers[0].wire_seq) if observers else None
+            await asyncio.sleep(min(0.1, remaining))
 
 
 def _read_selected_write_source(path: Path) -> bytes:

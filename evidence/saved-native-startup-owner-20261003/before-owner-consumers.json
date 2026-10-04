@@ -1,0 +1,1325 @@
+{
+  "head": "3e7588d77bf4acb42200c3d615495b674978b04b",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "modules": 311,
+      "parse_omissions": []
+    },
+    {
+      "root": "tests",
+      "modules": 362,
+      "parse_omissions": []
+    },
+    {
+      "root": "tools",
+      "modules": 53,
+      "parse_omissions": []
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 43,
+      "kind": "import",
+      "expression": "from .native_custody import BorrowedNative, EmptyNative, NativeCleanupFailed, NativeCustody, PiSessionChild, RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 52,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 93,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 119,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 126,
+      "kind": "Name",
+      "expression": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 141,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 144,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 375,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 384,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 42,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 29,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 47,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 13,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 72,
+      "kind": "declaration",
+      "name": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 51,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 130,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 74,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 13,
+      "kind": "import",
+      "expression": "from .native_attestation import NativeAttestation, PendingAttestation, SavedSessionReopenError"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 72,
+      "kind": "declaration",
+      "name": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "kind": "declaration",
+      "name": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 195,
+      "kind": "declaration",
+      "name": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 142,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 167,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 195,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 84,
+      "kind": "Name",
+      "expression": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 94,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 97,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 121,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 136,
+      "kind": "Name",
+      "expression": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 145,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 169,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 198,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 211,
+      "kind": "Name",
+      "expression": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 134,
+      "kind": "Name",
+      "expression": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 136,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 191,
+      "kind": "Name",
+      "expression": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 211,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 240,
+      "kind": "Name",
+      "expression": "ReopenNative"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 94,
+      "kind": "Name",
+      "expression": "NativeCustody"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 227,
+      "kind": "Name",
+      "expression": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 283,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 293,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 9,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 27,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 36,
+      "kind": "import",
+      "expression": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 407,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 503,
+      "kind": "import",
+      "expression": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 517,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 506,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 101,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 99,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 121,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 25,
+      "kind": "declaration",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 25,
+      "kind": "declaration",
+      "name": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 55,
+      "kind": "declaration",
+      "name": "ReopenSessionHelper"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 61,
+      "kind": "declaration",
+      "name": "validate_native_reopen"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 63,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 58,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 39,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 46,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 44,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 79,
+      "kind": "Name",
+      "expression": "ReopenSessionHelper"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 23,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 119,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 161,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 7,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 36,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 22,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 37,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 870,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 874,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 865,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 872,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 331,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 333,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 334,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 32,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 42,
+      "kind": "import",
+      "expression": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 55,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 97,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 196,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 272,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 14,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 36,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity, validate_native_reopen"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 30,
+      "kind": "declaration",
+      "name": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 171,
+      "kind": "declaration",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 171,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 255,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 49,
+      "kind": "import",
+      "expression": "from .native_attestation import PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 98,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 105,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 119,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 173,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 184,
+      "kind": "import",
+      "expression": "from .native_attestation import PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 120,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 51,
+      "kind": "Name",
+      "expression": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 87,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 91,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 108,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 186,
+      "kind": "Name",
+      "expression": "PendingAttestation"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 242,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 246,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 305,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 96,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 164,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 109,
+      "kind": "Name",
+      "expression": "validate_native_reopen"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 165,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 163,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 246,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 45,
+      "kind": "import",
+      "expression": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 187,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from .native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 67,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 175,
+      "kind": "import",
+      "expression": "from .native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 179,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 25,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 62,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 112,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 86,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 154,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 21,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 32,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 23,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 234,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 401,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 70,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 133,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 75,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 144,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 346,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 23,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 122,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 9,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 22,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 9,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 37,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 31,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 212,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 336,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 357,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 66,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 215,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 242,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 332,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeReopenError, validate_native_reopen"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 97,
+      "kind": "Attribute",
+      "expression": "native_session_reopen.validate_native_reopen"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 59,
+      "kind": "Name",
+      "expression": "validate_native_reopen"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 62,
+      "kind": "Name",
+      "expression": "validate_native_reopen"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 87,
+      "kind": "Name",
+      "expression": "validate_native_reopen"
+    },
+    {
+      "path": "tests/test_native_snapshot_identity.py",
+      "line": 8,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_snapshot_identity.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 17,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 26,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 548,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import validate_native_reopen"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 552,
+      "kind": "Name",
+      "expression": "validate_native_reopen"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 5,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 98,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 21,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 43,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import validate_native_reopen"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 216,
+      "kind": "Name",
+      "expression": "validate_native_reopen"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 25,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 32,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 169,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 168,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 200,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 168,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 5,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 251,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 21,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 22,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 114,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 117,
+      "kind": "Name",
+      "expression": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.native_session_reopen import NativeSessionIdentity"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 92,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 143,
+      "kind": "Name",
+      "expression": "NativeSessionIdentity"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 73,
+      "kind": "Name",
+      "expression": "SelectedSession"
+    }
+  ],
+  "limits": "Lexical declarations/imports/references; aliases and dynamic monkeypatch resolution require semantic reading. Native dependency source separately read."
+}

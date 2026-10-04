@@ -1,0 +1,82 @@
+{
+  "ok": true,
+  "scope": "Original managed checkpoint payload/cut and exact retained-envelope availability; source-change consumer, not revision authorization or model experiment",
+  "core_import": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "python": "3.14.2",
+  "checkpoint": {
+    "commit_id": "66794184f1674babbe9845610979960b",
+    "native_entry_id": "c0e4f9c9"
+  },
+  "empty_original_availability": {
+    "scope": "exact original selected-source envelope in its corroborated native commit",
+    "evaluated": false,
+    "reason": "An empty retained envelope has no eligible fact denominator",
+    "source_digest": "dd2c2794587e06d62d8ca1d6ee585494e9518d6f213a32e7d20369973ad97b7f",
+    "required": 0,
+    "available": 0,
+    "by_fact": {},
+    "covered_native_entries": 9746
+  },
+  "configured_original_availability": {
+    "scope": "exact original selected-source envelope in its corroborated native commit",
+    "evaluated": true,
+    "reason": "Original envelope verified against committed payload",
+    "source_digest": "0bf96aa409e9f2ca13e7b40c2627fc2ad4ca650aac1892211963f7dbcc70b902",
+    "required": 1,
+    "available": 1,
+    "by_fact": {
+      "current_human_input": {
+        "required": 1,
+        "available": 1
+      }
+    },
+    "covered_native_entries": 9523
+  },
+  "configured_original_commit_id": "c6c11dda844d427aa03a54a862e1ca08",
+  "configured_original_sha256": {
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-02T00-14-09-575Z_01a0f9f6-16a7-7101-ac0f-6cb7639f1949.jsonl": "0e391f8f48a452b698ed56193944ce87cc1c706d38cc172bd4ad73a666a325ee",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-02T00-14-09-575Z_01a0f9f6-16a7-7101-ac0f-6cb7639f1949.jsonl.input-proof": "cc98d41eaeeca3101f1c296bdce8aa7f5a880c5f5da1527a5cfa5f9a27317a24",
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3": "6b775e2522ac32b1514bcf2afe95eb9cfd08879ad586d6a605d68095c91a81a5"
+  },
+  "revision_mass": {
+    "evaluated": false,
+    "reason": "An original scope and authorized correction evidence are required, not content differences"
+  },
+  "controls": [
+    "native_payload_mismatch",
+    "native_cut_mismatch",
+    "missing_exact_retained_envelope",
+    "self_pair_cannot_claim_adjacent_checkpoint",
+    "absent_journal_cannot_mint_checkpoint",
+    "coding_research_goal_exact_and_missing_denominators"
+  ],
+  "recorded_probe": {
+    "questions": 21,
+    "controlled_correct": 7,
+    "missing": 14,
+    "canonical_availability_evaluated": false
+  },
+  "additional_provider_calls": 0,
+  "additional_native_inputs": 0,
+  "original_resource_closed": true,
+  "original_source_proof_and_journal_sha256": {
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl": "03d61d24cc9bb8acabd4a53c89bfa849e6e7460183c10a598f9f01770108fed0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl.input-proof": "7be3edda9c7f2e67003af00b7c03490c46bd20fc2098ee48c4b7a39c50d90f87",
+    "/home/ts/wt/s52902/forks/2026-10-02T11-45-21-583Z_01a0fc6e-e6af-72a9-ae8d-4139d4af15aa.jsonl": "f9382d2d971dafd05ab82369ef4a4d6d5aae14e1452fc20007cba004d5853a7e",
+    "/home/ts/wt/s52902/forks/2026-10-02T11-45-21-583Z_01a0fc6e-e6af-72a9-ae8d-4139d4af15aa.jsonl.input-proof": "138f2be2c3a3d76ed2727f22b171bdac7e6a6936dcfc9d3f3611b4398b329f43",
+    "/home/ts/wt/s52902/wire/compaction-commits.sqlite3": "6619555ee66f54f704903429be4ad37418c5d6756073c9a8c0cf37f7e8f26353"
+  },
+  "originals_unchanged": true,
+  "validation_history": {
+    "older_runtime": "ManagedCompactionEntry absent; no source overlay introduced",
+    "pytest": "Optional plugins unavailable; final six concrete controls used original evaluation/proof owners",
+    "original474": "Untouched selected-summary schema lacks current request column; no fallback or carry"
+  },
+  "receiving_driver_sha256": "0e499e20c0a908fee16920567364d6ba06a3eb9360b42f7bfee955351f2e8d31",
+  "scope_limits": [
+    "No final provider prompt presence",
+    "No model retention comparison",
+    "No authorized revision mass without original scope",
+    "No three-sequential-checkpoint qualification"
+  ]
+}

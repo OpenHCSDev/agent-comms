@@ -1,0 +1,56 @@
+.....................FF.....                                             [100%]
+=================================== FAILURES ===================================
+___________ test_failed_tree_verification_precedes_journal_creation ____________
+
+package = PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-source-20261004/scratch/pytest/test_failed_tree_verification_0/package')
+tmp_path = PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-source-20261004/scratch/pytest/test_failed_tree_verification_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0cc5b781a0>
+
+    def test_failed_tree_verification_precedes_journal_creation(package, tmp_path, monkeypatch):
+        from agent_comms import native_compaction_writer as writer
+>       from agent_comms import owner_compaction_commit as commit
+
+tests/test_native_package.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_commit.py:17: in <module>
+    from .compaction_result import CompactionResult
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Manual/worker compaction reply ownership, distinct from durable journal state."""
+    
+    from abc import abstractmethod
+    from dataclasses import dataclass
+    
+>   from acp.exceptions import RequestError
+E   ModuleNotFoundError: No module named 'acp'
+
+src/agent_comms/compaction_result.py:6: ModuleNotFoundError
+________ test_copied_helper_must_match_packaged_resource_before_journal ________
+
+package = PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-source-20261004/scratch/pytest/test_copied_helper_must_match_0/package')
+tmp_path = PosixPath('/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-resource608-source-20261004/scratch/pytest/test_copied_helper_must_match_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0cc58b73f0>
+
+    def test_copied_helper_must_match_packaged_resource_before_journal(package, tmp_path, monkeypatch):
+        from agent_comms import native_compaction_writer as writer
+>       from agent_comms import owner_compaction_commit as commit
+
+tests/test_native_package.py:219: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_commit.py:17: in <module>
+    from .compaction_result import CompactionResult
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Manual/worker compaction reply ownership, distinct from durable journal state."""
+    
+    from abc import abstractmethod
+    from dataclasses import dataclass
+    
+>   from acp.exceptions import RequestError
+E   ModuleNotFoundError: No module named 'acp'
+
+src/agent_comms/compaction_result.py:6: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_native_package.py::test_failed_tree_verification_precedes_journal_creation
+FAILED tests/test_native_package.py::test_copied_helper_must_match_packaged_resource_before_journal
+2 failed, 26 passed in 0.56s

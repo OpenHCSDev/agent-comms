@@ -1,5 +1,5 @@
 """One installed selected workflow, original custody and controlled provider only."""
-import asyncio, functools, hashlib, inspect, json, os, shutil, sqlite3, sys, tempfile, time
+import asyncio, functools, hashlib, inspect, json, os, shutil, sqlite3, sys, time
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -20,21 +20,28 @@ from agent_comms.selected_request import SelectedRequest
 from agent_comms.selected_session import SelectedSession
 from agent_comms.private_send_admission import PrivateSendAdmission
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_entries import NativeEntry
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.field_codec import FieldCodec
+from agent_comms.messages import Message, MessageType
+from agent_comms.wake import derive_exact_reply_target
 from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.registration import Registration
 from agent_comms.native_source_cursor import NativeSourceCursor
-from agent_comms.proven_source_coverage import SourceCoverage
+from agent_comms.proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 import agent_comms.native_package as native_package
-import agent_comms.private_send_admission as send_module
 import agent_comms.selected_session as session_module
 
 PACKAGE = Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])
 SOURCE = Path(os.environ['NATIVE_EVIDENCE_SOURCE'])
 OUTPUT = Path(os.environ['NATIVE_EVIDENCE_RECEIPT'])
 spans=[]
+children=[]
 
 
 def instrument(resources, target, name, *, scope=False):
@@ -56,7 +63,11 @@ def instrument(resources, target, name, *, scope=False):
         @functools.wraps(method)
         async def wrapped(*args,**kwargs):
             begin=time.perf_counter_ns()
-            try:return await method(*args,**kwargs)
+            try:
+                result=await method(*args,**kwargs)
+                if target is PiSessionChild and name=='start':
+                    children.append(result.proc)
+                return result
             finally:record(begin,time.perf_counter_ns())
     else:
         @functools.wraps(method)
@@ -70,22 +81,46 @@ def instrument(resources, target, name, *, scope=False):
 
 
 class Provider(LoopbackProvider):
+    def __init__(self, *, root, **options):
+        super().__init__(**options)
+        self.root=root
+
     def response_chunks(self):
-        if self.posts==1:
+        with Coordination(self.root/'coordination.sqlite3') as store, store.session.read():
+            (original,)=NativeRuntimeInput.select(
+                store.session._connection,
+                where='owner_thread=? AND session_entry_id IS NULL', parameters=('beta',),
+            )
+            (assignment_id,)=original.execution.source_assignment_ids(
+                store.session._connection,original.input_id,
+            )
+            assignment=WakeAssignment.one(store.session._connection,assignment_id=assignment_id)
+        with NativeEntry.open_input_evidence(Path(original.session_file)) as evidence:
+            _,entries=evidence.observe()
+            NativeEntry.tracked_users(entries)[original.input_id].require_entry_id()
+        if original.stage is TriageNativeExecution:
             yield {'content':'{"decision":"FULL"}'},None
             yield {},'stop'
-        else:yield from super().response_chunks()
+        else:
+            assert original.stage is FullNativeExecution
+            message=Comms(self.root).bus.log.message_by_id(assignment.message_id)
+            assert message.reference==assignment.source
+            response=Message(original.owner_thread,derive_exact_reply_target(message),
+                             self.text,MessageType.INFO,timestamp=0)
+            yield {'content':json.dumps(FieldCodec.encode((response,)))},None
+            yield {},'stop'
 
 
 async def main():
-    started=time.perf_counter_ns();base=Path(tempfile.mkdtemp(prefix='r493-',dir=os.environ.get('NATIVE_EVIDENCE_FIXTURE_PARENT', '/home/ts/wt')))
-    base.chmod(0o700);root=base/'wire';root.mkdir(mode=0o700)
+    started=time.perf_counter_ns();base=OUTPUT.parent
+    # This fresh declared fixture must fit the actual native tool socket ABI.
+    base.mkdir(mode=0o700);root=base/'wire';root.mkdir(mode=0o700)
     source_hash=hashlib.sha256(SOURCE.read_bytes()).hexdigest()
     report={'installed_python':sys.executable,'core_module':native_package.__file__,
             'source_sha256':source_hash,'source_bytes':SOURCE.stat().st_size,'private_root':str(root),
             'spans':spans,'paid_calls':0,'public_inputs':0,'complete':False,
             'clock':'One Python process perf_counter_ns. Nested/overlapping spans are not additive.'}
-    provider=Provider(status=200,text='PRIVATE_CAUSE_GREETING_OK')
+    provider=Provider(root=root,status=200,text='PRIVATE_CAUSE_GREETING_OK')
     server=await asyncio.start_server(provider.handle,'127.0.0.1',0)
     port=server.sockets[0].getsockname()[1];config=base/'config';config.mkdir(mode=0o700)
     (config/'models.json').write_text(json.dumps({'providers':{'response-local':{
@@ -121,14 +156,13 @@ async def main():
                 (SelectedRequest,('reserve',)),(NativePiRpcLaunch,('tracked',)),
                 (NativeStartupAdmission,('acquire','release')),(PiSessionChild,('start','close')),
                 (TrackedTurnSession,('attest','admit_prompt','committed_input','committed_context','context_proof','next_event')),
-                (PrivateSendAdmission,('reserve','_saved_session','verify','commit')),
-                (Registration,('transition_turn',)),
+                (PrivateSendAdmission,('reserve','prepare_context','_admit_once','verify','commit')),
+                (Registration,('transition_turn','observe_native_phase','attach_native_session')),
                 (NativeSourceCursor,('advance',)),
-                (SourceCoverage,('prefix','last_proof','evidence')), (OptionalAwarenessProjection,('for_selected','render')),
+                (SourceCoverage,('prefix',)), (ProvenSourceCoverage,('last_proof','evidence')),
+                (OptionalAwarenessProjection,('for_selected','segments')),
                 (native_package,('verify_native_package',))):
                 for name in names:instrument(resources,target,name)
-            instrument(resources,PrivateSendAdmission,'_exclusion',scope=True)
-            instrument(resources,send_module,'_response_boundary',scope=True)
             instrument(resources,session_module,'_response_boundary',scope=True)
             async with asyncio.timeout(90):
                 result=await SelectedExecution(root=root,wire_root_id=rid,owner_name='beta',
@@ -146,6 +180,7 @@ async def main():
             assert len(matches)==1 and provider.text in matches[0].body
             assert result.cursor_status=='proven',result
             assert provider.posts==2,provider.posts
+            assert sum(span['operation']=='TrackedTurnSession.attest' for span in spans)==2
             assert comms.registry.require('beta').turn_lease is None
             report['complete']=True
     except BaseException as error:
@@ -156,7 +191,10 @@ async def main():
         report['duration_ms']=(time.perf_counter_ns()-started)/1e6
         report['provider_posts']=provider.posts
         report['original_unchanged']=hashlib.sha256(SOURCE.read_bytes()).hexdigest()==source_hash
+        report['owned_native_children']=len(children)
+        report['owned_native_cleanup_complete']=all(not child.alive() for child in children)
         OUTPUT.write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps({k:v for k,v in report.items() if k!='spans'}))
+        assert report['owned_native_cleanup_complete']
 
 asyncio.run(main())

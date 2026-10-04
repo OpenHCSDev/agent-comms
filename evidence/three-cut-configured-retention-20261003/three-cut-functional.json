@@ -1,0 +1,337 @@
+{
+  "complete": true,
+  "public_inputs": 0,
+  "input_replays": 0,
+  "comparative_study": false,
+  "policy_activation": false,
+  "acceptance_scope": "three sequential configured SDK/ACP/native cuts and recorded retention probes",
+  "completed_rounds": [
+    "cut-1",
+    "cut-2",
+    "cut-3"
+  ],
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "source_bytes": 42580611,
+  "original_sha256": "afdb39487deb3bd77a51aa852668c0e1b195c96fad25ea8dd962106fd7c5385e",
+  "fork_bytes": 42750960,
+  "three_cuts_observed": true,
+  "actual_probe_count": 3,
+  "recall": 9,
+  "questions": 9,
+  "stale": 0,
+  "missing": 0,
+  "measurements": {
+    "recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "prohibition": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "alternative": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "original_scope_and_sdk_captures": true,
+  "prompt_presence_unavailable": [
+    "cut-1",
+    "cut-2"
+  ],
+  "prior_ACP_outcome": "UNCONFIRMED",
+  "elapsed_seconds": 186.90428274701117,
+  "original_source_unchanged": true,
+  "native_children_closed": true,
+  "prior_original_input_rows_unchanged": true,
+  "original_capture_hashes_preserved": true,
+  "source_head": "9a7616a2",
+  "installed_core_head": "4c30bd2336d841f9592ad443126e66d58257ec1a",
+  "installed_production_equal": true,
+  "native_manifest": "de16647979cbad28",
+  "native_tree": "7bf470",
+  "runtime_prefix": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001",
+  "actual_scope": "configured SDK/ACP/native retained fork; no physical UI and no comparative study",
+  "cut_ids": {
+    "cut-1": {
+      "commit_id": "007f49e4e2484792b1aed0164a28e9ba",
+      "native_entry_id": "fbc0a97b"
+    },
+    "cut-2": {
+      "commit_id": "af76fd77ce6d42b98f121b05c9138f85",
+      "native_entry_id": "fa0c1f5b"
+    },
+    "cut-3": {
+      "commit_id": "1d9d3289fbed4df1bbb0fc44045b148b",
+      "native_entry_id": "f1d4d7c6"
+    }
+  },
+  "canonical_availability": {
+    "cut-1": {
+      "evaluated": true,
+      "required": 6,
+      "available": 6,
+      "by_fact": {
+        "current_human_constraint": {
+          "required": 3,
+          "available": 3
+        },
+        "user_source": {
+          "required": 3,
+          "available": 3
+        }
+      },
+      "covered_native_entries": 9585
+    },
+    "cut-2": {
+      "evaluated": true,
+      "required": 9,
+      "available": 9,
+      "by_fact": {
+        "current_human_constraint": {
+          "required": 3,
+          "available": 3
+        },
+        "historical_human_constraint": {
+          "required": 1,
+          "available": 1
+        },
+        "input": {
+          "required": 1,
+          "available": 1
+        },
+        "user_source": {
+          "required": 4,
+          "available": 4
+        }
+      },
+      "covered_native_entries": 9603
+    },
+    "cut-3": {
+      "evaluated": true,
+      "required": 11,
+      "available": 11,
+      "by_fact": {
+        "current_human_constraint": {
+          "required": 2,
+          "available": 2
+        },
+        "historical_human_constraint": {
+          "required": 2,
+          "available": 2
+        },
+        "historical_user_correction": {
+          "required": 1,
+          "available": 1
+        },
+        "input": {
+          "required": 2,
+          "available": 2
+        },
+        "user_source": {
+          "required": 4,
+          "available": 4
+        }
+      },
+      "covered_native_entries": 9618
+    }
+  },
+  "provider_prompt_presence": {
+    "cut-1": {
+      "evaluated": false,
+      "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"
+    },
+    "cut-2": {
+      "evaluated": false,
+      "reason": "Original SDK serialized segment bytes not captured; object reserialization is not byte evidence"
+    },
+    "cut-3": {
+      "evaluated": true,
+      "stage": "recorded SDK provider input",
+      "final_transport_evaluated": false,
+      "context_digest": "09919c9f2f042633a5f1f7a64656ccbfa7305232fe1b508cb54dd659080422d6",
+      "required": 11,
+      "present": 11,
+      "exact_envelope_present": true
+    }
+  },
+  "revision_mass": {
+    "cut-1": {
+      "evaluated": false,
+      "reason": "An original scope and authorized correction evidence are required, not content differences"
+    },
+    "cut-2": {
+      "evaluated": true,
+      "scope": "Original captured scopes and certified authored task publications",
+      "constraints": {
+        "evaluated": true,
+        "eligible": 3,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": 0.0,
+        "authorized_supersessions": [
+          {
+            "seq": 1,
+            "message_id": "4a73874488ce"
+          }
+        ],
+        "scope_or_explicit_drop": [],
+        "additions": [],
+        "reason": "Original scoped lineages compared"
+      },
+      "decisions": {
+        "evaluated": false,
+        "eligible": 0,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": null,
+        "authorized_supersessions": [],
+        "scope_or_explicit_drop": [],
+        "additions": [],
+        "reason": "No eligible authored identities"
+      }
+    },
+    "cut-3": {
+      "evaluated": true,
+      "scope": "Original captured scopes and certified authored task publications",
+      "constraints": {
+        "evaluated": true,
+        "eligible": 3,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": 0.0,
+        "authorized_supersessions": [],
+        "scope_or_explicit_drop": [
+          {
+            "seq": 1,
+            "message_id": "4a73874488ce"
+          }
+        ],
+        "additions": [],
+        "reason": "Original scoped lineages compared"
+      },
+      "decisions": {
+        "evaluated": false,
+        "eligible": 0,
+        "unauthorized": 0,
+        "identities": [],
+        "mass": null,
+        "authorized_supersessions": [],
+        "scope_or_explicit_drop": [],
+        "additions": [],
+        "reason": "No eligible authored identities"
+      }
+    }
+  },
+  "answer_support": {
+    "cut-1": {
+      "tool_calls": 0,
+      "tools": [],
+      "unassisted_recall": true,
+      "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+    },
+    "cut-2": {
+      "tool_calls": 1,
+      "tools": [
+        "bash"
+      ],
+      "unassisted_recall": false,
+      "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+    },
+    "cut-3": {
+      "tool_calls": 1,
+      "tools": [
+        "bash"
+      ],
+      "unassisted_recall": false,
+      "scope": "Original probe branch; tool-assisted answers are task quality, not unassisted recall"
+    }
+  },
+  "recall_scope": "Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls",
+  "original_summary_usage": {
+    "cut-1": {
+      "evaluated": true,
+      "usage": {
+        "input": 110182,
+        "output": 3399,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 113581,
+        "cost": {
+          "input": 0.22036399999999998,
+          "output": 0.03399,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.25435399999999997
+        },
+        "reasoning": 0
+      },
+      "tokens_before": 123635,
+      "scope": "Original SDK-normalized counters; no cache savings or paired cost inference"
+    },
+    "cut-2": {
+      "evaluated": true,
+      "usage": {
+        "input": 24170,
+        "output": 3887,
+        "cacheRead": 7936,
+        "cacheWrite": 0,
+        "totalTokens": 35993,
+        "cost": {
+          "input": 0.04834,
+          "output": 0.03887,
+          "cacheRead": 0.0007936000000000001,
+          "cacheWrite": 0,
+          "total": 0.08800360000000002
+        },
+        "reasoning": 0
+      },
+      "tokens_before": 39830,
+      "scope": "Original SDK-normalized counters; no cache savings or paired cost inference"
+    },
+    "cut-3": {
+      "evaluated": true,
+      "usage": {
+        "input": 42231,
+        "output": 3815,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 46046,
+        "cost": {
+          "input": 0.084462,
+          "output": 0.03815,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.122612
+        },
+        "reasoning": 0
+      },
+      "tokens_before": 44320,
+      "scope": "Original SDK-normalized counters; no cache savings or paired cost inference"
+    }
+  },
+  "source_files": {
+    "tests/three_cut_retention_configured_journey.py": "2a00d4a1c0c426f52c7b2f0b7e9e8d765c850003f1156e74f4d294446e611043",
+    "tests/compaction_retention_fixture.py": "17ba23439332c6af5166ab3fea253d4a69d704f851dfbc73a57aaef5d63bb5e8",
+    "tests/retained_native_fixture.py": "d77a5782f829aa99fdcab98f10ad6d52575dbe5b149d98391505733b6827ed23",
+    "tests/compaction_source_successor_installed_journey.py": "97f5383675e2ddc5b5572e53c528c9d1658d8560a69bc54bee56d35130b7a6c3",
+    "tests/summary_prefix_configured_installed_journey.py": "78206c87b4f140d0c96784ad211528600cb2cb2bc402a65bd16031d3f1e9601f",
+    "tests/summary_prefix_native_observer.mjs": "8a56b14d44c4583e6b380a8afa090251c192c355d500b463c76069236bd6c990"
+  },
+  "artifact_hashes": {
+    "continuation-2-receipt.json": "c5e9be6ee35edc66c8833f47f230e63b85d9d53a6319b4a59273690a901e5808",
+    "continued-run.private.json": "d6951db5ba27f522491e4fa0dc7fae0483f7256d1e5a790c17f36a873e0c8e89",
+    "original-measurements.private.json": "49ead4b4f790d8deba1b69a228458d76dd25419d0d678825cb3489c73264fe4f",
+    "cut-3-checkpoint.private.json": "682af599361a028ec1b9e03941940376cd07d26c032b38c8685a6d5eb0897ee7",
+    "cut-3-registry.private.json": "464a532f07003c4f69dfb65f3dfe605fdd6040baa5a56d5bbc50a34377c79ac7",
+    "cut-3-manifest.private.json": "bf56925cc401ac3c6c1df849c9f8ada2a018006803f4171eaa028031d84cb55b",
+    "cut-3-inputs.private.json": "dafdf25398fb8a2c0e3c4e01b33b34e4111e9101bd4ec4aae1f461ae158e8d69"
+  }
+}

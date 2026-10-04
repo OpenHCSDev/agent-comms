@@ -1,0 +1,19 @@
+{
+  "state": "ORIGINAL_ADMISSION_RELATION_PASS",
+  "module": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-pending503-cursor507-candidate-20261002/lib/python3.14/site-packages/agent_comms/cursor_owner.py",
+  "original_input": "d4eece9aee310bf4b9733ba3888e7008",
+  "source_members": 3,
+  "controls": [
+    "same_admission_without_transient_id",
+    "explicit_original_id",
+    "wrong_explicit_id_refused",
+    "new_admission_refused",
+    "empty_observation_requests_refresh"
+  ],
+  "original_sql_bus_registry_journal_unchanged": true,
+  "original_cursor_still_missing": true,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "product_mutations": 0,
+  "live_gate_qualification": false
+}

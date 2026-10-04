@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .registration import Registration
+from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
@@ -26,7 +27,7 @@ from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ class AgentActivity:
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
             self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
 
@@ -112,8 +113,12 @@ class AgentActivity:
         snapshot = snapshot or self.registry.snapshot()
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
-        activity = ObservedActivity.acquire(
-            self.activity.current(participant.name, active=participant.executing), owner)
+        return self._observed(participant, owner,
+            self.activity.current(participant.name, active=participant.executing))
+
+    def _observed(self, participant: Thread, owner: OwnerIdentity,
+                  event: Activity) -> ObservedActivity:
+        activity = ObservedActivity.acquire(event, owner)
         if participant.turn_state.busy:
             phase = participant.turn_state.phase
             return replace(activity, state=phase.activity_state, detail=phase.summary)
@@ -121,9 +126,13 @@ class AgentActivity:
 
     def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
         snapshot = snapshot or self.registry.snapshot()
+        events = self.activity.all_current(
+            active=frozenset(name for name, thread in snapshot.threads.items() if thread.executing),
+            threads=snapshot.threads,
+        )
         return {
-            name: self.activity_of(name, snapshot=snapshot)
-            for name in snapshot.threads
+            name: self._observed(thread, snapshot.owner_identity(name), events[name])
+            for name, thread in snapshot.threads.items()
         }
 
     def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:
@@ -149,7 +158,7 @@ class AgentActivity:
         self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic | None
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
@@ -163,7 +172,8 @@ class AgentActivity:
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
-    ) -> TurnLeaseFence:
+    ) -> RegistryOwner:
+        """Return the exact owner installed by this atomic begin, including its lease."""
         with _store_lock(self._wire_lock_path):
             leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
             lease = leased.turn_lease
@@ -173,11 +183,15 @@ class AgentActivity:
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
-            return lease
+            return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
 
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
-        with _store_lock(self._wire_lock_path):
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.transition_turn(lease, phase)
+
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        with _store_lock(self._wire_lock_path, shared=True):
+            return self.registry.observe_native_phase(lease, phase)
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""
@@ -199,7 +213,7 @@ class AgentActivity:
         context_size: int | None = None,
     ) -> None:
         """Record the latest model and context metadata for a thread."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
             self.runtime_info.set(
                 AgentRuntimeInfo(

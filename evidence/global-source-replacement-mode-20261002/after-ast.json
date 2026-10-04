@@ -1,0 +1,523 @@
+{
+  "parser": "existing audit.findings.Package/ParsedModule",
+  "roots": [
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "root": "src/agent_comms",
+      "modules": 311,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "root": "tools/cutover",
+      "modules": 51,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "root": "tools/cutover",
+      "modules": 51,
+      "unparsed": []
+    }
+  ],
+  "parent_granted_worktree_module": "/home/ts/wt/comms-cleanup-live-integration-20260929/tools/cutover/global_extension_activation.py",
+  "sites": [
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/activity.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from .store_files import _append_jsonl, _atomic_write_text, _jsonl_records, _store_lock, file_revision"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/activity.py",
+      "line": 306,
+      "kind": "Call",
+      "source": "_atomic_write_text(self._path, ''.join((f'{json.dumps(record)}\\n' for record in retained)))"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/activity.py",
+      "line": 318,
+      "kind": "Call",
+      "source": "_atomic_write_text(self._path, ''.join((f'{json.dumps(record)}\\n' for record in records)))"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/bus_projection.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from .store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/bus_projection.py",
+      "line": 94,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.path, json.dumps(FieldCodec.encode(record.signed())), fsync_parent=fsync_parent)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "source": "from .store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 206,
+      "kind": "Call",
+      "source": "_atomic_write_text(path, json.dumps(document, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "source": "from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock, file_revision"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 366,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.path, json.dumps([FieldCodec.encode(item) for item in (*sources, source)]))"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/registry_store.py",
+      "line": 88,
+      "kind": "Call",
+      "source": "store_files._atomic_write_text(self.path, text, fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/registry_store.py",
+      "line": 92,
+      "kind": "Call",
+      "source": "store_files._atomic_write_text(self.path, text, fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 37,
+      "kind": "ImportFrom",
+      "source": "from .store_files import _atomic_write_text, _store_lock"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 151,
+      "kind": "Call",
+      "source": "_atomic_write_text(session_path, snapshot.pi_session(project))"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 420,
+      "kind": "Call",
+      "source": "_atomic_write_text(intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 358,
+      "kind": "Call",
+      "source": "_atomic_write_text(intent, json.dumps({'version': 1, 'lookup': person.lookup, 'old': before.name, 'new': new_name, 'generation': person.participant_generation, 'wireRootId': metadata.root_id}, sort_keys=True), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/tool_output.py",
+      "line": 9,
+      "kind": "ImportFrom",
+      "source": "from .store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/tool_output.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "_atomic_write_text(path, text, fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 37,
+      "kind": "ImportFrom",
+      "source": "from .store_files import StoreLock, StoreLockContention, _atomic_write_text, _iter_jsonl_records, _iter_jsonl_stream, _store_lock"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/wire_log.py",
+      "line": 625,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.metadata_path, json.dumps(FieldCodec.encode(metadata), indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 88,
+      "kind": "Call",
+      "source": "_atomic_write_text(args.output, json.dumps(sources, indent=2) + '\\n')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 89,
+      "kind": "Call",
+      "source": "_atomic_write_text(args.receipt, json.dumps(receipt, indent=2) + '\\n')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 10,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "_atomic_write_text(receipt, json.dumps(result, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 92,
+      "kind": "Call",
+      "source": "_atomic_write_text(bus.path, target.decode('utf-8'), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 10,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 31,
+      "kind": "Call",
+      "source": "_atomic_write_text(receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 36,
+      "kind": "Call",
+      "source": "_atomic_write_text(receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 32,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 212,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(previous, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 302,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.manifest, json.dumps(carried, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 28,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 239,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(previous, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 99,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 85,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 77,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.originals / name, contents.decode(), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 88,
+      "kind": "Call",
+      "source": "_atomic_write_text(args.output, json.dumps(sources, indent=2) + '\\n')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 89,
+      "kind": "Call",
+      "source": "_atomic_write_text(args.receipt, json.dumps(receipt, indent=2) + '\\n')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 10,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "_atomic_write_text(receipt, json.dumps(result, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 92,
+      "kind": "Call",
+      "source": "_atomic_write_text(bus.path, target.decode('utf-8'), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 10,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 31,
+      "kind": "Call",
+      "source": "_atomic_write_text(receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 36,
+      "kind": "Call",
+      "source": "_atomic_write_text(receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 32,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 206,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(previous, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 296,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.manifest, json.dumps(carried, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 27,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 208,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(previous, indent=2) + '\\n', fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 94,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 80,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.receipt, json.dumps(proof, indent=2), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 72,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.originals / name, contents.decode(), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "qualified_owner": null,
+      "source": "from agent_comms.private_path import PrivateFileRole, TrustedAncestorRole"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "qualified_owner": null,
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 22,
+      "kind": "ClassDef",
+      "qualified_owner": "GlobalSourceInstall",
+      "source": "@dataclass(frozen=True)\nclass GlobalSourceInstall(ABC):\n    source: ReviewedArtifact\n    destination: Path\n\n    def require_original(self):\n        self.source.require_original()\n        TrustedAncestorRole.require(self.destination.parent.lstat())\n        self.require_destination()\n\n    @abstractmethod\n    def require_destination(self):\n        pass\n\n    @abstractmethod\n    def retain_original(self, directory: Path):\n        pass\n\n    def install(self):\n        self.require_original()\n        _atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())\n        if digest(self.destination) != self.source.sha256:\n            raise RuntimeError(f'Installed global source differs: {self.destination}')\n\n    def installation_mode(self) -> int:\n        return PrivateFileRole.permissions"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 39,
+      "kind": "FunctionDef",
+      "qualified_owner": "GlobalSourceInstall.install",
+      "source": "def install(self):\n    self.require_original()\n    _atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())\n    if digest(self.destination) != self.source.sha256:\n        raise RuntimeError(f'Installed global source differs: {self.destination}')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 46,
+      "kind": "FunctionDef",
+      "qualified_owner": "GlobalSourceInstall.installation_mode",
+      "source": "def installation_mode(self) -> int:\n    return PrivateFileRole.permissions"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 51,
+      "kind": "ClassDef",
+      "qualified_owner": "ReplaceGlobalSource",
+      "source": "@dataclass(frozen=True)\nclass ReplaceGlobalSource(GlobalSourceInstall):\n    original: ReviewedArtifact\n\n    def installation_mode(self) -> int:\n        return stat.S_IMODE(self.original.path.stat().st_mode)\n\n    def require_destination(self):\n        if self.original.path != self.destination:\n            raise RuntimeError('Source preimage names another destination')\n        if self.destination.is_symlink() or not self.destination.is_file():\n            raise RuntimeError('Global source must be a regular file')\n        self.original.require_original()\n\n    def retain_original(self, directory):\n        self.require_original()\n        preimage = directory / self.destination.name\n        _atomic_write_text(preimage, self.destination.read_text(), fsync_parent=True)\n        if digest(preimage) != self.original.sha256:\n            raise RuntimeError('Global source changed while preserving its preimage')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 54,
+      "kind": "FunctionDef",
+      "qualified_owner": "ReplaceGlobalSource.installation_mode",
+      "source": "def installation_mode(self) -> int:\n    return stat.S_IMODE(self.original.path.stat().st_mode)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 41,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 67,
+      "kind": "Call",
+      "source": "_atomic_write_text(preimage, self.destination.read_text(), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/store_files.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "qualified_owner": null,
+      "source": "from .private_path import PrivateFileRole"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/store_files.py",
+      "line": 163,
+      "kind": "FunctionDef",
+      "qualified_owner": "_atomic_write_text",
+      "source": "def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool=False, mode: int=PrivateFileRole.permissions) -> None:\n    \"\"\"Replace a snapshot; private guarded writes also durably sync its name.\"\"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.tmp', dir=path.parent)\n    temporary_path = Path(temporary)\n    try:\n        with os.fdopen(fd, 'w', encoding='utf-8') as output:\n            os.chmod(temporary_path, mode)\n            output.write(text)\n            output.flush()\n            os.fsync(output.fileno())\n        _replace_snapshot(temporary_path, path)\n        if fsync_parent and os.name == 'posix':\n            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))\n            try:\n                os.fsync(directory_fd)\n            finally:\n                os.close(directory_fd)\n    finally:\n        temporary_path.unlink(missing_ok=True)"
+    }
+  ],
+  "scope": "One atomic writer; original new-source/private600 default and reviewed replaced-file mode via existing hook. No postreplacechmod/newatomicwriter/class. Dynamic aliases/external Python users not proven by AST; unchanged default preserves their contract.",
+  "private_mode_owner": {
+    "path": "src/agent_comms/private_path.py",
+    "line": 76,
+    "source": "class PrivateFileRole(PrivateRole):\n    permissions = 384\n\n    @classmethod\n    def accepts_kind(cls, mode: int) -> bool:\n        return stat.S_ISREG(mode)",
+    "consumer_derivations": [
+      "store_files._atomic_write_text default",
+      "GlobalSourceInstall.installation_mode"
+    ],
+    "mode_policy_declarations": 1,
+    "socket_mode_is_distinct_fact": true
+  }
+}

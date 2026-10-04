@@ -1,0 +1,43 @@
+{
+  "tool": "existing Node Acorn/acorn-walk",
+  "scope": "Lexical member/import evidence; dynamic SDK resolution read semantically",
+  "units": [],
+  "parse_omissions": [
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/dist/core/session-entry-store.js",
+      "error": "acorn.exports.parse is not a function"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+      "error": "acorn.exports.parse is not a function"
+    }
+  ]
+}

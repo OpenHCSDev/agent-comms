@@ -1,6 +1,8 @@
 # S4: Repeated-compaction retention evaluation
 
-**Source reviewed:** `4295d680`.
+**Historical plan baseline:** `4295d680`. Current measurement continuation: PR557;
+current S3 implementation: merged527, qualified functional02 on native960.
+The older baseline is not a request to rediscover or reimplement that capability.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 1 scaffold, step 4 native/model runs.**
 **Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* Decision, existing retained native fixture and lifecycle journeys.
 
@@ -13,6 +15,20 @@ and seven exact-answer questions per round: symbol, file, export root, goal,
 source revision, unresolved failure and input disposition. Later rounds supersede
 corrections, rename source, replace goal and change commit. They deliberately keep
 failure/input unresolved.
+
+The task-quality continuation adds frozen research and long-running-goal traces
+in `tests/fixtures/retention/`. `--scenario-file` decodes either authored oracle
+into the same `RecallScenario` used by exports and recorded-native scoring. Each
+has three authored source cuts, with retained valid alternatives, a later goal
+that revisits one, explicit corrections and continuing prohibitions. These are
+source fixtures; they are not three completed native compaction checkpoints.
+
+`Question.measurement` labels recall, prohibition, alternative and action-choice
+answers. `ScoreView` derives separate totals with the same exact-answer algorithm.
+A remembered identifier cannot hide a lost prohibition or invalid action choice
+in an aggregate score. The action score measures the frozen approved answer,
+not execution of an action against a runtime constraint. Runtime revision mass,
+provider prompt presence and model-quality margins remain unqualified.
 
 Question owns its expected answer and stale answers; RecallRound computes answer
 outcomes. ScoredRound/ScoredScenario derive counts through the shared ScoreView
@@ -35,6 +51,10 @@ than regex, substring credit or an LLM judge.
 python -m unittest discover -s tests -p test_compaction_retention_fixture.py -v
 python tests/compaction_retention_fixture.py
 python tests/compaction_retention_fixture.py --condition task-memory --answers answers.json
+python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/research.json --probe-prompts
+python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/goal.json --native-probes original-probes.json
+python tests/compaction_retention_fixture.py --recorded-run original-run.json
+python tests/compaction_retention_fixture.py --construction-plan --comparison-design design.json --sampling-seed 20261004
 ```
 
 All four labels use the same oracle: full-context, bounded, task-memory and
@@ -42,6 +62,65 @@ recent-only. For native/model evaluation, construct each condition in the runner
 and record its context digest.
 The scorer accepts recorded responses. Authored answers test the scorer; model
 retention requires actual model responses.
+
+`--construction-plan` uses the existing `PairedRecallDesign` and its pinned
+oracle to export each round's new history and unchanged public probe, plus
+prospective paired-arm order from an explicit sampling seed. It refuses source
+snapshots that rewrite the preceding prefix. History text is emitted once,
+rather than duplicated across every prospective sample and arm. Sampling and
+inference seeds are independent. This source export launches no model, creates
+no native cut/input and proves no intervention/capacity/registration/approval.
+Only the history/probe operands belong in the configured execution fixture;
+the complete plan includes private oracle metadata and is not a provider prompt.
+
+`--recorded-run` uses the existing RecordedNativeProbes input with `rounds` and
+unprobed `checkpoints` maps, plus optional original `stimuli` references. It validates distinct ancestor cuts in frozen round
+order through one borrowed original native source. Per-probe checkpoint,
+`sdk_context` and `context_manifest` references belong on RecordedNativeProbe.
+Checkpoint `registry_scope` references an original RegistryDocument capture;
+the document supplies its snapshot. Original certified `wire` corroborates task
+publications for scoped revision measurements. Missing original evidence stays
+unevaluated. SDK prompt presence is separate from final HTTP payload presence.
+Original NativeSummaryPayload and every original assistant step's PiUsage supply available counters;
+absent counters are never measured zeros. See
+[the receiving scope](../../checkpoints/repeated-retention-runner-20261002.md).
+
+RecordedNativeProbe exports `model_steps` from the same corroborated original
+input-to-answer branch. This includes assistant tool-call steps before the final
+answer. Each step keeps its original entry identity, timestamp and complete
+PiUsage record; unavailable usage remains unavailable, and missing optional
+counters retain the codec's omitted-field representation. The former final-only
+`answer_usage` projection is removed. The original
+answer record still retains its own usage. These are journaled completions, not
+a transport-attempt/retry count, actual billed spend or provider-wait duration.
+
+Recorded source inputs reuse `RecordedNativeProbe` in the run's `stimuli` map.
+The existing scenario construction owner supplies exact new-history `source_text`;
+the acquired original user/terminal must precede its cut or probe. An inherited
+probe also needs the original SDK prefix relationship. All stimulus/probe sources
+are borrowed in one reader group; missing original references remain unavailable.
+`source_inputs` reports their model steps separately. `recorded_workflow` requires
+those steps as well as the original summary/recall groups; `combined` retains the
+summary/recall scope. Shared source preparation is not independent arm cost.
+These measurements do not prove a condition installation, complete-history
+capacity, preregistration or a matched study. See
+[original stimulus binding](../../checkpoints/s4-original-stimulus-20261004.md).
+
+The submitted bounded SDK transform is reported only when its existing original
+converter/request binding is complete. Partial transform/source evidence remains
+visible; it does not become a bound request. The scorer groups that observation,
+source delivery and full-history eligibility against all frozen rounds, and the
+paired result retains both arms' evidence. Supplied condition labels and SDK
+previews still do not authenticate intended matched intervention construction.
+See [condition evidence](../../checkpoints/s4-condition-evidence-20261004.md).
+
+SDK construction now retains raw AgentMessages with the original SDK source
+witness. All four conditions use one selected SessionContext installation path,
+with current ContextBudget admission. Authored installed086 construction/restore
+and source/mutation/budget refusals qualify that SDK operation only. Actual
+submitted-condition selection still requires original converter/request binding;
+no matched interventions or model recall follow from installation. See
+[condition installation](../../checkpoints/s4-native-condition-installation-20261004.md).
 
 ## Required next infrastructure and owner boundaries
 
@@ -64,7 +143,7 @@ provider prompts or repair a history after seeing candidate results. Full-contex
 control runs only where the exact same history fits; explicitly mark ineligible
 runs rather than truncate that control silently (BOUND-2).
 
-Add coding, research and long-running-goal traces. Include corrections crossing
+Collect actual native checkpoints for the supplied coding, research and long-running-goal traces. Include corrections crossing
 summary segments and repeated split turns, Unicode/exact paths, and missing
 source evidence. At least three sequential real checkpoints per applicable trace.
 Randomize/repeat controls with same model and report sample counts/distributions.

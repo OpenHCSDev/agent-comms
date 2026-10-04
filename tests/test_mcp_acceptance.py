@@ -22,7 +22,6 @@ import time
 from contextlib import asynccontextmanager, contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -408,13 +407,8 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
             try:
                 await owner.new_session(cwd=str(project), mcp_servers=[])
-                attached = SimpleNamespace(
-                    _comms=owner._comms,
-                    sessions=SimpleNamespace(
-                        transcript=SimpleNamespace(snapshots=False, diffs=False),
-                        client=Attachment(),
-                    ),
-                )
+                attached = canonical_agent(owner._comms, auto_wake=False)
+                attached.on_connect(Attachment())
                 proxy = RuntimeProxy(attached, "project", owner._runtime.path)
                 await proxy.subscribe()
                 assert not attachment_settled.is_set()  # Initial idle replay is not this turn.
@@ -435,7 +429,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         )
                     )
                     await asyncio.wait_for(entered.wait(), TIMEOUT)
-                    assert owner.turns.active_turns.get("project")
+                    assert owner.turns.turn_state("project").busy
                     if case == "revoke_midturn":
                         await asyncio.to_thread(
                             _deny_via_simulated_user_pty,
@@ -445,7 +439,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                             env,
                             tmp_path / "pty-deny.log",
                         )
-                        assert owner.turns.active_turns.get("project")  # Genuine mid-turn denial.
+                        assert owner.turns.turn_state("project").busy  # Genuine mid-turn denial.
                     elif case == "disconnect":
                         if observer:
                             # Receipt of the RPC is not proof that the user saw
@@ -457,7 +451,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     release.set()
                     if case == "revoke_midturn":
                         assert await asyncio.to_thread(second_request.wait, 12)
-                        assert owner.turns.active_turns.get("project")
+                        assert owner.turns.turn_state("project").busy
                         # The final model response is still held at localhost:
                         # connection retirement cannot be Pi turn shutdown.
                         for pid in map(int, starts.read_text().splitlines()):
@@ -466,7 +460,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         (tmp_path / "midturn-retired.json").write_text(
                             json.dumps(
                                 {
-                                    "turnId": owner.turns.active_turns["project"],
+                                    "turnId": owner.turns.turn_state("project").managed_id,
                                     "finalModelResponseHeld": True,
                                     "mcpPidsAbsent": True,
                                 }

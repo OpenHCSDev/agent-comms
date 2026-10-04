@@ -4,19 +4,24 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from contextlib import ExitStack, asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from .child_process import AttachedChild
 from .native_attestation import NativeAttestation, PendingAttestation, SavedSessionReopenError
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
-from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
+from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
+from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
+    from .compaction_records import CompactionOperation
+    from .pi_vocabulary import CompactionReason
     from .selected_source import SessionRevision
+    from .owner_compaction_prepare import NativeWitness
 
 
 @dataclass
@@ -27,22 +32,31 @@ class PiSessionChild:
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
+    resources: ExitStack = field(default_factory=ExitStack, repr=False)
 
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
     @classmethod
-    async def start(cls, key, expected):
+    async def start(cls, key, attestation):
         launch, _ = key
-        proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
-        assert proc.stdout is not None and proc.stderr is not None
-        return cls(
-            proc,
-            PiRpcChannel(proc.stdout),
-            asyncio.create_task(cls.stderr_tail(proc.stderr)),
-            key,
-            PendingAttestation(expected),
-        )
+        with ExitStack() as resources:
+            environment = dict(launch.env)
+            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
+                address = resources.enter_context(PrivateSocketRole.address(
+                    Path(environment["AGENT_COMMS_PROJECT_SOCKET"])
+                ))
+                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
+            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
+            assert proc.stdout is not None and proc.stderr is not None
+            return cls(
+                proc,
+                PiRpcChannel(proc.stdout),
+                asyncio.create_task(cls.stderr_tail(proc.stderr)),
+                key,
+                attestation,
+                resources=resources.pop_all(),
+            )
 
     @staticmethod
     async def stderr_tail(stream: asyncio.StreamReader) -> str:
@@ -54,6 +68,7 @@ class PiSessionChild:
     async def close(self) -> None:
         await self.proc.stop()
         await asyncio.gather(self.stderr_task, return_exceptions=True)
+        self.resources.close()
 
     @asynccontextmanager
     async def failures(self):
@@ -78,20 +93,22 @@ class NativeCustody(ABC):
 
     retained = False
 
-    def reuse(self, key, session_file: str | None) -> PiSessionChild | None:
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+        return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,
+            environment=environment, session_file=session_file)
+
+    def reuse(self, key) -> PiSessionChild | None:
         return None
 
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
-    async def inspect_context(self, persistent, prepare):
-        await prepare()
-        return await persistent.custody.idle().inspect_context(persistent, prepare)
+    async def inspect(self, persistent, prepare, request):
+        """Inspect through this custody's legal acquisition/receiver capability."""
+        raise NativePiUnavailable("Native context requires an acquired native child")
 
-    async def expected(
-        self, launch, session_file, require_input_id
-    ) -> NativeSessionIdentity | None:
-        return None
+    async def expected(self, launch, require_input_id) -> NativeAttestation:
+        return launch.session.attestation()
 
     def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
         return successor if successor is not None else self
@@ -99,12 +116,19 @@ class NativeCustody(ABC):
     async def closed(self) -> NativeCustody:
         return self
 
-    def reopen(self, session_file: str) -> ReopenNative:
-        return ReopenNative(session_file)
+    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:
+        return ReopenNative(identity)
 
 
 class EmptyNative(NativeCustody):
     available = False
+
+    async def inspect(self, persistent, prepare, request):
+        # The runtime owner supplies its existing selected-session preparation:
+        # real saved launch/idle attestation/retention, never a priming prompt.
+        await prepare()
+        acquired = persistent.custody.idle()
+        return await acquired.inspect_acquired(persistent, request)
 
 
 class NativeCleanupFailed(RuntimeError):
@@ -120,30 +144,23 @@ class NativeCleanupFailed(RuntimeError):
 @dataclass
 class ReopenNative(NativeCustody):
     available = False
-    session_file: str
-    session_id: str | None = None
+    identity: NativeSessionIdentity
 
-    async def expected(self, launch, session_file, require_input_id):
-        if session_file != self.session_file or not require_input_id:
+    async def expected(self, launch, require_input_id):
+        if not require_input_id:
             raise SavedSessionReopenError(
                 "Saved native session requires explicit validated reopen."
             )
         try:
-            identity = await asyncio.to_thread(
-                validate_native_reopen,
-                launch.package,
-                session_file,
-                expected_session_id=self.session_id,
-            )
+            launch.session.attest(self.identity)
         except ValueError as error:
             raise SavedSessionReopenError(
                 "Saved native session failed strict reopen validation."
             ) from error
-        return NativeSessionIdentity(identity, session_file)
+        return PendingAttestation(self.identity)
 
-    def reopen(self, session_file: str) -> ReopenNative:
-        if session_file != self.session_file:
-            raise ValueError("Idle manager belongs to a different saved session")
+    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:
+        self.identity.require_same_session(identity)
         return self
 
 
@@ -168,8 +185,8 @@ class RetiringNative(NativeCustody):
             raise
         return self.successor
 
-    def reopen(self, session_file):
-        return self.successor.reopen(session_file)
+    def reopen(self, identity):
+        return self.successor.reopen(identity)
 
 
 @dataclass
@@ -178,11 +195,10 @@ class BorrowedNative(NativeCustody):
     successor: NativeCustody
     available = True
 
-    async def inspect_context(self, persistent, prepare):
-        from .pi_commands import AgentCommsInspectContext
+    async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with AgentCommsInspectContext().pending_response(
+        async with request.pending_response(
             self.child.reader,self.child.proc.stdin
         ) as response:
             return (await response).data.require_payload()
@@ -194,13 +210,10 @@ class BorrowedNative(NativeCustody):
             self.child,
         )
 
-    def reopen(self, session_file):
-        identity = self.child.attestation.identity
-        if identity is not None:
-            if identity.session_file != session_file:
-                raise ValueError("Idle manager belongs to a different saved session")
-            return ReopenNative(session_file, identity.session_id)
-        return self.successor.reopen(session_file)
+    def reopen(self, identity):
+        observed = self.child.attestation.require_identity()
+        observed.require_same_session(identity)
+        return ReopenNative(observed)
 
 
 @dataclass
@@ -221,24 +234,81 @@ class RetainedNative(NativeCustody):
         return self
 
     def selected(self, identity: NativeSessionIdentity, package: Path) -> RetainedNative:
-        if self.identity != identity or self.child.key[0].package != package:
+        if not self.identity.same_session(identity) or self.child.key[0].package != package:
             raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
         return self.idle()
 
-    async def inspect_context(self, persistent, prepare):
-        from .pi_commands import AgentCommsInspectContext
+    async def reload(self, witness: NativeWitness, operation: CompactionOperation,
+                     reason: type[CompactionReason]) -> None:
+        """Install this exact known commit through the acquired compaction owner.
+
+        The caller owns PersistentPiSession.external_write and its borrow lock.
+        The original manager opens and reconciles the real disk source, closes
+        its old entry store, and installs context through the native compaction
+        hook. Its SDK runtime, services and extension bindings remain acquired.
+        """
+        from .owner_compaction_prepare import PrepareCompactionHelper
+        from .pi_commands import AgentCommsRestoreCompaction
+        from .native_compaction_request import NativeIntent
+        from .selected_source import SessionRevision
+        from .session_fence import session_writer_fence
+
+        witness.require_same_session(self.identity)
+        # Use the existing whole-history preparation budget, not the cheap
+        # settings-query deadline. A refusal never authorizes another attempt.
+        async with asyncio.timeout(PrepareCompactionHelper.timeout_seconds):
+            # The commit's global resource has closed. Reload needs only the
+            # original per-session writer scope, in the same borrow->writer
+            # order used for normal execution, not another global BUS grant.
+            async with session_writer_fence(self.identity.session_file):
+                witness.require_current_file(self.identity.path)
+                request = AgentCommsRestoreCompaction(
+                    reconciliation=NativeIntent.read(operation).reconciliation(operation.commit_id),
+                    expected=operation.committed_outcome(), reason=reason, id=uuid4().hex,
+                )
+                response = await request.exchange(self.child.reader, self.child.proc.stdin, strict=True)
+                response.require_request(request)
+                attestation = PendingAttestation(self.identity)
+                response = await attestation.request.exchange(
+                    self.child.reader, self.child.proc.stdin, strict=True,
+                )
+                observed = attestation.accept(response)
+                witness.require_current_file(self.identity.path)
+                self.revision = SessionRevision.observe(self.identity.session_file).require_available()
+                self.child.attestation = observed
+
+    async def inspect(self, persistent, prepare, request):
+        # Reobserve this retained child through the same preparation/AgentInfo
+        # owner. An acquired child alone does not publish native usage.
+        await prepare()
+        acquired = persistent.custody.idle()
+        return await acquired.inspect_acquired(persistent, request)
+
+    async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
             current = persistent.custody.idle()
-            response = await AgentCommsInspectContext().exchange(
+            response = await request.exchange(
                 current.child.reader,current.child.proc.stdin
             )
             return response.data.require_payload()
 
-    def reuse(self, key, session_file):
-        if self.child.key == key and self.identity.session_file == session_file and self.current:
+    def reuse(self, key):
+        if self.child.key == key and self.current:
             self.child.attestation = PendingAttestation(self.identity)
             return self.child
         return None
+
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+        if self.current:
+            original, authentication = self.child.key
+            candidate = original.retained_managed(command, arguments,
+                worktree=worktree, environment=environment, session_file=session_file)
+            if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
+                original, authentication
+            ):
+                return original
+        return super().managed_launch(command, arguments, worktree=worktree,
+            environment=environment, session_file=session_file)
 
     def retire(self, successor=None):
         return RetiringNative(
@@ -247,7 +317,6 @@ class RetainedNative(NativeCustody):
             self.child,
         )
 
-    def reopen(self, session_file):
-        if self.identity.session_file != session_file:
-            raise ValueError("Idle manager belongs to a different saved session")
-        return ReopenNative(session_file, self.identity.session_id)
+    def reopen(self, identity):
+        self.identity.require_same_session(identity)
+        return ReopenNative(self.identity)

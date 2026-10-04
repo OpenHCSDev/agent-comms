@@ -42,8 +42,18 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
+    """Original identity and author coordinate, independent of disposition."""
     key: str
     origin: InputOrigin
+
+    def public_description(self) -> str:
+        return f"Original input {self.key} · {self.origin.declared_name}"
+
+    def public_text(self, comms) -> str:
+        from .input_disposition import InputDispositions
+
+        inputs = InputDispositions(comms.root / InputDispositions.filename).read()
+        return self.require_original(inputs).source_text
 
     def require_human_input(self):
         self.origin.require_human()

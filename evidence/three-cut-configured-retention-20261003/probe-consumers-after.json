@@ -1,0 +1,185 @@
+{
+  "declarations": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 35,
+      "name": "RecordedNativeProbes",
+      "bases": [],
+      "methods": [
+        "observe"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 230,
+      "name": "RecordedNativeProbe",
+      "bases": [],
+      "methods": [
+        "answer_for_input",
+        "read_sdk_context",
+        "sdk_request",
+        "prompt_presence",
+        "observe",
+        "read"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 198,
+      "name": "NativeEvidenceRead",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "require_path",
+        "open",
+        "borrow",
+        "close",
+        "observe",
+        "decode_rows",
+        "retained_task_facts",
+        "entry_index",
+        "branch",
+        "recorded_source_prefix",
+        "covered_prefix"
+      ]
+    }
+  ],
+  "imports": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 26,
+      "names": [
+        "RecordedNativeProbe"
+      ]
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 15,
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 31,
+      "names": [
+        "RecordedNativeProbes"
+      ]
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 32,
+      "names": [
+        "RecordedNativeProbe"
+      ]
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 21,
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 17,
+      "names": [
+        "RecordedNativeProbe"
+      ]
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 20,
+      "names": [
+        "RecordedNativeProbes"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 31,
+      "names": [
+        "RecordedNativeProbes"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 34,
+      "names": [
+        "RecordedNativeProbe"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 29,
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 61,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 85,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 56,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 62,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 211,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 210,
+      "name": "RecordedNativeProbe.answer_for_input"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 211,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 170,
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 180,
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 165,
+      "name": "RecordedNativeProbe.answer_for_input"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 175,
+      "name": "RecordedNativeProbes"
+    }
+  ],
+  "parse_omissions": [],
+  "resolution": "Lexical AST; runtime and external dynamic objects not resolved."
+}

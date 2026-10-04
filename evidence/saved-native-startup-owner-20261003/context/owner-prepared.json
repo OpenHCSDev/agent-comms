@@ -1,0 +1,30 @@
+{
+  "scope": "private saved-source owner for actual installed309 UI",
+  "root": "/home/ts/.cache/agent-scratch/m567ctx",
+  "source": "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl",
+  "root_id": "1814e6d08b424332bd2a9c0ed6cd5be0",
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3/node_modules/@earendil-works/pi-coding-agent",
+  "name": "context547",
+  "process": {
+    "pid": 2279262,
+    "start_time": 47871978
+  },
+  "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "core_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/comms.py",
+  "before_source_hashes": {
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl": "e864648e12beb2e7a376b447783235dc6149ed3d34b817e6bebd3b89ea440770",
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl.input-proof": "31339d72123405bd5015f48de43c10fec7fbdbe92ed61589cda18ae626055fcf"
+  },
+  "configured_model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "auto_wake": false,
+  "prompt_dispatched": false,
+  "reattached_original_private_root": false,
+  "unopened_refused": "Native context requires an acquired native child",
+  "native_process": {
+    "pid": 2279445,
+    "start_time": 47872344
+  },
+  "prepared_child_alive": true,
+  "prepared_context_rpc_sha256": "d0629dcb8b662c3bf78cca0bd98feb410f46f0f69d55ab3c552c5c99cfb0b02e"
+}

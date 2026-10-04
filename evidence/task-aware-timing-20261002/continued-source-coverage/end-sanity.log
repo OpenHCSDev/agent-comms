@@ -1,0 +1,2468 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.....................................    [100%]
+=================================== FAILURES ===================================
+__ test_continued_private_session_needs_no_fresh_object_and_preserves_history __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3d923c0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+
+    def test_continued_private_session_needs_no_fresh_object_and_preserves_history(continued):
+        journal, session, inputs, source = continued
+        before = session.read_bytes(), inputs.path.read_bytes()
+>       operation = journal.summaries.reserve(str(session), source)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_continued_private_session.py:65: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3d923c0>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_session0/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'c1fcf58bbc734888b341c85281dd3253', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[unknown] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33df250>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'unknown'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33df250>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta0/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '3a335f701e1045cd82859d0311545fae', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[unbound] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33defd0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'unbound'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33defd0>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta1/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'e2752a26bccd41ea80196035f68812b8', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[untracked] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33da780>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'untracked'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33da780>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta2/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '72c6196da4804c11b7cdcd43c25340f1', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[text] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33db230>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'text'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33db230>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta3/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'bb055eba35714c3cb95f825c55493883', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[extra-content-field] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd30055b0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'extra-content-field'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd30055b0>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta4/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '85d0eb53029b434ba6ba15fc677b49ed', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[null-signature] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd34eb8a0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'null-signature'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd34eb8a0>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta5/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'e8c372e8489c4430b29fdb57f7a743c4', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[signed-content] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd34eb350>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'signed-content'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd34eb350>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta6/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '35eb6984169c41ecbdee454b038b69a6', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[opaque-content] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33c7d50>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'opaque-content'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33c7d50>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta7/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'd773c708bea042f8bb88c629109e1a78', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[string-content] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33c7350>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'string-content'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33c7350>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta8/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'e149b83b848a4aa7a5f378d30ab9d97f', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[digest] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd30216d0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'digest'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd30216d0>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta9/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'dcd016840a49470eaecde9345cd7f646', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[revision] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33ffb60>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'revision'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd33ffb60>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta10/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '1035f49ac7fc4a0988b6cd795f5630d8', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+__ test_continued_private_uncertain_or_mismatched_history_never_reserves[raw] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3011b70>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'raw'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3011b70>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta11/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = 'f9021113be8f4ec89414865a03434b5b', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[duplicate] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3010c90>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'duplicate'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3010c90>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta12/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '9b54841b57064925bc9e8894551e9b33', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[foreign] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31cc6d0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'foreign'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "extra-content-field",
+            "null-signature",
+            "signed-content",
+            "opaque-content",
+            "string-content",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        saved = json.loads(inputs.path.read_text())
+        rows = saved["rows"]
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["kind"] = "bound_unknown"
+        if damage == "unbound":
+            rows["acp:old"]["native_id"] = None
+        if damage == "foreign":
+            rows["acp:old"]["owner"] = "someone-else"
+        if damage == "untracked":
+            del entries[1]["message"]["inputId"]
+        if damage == "text":
+            entries[1]["message"]["content"][0]["text"] = "different"
+        if damage == "extra-content-field":
+            entries[1]["message"]["content"][0]["extra"] = True
+        if damage == "null-signature":
+            entries[1]["message"]["content"][0]["textSignature"] = None
+        if damage == "signed-content":
+            entries[1]["message"]["content"][0]["textSignature"] = "signature"
+        if damage == "opaque-content":
+            entries[1]["message"]["content"][0]["type"] = "extension"
+        if damage == "string-content":
+            entries[1]["message"]["content"] = "old"
+        if damage == "digest":
+            entries[1]["message"]["inputDigest"] = "b" * 64
+        if damage == "duplicate":
+            entries.append(entries[1])
+        if damage == "raw":
+            journal.private_inputs.reserve(session, "b" * 32)
+        inputs.path.write_text(json.dumps(saved))
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if damage != "revision":
+            refresh_source(source, session)
+        with pytest.raises((CompactionJournalError, ValueError)):
+>           journal.summaries.reserve(str(session), source)
+
+tests/test_continued_private_session.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSummaries(journal=<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31cc6d0>)
+session_file = '/home/ts/wt/comms-retained-human-main-20261001/.artifacts/s1-coverage-sanity-20261002/test_continued_private_uncerta13/native-sessions/ffffffffffffffffffffffffffffffff/continued.jsonl'
+source = {'source': {'kind': 'selected_admission', 'owner': {'pid': 8872, 'start_time': 42639417}, 'incarnation': {'name': 'own...acts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}}
+operation_id = '6862c5023ed643f59ab85cc28d5c8bc9', fresh_session = None
+admission_generation = None, future_queue = None
+
+    def reserve(
+        self,
+        session_file: str,
+        source: SelectedSummarySource,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        envelope = source
+>       payload = envelope.journal_json()
+                  ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'journal_json'
+
+src/agent_comms/compaction_summaries.py:87: AttributeError
+__ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[None] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3cdae10>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = None
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[context] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3cdba10>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'context'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[unsettled] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd304e200>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'unsettled'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd304e830>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'foreign'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[no-marker] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3224410>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'no-marker'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[extended] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3224d70>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'extended'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+__ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[null] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd2febd10>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'null'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[opaque] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31c3a50>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'opaque'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:187: TypeError
+________ test_original_committed_cut_covers_inherited_prefix_only[None] ________
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd3194dd0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = None
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+_ test_original_committed_cut_covers_inherited_prefix_only[missing-operation] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31e40c0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'missing-operation'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+_ test_original_committed_cut_covers_inherited_prefix_only[unknown-operation] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31e5cc0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'unknown-operation'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+______ test_original_committed_cut_covers_inherited_prefix_only[summary] _______
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31e6580>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'summary'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+________ test_original_committed_cut_covers_inherited_prefix_only[cut] _________
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31e6ac0>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'cut'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+_______ test_original_committed_cut_covers_inherited_prefix_only[parent] _______
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31e7460>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'parent'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+____ test_original_committed_cut_covers_inherited_prefix_only[foreign-file] ____
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd31e6510>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'foreign-file'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+__ test_original_committed_cut_covers_inherited_prefix_only[untracked-suffix] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd324c130>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'untracked-suffix'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+____ test_original_committed_cut_covers_inherited_prefix_only[raw-unknown] _____
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f0bd324c440>, PosixPath('/home/ts/wt/comms-retained-hu...cts': [{'kind': 'input', 'source': {'kind': 'reserved', 'key': 'acp:new', 'sequence': None, 'owner': 'owner', ...}}]}})
+damage = 'raw-unknown'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_identity import NativeCommitIdentity
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:236: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_continued_private_session.py::test_continued_private_session_needs_no_fresh_object_and_preserves_history
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[unknown]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[unbound]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[untracked]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[text]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[extra-content-field]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[null-signature]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[signed-content]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[opaque-content]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[string-content]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[digest]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[revision]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[raw]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[duplicate]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[foreign]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[None]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[context]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[unsettled]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[no-marker]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[extended]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[null]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[opaque]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[None]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[missing-operation]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[unknown-operation]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[summary]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[cut]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[parent]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[foreign-file]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[untracked-suffix]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[raw-unknown]
+32 failed, 37 passed in 7.55s

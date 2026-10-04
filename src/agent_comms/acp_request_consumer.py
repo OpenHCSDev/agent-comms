@@ -76,5 +76,5 @@ class AcpRequestConsumer(MroDispatch):
         if self.session_id in self.agent.sessions.proxies:
             self.response = await self.forward(request)
             return
-        self.agent.inputs.send_now(self.session_id)
+        await self.agent.inputs.send_now(self.session_id)
         self.response = PromptResponse(stop_reason="end_turn")

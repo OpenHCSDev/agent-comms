@@ -10,12 +10,15 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TYPE_CHECKING
 
 from .agent_events import ToolStart
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
+
+if TYPE_CHECKING:
+    from .pi_payloads import ToolCallContent
 
 
 class NativeTool(DeclaredFamily, affix="Tool"):
@@ -75,6 +78,10 @@ class CodingTool(NativeTool):
 
     @abstractmethod
     def _parse_resource(self) -> FileClaimPath | None: ...
+
+    def matches_request(self, request: ToolCallContent) -> bool:
+        """Exact intended invocation, independent of call ID or execution success."""
+        return request.name == self.declared_name and request.arguments == self.arguments
 
     @classmethod
     def from_call(cls, name: str, arguments: dict[str, Any]) -> CodingTool:

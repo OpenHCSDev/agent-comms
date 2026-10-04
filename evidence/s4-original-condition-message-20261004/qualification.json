@@ -1,0 +1,25 @@
+{
+  "scope": "Private original S4 SDK transform/hash and recorded measurement readers; not configured request converter observation/model recall or study",
+  "source_head": "74707adbc3286b1b81d34dde52fdaedf4316977d",
+  "sanity": {
+    "command": "PYTHONPATH=src:tests python -m unittest test_recorded_retention_measurements test_compaction_retention_fixture",
+    "tests": 28,
+    "seconds": 2.111,
+    "exit_code": 0
+  },
+  "SDK": {
+    "command": "node tests/native_turn_context_contract.mjs <immutable2ea-package> <owned-scratch>/sdk --source-projections --summary-only",
+    "exit_code": 0,
+    "artifact_manifest": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+    "output_sha256": "dcb4662c803a9b4a79de686f988127d6291bb547ed4c8e9f7d2b3a818000a2b1",
+    "stderr_bytes": 0,
+    "original_transform_sha256": "f754b63c1524077155fa4ea215aa3a7a91603eb2daecbbec00d2e512e57e07b8",
+    "provider_calls": 0,
+    "journal_bytes_unchanged": true,
+    "scope": "Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline"
+  },
+  "runtime_native_changes": 0,
+  "new_model_inputs": 0,
+  "comparison_study": false,
+  "full_S4_complete": false
+}

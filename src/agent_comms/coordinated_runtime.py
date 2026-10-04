@@ -8,20 +8,22 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 from __future__ import annotations
 
 import threading
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .pi_vocabulary import ThinkingLevel
+from .agent_events import CompactionEvent
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
-from .native_pi import _private_session_dir, _trusted_package
+from .native_pi import NativePiRpcLaunch, _private_session_dir
 from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
-from .selected_turn import SelectedAttempt, SelectedConsideration
+from .selected_turn import SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 
 
@@ -40,6 +42,20 @@ class SelectedExecution:
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
+    _tracked_factory: Callable[..., NativePiRpcLaunch] = field(
+        init=False, repr=False, compare=False,
+    )
+
+    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+        """Consume the original pre-claim acquisition for each stage's launch.
+
+        Every stage rebuilds its complete source/configuration through the
+        executable factory acquired by validate before selecting a participant;
+        no native child, input proof or readiness is borrowed from a prior turn.
+        """
+        if package != self.native_package:
+            raise IdentityConflict("Selected launch differs from its execution package")
+        return self._tracked_factory(**options)
 
     def validate(self) -> None:
         if not self.opt_in:
@@ -60,7 +76,6 @@ class SelectedExecution:
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )
-        _trusted_package(self.native_package)  # before any claim or native reservation
         if (
             self.selected_existing_file_write is not None
             and type(self.selected_existing_file_write) is not SelectedExistingFileWrite
@@ -71,6 +86,7 @@ class SelectedExecution:
                 raise TypeError("selected tool requires a nominal owner intent")
             if self.selected_existing_file_write is not None:
                 raise IdentityConflict("selected tool cannot share an operator file plan")
+        self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
 
     def action(self, session: SelectedSession) -> SelectedAction:
         if self.selected_tool_intent is not None:
@@ -79,36 +95,30 @@ class SelectedExecution:
             return self.selected_existing_file_write
         return session.default_action()
 
-    async def run(self) -> CoordinatedTurn | None:
+    async def run(self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
         self.root = Path(self.root).absolute()
-        self.validate()
+        # Package acquisition belongs to this execution before it can select
+        # a claim. Join its blocking verification before that custody advances.
+        await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
-        with (
-            Coordination(str(self.root / "coordination.sqlite3")) as store,
-            SelectedParticipant.select(
+        with Coordination(str(self.root / "coordination.sqlite3")) as store:
+            async with SelectedParticipant.select(
                 comms,
                 store,
                 self.wire_root_id,
                 self.owner_name,
                 self.after_seq,
-            ) as participant,
-        ):
-            if participant is None:
-                return None
-            session = SelectedSession.prepare(
-                participant,
-                self.session_file,
-                self.fresh_private_enrollment,
-                self.selected_thinking_level,
-            )
-            session, ignored = await SelectedConsideration(participant).run(
-                self.native_package, session
-            )
-            if ignored is not None:
-                return ignored
-            attempt = SelectedAttempt.engage(participant)
-            return await attempt.run(
-                self.native_package, session, self.action(session), self.write_authority
-            )
+                on_compaction=on_compaction,
+            ) as participant:
+                if participant is None:
+                    return None
+                session = await SelectedSession.prepare(
+                    participant,
+                    self.session_file,
+                    self.fresh_private_enrollment,
+                    self.selected_thinking_level,
+                    self,
+                )
+                return await SelectedConsideration(participant).run(self, session)

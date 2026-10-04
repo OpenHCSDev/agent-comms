@@ -28,6 +28,7 @@ from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .registration import Registration
+    from .turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,6 +36,11 @@ class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck
     thread: Thread
     admission_generation: int
+
+    @property
+    def turn_lease(self) -> TurnLeaseFence:
+        """The admitted owner declaration determines its exact original lease."""
+        return self.thread.require_turn_lease()
 
     @classmethod
     def capture_local(cls, snapshot: RegistrySnapshot, name: str) -> RegistryOwner:
@@ -125,7 +131,7 @@ class GoalLaunchOwner(RegistryOwner):
     check_type = RegistryIdentityCheck
 
     def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> None:
-        name = snapshot.aliases.get(self.thread.name, self.thread.name)
+        name = snapshot.canonical_name(self.thread.name)
         canonical = replace(self, thread=replace(self.thread, name=name))
         canonical.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(name)

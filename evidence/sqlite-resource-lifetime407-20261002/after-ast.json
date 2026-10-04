@@ -1,0 +1,120 @@
+{
+  "revision": "0c859bc3ee523bdf960b91f962f791d72d313ac7",
+  "parser": "existing NRA audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omitted": []
+    },
+    {
+      "root": "tests",
+      "parsed": 357,
+      "omitted": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omitted": []
+    }
+  ],
+  "resource_and_metadata_calls": [
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 173,
+      "callee": "sqlite3.connect"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 72,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 110,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 78,
+      "callee": "sqlite3.connect"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 129,
+      "callee": "SchemaMeta.require_current"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 153,
+      "callee": "SchemaMeta.require_current"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 54,
+      "callee": "sqlite3.connect"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 223,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 160,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 100,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 447,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 520,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 129,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 168,
+      "callee": "RecoverySelection.project"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 175,
+      "callee": "SchemaMeta.require_current"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 348,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 353,
+      "callee": "RecoverySelection.project"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1525,
+      "callee": "CoordinationStore.observing"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 1520,
+      "callee": "CoordinationStore.observing"
+    }
+  ],
+  "removed_function_references": [],
+  "limits": "Dotted syntactic references are not dynamic resolution proof. Python roots only; external SQLite implementation and native JavaScript are not parsed. No nested-function duplicate attribution."
+}

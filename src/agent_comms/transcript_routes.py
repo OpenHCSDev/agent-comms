@@ -208,7 +208,6 @@ class TranscriptRoutes:
         from .input_disposition import InputDispositions
         from .native_transcript import NativeTranscript
         from .native_input_owner import RegistryOwner
-        from .private_bus_checkpoint import conversation_sources_unlocked
 
         if not routing.requires_annotation(published):
             return
@@ -242,10 +241,10 @@ class TranscriptRoutes:
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
             marks = ",".join("?" for _ in references)
-            originals = conversation_sources_unlocked(
-                source, lookup, f"w.seq IN ({marks})", tuple(ref.seq for ref in references),
+            originals = tuple(source.conversation_sources(
+                lookup, f"w.seq IN ({marks})", tuple(ref.seq for ref in references),
                 limit=len(references), ascending=True,
-            ) if references else ()
+            )) if references else ()
             if {item.message.reference for item in originals} != set(references) or len(set(published)) != len(published):
                 raise RelationViolationError("Publication is not its original seq/id relation")
             routing.require_publications(

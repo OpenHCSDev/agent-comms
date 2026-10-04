@@ -1,0 +1,80 @@
+{
+  "revision": "ab8fef1393b75374e6dcb972d5ae79a4c6892357",
+  "tool": "refactor-audit Package.load",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "parsed": 356,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 127,
+      "kind": "Attribute",
+      "source": "settings.boundary_current"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 57,
+      "kind": "AsyncFunctionDef",
+      "source": "async def boundary_current(self, retained, owner, registry):\n    return await self.reason.boundary_current(retained, self.boundary, owner, registry)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 58,
+      "kind": "Attribute",
+      "source": "self.reason.boundary_current"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 133,
+      "kind": "AsyncFunctionDef",
+      "source": "@classmethod\nasync def boundary_current(cls, retained, boundary, owner, registry):\n    return True"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 182,
+      "kind": "AsyncFunctionDef",
+      "source": "@classmethod\nasync def boundary_current(cls, retained, boundary, owner, registry):\n    return bool(boundary) and await asyncio.to_thread(lambda: retained.optional_boundary(owner, registry.snapshot()) == boundary)"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 579,
+      "kind": "Attribute",
+      "source": "optional.boundary_current"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 574,
+      "kind": "Attribute",
+      "source": "decision.boundary_current"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 576,
+      "kind": "Attribute",
+      "source": "optional.boundary_current"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 581,
+      "kind": "Attribute",
+      "source": "replace(optional, boundary=optional.boundary * 2).boundary_current"
+    }
+  ],
+  "limits": [
+    "Syntactic attribute names do not prove dynamic dispatch; native and generated code not parsed. Family semantic read covers each recorded boundary_current site."
+  ]
+}

@@ -149,9 +149,8 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
     def require_original(self, original_source: CertifiedSourceRead | None) -> Message:
         if original_source is None:
             raise RelationViolationError("Decision correction requires the original publication read")
-        from .private_bus_checkpoint import delivery_references_unlocked
 
-        delivery, = delivery_references_unlocked(original_source, (self.original,))
+        delivery, = original_source.references((self.original,))
         original = delivery.message
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
@@ -173,6 +172,14 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
     retains_authored_task = False
     permits_agent_revision = False
+    observes_subtask = False
+
+    def optional_boundary(self, message: Message) -> tuple[MessageReference, ...]:
+        """Only an explicit authored completion can request optional timing."""
+        return ()
+
+    def require_subtask(self) -> Subtask:
+        raise RelationViolationError("Original wire message has no subtask observation")
 
     def require_scoped_task(self) -> ScopedTaskDeclaration:
         raise RelationViolationError("Original wire message has no declared scoped task")
@@ -399,6 +406,38 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Subtask(ModelTaskDeclaration):
+    """Explicit completed/unfinished observation, not a turn or goal terminal.
+
+    The boolean is the original author's observation at the tool boundary. It
+    has no independently updated lifecycle: corrections replace the observation
+    through the same original wire lineage as decisions and constraints.
+    """
+    completed: bool
+    observes_subtask = True
+
+    def require_subtask(self):
+        return self
+
+    def require_previous(self, original):
+        return original.task.require_subtask()
+
+    def turn_scope_matches(self, owner, registry):
+        return owner.has_observed_task_turn(self.source_turn.resolved(registry), self.source_turn_id)
+
+    def applies(self, owner, registry):
+        return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
+
+    def optional_boundary(self, message):
+        return (message.reference,) if self.completed else ()
+
+    def retained_task_facts(self, message):
+        from .retained_task_facts import SubtaskTaskFact
+
+        return (SubtaskTaskFact(message),)
+
+
+@dataclass(frozen=True, kw_only=True)
 class HumanConstraintPin(ScopedTaskDeclaration):
     """Original human wording is referenced, never copied into a pin's body."""
     subject: MessageReference
@@ -462,10 +501,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.change.require_publication(self, registry, original_source)
 
     def require_wording_publication(self, registry, original_source):
-        from .private_bus_checkpoint import delivery_references_unlocked
         from .bus_publication import stable_thread_lookup
 
-        delivery, = delivery_references_unlocked(original_source, (self.subject,))
+        delivery, = original_source.references((self.subject,))
         delivery.message.sender_role.require_user()
         if delivery.audience.sender_lookup != stable_thread_lookup(self.source_user.created_at):
             raise RelationViolationError("USER pin differs from its original human author")
@@ -530,6 +568,10 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
 
     def require_decision(self):
         return self
+
+    def contains_alternative(self, value: str | None) -> bool:
+        """Membership in this declaration, not permission from every constraint."""
+        return value == self.chosen or value in self.rejected
 
     def require_previous(self, original):
         return original.require_decision()

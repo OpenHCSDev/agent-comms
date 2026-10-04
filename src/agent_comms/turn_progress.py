@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
+from functools import partial
 from typing import TYPE_CHECKING
 
 from acp.schema import (
@@ -17,18 +18,20 @@ from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
+from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
 from .messages import MessageType
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
+from .turn_lease import TurnState
 
 if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
-    from .turn_input_source import OriginalTurnInput
+    from .owned_turn import OwnedTurn
 
 
 @dataclass(kw_only=True)
@@ -57,11 +60,7 @@ class TurnProgress(events.AgentEventConsumer):
         runtime,
         emitted_errors,
         session_id,
-        thread,
-        turn_lease,
-        routing,
-        original: OriginalTurnInput,
-        checkpoint,
+        turn: OwnedTurn,
         finish_event,
         goals: TurnGoalAccount,
         sync_goals,
@@ -69,10 +68,7 @@ class TurnProgress(events.AgentEventConsumer):
         self._comms = comms
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
         self.runtime, self.emitted_errors = runtime, emitted_errors
-        self.session_id, self.thread = session_id, thread
-        self.turn_lease = turn_lease
-        self.routing, self.checkpoint = routing, checkpoint
-        self.original = original
+        self.session_id, self.turn = session_id, turn
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
@@ -86,16 +82,32 @@ class TurnProgress(events.AgentEventConsumer):
         )
 
     @property
+    def thread(self):
+        return self.turn.thread
+
+    @property
+    def turn_lease(self):
+        return self.turn.turn_lease
+
+    @property
+    def routing(self):
+        return self.turn.routing
+
+    @property
+    def original(self):
+        return self.turn.original
+
+    @property
+    def checkpoint(self):
+        return self.turn.checkpoint
+
+    @property
     def origins(self):
         return self.original.origins
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
-        from .thread_identity import TurnId
-        from .turn_context import RecordedContextTurn
-
-        turn = RecordedContextTurn(TurnId(self.turn_lease.turn_id), self.turn_lease.identity)
-        self.comms.bus.log.record_context(event.context.for_turn(self.thread.incarnation, turn))
+        await event.context.record(self.comms.bus.log, self.thread, self.turn_lease)
 
     @property
     def reply_targets(self):
@@ -145,18 +157,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ProviderUsage)
     async def provider_usage(self, event: events.ProviderUsage) -> None:
-        self.goals.provider_usage(event)
-
-    @handles(events.CompactionStart, events.CompactionEnd)
-    async def invalidate_context(self, event: events.CompactionEvent) -> None:
-        info = self.comms.agents.agent_info_of(self.thread_name)
-        self.comms.agents.set_agent_info(
-            self.thread_name,
-            model=info.model if info else None,
-            session_name=info.session_name if info else None,
-            context_used=None,
-            context_size=info.context_size if info else None,
-        )
+        await Coordination.run_worker(partial(self.goals.provider_usage, event))
 
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
@@ -165,8 +166,11 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.CommittedProgress)
     async def committed_progress(self, event: events.CommittedProgress) -> None:
+        await Coordination.run_worker(partial(self.publish_progress, event.text))
+
+    def publish_progress(self, progress: str) -> None:
+        """Join the committed notice and consume its streamed text together."""
         if self.reply_targets:
-            progress = event.text
             if progress and "".join(self.reply_parts) == progress:
                 # Pi committed this assistant message before tool work.
                 # Publish it once as visible, non-waking progress; the
@@ -177,11 +181,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        unknown_attempts = not self.inputs.dispositions.read().all_started(
+        document = await Coordination.run_worker(self.inputs.dispositions.read)
+        unknown_attempts = not document.all_started(
             self.inputs.turn_input_keys.get(self.session_id, set())
         )
         if event.ok is True and (
-            self.inputs.pending_followups(self.session_id) or unknown_attempts
+            self.inputs.pending_followups(self.session_id, document) or unknown_attempts
         ):
             # A final assistant stop can prove the original turn,
             # not an ACKed follow-up lacking its own user start.
@@ -193,7 +198,7 @@ class TurnProgress(events.AgentEventConsumer):
         if self.result is not None:
             event = replace(event, ok=False, text="Duplicate native terminal result")
         self.result = event
-        self.goals.done(event)
+        await Coordination.run_worker(partial(self.goals.done, event))
         return event
 
     @handles(events.InputStarted)
@@ -213,11 +218,8 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def before_agent_info(self, event: events.AgentInfo) -> None:
         session_file = event.session_file
-        if (
-            session_file
-            and self.comms.registry.require(self.thread_name).session_file != session_file
-        ):
-            self.comms.threads.attach_session(self.thread_name, str(session_file))
+        if session_file:
+            await self.turn.attach_native_session(session_file)
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
@@ -225,27 +227,30 @@ class TurnProgress(events.AgentEventConsumer):
     @handles(events.ToolEnd)
     async def tool_ended(self, event: events.ToolEnd) -> None:
         await self.sessions.sync_identity(self.session_id)
-        self.goals.tool_ended(event)
-
-    @property
-    def phase(self):
-        return self.comms.registry.require(self.thread_name).turn_state.phase
+        await Coordination.run_worker(partial(self.goals.tool_ended, event))
 
     async def transition(self, phase) -> None:
-        if self.phase == phase:
-            return
-        if self.comms.agents.transition_turn(self.turn_lease, phase):
-            state = self.comms.registry.require(self.thread_name).turn_state
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.transition_turn, self.turn_lease, phase
+        ))
+        await self.emit_turn_effects(states)
+
+    async def emit_turn_effects(self, states: Iterable[TurnState]) -> None:
+        for state in states:
             with self.publication_measurements.measuring():
                 await self.effects._emit_event(self.session_id, TurnTranscriptUpdate(state=state))
 
     @handles(events.NativePhaseChanged)
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
-        for observation in event.phase.request_observations:
-            record_request_progress(self.comms.root, self.turn_lease, observation,
-                                    native_process=event.native_process,
-                                    publication=self.publication_measurements)
-        await self.transition(self.phase.observed(event.phase))
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.observe_native_phase, self.turn_lease, event.phase
+        ))
+        await self.emit_turn_effects(states)
+
+    def record_request_progress(self, progress, native_process) -> None:
+        record_request_progress(self.comms.root, self.turn_lease, progress,
+                                native_process=native_process,
+                                publication=self.publication_measurements)
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:
@@ -281,7 +286,8 @@ class TurnProgress(events.AgentEventConsumer):
                     )
                     published.append(message.reference)
 
-    async def publish_result(self):
+    def publish_checkpoint(self):
+        """Close terminal publication and its original read before ACP delivery."""
         if self.result is not None and self.result.ok:
             self.publish_success()
         else:
@@ -317,15 +323,19 @@ class TurnProgress(events.AgentEventConsumer):
                     MessageType.ALERT,
                     notice=True,
                 )
+        return self.comms.transcripts.transcript_checkpoint(self.thread_name)
+
+    async def publish_result(self):
+        # Cancellation must join original sends, their annotation and the
+        # checkpoint before OwnedTurn can settle or release its lease.
+        checkpoint = await Coordination.run_worker(self.publish_checkpoint)
         await self.runtime.session_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TranscriptChangedUpdate(
-                        self.comms.transcripts.transcript_checkpoint(self.thread_name)
-                    )
+                    TranscriptChangedUpdate(checkpoint)
                 ),
             ),
         )

@@ -21,6 +21,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     # Original journal event time in Unix seconds; None is unrecorded, never now.
     timestamp: float | None = None
 
+    def as_context(self) -> TranscriptEvent:
+        """Non-text native evidence retains its own presentation declaration."""
+        return self
+
     @property
     def text_size(self) -> int:
         return 0
@@ -45,6 +49,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
 @dataclass(frozen=True)
 class TextTranscript(TranscriptEvent):
     text: str = ""
+
+    def as_context(self) -> ContextTranscript:
+        return ContextTranscript(self.text, timestamp=self.timestamp)
 
     @property
     def starts_activity(self) -> bool:
@@ -122,7 +129,9 @@ class AssistantTranscript(AgentTextTranscript):
 
 
 class NoticeTranscript(AgentTextTranscript):
-    pass
+    def as_context(self) -> NoticeTranscript:
+        # Native failures remain visible notices, including bounded triage.
+        return self
 
 
 @dataclass(frozen=True, kw_only=True)

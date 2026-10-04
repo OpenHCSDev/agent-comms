@@ -1,0 +1,26 @@
+{
+  "builder_head": "d2799ba63ce28b8c6a7a48d5a8fdf7a5c1abcbf7",
+  "reviewed_source": "38affa3c3b6ee7db03a82812f3d73e14de8b2e08",
+  "production_source": "bc10c16a7c71be8c03e5299625f9426aa9062a75",
+  "original960_manifest_sha256": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+  "frozen_native_sources": {
+    "stack/native-compaction-selected-summary.mjs": "6ba183ebcc56c168fbd58b7629f2eab37f6539a6c781e7d851d3b07a8701f7ba",
+    "stack/native-request-observation.mjs": "376f78f7fe90e1e9810e56b528a4dde331eae03b472ead2f28f7dba55a21ec2c",
+    "stack/native-request-observation.d.ts": "c34367013db36532374819b0b78739e15949a376220e4f848c17aba23458ae91",
+    "stack/patch-native-request-observation.py": "3519a5745a78f35f60fb04963e2a8a421cd1cb49676dad56086cabe349bfd2fa",
+    "stack/bin/prepare-pi-native": "518fb7c3e3d602811389d975cb785715809b4247909408d7d0d3c06a85c3febd"
+  },
+  "stock_recipe_sha256": "518fb7c3e3d602811389d975cb785715809b4247909408d7d0d3c06a85c3febd",
+  "capture_recipe_sha256": "7a50a8c03be289c904c868b4eb5a19ca9d1c8b01427f3ca1ee46df5170f6165b",
+  "capture_changes": [
+    "Fixed existing checkout stack_root",
+    "Remove existing target reuse/old-manifest check during pin derivation",
+    "Retain completed new stock assembly for matching pins"
+  ],
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "new_environment": false,
+  "new_worktree": false,
+  "provider_calls": 0,
+  "public_changes": false,
+  "native960_unchanged": true
+}

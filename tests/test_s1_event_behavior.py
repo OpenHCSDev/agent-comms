@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import AsyncExitStack
 from abc import abstractmethod
 from pathlib import Path
 
@@ -17,6 +17,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
+from agent_comms.transcript_updates import TurnTranscriptUpdate
 from test_backend_native_lifecycle import native_backend as native_backend
 
 
@@ -54,7 +55,7 @@ class ToolCase(EffectCase):
 class CompactionCase(EffectCase):
     def body(self):
         return (
-            ae.CompactionStart("test"),
+            ae.CompactionStart(),
             ae.CompactionProgress(chunk_index=1),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
@@ -72,7 +73,7 @@ class CompactionCase(EffectCase):
 class CompactionAbortCase(CompactionCase):
     def body(self):
         return (
-            ae.CompactionStart("test"),
+            ae.CompactionStart(),
             ae.CompactionEnd(aborted=True),
             ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
             ae.Chunk("answer"),
@@ -129,12 +130,8 @@ async def owner_turn(comms, tmp_path):
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
     try:
         async with AsyncExitStack() as resources:
-            with ExitStack() as permits:
-                assert execution.admit(permits)
-                execution.begin(resources)
-                execution.prepare_prompt()
-                execution.open_stream(resources, permits)
-                resources.enter_context(permits.pop_all())
+            async with AsyncExitStack() as permits:
+                assert await execution.acquire(resources, permits)
                 yield execution, execution.progress
     finally:
         await owner.shutdown()
@@ -185,7 +182,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
             assert comms.agents.activity_of(execution.thread_name).detail == "Compacting context"
     await progress.consume(ae.StreamSettled())
     assert execution.finish_event.is_set()
-    assert comms.registry.require(execution.thread_name).active_turn is None
+    assert comms.registry.require(execution.thread_name).turn_lease == execution.turn_lease
     assert comms.goals.goal_wait("waiting") is not None
     diagnostic = {"elapsed_ms": 3} if not value.successful else None
     await progress.consume(
@@ -217,11 +214,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         assert progress.terminal_failure["diagnostic"] == diagnostic
     await runner.settle_turn(
         execution.session_id,
-        execution.thread_name,
-        execution.turn_id,
         execution.turn_lease,
-        stream_settled=progress.settled,
-        terminal_fence=progress.terminal_fence,
     )
     assert comms.goals.goal_wait("waiting") is None
     assert comms.registry.require("waiting").goal.state.active
@@ -246,28 +239,15 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
 
     async def disconnected(session, event, **kwargs):
         await original(session, event, **kwargs)
-        if isinstance(event, ae.TurnSettled):
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             raise ConnectionError("client disconnected after receiving terminal event")
 
     monkeypatch.setattr(runner.effects, "_emit_event", disconnected)
-    kwargs = dict(stream_settled=progress.settled, terminal_fence=progress.terminal_fence)
-    if after_stream:
+    with pytest.raises(ConnectionError, match="client disconnected"):
         await runner.settle_turn(
             execution.session_id,
-            execution.thread_name,
-            execution.turn_id,
             execution.turn_lease,
-            **kwargs,
         )
-    else:
-        with pytest.raises(ConnectionError, match="client disconnected"):
-            await runner.settle_turn(
-                execution.session_id,
-                execution.thread_name,
-                execution.turn_id,
-                execution.turn_lease,
-                **kwargs,
-            )
     assert comms.goals.goal_wait("waiting") is None
     goal = comms.registry.require("waiting").goal
     assert comms.goals.release_waits_after_terminal_turn(progress.terminal_fence) == ()
@@ -359,7 +339,6 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
     import json
 
     from agent_comms.manual_compaction_bridge import compact_context
-    from agent_comms.transcript_updates import StartedTranscriptUpdate
 
     native = native_backend
     await native.run(
@@ -389,8 +368,8 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
 
     async def observe(session_id, event, **kwargs):
         await emit(session_id, event, **kwargs)
-        observed.append(type(event))
-        if isinstance(event, StartedTranscriptUpdate):
+        observed.append(event)
+        if isinstance(event, TurnTranscriptUpdate) and event.state.busy and "waiting" not in comms.registry:
             comms.registry.declare(
                 Thread(
                     "waiting",
@@ -427,7 +406,11 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         assert comms.registry.require(name).active_turn is None
         assert comms.goals.goal_wait("waiting") is None
         assert comms.registry.require("waiting").goal.state.active
-        assert observed.index(ae.ManualCompactionEnd) < observed.index(ae.TurnSettled)
+        terminal = next(i for i, event in enumerate(observed)
+            if isinstance(event, TurnTranscriptUpdate) and not event.state.busy)
+        compaction_end = next(i for i, event in enumerate(observed)
+            if isinstance(event, ae.ManualCompactionEnd))
+        assert compaction_end < terminal
         assert len(native.saved_inputs()) == (3 if enabled else 2)  # No input replay.
     finally:
         await owner.shutdown()
@@ -465,7 +448,6 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
 ):
     from acp.schema import TextContentBlock
 
-    from agent_comms.transcript_updates import StartedTranscriptUpdate
 
     owner = CommsAgent(
         comms,
@@ -481,8 +463,8 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
 
     async def observed(session_id, event, **kwargs):
         await emit(session_id, event, **kwargs)
-        events.append(type(event))
-        if isinstance(event, StartedTranscriptUpdate):
+        events.append(event)
+        if isinstance(event, TurnTranscriptUpdate) and event.state.busy and "waiting" not in comms.registry:
             comms.registry.declare(
                 Thread(
                     "waiting",
@@ -496,7 +478,7 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
                 "waiting",
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
             )
-        if isinstance(event, ae.TurnSettled):
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             assert comms.goals.goal_wait("waiting") is not None
             assert comms.registry.require(name).active_turn is None
 
@@ -508,7 +490,8 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
             )
         assert comms.goals.goal_wait("waiting") is None
         assert comms.registry.require("waiting").goal.state.active
-        assert events.count(ae.TurnSettled) == 1
+        assert sum(isinstance(event, TurnTranscriptUpdate) and not event.state.busy
+            for event in events) == 1
         assert any(row.body == "relay body" for row in comms.bus.log.full_history())
     finally:
         await owner.shutdown()

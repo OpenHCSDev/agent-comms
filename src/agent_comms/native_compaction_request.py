@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 from .compaction_records import CompactionOperation
+from .compaction_identity import NativeCommitIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
@@ -34,13 +35,6 @@ class NativeAuthority:
     def capture(cls, fd: int) -> NativeAuthority:
         held = os.fstat(fd)
         return cls(os.getpid(), str(held.st_dev), str(held.st_ino))
-
-
-@dataclass(frozen=True)
-class NativeCommitIdentity:
-    commit_id: str = field(metadata={"wire_name": "commitId"})
-    payload_digest: str = field(metadata={"wire_name": "payloadDigest"})
-    metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -104,6 +98,23 @@ class NativeIntent:
     witness: NativeWitness
     payload_digest: str = field(metadata={"wire_name": "payloadDigest"})
     metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
+
+    def require_committed_payload(self, operation: CompactionOperation, entry, outcome) -> None:
+        """The original intent owns marker and payload corroboration together."""
+        from .compaction_errors import CompactionJournalError
+
+        try:
+            self.witness.require_session(operation.session_file)
+        except ValueError as error:
+            raise CompactionJournalError("Original committed source cut differs") from error
+        if entry.details.agent_comms_commit != self.identity(operation.commit_id):
+            raise CompactionJournalError("Original committed source cut differs")
+        if (
+            entry.payload_digest(self.witness) != self.payload_digest
+            or entry.metadata_digest() != self.metadata_digest
+            or outcome.metadata_digest != self.metadata_digest
+        ):
+            raise CompactionJournalError("Original committed source payload differs")
 
     def journal_json(
         self, owner: OwnerCompactionAttestation, source: CompactionSource,

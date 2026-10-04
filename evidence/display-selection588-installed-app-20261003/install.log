@@ -1,0 +1,11 @@
+Using Python 3.14.2 environment at: /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002
+   Updating https://github.com/OpenHCSDev/agent-comms.git (5025c4ba84c5623f475706475fb7743ce0e8f156)
+    Updated https://github.com/OpenHCSDev/agent-comms.git (5025c4ba84c5623f475706475fb7743ce0e8f156)
+Resolved 9 packages in 1.83s
+   Building agent-comms @ git+https://github.com/OpenHCSDev/agent-comms.git@5025c4ba84c5623f475706475fb7743ce0e8f156
+      Built agent-comms @ git+https://github.com/OpenHCSDev/agent-comms.git@5025c4ba84c5623f475706475fb7743ce0e8f156
+Prepared 1 package in 237ms
+Uninstalled 1 package in 23ms
+Installed 1 package in 66ms
+ - agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@5e1575269bd20e87f6c03365619feeb0178a215d)
+ + agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@5025c4ba84c5623f475706475fb7743ce0e8f156)

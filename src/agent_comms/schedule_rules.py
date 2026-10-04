@@ -1,10 +1,11 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
 import asyncio
+from functools import partial
+from .coordinator import Coordination
 
 from acp import RequestError
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
     from .input_drain import InputDrain
+    from .turn_runner import TurnRunner
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,7 +27,7 @@ class SessionScheduleCheck(RuleCheck):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalScheduleCheck(SessionScheduleCheck):
-    turn_busy: Callable[[str], bool]
+    turns: "TurnRunner"
 
 
 class WakeScheduleCheck(SessionScheduleCheck):
@@ -48,12 +50,14 @@ class WakeScheduleCheck(SessionScheduleCheck):
             if ClosingScheduleRule().violated(self):
                 return
             async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
-                pending = inputs.pending_turns.pop(session_id, [])
-                owner = inputs.comms.registry.require(inputs.sessions.require(session_id))
+                snapshot = await Coordination.run_worker(inputs.comms.registry.snapshot)
+                owner = snapshot.require(inputs.sessions.require(session_id))
                 try:
-                    inputs.comms.registry.status(owner.name).require_running()
+                    snapshot.status(owner.name).require_running()
                 except RelationViolationError:
+                    inputs.pending_turns.pop(session_id, None)
                     continue
+                pending = inputs.pending_turns.pop(session_id, [])
                 goal = owner.active_goal
                 if goal is not None:
                     pending = [turn for turn in pending if turn.goal_id == goal.id]
@@ -83,7 +87,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     if goal is None:
                         raise
                     pending[0].require_dependency_wake(error)
-                    inputs.comms.goals.block_goal_after_failed_turn(
+                    await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
                         owner.name,
                         started_goal=goal,
                         expected_worktree=owner.worktree,
@@ -91,7 +95,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                             "Standby wake launch authority unavailable; inspect the UNKNOWN "
                             "input before explicit Retry. No input was replayed."
                         ),
-                    )
+                    ))
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
@@ -110,7 +114,7 @@ class OccupiedGoalScheduleRule(ReservationRule):
     explanation = "The session still owns a running turn."
 
     def violated(self, check):
-        return check.turn_busy(check.session_id)
+        return check.session_id in check.turns.turn_tasks
 
 
 class NativeInboxGoalScheduleRule(ReservationRule):

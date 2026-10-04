@@ -1,0 +1,91 @@
+{
+  "source_checkpoint": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "builder_source": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/agent-comms-import-fence.mjs",
+      "original_sha256": "f005662a026ddac9009c92d3af6a45818fe773b9f70528064e9f658fd1831ddb",
+      "new_sha256": "b732b504a3d92177443fc0c983dd8d0cca4c6d7f1c51c7393be6e5d057e759ec"
+    }
+  ],
+  "all_other_members_equal_immutable610_2ea": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138420949,
+  "new_donor_regular_files_single_links": true,
+  "new_donor_regular_files_readonly": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Sealed independent resources renamed into manifest-derived target; original prepare-pi-native verifies it. Sharing receiver uses only this NEW same-fence donor.",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Actual shared readonly SDK import + capture/root/child/mixed reads, original whole-tree trust and filesystem/import refusals. SDK authored private session, zero network/provider/input/public/UI; no historical/model/wholeturn/S4/oldpayload-reclamation claim. Native receiver retired; single NEW artifact keeper remains. Source-only sibling416/417 unchanged.",
+  "state": "PASS_COMPILED_SHARED_RESOURCE_SDK",
+  "normal_canonical_prepare_verified": true,
+  "qualification_sdk_original": {
+    "args": [
+      "node",
+      "/home/ts/wt/comms-task-aware-native-bundle-20261002/tests/native_turn_context_contract.mjs",
+      "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/receiver/node_modules/@earendil-works/pi-coding-agent",
+      "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/sdk-state",
+      "--recorded-readers",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.9664736860431731,
+    "stdout_sha256": "8f3509116bb2e18fd054fea2ff0f557959522e382dadc5f2b035fb0d26d72611",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sdk_scope": {
+    "scope": "actual-sdk-source-contract",
+    "provider_calls": 0,
+    "provider_bytes_identical": true,
+    "journal_bytes_unchanged": true,
+    "original_contribution_tokens": 1207,
+    "invalid_coordinates_refused": 5,
+    "transformation_observed_without_input_rejection": true,
+    "preview_not_recorded": true,
+    "kinds": [
+      "system_layer",
+      "compaction_summary",
+      "transcript",
+      "injection_message",
+      "tool_catalog"
+    ],
+    "session_file": "/home/ts/.cache/agent-scratch/native-resource608-shared-receiver-20261004/sdk-state/sessions/2026-10-04T01-29-18-536Z_01a10487-9bc7-7166-94e4-c9d85fde1a04.jsonl"
+  },
+  "sharing": {
+    "regular_files": 19190,
+    "shared_logical_bytes": 138420949,
+    "receiver_exclusive_regular_file_allocated_bytes": 0,
+    "directory_metadata_bytes_not_counted": true,
+    "old_payload_reclaimed_bytes": 0,
+    "measurement": "st_size for shared logical content; st_blocks only for receiver-exclusive regular inodes"
+  },
+  "existing_sharing_hook": {
+    "shared_files": 19190,
+    "shared_content_bytes": 138420949
+  },
+  "node_import_fence_cases": 16,
+  "python_whole_trust_refusal_cases": 13,
+  "python_original_argument_refusal_exit": 4,
+  "receiver_shape_first_refusal_before_sdk": true,
+  "negatives_retained": true,
+  "sdk_runs": 1,
+  "stock_assemblies": 1,
+  "receiver_directories_and_hardlinks_only": true,
+  "receiver_and_authored_fixture_removed_after_joined_exit": true,
+  "canonical_donor_single_links_after_receiver_retirement": true,
+  "canonical_donor_exclusive_regular_file_allocated_bytes_after_receiver_retirement": 194633728,
+  "old_artifact_commitments_verified_after": [
+    "4b7f66f396a342e523d631c753686789b61313c34c30d894ddf24b5a861caa26",
+    "fd4f6c7e57bd8f19fc4a14a8a8c3d6a196f68dc765de1538ba34443f0feab780",
+    "5ff27e716d8adc6cd1a2482fb90d35e24b4c4f837160f262ff05ee2c52769798",
+    "61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b"
+  ],
+  "private_journal_and_extension_source_single_link_contracts_unchanged": true,
+  "private_state_count_not_measured_before_cleanup": true
+}

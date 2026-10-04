@@ -1,0 +1,2462 @@
+{
+  "source_head": "12c1758e",
+  "modules": 726,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 407,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 119,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 141,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 144,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 275,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 219,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 62,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 193,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 375,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 384,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 34,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 100,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 42,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 31,
+      "node": "ClassDef",
+      "source": "@dataclass(kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 65,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 77,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 101,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 29,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 47,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 51,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 130,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 74,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 24,
+      "node": "ClassDef",
+      "source": "class NativeCompactionWriter:"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 41,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 121,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 198,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 27,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 100,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 136,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 211,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 293,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 27,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 35,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 35,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 44,
+      "node": "FunctionDef",
+      "source": "def package_tree_digest(root: Path) -> str:"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 116,
+      "node": "FunctionDef",
+      "source": "def verify_native_package(root: Path) -> None:"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 125,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 131,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 133,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 401,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 702,
+      "node": "FunctionDef",
+      "source": "def _trusted_package(package: Path) -> Path:"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 442,
+      "node": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 407,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 490,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 523,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 107,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 496,
+      "node": "Attribute",
+      "source": "cls.package_for_command"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 517,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 542,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 723,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 506,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 469,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 99,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 121,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 104,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 25,
+      "node": "ClassDef",
+      "source": "class NativeSessionPreparation(backend.TurnSession):"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 68,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 21,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 86,
+      "node": "ClassDef",
+      "source": "class SessionIdentityHelper(PiHelper):"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 51,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 89,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 35,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 42,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 40,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 59,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 72,
+      "node": "Name",
+      "source": "SessionIdentityHelper"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 71,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 119,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 161,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 36,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 96,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 59,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 48,
+      "node": "Name",
+      "source": "NativeCompactionWriter"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 38,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 69,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 91,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 119,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 168,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 295,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 878,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 882,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 873,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 880,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 333,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 334,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 359,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 360,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 55,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 97,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 196,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 272,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 31,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 30,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 171,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 98,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 105,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 119,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 173,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 120,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 87,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 91,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 242,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 246,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 305,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 96,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 101,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 109,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 165,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 163,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 246,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 187,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 208,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 60,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 67,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 451,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 179,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 64,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 114,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 70,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 63,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 92,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 82,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 86,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/explicit_private_owner_installed_journey.py",
+      "line": 47,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 78,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 77,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 88,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 42,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 29,
+      "node": "FunctionDef",
+      "source": "def package_for_command(command):"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 26,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 24,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 26,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 27,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 56,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 56,
+      "node": "Name",
+      "source": "package_for_command"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 57,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 154,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 156,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 168,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 29,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 32,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 50,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 75,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 42,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 265,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 544,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 70,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 133,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 75,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 144,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 483,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 122,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 89,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 25,
+      "node": "Attribute",
+      "source": "cohort_foreground._trusted_package"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 26,
+      "node": "Attribute",
+      "source": "coordinated_runtime._trusted_package"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 50,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 64,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 842,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 34,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 51,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 22,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 37,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 31,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 31,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 214,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 357,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2061,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 324,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 351,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 456,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 487,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 548,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 683,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 818,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 841,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 887,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1227,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1248,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1324,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1801,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1881,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1922,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2002,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2027,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 366,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 402,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 606,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 645,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 719,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 966,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 986,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1024,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1051,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1086,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1124,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1154,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1162,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1201,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1275,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1298,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1351,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1370,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1397,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1448,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1527,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1555,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1598,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1644,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1782,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1816,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1820,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1905,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1939,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1972,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1992,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2107,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2123,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 783,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1438,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1517,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1695,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1712,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1744,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 183,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 257,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 69,
+      "node": "Name",
+      "source": "NativeCompactionWriter"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 134,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 154,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 62,
+      "node": "Attribute",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 73,
+      "node": "Attribute",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 66,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 76,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 65,
+      "node": "Attribute",
+      "source": "native_package.verify_native_package"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 75,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 84,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 167,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 153,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 124,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 105,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 35,
+      "node": "Attribute",
+      "source": "runtime._trusted_package"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 68,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 48,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 120,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 46,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 70,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 31,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 34,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 41,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 52,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 65,
+      "node": "Attribute",
+      "source": "NativePiRpcLaunch.package_for_command"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 22,
+      "node": "Attribute",
+      "source": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 31,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 34,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 41,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 52,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 62,
+      "node": "Attribute",
+      "source": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 65,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 43,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 44,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 45,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 45,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 63,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 82,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 89,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 109,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 127,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 134,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 219,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 34,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 145,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 162,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1005,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 386,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 393,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 450,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 651,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 920,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1350,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 640,
+      "node": "Attribute",
+      "source": "native._trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 643,
+      "node": "Attribute",
+      "source": "native._trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 921,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 944,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 637,
+      "node": "Attribute",
+      "source": "native_package.package_tree_digest"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 243,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 292,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 303,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 332,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 432,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 458,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 511,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 530,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 545,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 568,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 121,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 143,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 150,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 325,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 380,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 411,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 598,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 623,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 647,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 668,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 716,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 737,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 772,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 792,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 215,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 242,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 332,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 52,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 151,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 258,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 397,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 594,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 283,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 56,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 57,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 96,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 60,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 79,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 96,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_snapshot_identity.py",
+      "line": 52,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 90,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 100,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 120,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 129,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 153,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 178,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 43,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 79,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 128,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 163,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 181,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 199,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 247,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 295,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 145,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 26,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 52,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 37,
+      "node": "Attribute",
+      "source": "runtime._trusted_package"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 142,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 300,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 50,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 277,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 318,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 251,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 511,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 987,
+      "node": "Name",
+      "source": "package_tree_digest"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 558,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 557,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 98,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 98,
+      "node": "Name",
+      "source": "SelectedSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 86,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 100,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 132,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 154,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 121,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 47,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 111,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 216,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 153,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 171,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 32,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 42,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 208,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 61,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 272,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 295,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 513,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 532,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1001,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1019,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 168,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 169,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 200,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 168,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 251,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "node": "Name",
+      "source": "NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 114,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 117,
+      "node": "Name",
+      "source": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 47,
+      "node": "Attribute",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 54,
+      "node": "Attribute",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 65,
+      "node": "Attribute",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 69,
+      "node": "Attribute",
+      "source": "native_pi.NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 169,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 204,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 265,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 114,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 142,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 232,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 240,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 304,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 312,
+      "node": "Attribute",
+      "source": "runtime.SelectedExecution"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 138,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 195,
+      "node": "Name",
+      "source": "SelectedExecution"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 92,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 143,
+      "node": "Name",
+      "source": "NativeSessionIdentity"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 85,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 86,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 171,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 43,
+      "node": "Name",
+      "source": "_trusted_package"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 45,
+      "node": "Name",
+      "source": "verify_native_package"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 73,
+      "node": "Name",
+      "source": "SelectedSession"
+    }
+  ],
+  "limits": "Lexical declaration/import/reference evidence; dynamic dispatch read semantically. Native unchanged915 dependency AST remains569; full source/child-key/route/admission/header/writer/resource lifecycle reviewed."
+}

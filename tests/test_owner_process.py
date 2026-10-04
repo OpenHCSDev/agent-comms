@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import time
 from dataclasses import replace
@@ -319,6 +320,178 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             assert not Path(f"/proc/{current.pid}/task/{current.pid}/children").read_text().strip()
         assert all(path.read_bytes() == content for path, content in source_files.items())
         assert not list(tmp_path.rglob("*.input-proof"))
+
+        # Same actual native owner batch, no new input/provider: an installation
+        # failure must retain its wire OFD and exact launches until disposition.
+        import errno
+        import hashlib
+        import subprocess
+        from agent_comms.owner_restart import StoppedOwnerFailure
+
+        tools = Path(__file__).parents[1] / 'tools' / 'cutover'
+        monkeypatch.syspath_prepend(str(tools))
+        from cutover_child import restore_stopped_batch
+        from publish_retained_summary import ReviewedArtifact
+
+        artifact = tmp_path / 'protected-original'
+        artifact.write_bytes(b'original retained content')
+        witness = ReviewedArtifact(artifact, hashlib.sha256(artifact.read_bytes()).hexdigest())
+        original_error = OSError(errno.EXDEV, 'Controlled stopped-install failure')
+
+        class FailedInstalledOperation(StoppedOwnerInstallation):
+            def require_selection(self, snapshot, owners):
+                cutover.require_selection(snapshot, owners)
+
+            def after_stopped(self, lifecycle):
+                raise original_error
+
+            def recover(self, stopped):
+                witness.require_original()
+                return restore_stopped_batch(stopped)
+
+        def wire_available():
+            # Another process/OFD, not recursive acquisition of our held FD.
+            probe = subprocess.run([sys.executable, '-c',
+                "import fcntl,sys; f=open(sys.argv[1],'a+b'); "
+                "fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)",
+                str(tmp_path / '.wire.lock')], capture_output=True)
+            return probe.returncode == 0
+
+        latest = tuple(comms.registry.require(name) for name in selected)
+        operation = FailedInstalledOperation()
+        with pytest.raises(StoppedOwnerFailure) as caught:
+            comms.owners.restart_owners(selected, cutover=operation)
+        failure = caught.value
+        assert failure.__cause__ is original_error
+        assert failure.operation is operation
+        assert all(not owner.process_alive for owner in latest)
+        assert not wire_available(), 'Failed operation lost original wire custody'
+        try:
+            restored = failure.recover()
+        finally:
+            failure.abandon()
+        assert wire_available()
+        for index, receipt in enumerate(restored):
+            current = comms.registry.require(receipt.thread)
+            ready(current)
+            launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
+            assert launch.binary == str(target_binary)
+            assert launch.arguments == settings[index][1]
+            assert launch.environment['BATCH_OWNER_CREDENTIAL'] == settings[index][2]
+            assert current.goal == original_goals[current.name]
+
+        # A changed original refuses restoration before any child/owner launch;
+        # the same failure still owns the wire until explicit stopped disposition.
+        current_batch = tuple(comms.registry.require(name) for name in selected)
+        with pytest.raises(StoppedOwnerFailure) as changed:
+            comms.owners.restart_owners(selected, cutover=operation)
+        artifact.write_bytes(b'committed target content')
+        try:
+            with pytest.raises(RuntimeError, match='Reviewed artifact changed'):
+                changed.value.recover()
+            assert not wire_available()
+            assert all(not owner.process_alive for owner in current_batch)
+            assert artifact.read_bytes() == b'committed target content'
+        finally:
+            changed.value.abandon()
+        assert wire_available()
+        assert all(path.read_bytes() == content for path, content in source_files.items())
+        assert not list(tmp_path.rglob('*.input-proof'))
+
+        # Exercise the actual one-shot publication member at the failure seam
+        # before its stopped .originals archive exists. Its inherited failed()
+        # must complete the existing RAM/OFD source handoff before unwinding.
+        import fcntl
+        from agent_comms.active_route import ActiveRoute, active_route_path
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.owner_cutover import PreserveOwnerRuntime
+        from agent_comms.owner_lifecycle import OwnerRestartSelection
+        import publish_retained_summary as publisher
+        from runtime_installation import PreserveRuntimeInstallation
+
+        home = tmp_path / 'publication-home'
+        home.mkdir(mode=0o700)
+        monkeypatch.setenv('HOME', str(home))
+        route = ActiveRoute(tmp_path, root_id, package)
+        route_file = active_route_path()
+        route_file.parent.mkdir(parents=True, mode=0o700)
+        route_file.write_text(json.dumps(FieldCodec.encode(route)))
+        route_file.chmod(0o600)
+        links = home / '.local/bin'
+        links.mkdir(parents=True)
+        prefix = Path(sys.prefix)
+        for command in publisher.COMMANDS:
+            (links / command).symlink_to(prefix / 'bin' / command)
+        monkeypatch.setattr(publisher, 'ROOT', tmp_path)
+        monkeypatch.setattr(publisher, 'LINKS', links)
+        original = tmp_path / 'goal_waits.json'
+        original.write_text('{}\n')
+        reviewed = publisher.ReviewedArtifact(original, publisher.digest(original))
+        cohort = publisher.ReviewedRetainedSummaryCohort(
+            prefix, Path(sys.executable), prefix, route, package,
+            reviewed, reviewed, (),
+        )
+
+        class EarlyFailedPublication(publisher.PublishRetainedSummary):
+            def require_selection(self, snapshot, owners):
+                cutover.require_selection(snapshot, owners)
+
+            def after_stopped(self, lifecycle):
+                assert not self.receipt.with_suffix('.originals').exists()
+                raise original_error
+
+        class ChangedFailedPublication(EarlyFailedPublication):
+            def after_stopped(self, lifecycle):
+                original.write_text('{"changed":true}\n')
+                super().after_stopped(lifecycle)
+
+        route_descriptor = os.open(route_file.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            fcntl.flock(route_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            for name in selected:
+                comms.owners.start(name)
+                ready(comms.registry.require(name))
+            before = comms.registry.snapshot()
+            captured = tuple(before.require_active(name) for name in selected)
+            audience = tuple(OwnerRestartSelection.capture(before, name) for name in selected)
+            receipt = tmp_path / 'early-publication.json'
+            receipt.write_text('{"phase":"preflight-complete"}\n')
+            operation = EarlyFailedPublication(
+                cohort, audience, captured, PreserveOwnerRuntime(),
+                PreserveRuntimeInstallation({}), route_descriptor, receipt,
+            )
+            with pytest.raises(StoppedOwnerFailure) as early:
+                comms.owners.restart_owners(selected, cutover=operation)
+            assert early.value.__cause__ is original_error
+            assert not receipt.with_suffix('.originals').exists()
+            assert json.loads(receipt.read_text())['phase'] == 'failed-install-original-runtime-restored'
+            assert wire_available(), 'Owned recovery did not retire its wire custody'
+            for prior in captured:
+                restored = comms.registry.require(prior.name)
+                ready(restored)
+                assert replace(restored, process_identity=prior.process_identity) == prior
+                assert restored.process_identity != prior.process_identity
+            assert original.read_text() == '{}\n'
+
+            before = comms.registry.snapshot()
+            captured = tuple(before.require_active(name) for name in selected)
+            audience = tuple(OwnerRestartSelection.capture(before, name) for name in selected)
+            refused_receipt = tmp_path / 'changed-publication.json'
+            refused_receipt.write_text('{"phase":"preflight-complete"}\n')
+            refused = ChangedFailedPublication(
+                cohort, audience, captured, PreserveOwnerRuntime(),
+                PreserveRuntimeInstallation({}), route_descriptor, refused_receipt,
+            )
+            with pytest.raises(StoppedOwnerFailure) as changed_publication:
+                comms.owners.restart_owners(selected, cutover=refused)
+            assert changed_publication.value.__cause__ is original_error
+            assert any('recovery refused' in note for note in changed_publication.value.__notes__)
+            assert all(not owner.process_alive for owner in captured)
+            assert original.read_text() == '{"changed":true}\n'
+            assert not refused_receipt.with_suffix('.originals').exists()
+            assert wire_available()
+        finally:
+            os.close(route_descriptor)
     finally:
         for name in ("batch-a", "batch-renamed", "batch-b"):
             try:
@@ -328,3 +501,41 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             if owner.process_alive:
                 comms.owners.stop(owner.name)
         assert all(not owner.process_alive for owner in originals)
+
+
+def test_native_configuration_retains_original_home_across_writable_fork(tmp_path, monkeypatch):
+    from agent_comms.owner_launch import RestartEnvironment
+
+    original = tmp_path / "original-home"
+    canonical = original / "credentials"
+    canonical.mkdir(parents=True)
+    auth = canonical / "auth.json"
+    auth.write_text("original credentials")
+    configuration = RestartEnvironment.inherit({
+        "HOME": str(original), "PI_CODING_AGENT_DIR": "~/agent",
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": "~/credentials",
+    })
+    revision = configuration.auth_revision()
+    fork = configuration.for_agent(tmp_path / "fork-policy")
+    monkeypatch.setenv("HOME", str(tmp_path / "different-home"))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "different-agent"))
+    assert fork.native_config == canonical
+    assert fork.agent_directory == tmp_path / "fork-policy"
+    assert fork.auth_revision() == revision
+    assert fork.encode_native() == {
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": str(canonical),
+        "PI_CODING_AGENT_DIR": str(tmp_path / "fork-policy"),
+    }
+    assert str(canonical / "models.json") in fork.settings_paths(tmp_path)
+    assert str(tmp_path / "fork-policy/settings.json") in fork.settings_paths(tmp_path)
+    assert auth.read_text() == "original credentials"
+
+
+def test_native_configuration_uses_original_pi_directory_when_not_explicit(tmp_path):
+    from agent_comms.owner_launch import RestartEnvironment
+
+    configuration = RestartEnvironment.inherit({
+        "HOME": str(tmp_path), "PI_CODING_AGENT_DIR": "~/configured-agent",
+    })
+    assert configuration.native_config == configuration.agent_directory == tmp_path / "configured-agent"
+    assert configuration.for_agent(tmp_path / "output").native_config == tmp_path / "configured-agent"

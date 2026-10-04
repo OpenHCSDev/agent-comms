@@ -20,6 +20,7 @@ from .claim_admission import (
     verify_selected_wake,
 )
 from .comms import Comms
+from .field_codec import FieldCodec
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeAdmission,
@@ -41,7 +42,7 @@ class CodingCall(NativeToolCall):
 
     @property
     def name(self) -> str:
-        return self.tool.declared_name
+        return FieldCodec.encode(type(self.tool))
 
     def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None:
         record_selected_terminal(directory, self.slot(input_id), self.slot(input_id))
@@ -118,9 +119,18 @@ class CodingToolOwner:
             )
             self.claims[canonical] = claimed
 
-    def finish(self) -> None:
+    async def finish(self) -> None:
+        """Only an owned claim set needs a worker and its SQLite resource."""
+        if not self.claims:
+            return
+        await Coordination.run_async(
+            self.store.session.path, self.release,
+            clock_ms=self.store.session.now,
+        )
+
+    def release(self, store: Coordination) -> None:
         release_selected_resources(
-            self.comms, self.store, self.admission, self.owner_name, tuple(self.claims.values())
+            self.comms, store, self.admission, self.owner_name, tuple(self.claims.values())
         )
         self.claims.clear()
 
@@ -139,8 +149,8 @@ class CodingToolMode(NativeToolMode):
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return CodingToolSocket(directory, token, self.owner)
 
-    def finish(self) -> None:
-        self.owner.finish()
+    async def finish(self) -> None:
+        await self.owner.finish()
 
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):

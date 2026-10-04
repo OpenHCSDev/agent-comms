@@ -1,0 +1,145 @@
+{
+  "source": "39705fd813dc8fd400c39a2a4da167d8958fd6fb",
+  "base": "b1e235e16c42c23649fabaa33b9b908f0388ad13",
+  "tools": [
+    "existing NRA SourceModule",
+    "AstParentIndex",
+    "AstExpressionProjection"
+  ],
+  "declared_roots": [
+    "src",
+    "tests",
+    "tools",
+    "extensions"
+  ],
+  "parsed_modules": 717,
+  "parse_omissions": [
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 50,
+      "error": "invalid syntax"
+    }
+  ],
+  "declarations": [
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 12,
+      "bases": [
+        "PiResponseData"
+      ],
+      "members": [
+        {
+          "name": "for_turn",
+          "async": false
+        },
+        {
+          "name": "record",
+          "async": true
+        }
+      ]
+    }
+  ],
+  "record_consumers": [
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 87,
+      "owner": "observe_context",
+      "call": "event.context.record(self.bus.log, self.owner.thread, lease)",
+      "awaited": true
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 95,
+      "owner": "observe_context",
+      "call": "event.context.record(self.comms.bus.log, self.thread, self.turn_lease)",
+      "awaited": true
+    }
+  ],
+  "record_forwarder_references": [
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 28,
+      "owner": "record",
+      "reference": "log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 35,
+      "owner": "test_silent_manifest_continuous_original_message_and_cold_projection",
+      "reference": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 50,
+      "owner": "test_silent_manifest_continuous_original_message_and_cold_projection",
+      "reference": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 76,
+      "owner": "test_recorded_context_history_retains_rename_and_original_predecessor",
+      "reference": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 77,
+      "owner": "test_recorded_context_history_retains_rename_and_original_predecessor",
+      "reference": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 84,
+      "owner": "test_recorded_context_history_retains_rename_and_original_predecessor",
+      "reference": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 86,
+      "owner": "test_recorded_context_history_retains_rename_and_original_predecessor",
+      "reference": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 300,
+      "owner": "complete_history_controls",
+      "reference": "service.bus.log.record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 306,
+      "owner": "complete_history_controls",
+      "reference": "service.bus.log.record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 292,
+      "owner": "complete_history_controls",
+      "reference": "service.bus.log.record_context"
+    }
+  ],
+  "semantic_boundaries": {
+    "record_context": "One bound WireLog.record_context passed as data to existing Coordination.run_worker; low-level source seeding still legitimate",
+    "events": "TurnContextObserved.context and ContextObserved.context annotate SAME NativeContextManifestData; ordinary PiEvent.apply yields projected agent event",
+    "leases": "Selected retains existing RegistryOwner.require_active_turn and Thread.require_turn_lease; ordinary consumes original TurnProgress constructor lease",
+    "resource": "Existing Coordination.run_worker uses executor and join_retirement; canonical WireLog owns locking and original sealed append",
+    "ambiguity": "AST spelling does not prove runtime dispatch/reflection/MRO; concrete owner methods and event annotations read; native JS and external dependency implementations unchanged"
+  },
+  "parser_supplement": {
+    "path": "src/agent_comms/tracked_turn.py",
+    "tool": "candidate-version Python3.14 standard ast, not a configured NRA3.14 environment",
+    "parsed": true,
+    "record_attributes": [],
+    "meaning": "Original tracked PiEvent dispatch/observe_event consumer remains; no additional context-record consumer"
+  },
+  "remaining_python_parse_omissions": [],
+  "production_delta": {
+    "files": [
+      "native_turn_context.py",
+      "selected_participant.py",
+      "turn_progress.py"
+    ],
+    "added_lines": 8,
+    "deleted_lines": 7,
+    "deleted_owner_helper": "SelectedParticipant.record_context"
+  }
+}

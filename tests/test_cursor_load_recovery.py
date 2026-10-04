@@ -86,7 +86,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         with _store_lock(comms.root / "bus.jsonl"):
             loaded = next(
                 update.envelope
-                for update in agent.cursors.trusted_metadata(owner.name, owner.name)
+                for update in (await agent.cursors.trusted_metadata(owner.name, owner.name))
                 if isinstance(update, CursorAdvancedUpdate)
             )
             assert loaded.observation.status == "unavailable"

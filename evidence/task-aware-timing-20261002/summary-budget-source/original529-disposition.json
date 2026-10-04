@@ -1,0 +1,13 @@
+{
+  "original_receipt": "/home/ts/wt/s52901/receipt.json",
+  "sha256": "bbe40e750825571dca5a355d717b4a6c8682d4e93b2fac0f17f136c47cd178aa",
+  "complete": false,
+  "input_replays": 0,
+  "public_inputs": 0,
+  "error": {
+    "type": "SelectedChildUnknown",
+    "detail": "Selected summary failed: Summary provider exceeded the native plan output token budget (retained 5534, reasoning 0, total 5534, budget 4096) (outcome uncertain; input not retried)"
+  },
+  "native_children_closed": true,
+  "source_unchanged": true
+}

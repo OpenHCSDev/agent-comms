@@ -1,0 +1,20 @@
+{
+  "source_checkpoint": "bf294eab8159556a91952496850ff16a4c900c30",
+  "accepted_native_source": "4ab53277ad3075978c36d75bbd010de5df169d00",
+  "native_production_equal": true,
+  "files": {
+    "stack/native-turn-context.mjs": "143e7335e68e5aa89d15c4cf5c012aed3ddf0d0a23c4194b64d1fcb3b00f8db0",
+    "stack/native-turn-context.d.ts": "e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba",
+    "stack/patch-native-turn-context.py": "87421c83bdaaba23462593ecf30af6cab3d1d7a2da0c56e990af9680b428096f"
+  },
+  "canonical_recipe_sha256": "518fb7c3e3d602811389d975cb785715809b4247909408d7d0d3c06a85c3febd",
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "purpose": "ONE matching603 requiredquery.parts native; artifactonly. Arendt owns original recorded read qualification.",
+  "original89_held": true,
+  "originalf3dd39_held": true,
+  "sharing_refactor_deferred": true,
+  "new_environment": false,
+  "new_worktree": false,
+  "provider_calls": 0,
+  "public_changes": false
+}

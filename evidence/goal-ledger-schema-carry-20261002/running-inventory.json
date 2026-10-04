@@ -1,0 +1,25 @@
+{
+  "classification": "running-source-transactional-inventory-not-stopped-carry",
+  "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/goal-private/goal_attempts.sqlite3",
+  "backup": "/home/ts/.cache/agent-scratch/comms-goal-ledger-schema-carry-20261002/goal-attempts.running-inventory.sqlite3",
+  "backup_sha256": "64a891bc5ab10bdba92cf9cebde97de052a5fce02409ffc10c114e6dccba8ce5",
+  "bytes": 221184,
+  "authentic_source_sha": "18da06e366cf6d297e888215af2c4c823ecce32f",
+  "exact_authentic_ddl": true,
+  "different_objects": [],
+  "rows": {
+    "failed_turn_evidence": 4,
+    "generation": 8,
+    "attempt_record": 36,
+    "goal_human_decision": 7,
+    "goal_provider_usage": 437,
+    "goal_attempt_schema": 1
+  },
+  "rows_sha256": "af6169b96c97ed631380c6dab742b13ab91afcf043634a147fe6af0be6ff92ce",
+  "integrity": [
+    [
+      "ok"
+    ]
+  ],
+  "foreign_key_errors": 0
+}

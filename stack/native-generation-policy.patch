@@ -53,7 +53,7 @@
                  params = nextParams;
              }
 +            new ContextBudget(model, context, responsesInput(params))
-+                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS);
++                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS, options);
              const requestOptions = {
                  ...(options?.signal ? { signal: options.signal } : {}),
                  ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
@@ -70,7 +70,7 @@
                  params = nextParams;
              }
 +            new ContextBudget(model, context, responsesInput(params))
-+                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS);
++                .admit(params, "max_output_tokens", OPENAI_RESPONSES_MIN_OUTPUT_TOKENS, options);
              const requestOptions = {
                  ...(options?.signal ? { signal: options.signal } : {}),
                  ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
@@ -87,7 +87,7 @@
              const sseHeaders = buildSSEHeaders(model.headers, options?.headers, accountId, apiKey, codexSessionId);
              const websocketHeaders = buildWebSocketHeaders(model.headers, options?.headers, accountId, apiKey, websocketRequestId);
 +            new ContextBudget(model, context, responsesInput(body))
-+                .admit(body, "max_output_tokens");
++                .admit(body, "max_output_tokens", 1, options);
              const bodyJson = JSON.stringify(body);
              const httpTimeoutMs = normalizeTimeoutMs(options?.timeoutMs);
              const websocketConnectTimeoutMs = normalizeTimeoutMs(options?.websocketConnectTimeoutMs);
@@ -104,7 +104,7 @@
                  params = nextParams;
              }
 +            new ContextBudget(model, context, googleInput(params))
-+                .admit(params.config ?? {}, "maxOutputTokens");
++                .admit(params.config ?? {}, "maxOutputTokens", 1, options);
              const googleStream = await retryGoogleRequest(() => client.models.generateContentStream(params), options);
              stream.push({ type: "start", partial: output });
              let currentBlock = null;
@@ -121,7 +121,7 @@
                  params = nextParams;
              }
 +            new ContextBudget(model, context, googleInput(params))
-+                .admit(params.config ?? {}, "maxOutputTokens");
++                .admit(params.config ?? {}, "maxOutputTokens", 1, options);
              const googleStream = await retryGoogleRequest(() => client.models.generateContentStream(params), options);
              stream.push({ type: "start", partial: output });
              let currentBlock = null;
@@ -139,7 +139,7 @@
                  params = { ...nextParams, stream: true };
 +            }
 +            new ContextBudget(model, context, anthropicInput(params))
-+                .admit(params, "max_tokens");
++                .admit(params, "max_tokens", 1, options);
 +            if (params.thinking?.type === "enabled" && params.thinking.budget_tokens >= params.max_tokens) {
 +                throw new BudgetAdmissionError("Thinking budget leaves no answer room after final request admission");
              }
@@ -158,7 +158,7 @@
                  commandInput = nextCommandInput;
              }
 +            new ContextBudget(model, context, bedrockInput(commandInput))
-+                .admit(commandInput.inferenceConfig ?? {}, "maxTokens");
++                .admit(commandInput.inferenceConfig ?? {}, "maxTokens", 1, options);
              const command = new ConverseStreamCommand(commandInput);
              const response = await client.send(command, { abortSignal: options.signal });
              responseRequestId = normalizeDiagnosticValue(response.$metadata.requestId);
@@ -193,7 +193,7 @@
      const signal = options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
 +    const wirePayload = toMistralWirePayload(payload);
 +    new ContextBudget(model, context, chatInput(wirePayload))
-+        .admit(wirePayload, "max_tokens");
++        .admit(wirePayload, "max_tokens", 1, options);
      const response = await (options?.fetch ?? globalThis.fetch)(url, {
          method: "POST",
          headers,
@@ -215,7 +215,20 @@
                  payload = nextPayload;
              }
 +            new ContextBudget(model, payload.context, payload.context)
-+                .admit(payload.options ?? {}, "maxTokens");
++                .admit(payload.options ?? {}, "maxTokens", 1, options);
              const response = await (options?.fetch ?? globalThis.fetch)(url, {
                  method: "POST",
                  headers: {
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
+@@ -444,7 +444,9 @@
+                 output: response.usage.output_tokens || 0,
+                 cacheRead: cachedTokens,
+                 cacheWrite: cacheWriteTokens,
+-                reasoning: response.usage.output_tokens_details?.reasoning_tokens || 0,
++                ...(response.usage.output_tokens_details?.reasoning_tokens !== undefined
++                    ? { reasoning: response.usage.output_tokens_details.reasoning_tokens }
++                    : {}),
+                 totalTokens: response.usage.total_tokens || 0,
+                 cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+             };

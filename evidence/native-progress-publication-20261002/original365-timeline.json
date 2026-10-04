@@ -1,0 +1,178 @@
+{
+  "wire_seq": 365,
+  "wire_id": "d5e82a0ffd5f",
+  "wire_ts": 1790936041.14469,
+  "owners": [
+    {
+      "owner": "compaction499-live-architecture-memory",
+      "full": {
+        "input_id": "798a8d021e9b9cec7f4e3b97b74bd5fe",
+        "entry_id": "a7858aae",
+        "native_input_offset_s": 43.72231,
+        "native_assistant_offset_s": 49.73131,
+        "dispatch_offset_s": 44.22931,
+        "first_event_offset_s": 44.56331,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 9.300088,
+        "native_callback_ms": 9.588251
+      },
+      "triage": {
+        "input_id": "c6427001d0d0ccf25206b4334e4747c9",
+        "entry_id": "18821145",
+        "native_input_offset_s": 15.84631,
+        "native_assistant_offset_s": 19.57931,
+        "dispatch_offset_s": 16.36131,
+        "first_event_offset_s": 16.68831,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 13.181369,
+        "native_callback_ms": 3.429312
+      },
+      "wire_reply_offset_s": 66.101749,
+      "triage_to_full_gap_s": 24.143,
+      "answer_to_wire_gap_s": 16.370439
+    },
+    {
+      "owner": "compaction501-live-architecture-memory",
+      "full": {
+        "input_id": "9e8a10dda7dd71f009ebe056417a7d70",
+        "entry_id": "b57b561c",
+        "native_input_offset_s": 44.62531,
+        "native_assistant_offset_s": 49.08531,
+        "dispatch_offset_s": 45.02231,
+        "first_event_offset_s": 45.35831,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 9.283295,
+        "native_callback_ms": 13.956951
+      },
+      "triage": {
+        "input_id": "7c9e86ed5c9ffc1d6c9a8ec313a06940",
+        "entry_id": "a6460fc2",
+        "native_input_offset_s": 16.17431,
+        "native_assistant_offset_s": 19.27631,
+        "dispatch_offset_s": 16.75731,
+        "first_event_offset_s": 16.99031,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 16.302805,
+        "native_callback_ms": 3.628229
+      },
+      "wire_reply_offset_s": 63.912249,
+      "triage_to_full_gap_s": 25.349,
+      "answer_to_wire_gap_s": 14.826939
+    },
+    {
+      "owner": "openhcs-audit-merged-boundaries",
+      "full": {
+        "input_id": "5fd4e65fd62999b28524a7ea271ffe13",
+        "entry_id": "3c488ef8",
+        "native_input_offset_s": 41.96531,
+        "native_assistant_offset_s": 47.34831,
+        "dispatch_offset_s": 42.57731,
+        "first_event_offset_s": 43.02931,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 6.191303,
+        "native_callback_ms": 9.831953
+      },
+      "triage": {
+        "input_id": "3b2b39f6342ff3be191b416e3d9c7616",
+        "entry_id": "c41a1a50",
+        "native_input_offset_s": 14.70231,
+        "native_assistant_offset_s": 19.71031,
+        "dispatch_offset_s": 15.26931,
+        "first_event_offset_s": 15.59531,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 10.015384,
+        "native_callback_ms": 8.973772
+      },
+      "wire_reply_offset_s": 63.280469,
+      "triage_to_full_gap_s": 22.255,
+      "answer_to_wire_gap_s": 15.932159
+    },
+    {
+      "owner": "openhcs-helper",
+      "full": {
+        "input_id": "4e3dd29677ccafc02b6de1800a520c79",
+        "entry_id": "60112b34",
+        "native_input_offset_s": 36.80931,
+        "native_assistant_offset_s": 43.07431,
+        "dispatch_offset_s": 37.25531,
+        "first_event_offset_s": 37.53131,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 2.592667,
+        "native_callback_ms": 8.187861
+      },
+      "triage": {
+        "input_id": "1ca11d1a148e3ba8f8ba3f3c15e01a74",
+        "entry_id": "c702609e",
+        "native_input_offset_s": 11.67931,
+        "native_assistant_offset_s": 14.82931,
+        "dispatch_offset_s": 12.25431,
+        "first_event_offset_s": 12.55931,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 6.446968,
+        "native_callback_ms": 5.224975
+      },
+      "wire_reply_offset_s": 51.244568,
+      "triage_to_full_gap_s": 21.98,
+      "answer_to_wire_gap_s": 8.170258
+    },
+    {
+      "owner": "openhcs-helper2",
+      "full": {
+        "input_id": "dea775f50627c4959f13ee9f61c51695",
+        "entry_id": "94bf9b7f",
+        "native_input_offset_s": 41.81931,
+        "native_assistant_offset_s": 47.09131,
+        "dispatch_offset_s": 42.23331,
+        "first_event_offset_s": 42.57031,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 5.544599,
+        "native_callback_ms": 13.792138
+      },
+      "triage": {
+        "input_id": "94918133545978a49c308260e960afec",
+        "entry_id": "cc591c66",
+        "native_input_offset_s": 15.03331,
+        "native_assistant_offset_s": 18.37031,
+        "dispatch_offset_s": 15.44631,
+        "first_event_offset_s": 15.69031,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 13.810823,
+        "native_callback_ms": 3.709501
+      },
+      "wire_reply_offset_s": 58.3286,
+      "triage_to_full_gap_s": 23.449,
+      "answer_to_wire_gap_s": 11.23729
+    },
+    {
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "full": {
+        "input_id": "651df2b51ab3860a357928887ac2985a",
+        "entry_id": "50a1301b",
+        "native_input_offset_s": 35.31131,
+        "native_assistant_offset_s": 41.68431,
+        "dispatch_offset_s": 35.87631,
+        "first_event_offset_s": 36.30331,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 4.003263,
+        "native_callback_ms": 13.702483
+      },
+      "triage": {
+        "input_id": "079ad1b786b57ff50bdc7f521a1b2527",
+        "entry_id": "39478a78",
+        "native_input_offset_s": 11.19331,
+        "native_assistant_offset_s": 14.93031,
+        "dispatch_offset_s": 11.82731,
+        "first_event_offset_s": 12.17831,
+        "native_request_samples": 14,
+        "finished_receipt_lag_s": 4.580797,
+        "native_callback_ms": 4.019687
+      },
+      "wire_reply_offset_s": 52.933644,
+      "triage_to_full_gap_s": 20.381,
+      "answer_to_wire_gap_s": 11.249334
+    }
+  ],
+  "limits": [
+    "Journal user\u2192assistant includes native preparation/transport/provider/callback; request spans separate dispatch/first_event; no fabricated provider queue duration. Parent receipt lag compares same-host native and CPython monotonic_ns, exact process custody retained in originalrecords. No CPU sampling for original365; registry writes confirmed by source relation, not historical per-write profiler attribution."
+  ]
+}

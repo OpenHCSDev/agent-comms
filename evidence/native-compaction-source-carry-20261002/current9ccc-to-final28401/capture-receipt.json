@@ -1,0 +1,81 @@
+{
+  "classification": "consistent-readonly-current-public9ccc-cohort-not-public-stopped-grant",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "source_package": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "interpreter": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/bin/python",
+  "source_versions": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "source_declaration_sha256": "7fd29c451778b8b8e1aae06da8e485666fc215e6fa449bf60a60154606606206",
+  "originals": [
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/coordination.sqlite3",
+      "sha256": "e90202c6eb4ac312378d44c14587cadce8477bed3f820480035cc58d166a8b98",
+      "revision": {
+        "identity": {
+          "device": 2083,
+          "inode": 3997241
+        },
+        "size": 3448832,
+        "mtime_ns": 1790926850376230557,
+        "ctime_ns": 1790926850376230557
+      }
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native_prompt_bindings.sqlite3",
+      "sha256": "c51378fe794ad82ae9ef3641c513d3dfd2ff3aaf2d83af3ee20551debd87e69b",
+      "revision": {
+        "identity": {
+          "device": 2083,
+          "inode": 3994459
+        },
+        "size": 208896,
+        "mtime_ns": 1790920218708311742,
+        "ctime_ns": 1790920218710311780
+      }
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3",
+      "sha256": "bf79042875f7bc399b4fd31854846d7a002276c5e8d49ee4b07cf55354316edf",
+      "revision": {
+        "identity": {
+          "device": 2083,
+          "inode": 3996791
+        },
+        "size": 446464,
+        "mtime_ns": 1790920221263361438,
+        "ctime_ns": 1790920221263361438
+      }
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/goal-private/goal_attempts.sqlite3",
+      "sha256": "1befd181b44ed3884d02154526dbf38d8b57bfdcadef0ace00f6a6db98224080",
+      "revision": {
+        "identity": {
+          "device": 2083,
+          "inode": 4589859
+        },
+        "size": 237568,
+        "mtime_ns": 1790926556995927714,
+        "ctime_ns": 1790926557015928095
+      }
+    }
+  ],
+  "private_logical_backups": {
+    "native_prompt_bindings.sqlite3": "5f18802f306cae19147ebef5c430e95b4fb8ba02085b54a9920b977000cb5759",
+    "compaction-commits.sqlite3": "87dd3ae4e688ac769526ce41e333b46b2d75c7c097be4c29fe94b456e1f87e4c",
+    "coordination.sqlite3": "0806bd0974602d12614c28b8b5c45c51739e98f121e05e0f8ba479139b3ec30a",
+    "goal-private/goal_attempts.sqlite3": "e1a1e7ea80bd9f267d56bb303b99d7fc79f34ca1e6410a1360d219ed8956457d"
+  },
+  "raw_preimages": "/home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/current9ccc-historical01/public-raw-preimages",
+  "private_root": "/home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/current9ccc-historical01/private-original",
+  "read_custody_seconds": 0.1872572669526562,
+  "consistency": "overlapping rollback SHARED SQLite snapshots plus existing atomic-binding snapshot lock; held-FD original revision and exact byte hashes verified before release",
+  "public_stops": 0,
+  "public_writes": 0,
+  "provider_calls": 0,
+  "input_replays": 0
+}

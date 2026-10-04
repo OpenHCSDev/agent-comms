@@ -1,0 +1,32 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_existing_gateway_restart_returns_only_redacted_owner_dto _________
+
+root = PosixPath('/var/tmp/rg-client-r4z5gfiq/retained-source-retained-source-retained-source-retained-source-retained-source-retained-source-retained-source-retained-source-')
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="gateway requires Linux SO_PEERCRED")
+    async def test_existing_gateway_restart_returns_only_redacted_owner_dto(root: Path) -> None:
+        from agent_comms.coordinator import Coordination
+        from agent_comms.coordination_tables.executions import ExecutionOrigin
+        with Coordination(root / "coordination.sqlite3") as store:
+            store.participants.register("a", "Alice", "Alice", committed=True)
+            store.executions.create("SECRET_EXECUTION", ExecutionOrigin.ACP, "a", "Alice", 2)
+        database = root / "coordination.sqlite3"
+        initial = (database.stat().st_ino, database.stat().st_size, database.stat().st_mtime_ns)
+        gateway = RecoveryGateway(root)
+        for _ in range(2):
+            await gateway.start()
+            try:
+                view = await read_gateway_projection(gateway.path, "Alice")
+                assert view["availability"] == "available"
+                assert view["owner"] == "Alice"
+>               assert view["current"]["status"] == "pending"
+E               AssertionError: assert 'queued' == 'pending'
+E                 
+E                 - pending
+E                 + queued
+
+tests/test_recovery_gateway_client.py:52: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_recovery_gateway_client.py::test_existing_gateway_restart_returns_only_redacted_owner_dto
+1 failed, 1 passed in 1.59s

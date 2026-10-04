@@ -1,0 +1,95 @@
+{
+  "complete": true,
+  "completion": "Original installed02 artifacts scored after PathText annotation correction; raw serialization failure preserved; no native/input restart",
+  "receiving_core": "701843fd959d12504cb1fd3ea57dc7dcfadc5d4c",
+  "native_manifest": "51bff517be67ae98213760beebd2c070591e5df61cb2c9ebbf87cacbf9f039ab",
+  "native_tree": "e74115621526343102e3f7074a1ddfda406c2db4d1fe94029030cdc09f47e68d",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "source_bytes": 42580611,
+  "original_source_unchanged": true,
+  "native_children_closed": true,
+  "installed_run_seconds": 30.11261764797382,
+  "original_budget_observations": 1,
+  "exact_manifest_request": true,
+  "request_id": "489d2c60-3bd4-448f-ab25-068c9fa2569b",
+  "budget": {
+    "evaluated": true,
+    "observations": [
+      {
+        "requestId": "489d2c60-3bd4-448f-ab25-068c9fa2569b",
+        "sessionId": "01a100e4-7e3c-714c-b782-115fcd9ac780",
+        "inputId": "3752516274b4109d525825cf7257a6fc",
+        "startedAtMs": 1791016354070,
+        "observedAtMs": 1791016354542,
+        "monotonicNs": "491993719857960",
+        "elapsedMs": 472.202113,
+        "callbackMs": 0.120027,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.120027,
+        "stage": "budget_admission",
+        "detail": "Model request budget admitted",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "",
+        "model": {
+          "kind": "reported",
+          "contextWindow": 272000,
+          "provider": "openai-codex",
+          "id": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol",
+          "maxTokens": 128000
+        },
+        "estimatedInputTokens": 137202,
+        "availableTokens": 134798,
+        "outputTokenField": "max_output_tokens",
+        "minimumOutputTokens": 1
+      }
+    ],
+    "scope": "Original ContextBudget admission after payload hooks; not provider token counts or HTTP bytes",
+    "reason": "Original admitted request calculations"
+  },
+  "source_coverage": {
+    "evaluated": true,
+    "scope": "JournalProvenance entry membership, not transformed message-byte equivalence",
+    "original_message_entries": 9588,
+    "included_message_entries": 94,
+    "unreferenced_message_entries": 9494,
+    "complete_message_reference_coverage": false,
+    "full_context_capacity": {
+      "evaluated": false,
+      "reason": "Current request admission does not establish complete-history construction or provider-token capacity"
+    }
+  },
+  "original_artifact_hashes": {
+    "original-inputs.private.json": "d02aa54794828133c2f55a82536a9764cde637599508f6f4b4e5d74a2247dcf7",
+    "original-manifest.private.json": "cc636370eba1ecfb6a65b6e4f2701d1e164a2ef88e2f68a214dfe27d872e6d4c",
+    "e375bb0542a74ba4b953800d846f44b8.requests.jsonl": "5df5a22340b7d4556e09d235d9102c131ef5ca5b35b7e1b5fa8e3468fc3c5a29",
+    "2026-10-03T08-32-16-955Z_01a100e4-7e3c-714c-b782-115fcd9ac780.jsonl": "3b947b95bea885488b99ce618151c47cd72556945ce7a3bdf47f7785868f46ce",
+    "recorded-probe.private.json": "1179570c67bef717d87386c137f22a0e5b2b68b3dbc96e18bf0a2b1e250bf408",
+    "request-construction.private.json": "477e69f751f72ca3bbb21dde5ae6825d11589c0e63b27e3d9b04be626a16ee9b"
+  },
+  "public_inputs": 0,
+  "input_replays": 0,
+  "provider_inputs": 1,
+  "additional_provider_calls": 0,
+  "condition_intervention_evaluated": false,
+  "final_HTTP_bytes_evaluated": false,
+  "action_validity_evaluated": false,
+  "model_recall_evaluated": false,
+  "raw_driver_failures": [
+    {
+      "stage": "installed01",
+      "kind": "not_sent",
+      "provider_calls": 0,
+      "reason": "Registry-only fixture missed current participant registration"
+    },
+    {
+      "stage": "installed02",
+      "reason": "Unsupported JSON value: PosixPath",
+      "point": "After ACP end_turn+exact marker, SDK/InputDoc/manifest acquisition and RecordedNativeProbe.read; artifact serialization only"
+    }
+  ]
+}

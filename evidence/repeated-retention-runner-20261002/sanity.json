@@ -1,0 +1,24 @@
+{
+  "scorer_controls": 14,
+  "measurement_controls": 3,
+  "additional_provider_calls": 0,
+  "source_hashes": {
+    "tests/retained_native_fixture.py": "abd443bb33bea8e74c4bc613f715680334db36d10091172eeea6a50afa66e5d6",
+    "tests/compaction_retention_fixture.py": "1a9be4c37f41133ff91eb2870f98cd4db5a9dfedc5c66b7cae8e2adf7072dad4",
+    "tests/test_recorded_retention_measurements.py": "779b2b03bc6bbf1751db6c3eec537662a06655e1a1e07a1324f31dbc77b49747",
+    "tests/test_compaction_retention_fixture.py": "59b71fb98e8fc3f152fb7e6a0c9428df06f63865acbe95ba5b7b887f7e9dbc40"
+  },
+  "raw_original_consumer": ".artifacts/557-original-record-reader/installed-original-consumer.log",
+  "raw_controls": ".artifacts/557-original-record-reader/controls-final.log",
+  "scope": "Evaluation measurement controls and completed-original consumer, not new model/native acceptance",
+  "corrected_initial_errors": [
+    "Authored NativeSummaryPayload constructor used positional instead of keyword-only arguments",
+    "RegistrySnapshot Mapping annotations are not codec records; use original RegistryDocument and its snapshot"
+  ],
+  "remaining": [
+    "Three sequential actual native cuts",
+    "Original matching SDK captures and captured correction scopes",
+    "Approved matched model/sample/spend study",
+    "S1 local budgets and optional timing default"
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "revision": "914bef2dd93f251bd308df74151c31bf0b8f76cd",
+  "tool": "Existing audit.findings.Package via retained S4 consumer script",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "name": "NativeForkCreation",
+      "line": 375,
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "name": "NativeSessionIdentity",
+      "line": 21,
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "name": "NativeContextData",
+      "line": 34,
+      "bases": [
+        "PiResponseData"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "SegmentManifest",
+      "line": 96,
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "name": "ContextManifest",
+      "line": 422,
+      "bases": []
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "name": "RecordedNativeProbes",
+      "line": 37,
+      "bases": []
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "name": "RecordedNativeProbe",
+      "line": 274,
+      "bases": []
+    }
+  ],
+  "consumers": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 145,
+      "read": "a['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 145,
+      "read": "b['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "read": "a['fork']['sourceRevision']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "read": "b['fork']['sourceRevision']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 158,
+      "read": "a['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 158,
+      "read": "b['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 161,
+      "read": "a['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 161,
+      "read": "b['sdk_manifest']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 148,
+      "read": "a['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 148,
+      "read": "b['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "read": "a['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "read": "b['fork']"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 163,
+      "read": "item['sdk_manifest']"
+    }
+  ],
+  "limits": "Lexical original declarations/calls and construction field reads; exported JSON/dynamic/MRO readers require semantic review"
+}

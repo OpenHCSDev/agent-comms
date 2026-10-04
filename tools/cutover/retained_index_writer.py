@@ -26,19 +26,19 @@ def main():
         marker = log._private_marker_unlocked()
         if marker.root_id != root_id or marker.checkpoint_seal is None:
             raise RelationViolationError('Original private writer proof changed.')
+        environment = dict(os.environ)
+        environment.pop('PYTHONPATH', None)
         target_schema = subprocess.run([
             target_python, str(Path(installer).with_name('checkpoint_schema.py')),
-        ], check=True, capture_output=True, text=True).stdout.strip()
+        ], env=environment, check=True, capture_output=True, text=True).stdout.strip()
         if target_schema == declared_schema_digest():
             raise RelationViolationError('Target schema no longer requires retained reset.')
         before = bus_digest(log.path)
         retained = replace(marker, checkpoint_version=None, checkpoint_seal=None)
         log.write_metadata_unlocked(retained)
         (root / 'private_bus_checkpoint.sqlite3').unlink()
-        environment = dict(os.environ)
-        environment.pop('PYTHONPATH', None)
-        subprocess.run([target_python, installer, root, str(custody), root_id],
-                       env=environment, pass_fds=(custody,), check=True)
+        subprocess.run([target_python, installer, root, str(custody.descriptor), root_id],
+                       env=environment, pass_fds=(custody.descriptor,), check=True)
         after = log.read_metadata_unlocked()
         if replace(after, checkpoint_version=None, checkpoint_seal=None) != retained:
             raise RelationViolationError('Cutover changed original marker identity or admission.')

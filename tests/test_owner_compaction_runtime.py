@@ -5,20 +5,22 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
+from contextlib import asynccontextmanager
 
 import pytest
 
 from agent_comms import owner_compaction_runtime
 from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness
 from agent_comms.owner_compaction_provider import NativeSummary
-from agent_comms.owner_compaction_runtime import compact_owner_once
-from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.owner_compaction_runtime import _commit_native_summary
+from agent_comms.private_path import FileRevision
+from agent_comms.pi_vocabulary import ManualCompactionReason
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("shutdown", ["owner", "inner_wrapper", "all_tasks"])
 async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
-    monkeypatch, shutdown
+    monkeypatch, shutdown, tmp_path
 ):
     entered = threading.Event()
     release = threading.Event()
@@ -35,27 +37,14 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
 
     monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
 
+    saved = tmp_path / 'saved.jsonl'
+    saved.write_text('Original worker lifetime fixture\n')
+    witness = NativeWitness("session-id", str(saved), "leaf", "kept", FileRevision.from_stat(saved.stat()))
     prepared = NativePreparation(
-        NativeWitness("session-id", "/tmp/fake-saved", "leaf", "kept", "1:2:3:4:5"),
+        witness,
         1, False,
     )
-    monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
-
     class Bridge:
-        native = SimpleNamespace(package_dir="test-owned-package")
-        def require_source_current(self, *_args):
-            pass
-
-        def prepare_source(self, *_args, **_kwargs):
-            return (
-                NativePreparation(
-                    NativeWitness("session-id", "/tmp/fake-saved", "leaf", "kept", "1:2:3:4:5"),
-                    1,
-                    False,
-                ),
-                object(),
-            )
-
         def commit(self, *_args, **_kwargs):
             entered.set()
             assert release.wait(timeout=4), "test release never arrived"
@@ -63,22 +52,18 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
             return SimpleNamespace(status="committed")
 
     class Persistent:
-        async def discard_for_external_write(self, *_args):
-            pass
-
-    async def synthetic_summary(_metadata, _source):
-        return NativeSummary("synthetic, no provider", None, None)
+        @asynccontextmanager
+        async def external_write(self, *_args):
+            # This control cancels inside the joined OS worker, before reload.
+            # Actual SDK reload/source custody is qualified separately.
+            yield SimpleNamespace()
 
     async def owner():
         async with turn_lock:
-            await compact_owner_once(
-                Bridge(),
-                SimpleNamespace(require_saved_session=lambda: "/tmp/fake-saved"),
-                1,
-                Persistent(),
-                synthetic_summary,
-                settings=PiCompactionSettings(16384, 20000),
-                context_window=128000,
+            await _commit_native_summary(
+                Bridge(), SimpleNamespace(), 1, Persistent(), prepared,
+                SimpleNamespace(), NativeSummary("worker lifetime control, no provider", None, None),
+                reason=ManualCompactionReason,
             )
 
     task = asyncio.create_task(owner(), name="actual-owner-turn")

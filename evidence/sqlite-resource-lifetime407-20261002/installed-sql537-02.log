@@ -1,0 +1,168 @@
+.FFF.                                                                    [100%]
+=================================== FAILURES ===================================
+__________ test_gateway_uses_original_snapshot_and_one_metadata_read ___________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-jri5o5wf')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb82752cfc0>
+
+    def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypatch):  # noqa: F811
+        import json
+        import threading
+        from contextlib import contextmanager
+        from agent_comms.coordination_database import CoordinationStore
+        from agent_comms.recovery_gateway import _snapshot
+        from agent_comms.recovery_projection import RecoverySelection
+    
+        root, _root_id, comms, _initial, _people = _root(tmp_path)
+        database = root / "coordination.sqlite3"
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        commit_requested = threading.Event()
+        committed = threading.Event()
+        errors, statements = [], []
+        project = RecoverySelection.project
+        observe = CoordinationStore.observing
+    
+        # Instrument the original resource and callback, without substituting SQL,
+        # schema, identities, projection results, or transaction ownership.
+        @contextmanager
+        def traced_read(*args, **kwargs):
+            with observe(*args, **kwargs) as db:
+                db.set_trace_callback(statements.append)
+                yield db
+    
+        def writer():
+            try:
+                with Coordination(str(database)) as store:
+                    store.session._connection.set_trace_callback(
+                        lambda sql: commit_requested.set() if sql == "COMMIT" else None
+                    )
+                    store.participants.advance_generation(
+                        lookup, "renamed", expected_generation=1
+                    )
+                committed.set()
+            except BaseException as error:
+                errors.append(error)
+    
+        changing = threading.Thread(target=writer)
+    
+        def during_commit(db, owner_lookup, owner_thread):
+            changing.start()
+            assert commit_requested.wait(2)
+            assert not committed.is_set()
+            return project(db, owner_lookup, owner_thread)
+    
+        monkeypatch.setattr(CoordinationStore, "observing", staticmethod(traced_read))
+        monkeypatch.setattr(RecoverySelection, "project", staticmethod(during_commit))
+        try:
+            original = json.loads(_snapshot(root, database, "beta"))
+        finally:
+            changing.join(3)
+        assert not changing.is_alive() and not errors
+        assert committed.is_set()
+        assert original["availability"] == "available" and original["owner"] == "beta"
+        assert sum("PRAGMA user_version" in sql for sql in statements) == 1
+>       assert sum("FROM schema_meta" in sql for sql in statements) == 1
+E       assert 0 == 1
+E        +  where 0 = sum(<generator object test_gateway_uses_original_snapshot_and_one_metadata_read.<locals>.<genexpr> at 0x7fb827271b10>)
+
+tests/test_outbound_transcript_source.py:116: AssertionError
+____ test_observation_closes_failed_reads_and_preserves_schema_disposition _____
+
+db_path = PosixPath('/tmp/pytest-of-ts/pytest-1084/test_observation_closes_failed0/coordination.sqlite3')
+
+    def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
+        from agent_comms.coordination_database import CoordinationStore
+        from agent_comms.recovery_projection import (
+            UnavailableRecoveryProjection, read_recovery_projection,
+        )
+    
+>       with ready(db_path):
+             ^^^^^^^^^^^^^^
+
+tests/test_coordination_store.py:1513: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-ts/pytest-1084/test_observation_closes_failed0/coordination.sqlite3')
+origin = <ExecutionOrigin.WIRE: 'wire'>, max_attempts = 2
+
+    def ready(
+        path: Path, *, origin: ExecutionOrigin = ExecutionOrigin.WIRE, max_attempts: int = 2
+    ) -> Coordination:
+        db = store(path)
+        assert isinstance(db.participants.register("owner", "Owner", "thread", committed=True), Applied)
+        if origin is ExecutionOrigin.WIRE:
+            db.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="Owner",
+                    recipient_lookup="owner",
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.DIRECT,
+                    accepted_at_ms=1_000,
+                    updated_at_ms=1_000,
+                    lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
+                )
+            )
+>       db.executions.create(
+            "exec",
+            origin,
+            "owner",
+            "thread",
+            max_attempts,
+            assignment_ids=("claim",) if origin is ExecutionOrigin.WIRE else (),
+            exact_target="owner" if origin is ExecutionOrigin.WIRE else None,
+        )
+E       TypeError: ExecutionStore.create() got an unexpected keyword argument 'assignment_ids'
+
+tests/test_coordination_store.py:105: TypeError
+____ test_public_read_exception_releases_transaction_and_mutators_reuse_it _____
+
+db_path = PosixPath('/tmp/pytest-of-ts/pytest-1084/test_public_read_exception_rel0/coordination.sqlite3')
+
+    def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_path: Path) -> None:
+>       with ready(db_path) as db:
+             ^^^^^^^^^^^^^^
+
+tests/test_coordination_store.py:1490: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-ts/pytest-1084/test_public_read_exception_rel0/coordination.sqlite3')
+origin = <ExecutionOrigin.WIRE: 'wire'>, max_attempts = 2
+
+    def ready(
+        path: Path, *, origin: ExecutionOrigin = ExecutionOrigin.WIRE, max_attempts: int = 2
+    ) -> Coordination:
+        db = store(path)
+        assert isinstance(db.participants.register("owner", "Owner", "thread", committed=True), Applied)
+        if origin is ExecutionOrigin.WIRE:
+            db.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="Owner",
+                    recipient_lookup="owner",
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.DIRECT,
+                    accepted_at_ms=1_000,
+                    updated_at_ms=1_000,
+                    lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
+                )
+            )
+>       db.executions.create(
+            "exec",
+            origin,
+            "owner",
+            "thread",
+            max_attempts,
+            assignment_ids=("claim",) if origin is ExecutionOrigin.WIRE else (),
+            exact_target="owner" if origin is ExecutionOrigin.WIRE else None,
+        )
+E       TypeError: ExecutionStore.create() got an unexpected keyword argument 'assignment_ids'
+
+tests/test_coordination_store.py:105: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_outbound_transcript_source.py::test_gateway_uses_original_snapshot_and_one_metadata_read
+FAILED tests/test_coordination_store.py::test_observation_closes_failed_reads_and_preserves_schema_disposition
+FAILED tests/test_coordination_store.py::test_public_read_exception_releases_transaction_and_mutators_reuse_it
+3 failed, 2 passed in 1.60s

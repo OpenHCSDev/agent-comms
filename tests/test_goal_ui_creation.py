@@ -1,5 +1,7 @@
 """A UI goal must acquire owner-private launch authority before it is visible."""
 
+from unittest.mock import AsyncMock
+
 import os
 
 import pytest
@@ -36,7 +38,7 @@ async def _owner(tmp_path, monkeypatch):
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
     wakes = []
-    monkeypatch.setattr(owner.turns.goals, "schedule_goal", wakes.append)
+    monkeypatch.setattr(owner.turns.goals, "schedule_goal", AsyncMock(side_effect=wakes.append))
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     return comms, owner, proxy, session, wakes
 

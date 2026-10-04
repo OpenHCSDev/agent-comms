@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+from contextlib import AsyncExitStack
+from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -22,6 +24,7 @@ from . import pi_events as pi
 from .acp_failure import ACPFailure
 from .channel_targets import BuiltinChannel
 from .comms import Comms
+from .coordinator import Coordination
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -32,6 +35,8 @@ from .input_drain import InputDrain
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
+from .native_input_owner import RegistryOwner
+from .routing import TurnRouting
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
@@ -42,7 +47,7 @@ from .session_lifecycle import SessionLifecycle
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
-from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -98,8 +103,6 @@ class TurnRunner:
         *,
         agent_bin: str | None,
         agent_args: list[str] | None,
-        adaptive_compaction_enabled: bool,
-        adaptive_summary_strategy: Any,
         reply_window: float | None,
         no_reply_window: float | None,
         reply_quiet: float | None,
@@ -107,8 +110,6 @@ class TurnRunner:
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.adaptive_compaction_enabled = adaptive_compaction_enabled
-        self.adaptive_summary_strategy = adaptive_summary_strategy
         self.agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
         arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
         self.agent_args = NativeArguments.parse(
@@ -120,7 +121,7 @@ class TurnRunner:
         self.persistent_backends: dict[str, backend.PersistentPiSession] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
         self.emitted_errors: dict[str, ACPFailure] = {}
-        self.goals = GoalScheduler(comms, effects, self.session_busy)
+        self.goals = GoalScheduler(comms, effects)
         self.reply_window = (
             reply_window
             if reply_window is not None
@@ -154,17 +155,17 @@ class TurnRunner:
         return state.busy and state.managed_id == turn_id
 
     async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
-        current = self.turn_state(session_id)
-        if current.phase == phase:
-            return
-        if self.comms.agents.transition_turn(lease, phase):
-            await self.effects._emit_event(session_id, self.current_turn_update(session_id))
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.transition_turn, lease, phase
+        ))
+        for state in states:
+            await self.effects._emit_event(session_id, TurnTranscriptUpdate(state=state))
 
     async def observe_compaction(self, session_id: str, event) -> None:
         name = self.sessions.bindings.get(session_id)
         if name is None:
             return
-        thread = self.comms.registry.require(name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         lease = thread.turn_lease
         if lease is None:
             return
@@ -173,41 +174,50 @@ class TurnRunner:
     def native_arguments(self, thread: Thread) -> tuple[str, ...]:
         return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
 
-    def native_environment(self, thread: Thread, worktree: str) -> dict[str, str]:
-        from .runtime_requests import ProjectRuntimeRequest
-
-        project = ProjectRuntimeRequest.for_native(self.comms.registry.snapshot(), thread)
-        return {
-            "AGENT_COMMS_THREAD": thread.name,
-            "PI_AGENT_ID": thread.name,
-            "AGENT_COMMS_ROOT": str(self.comms.root),
-            "PI_PARENT_ID": thread.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
-            "PI_WORKTREE": worktree,
-            **project.environment(self.comms.root),
-        }
-
     async def prepare_selected_session(self, session_id: str, thread: Thread) -> StateData:
         from .native_session_prepare import NativeSessionPreparation
 
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
+        environment = await Coordination.run_worker(lambda: thread.native_environment(
+            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        ))
         state = await NativeSessionPreparation.open(
             self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),
             self.agent_bin,
             self.native_arguments(thread),
             worktree=thread.worktree,
-            environment=self.native_environment(thread, thread.worktree),
+            environment=environment,
             session_file=thread.session_file,
+            observe=partial(self.observe_selected_preparation, session_id, thread),
         )
-        state.model.require_selection(thread.model)
         return state
 
+    async def observe_selected_preparation(
+        self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
+    ) -> None:
+        """Publish this attested saved owner through the shared info consumer."""
+        state.model.require_selection(thread.model)
+        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await self.effects._emit_event(session_id, info)
+
     async def inspect_context(self, session_id, thread):
+        from .pi_commands import AgentCommsInspectContext
+
+        return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
+
+    async def inspect_context_segment(self, session_id, thread, manifest):
+        from .pi_commands import AgentCommsInspectContextSegment
+
+        request = AgentCommsInspectContextSegment.for_manifest(manifest)
+        context = await self.inspect_native_request(session_id, thread, request)
+        return context.recorded_public_text(manifest)
+
+    async def inspect_native_request(self, session_id, thread, request):
         persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
-        async def prepare():
-            return await self.prepare_selected_session(session_id, thread)
-        context = await persistent.custody.inspect_context(persistent, prepare)
+        context = await persistent.custody.inspect(
+            persistent, partial(self.prepare_selected_session, session_id, thread), request,
+        )
         return context.require_session_file(thread.require_saved_session())
 
     async def prompt_owned(
@@ -220,7 +230,7 @@ class TurnRunner:
         self.turn_tasks[session_id] = turn_task
         try:
             thread_name = await self.sessions.sync_identity(session_id)
-            self.comms.registry.require(thread_name)
+            await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
             text = self.effects._prompt_text(prompt)
             images = self.effects._prompt_images(prompt)
             agent_task: str | None = None
@@ -236,8 +246,10 @@ class TurnRunner:
             sent_seq = 0
             if relay_text:
                 target, body = parse_target(relay_text)
-                self.comms.messaging.send(thread_name, target, body)
-                sent_seq = self.comms.bus.log.total_messages()
+                message = await Coordination.run_worker(partial(
+                    self.comms.messaging.send_message, thread_name, target, body,
+                ))
+                sent_seq = message.seq
             self.effects._debug_log(
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
                 f"sent_seq={sent_seq}"
@@ -260,17 +272,18 @@ class TurnRunner:
                 )
             else:
                 turn_id = uuid4().hex
-                turn_lease = self.comms.agents.begin_turn(
-                    thread_name, turn_id, "Waiting for replies"
-                )
-                try:
+                async with AsyncExitStack() as resources:
+                    await Coordination.run_worker(partial(
+                        self.acquire_turn, resources, session_id, thread_name,
+                        turn_id, "Waiting for replies",
+                    ))
                     await self.effects._emit_event(
-                        session_id, self.current_turn_update(session_id)
+                        session_id, await Coordination.run_worker(partial(
+                            self.current_turn_update, session_id,
+                        )),
                     )
                     await self.inputs.drain_inbox(session_id)
                     await self.collect_replies(session_id, thread_name, sent_seq)
-                finally:
-                    await self.settle_turn(session_id, thread_name, turn_id, turn_lease)
             self.effects._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -307,7 +320,7 @@ class TurnRunner:
                     break
                 continue
             # No reply yet: keep waiting while a peer is on it.
-            peer_progress = self.peer_progress(thread_name, sent_seq)
+            peer_progress = await Coordination.run_worker(partial(self.peer_progress, thread_name, sent_seq))
             idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
             if idle_for >= IDLE_GRACE and waited >= self.no_reply_window:
                 break
@@ -334,15 +347,17 @@ class TurnRunner:
             await self.sessions.proxies[session_id].request("cancel")
             return
         name = self.sessions.bindings.get(session_id)
-        if name and (goal := self.comms.registry.require(name).goal) and goal.state.active:
-            self.comms.goals.update_goal(
-                name,
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
+        if thread is not None and (goal := thread.goal) and goal.state.active:
+            await Coordination.run_worker(partial(
+                self.comms.goals.update_goal, name,
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,
-            )
+            ))
         task = self.turn_tasks.get(session_id)
         if task is not None:
-            lease = self.comms.registry.require(name).turn_lease if name is not None else None
+            current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
+            lease = current.turn_lease if current is not None else None
             if lease is not None:
                 await self.transition_turn(session_id, lease, CancellingPhase())
             task.cancel()
@@ -364,7 +379,7 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        if not self.owns_turn(session_id, turn_id) or controller is None:
+        if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
         if permission is None:
@@ -402,7 +417,7 @@ class TurnRunner:
             # An ACP controller exception is denial, never a raw error in Pi
             # RPC/model output or a reason to resend an uncertain MCP call.
             return pi.CancelledUiChoice()
-        if not self.owns_turn(session_id, turn_id):
+        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         if isinstance(controller, SocketClient) and not self.runtime.is_controller(
             session_id, controller
@@ -413,21 +428,38 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         return request.choice(selected)
 
-    def finish_turn_stream(
-        self,
-        session_id: str,
-        thread_name: str,
-        turn_id: str,
-        lease: TurnLeaseFence,
-    ) -> FinishedTurnFence | None:
-        """Clear only this turn; waiter release follows committed terminal output."""
-        return self.comms.agents.finish_turn(lease)
+    def acquire_turn(
+        self, resources: AsyncExitStack, session_id: str, thread_name: str,
+        turn_id: str, detail: str, routing: TurnRouting | None = None, *,
+        task: asyncio.Task[Any] | None = None,
+    ) -> RegistryOwner:
+        """Bind the exact installed lease to cleanup before worker delivery.
+
+        The joined worker may commit admission before its awaiting caller is
+        cancelled. Register on the caller's stack here, while it still owns
+        this operation; no delivered result is needed to retire that lease.
+        """
+        owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
+        resources.push_async_callback(
+            self.settle_turn, session_id, owner.turn_lease,
+            task=task,
+        )
+        return owner
+
+    def finish_turn(
+        self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence,
+    ) -> TurnTranscriptUpdate:
+        """Release the original CAS lease and retain its waiter cleanup."""
+        terminal_fence = self.comms.agents.finish_turn(lease)
+        resources.push_async_callback(
+            Coordination.run_worker,
+            partial(self.comms.goals.release_waits_after_terminal_turn, terminal_fence),
+        )
+        return self.current_turn_update(session_id)
 
     async def settle_turn(
         self,
         session_id: str,
-        thread_name: str,
-        turn_id: str,
         lease: TurnLeaseFence,
         *,
         task: asyncio.Task[Any] | None = None,
@@ -439,25 +471,25 @@ class TurnRunner:
         """
         if task is not None and self.turn_tasks.get(session_id) is task:
             self.turn_tasks.pop(session_id, None)
-        terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, lease)
-        try:
-            await self.effects._emit_event(session_id, self.current_turn_update(session_id))
-        finally:
-            self.comms.goals.release_waits_after_terminal_turn(terminal_fence)
+        async with AsyncExitStack() as resources:
+            update = await Coordination.run_worker(partial(
+                self.finish_turn, resources, session_id, lease,
+            ))
+            await self.effects._emit_event(session_id, update)
 
     def current_turn_update(self, session_id: str):
         return TurnTranscriptUpdate(state=self.turn_state(session_id))
 
     async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
-        await self.effects._emit_event(session_id, self.current_turn_update(session_id), client=client)
+        update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
+        await self.effects._emit_event(session_id, update, client=client)
 
-    def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
-        return (
-            self.inputs.backend_inboxes.get(session_id) if self.turn_state(session_id).accepts_followup else None
-        )
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
+        state = await Coordination.run_worker(partial(self.turn_state, session_id))
+        return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
     async def close_idle_backend(self, session_id: str) -> None:
-        if not self.session_busy(session_id) and (
+        if not await Coordination.run_worker(partial(self.session_busy, session_id)) and (
             persistent := self.persistent_backends.get(session_id)
         ):
             await persistent.close_idle()
@@ -476,7 +508,9 @@ class TurnRunner:
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
-                result = await execution.run()
+                result = await execution.run(
+                    on_compaction=partial(self.effects._emit_event, session_id)
+                )
                 while not inbox.empty():
                     command = inbox.get_nowait()
                     if not isinstance(command, dict) or not (input_id := command.get("_input_id")):

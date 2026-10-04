@@ -1,5 +1,7 @@
 """Real publication must register the entire audience, without test SQL setup."""
 
+import pytest
+
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
@@ -10,7 +12,8 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
-def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
+@pytest.mark.asyncio
+async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
@@ -27,8 +30,8 @@ def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tm
         assert {r.canonical_thread for r in initial.audience.recipients} == {
             "receiver", "stopped-reviewer", "unstarted-reviewer"
         }
-        cursor = _accept_visible_deliveries(
-            comms.bus, root_id, store, lookup, 0, owner_name=receiver.name
+        cursor = await _accept_visible_deliveries(
+            comms.bus, root_id, store.session.path, lookup, 0, owner_name=receiver.name
         )
         assert cursor == message.seq
         assignments = sealed_cohort_assignments(store, lookup)
@@ -37,8 +40,8 @@ def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tm
         before = tuple(store.participants.get(r.recipient_lookup)
                        for r in initial.audience.recipients)
         again = comms.messaging.send_message("sender", "#team", "Second @receiver")
-        assert _accept_visible_deliveries(
-            comms.bus, root_id, store, lookup, cursor, owner_name=receiver.name
+        assert await _accept_visible_deliveries(
+            comms.bus, root_id, store.session.path, lookup, cursor, owner_name=receiver.name
         ) == again.seq
         assert tuple(store.participants.get(r.recipient_lookup)
                      for r in initial.audience.recipients) == before

@@ -1,0 +1,53 @@
+{
+  "head": "3b3855305c7f1f3aa0cefee25110a4791633a42e",
+  "parsed": 364,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 229,
+      "expression": "ContextCliCommand(thread=owner.name, turn=2).apply(comms)"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 237,
+      "expression": "ContextCliCommand(thread='Alice', turn=2, diff=True).apply(reopened)"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 242,
+      "expression": "ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened)"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 236,
+      "expression": "ContextCliCommand(thread='Renamed-Alice', turn=1).apply(reopened)"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 240,
+      "expression": "ContextCliCommand(thread='Renamed-Alice', diff=True).apply(reopened)"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 202,
+      "expression": "ContextCliCommand(thread='Alice', turn=1).apply(reopened)"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 203,
+      "expression": "ContextCliCommand(thread='Alice', diff=True).apply(reopened)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 413,
+      "expression": "ContextCliCommand(thread=source.name, diff=True).apply(service)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 416,
+      "expression": "ContextCliCommand(thread=source.name, turn=manifests[-1].turn.occurrence.generation).apply(service)"
+    }
+  ],
+  "scope": "Original Package AST direct Context/Compaction command result consumers; semantic read distinguishes JSON expectations from refusal-only calls."
+}

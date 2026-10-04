@@ -27,10 +27,10 @@ from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_session_reopen import validate_native_reopen
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
-from agent_comms.selected_pi_route import read_selected_compaction_decision
+from agent_comms.selected_pi_route import observe_selected_compaction_decision
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
 
@@ -185,27 +185,27 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         assert attempt.state.commit_id
         operation = journal.operations.get(attempt.state.commit_id)
         assert operation.state.committed
-        envelope = attempt.envelope()
+        envelope = attempt.request
         if retained_text:
             assert envelope.retained.text.count(retained_text) == 1
             assert len(attempt.source_json.encode()) > RetainedTaskFacts.journal_control_bytes
             assert len(operation.intent_json.encode()) > RetainedTaskFacts.journal_control_bytes
         # A fresh reader must accept the same original complete payload and links.
         recovered = CompactionJournal(journal.path)
-        assert recovered.summaries.get(attempt.operation_id).envelope() == envelope
+        assert recovered.summaries.get(attempt.operation_id).request == envelope
         assert NativeIntent.read(recovered.operations.get(operation.commit_id)).witness == preparation.witness
         recovered.operations.get(operation.commit_id).committed_outcome()
         operation.require_summary_link(attempt, admit_original=True)
 
         persistent = agent.turns.persistent_backends["retained"]
         if mode == "manual":
-            assert not persistent.available and persistent.custody.session_file == str(session)
+            assert not persistent.available and persistent.custody.identity.session_file == str(session)
             await agent.turns.prepare_selected_session(
                 "retained", comms.registry.require("retained")
             )
         else:
             assert persistent.available and persistent.custody.child.proc.returncode is None
-        decision = await read_selected_compaction_decision(
+        decision = await observe_selected_compaction_decision(
             persistent,
             session_file=str(session),
             expected_package=package,
@@ -213,11 +213,11 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         )
         assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(
-            validate_native_reopen,
+            NativeSessionIdentity.locate,
             package,
             str(session),
-            expected_session_id=preparation.witness.session_id,
         )
+        identity.require_same_session(preparation.witness)
         latest = None
         user_entries_after = 0
         with session.open() as stream:

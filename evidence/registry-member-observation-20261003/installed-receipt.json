@@ -1,0 +1,83 @@
+{
+  "state": "SCOPED_INSTALLED_REGISTRY_MEMBER_CLI_PASS",
+  "elapsed_seconds": 3.5855655159102753,
+  "root": "/home/ts/.cache/agent-scratch/mendel-registry-member605-installed02",
+  "proof": {
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "core_head": "654a4ca992cb54675646969cdc77b3400c66a0cc",
+    "installed_package": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+    "python_files": 311,
+    "package_files": 342,
+    "wheel_sha256": "2b2e46758fc0f7244c71cc802009433879cde0c67ef02fc264fce9218550ffdb",
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/registry-member605-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    }
+  },
+  "cli": [
+    {
+      "args": [
+        "register",
+        "--name",
+        "original",
+        "--worktree",
+        "/home/ts/.cache/agent-scratch/mendel-registry-member605-installed02"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"registered\": \"original\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "thread",
+        "--name",
+        "original",
+        "--no-pending"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"name\": \"original\",\n  \"tags\": [],\n  \"worktree\": \"/home/ts/.cache/agent-scratch/mendel-registry-member605-installed02\",\n  \"created_at\": 1791065455.7873418,\n  \"session_file\": null,\n  \"title\": null,\n  \"parent\": null,\n  \"task\": null,\n  \"process_identity\": null,\n  \"model\": null,\n  \"thinking_level\": null,\n  \"goal\": null,\n  \"previous_worktrees\": [],\n  \"auto_title_pending\": false,\n  \"role\": \"agent\",\n  \"execution\": \"external\",\n  \"active_turn\": null,\n  \"channel_scope_generation\": 0,\n  \"turn_generation\": 0,\n  \"last_finished_turn_id\": null,\n  \"status\": \"running\",\n  \"is_fork\": false,\n  \"goal_execution\": null\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "thread",
+        "--name",
+        "original",
+        "--no-pending"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"name\": \"renamed\",\n  \"tags\": [],\n  \"worktree\": \"/home/ts/.cache/agent-scratch/mendel-registry-member605-installed02\",\n  \"created_at\": 1791065455.7873418,\n  \"session_file\": null,\n  \"title\": null,\n  \"parent\": null,\n  \"task\": null,\n  \"process_identity\": null,\n  \"model\": null,\n  \"thinking_level\": null,\n  \"goal\": null,\n  \"previous_worktrees\": [],\n  \"auto_title_pending\": false,\n  \"role\": \"agent\",\n  \"execution\": \"external\",\n  \"active_turn\": null,\n  \"channel_scope_generation\": 0,\n  \"turn_generation\": 0,\n  \"last_finished_turn_id\": null,\n  \"status\": \"running\",\n  \"is_fork\": false,\n  \"goal_execution\": null\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "thread",
+        "--name",
+        "original",
+        "--no-pending"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"name\": \"renamed\",\n  \"tags\": [],\n  \"worktree\": \"/home/ts/.cache/agent-scratch/mendel-registry-member605-installed02\",\n  \"created_at\": 1791065455.7873418,\n  \"session_file\": null,\n  \"title\": null,\n  \"parent\": null,\n  \"task\": null,\n  \"process_identity\": null,\n  \"model\": null,\n  \"thinking_level\": null,\n  \"goal\": null,\n  \"previous_worktrees\": [],\n  \"auto_title_pending\": false,\n  \"role\": \"agent\",\n  \"execution\": \"external\",\n  \"active_turn\": null,\n  \"channel_scope_generation\": 0,\n  \"turn_generation\": 0,\n  \"last_finished_turn_id\": null,\n  \"status\": \"stopped\",\n  \"is_fork\": false,\n  \"goal_execution\": null\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "thread",
+        "--name",
+        "original",
+        "--no-pending"
+      ],
+      "exit": 1,
+      "stdout": "{\n  \"error\": \"Thread 'original' is not registered.\"\n}\n",
+      "stderr": ""
+    }
+  ],
+  "retained_cut_preserved": true,
+  "strict_missing_timestamp_refused": true,
+  "native_launches": 0,
+  "provider_calls": 0,
+  "public_inputs": 0,
+  "original_source_mutations": 0,
+  "owned_processes_remaining": [],
+  "scope": "installed CLI/private registration/status/alias/removal/restoration; no native/provider/physical UI or latency gain"
+}

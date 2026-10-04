@@ -7,14 +7,26 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
+from .input_attempt import StoredInput
 
 if TYPE_CHECKING:
-    from .input_disposition import InputDispositions
+    from .input_disposition import InputDocument
     from .messages import Message
     from .threads import Thread
 
 
+@dataclass(frozen=True)
 class InputBatch(ABC):
+    originals: tuple[StoredInput, ...]
+
+    @property
+    def keys(self) -> tuple[str, ...]:
+        return tuple(row.key for row in self.originals)
+
+    @property
+    def prompt(self) -> str:
+        return "\n\n".join(row.source_text for row in self.originals)
+
     @property
     @abstractmethod
     def admits_multiple(self) -> bool: ...
@@ -25,24 +37,23 @@ class InputBatch(ABC):
         keys: tuple[str, ...],
         prompt: str,
         owner: Thread,
-        dispositions: InputDispositions,
+        document: InputDocument,
     ) -> InputBatch:
-        # Sequence identity makes duplicates collapse. Equality then proves every
-        # origin was a distinct positive channel message, in the admitted order.
+        from .input_disposition import InputDispositions
+
+        originals = document.originals(keys)
+        single = SingleInputBatch(originals)
+        # Sequence identity proves distinct channel originals in admitted order.
         channels = {
             origin.seq: origin
             for origin in origins
             if origin.seq > 0 and is_channel_target(origin.target)
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
-            return SingleInputBatch()
-        expected_keys = tuple(dispositions.bus_key(origin, owner) for origin in origins)
-        texts = dispositions.read().source_texts(keys)
-        if texts is None:
-            return SingleInputBatch()
-        admitted = ChannelInputBatch(expected_keys, "\n\n".join(texts))
-        # Durable text, including admission-time resolved names, is authoritative.
-        return admitted if admitted == ChannelInputBatch(keys, prompt) else SingleInputBatch()
+            return single
+        expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)
+        admitted = ChannelInputBatch(originals)
+        return admitted if admitted.keys == expected_keys and admitted.prompt == prompt else single
 
 
 class SingleInputBatch(InputBatch):
@@ -53,9 +64,6 @@ class SingleInputBatch(InputBatch):
 
 @dataclass(frozen=True)
 class ChannelInputBatch(InputBatch):
-    keys: tuple[str, ...]
-    prompt: str
-
     @property
     def admits_multiple(self) -> bool:
         return True

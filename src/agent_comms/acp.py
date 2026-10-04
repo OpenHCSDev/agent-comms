@@ -21,10 +21,11 @@ import asyncio
 import json
 import os
 import re
-import sqlite3
 import sys
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
@@ -39,7 +40,6 @@ from acp.schema import (
 )
 
 from agent_comms.coordination_errors import (
-    CoordinationError,
     IdentityConflict,
     PublicationActivationBlocked,
     StaleFence,
@@ -107,8 +107,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         reply_quiet: float | None = None,
         runtime_enabled: bool = False,
         auto_wake: bool = True,
-        adaptive_compaction_enabled: bool = True,
-        adaptive_summary_strategy: Any = None,
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
         private_selected_tool_intent: SelectedToolIntent | None = None,
@@ -136,8 +134,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self,
             agent_bin=agent_bin,
             agent_args=agent_args,
-            adaptive_compaction_enabled=adaptive_compaction_enabled,
-            adaptive_summary_strategy=adaptive_summary_strategy,
             reply_window=reply_window,
             no_reply_window=no_reply_window,
             reply_quiet=reply_quiet,
@@ -256,7 +252,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         text = self._prompt_text(prompt)
         if (
-            self.turns.active_backend_inbox(session_id) is not None
+            await self.turns.active_backend_inbox(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
             return await self.inputs.accept_followup(
@@ -318,7 +314,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=self.sessions.metadata(name, session_id=session_id),
+                field_meta=await self.sessions.metadata(name, session_id=session_id),
             ),
         )
 
@@ -372,20 +368,20 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 "private N/K ACP requires an explicit matching root and native package"
             )
         thread_name = await self.sessions.sync_identity(session_id)
-        # Registry admission may change without session/new or session/load.
-        # Publish the observed status even when stopped, busy, or no-wake;
-        # callbacks may only invalidate a prior client binding, not replace it.
-        await self.cursors.publish(session_id, thread_name)
-        if not self.inputs.auto_wake or not self.sessions.runtime_enabled:
-            return 0  # Explicitly disabled by owner runtime configuration.
-        if self._comms.registry.status(thread_name).stopped:
-            return 0
+        snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
+        owner = snapshot.require(thread_name)
         if (
-            self.turns.session_busy(session_id)
+            self.inputs.background_wakes_disabled
+            or snapshot.status(thread_name).stopped
+            or session_id in self.turns.turn_tasks
+            or owner.turn_state.busy
             or session_id in self.inputs.backend_inboxes
         ):
-            return 0  # Never overlap the ACP owner session's running turn.
-        owner = self._comms.registry.require(thread_name)
+            # Admission changes still invalidate the client while this owner
+            # cannot run a wake. An eligible drain observes once after its
+            # acceptance/selection, instead of verifying history before it too.
+            await self.cursors.publish(session_id, thread_name)
+            return 0
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         if owner.turn_state.busy:
@@ -393,23 +389,22 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
-        with bus.log.locked():
-            admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
-        with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-            _accept_visible_deliveries(
-                bus,
-                wire_root_id,
-                store,
-                stable_thread_lookup(owner.created_at),
-                0,
-                owner_name=owner.name,
-                native_package=package,
-            )
+        def read_admission():
+            with bus.log.locked():
+                return bus.log._private_marker_unlocked().admission_after_seq
+        admission_after_seq = await Coordination.run_worker(read_admission)
+        store_path = self._comms.root / "coordination.sqlite3"
+        await _accept_visible_deliveries(
+            bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
+            owner_name=owner.name, native_package=package,
+        )
+        def select(store):
             participant = store.participants.get(stable_thread_lookup(owner.created_at))
             candidate = next_sealed_assignment(
-                store, participant.lookup, owner.name, after_seq=admission_after_seq
+                store, participant.lookup, owner.name, after_seq=admission_after_seq,
             )
-            runnable = candidate is not None and participant.pointer.execution_id is None
+            return candidate is not None and participant.pointer.execution_id is None
+        runnable = await Coordination.run_async(store_path, select)
         result = None
         if runnable:
             execution = SelectedExecution(
@@ -431,22 +426,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current generation or an all-N prefix;
             # old-generation Pi evidence cannot initialize this cursor on reconnect.
-            try:
-                with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-                    person = store.participants.get(stable_thread_lookup(owner.created_at))
-                    admission_generation = self._comms.registry.snapshot().admission_generations[
-                        thread_name
-                    ]
-                    cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance(
-                        owner=owner,
-                        owner_admission_generation=admission_generation,
-                        owner_generation=person.participant_generation,
-                        committed_input_id=None,
-                    )
-            except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
-                cursor = None  # projection unavailable; no claim or model retry
-            if cursor is not None:
-                await self.cursors.publish(session_id, thread_name)
+            await self.cursors.publish(
+                session_id, thread_name, read_cursor=NativeSourceCursor.refresh_async
+            )
         else:
             # A disconnected client must not turn a settled claim into an
             # apparent model failure. Reconnect reads the same durable row.
@@ -457,11 +439,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
-        await self.inputs.stop_wakes()
-        await self.sessions.close_proxies()
-        await self.turns.close()
-        await self.inputs.close()
-        await self.sessions.release_owned()
+        async with AsyncExitStack() as retirement:
+            retirement.push_async_callback(self.sessions.release_owned)
+            retirement.push_async_callback(self.turns.close)
+            retirement.push_async_callback(self.sessions.close_proxies)
+            retirement.push_async_callback(self.inputs.close)
 
     async def _emit_text(
         self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None
@@ -516,75 +498,78 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    if "--login" in sys.argv[1:]:
-        from .login import run_login
+    from .active_route import resolve_comms_route
 
-        index = sys.argv.index("--login")
-        return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
-    debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
-    if debug_path:
-        import logging
+    with resolve_comms_route().admit_client():
+        if "--login" in sys.argv[1:]:
+            from .login import run_login
 
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s %(name)s %(levelname)s %(message)s",
-            filename=debug_path + ".log",
-        )
-    # The stdio ACP client only attaches to a separately owned worker. An
-    # explicit private launch must be checked before it can create a wire or
-    # request an owner; the worker independently repeats the same preflight.
-    from .private_nk_entrypoint import private_nk_from_environment
+            index = sys.argv.index("--login")
+            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
+        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+        if debug_path:
+            import logging
 
-    private_nk = private_nk_from_environment()
-    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
-    if private_nk is not None:
-        comms.owners.pin_private_nk_launch(
-            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
-        )
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format="%(asctime)s %(name)s %(levelname)s %(message)s",
+                filename=debug_path + ".log",
+            )
+        # The stdio ACP client only attaches to a separately owned worker. An
+        # explicit private launch must be checked before it can create a wire or
+        # request an owner; the worker independently repeats the same preflight.
+        from .private_nk_entrypoint import private_nk_from_environment
 
-    async def run() -> None:
-        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-
-            async def watchdog() -> None:
-                while True:
-                    await asyncio.sleep(5)
-                    tasks = [t for t in asyncio.all_tasks() if not t.done()]
-                    with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
-                        debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
-                        for task in tasks:
-                            stack = task.get_stack()
-                            innermost = [
-                                f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
-                                for frame in stack
-                                if frame
-                            ][-4:]
-                            debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
-
-            asyncio.create_task(watchdog())
-        agent = CommsClient(
-            comms,
-            runtime_enabled=True,
-            private_nk_native_package=private_nk.native_package if private_nk else None,
-            private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
-        )
-
-        def observe(event: Any) -> None:
-            agent._debug_log(
-                f"{event.direction.value}: {json.dumps(event.message)[:200]}"
-                if hasattr(event, "message")
-                else f"{event.direction.value}"
+        private_nk = private_nk_from_environment()
+        comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+        if private_nk is not None:
+            comms.owners.pin_private_nk_launch(
+                private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
             )
 
-        conn_kwargs: dict[str, Any] = {}
-        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-            conn_kwargs["observers"] = [observe]
-        try:
-            await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
-        finally:
-            await agent.shutdown()
+        async def run() -> None:
+            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
 
-    asyncio.run(run())
-    return 0
+                async def watchdog() -> None:
+                    while True:
+                        await asyncio.sleep(5)
+                        tasks = [t for t in asyncio.all_tasks() if not t.done()]
+                        with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
+                            debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
+                            for task in tasks:
+                                stack = task.get_stack()
+                                innermost = [
+                                    f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
+                                    for frame in stack
+                                    if frame
+                                ][-4:]
+                                debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
+
+                asyncio.create_task(watchdog())
+            agent = CommsClient(
+                comms,
+                runtime_enabled=True,
+                private_nk_native_package=private_nk.native_package if private_nk else None,
+                private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+            )
+
+            def observe(event: Any) -> None:
+                agent._debug_log(
+                    f"{event.direction.value}: {json.dumps(event.message)[:200]}"
+                    if hasattr(event, "message")
+                    else f"{event.direction.value}"
+                )
+
+            conn_kwargs: dict[str, Any] = {}
+            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+                conn_kwargs["observers"] = [observe]
+            try:
+                await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
+            finally:
+                await agent.shutdown()
+
+        asyncio.run(run())
+        return 0
 
 
 if __name__ == "__main__":

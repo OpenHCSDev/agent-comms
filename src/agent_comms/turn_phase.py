@@ -9,7 +9,6 @@ from typing import ClassVar, TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .activity import ActivityState
 from .compaction_progress import CompactionSourceProgress
-from .request_progress import RequestProgress
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -19,9 +18,6 @@ class StallExempt:
     """Model progress does not end this excursion; its own events do."""
 
     def model_progress(self) -> TurnPhase:
-        return self
-
-    def model_request(self, source: RequestProgress) -> TurnPhase:
         return self
 
 
@@ -96,16 +92,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
 
-    def model_request(self, source: RequestProgress) -> TurnPhase:
-        return ModelWaitPhase(source=source)
-
-    @property
-    def request_observations(self) -> tuple[RequestProgress, ...]:
-        return ()
-
-    def stalled(self, accepted: bool) -> tuple[str, str]:
-        phase = self if accepted else PromptAcceptancePhase()
-        return phase.stall_reason, phase.declared_name
+    def stalled(self, accepted: bool) -> TurnPhase:
+        return self if accepted else PromptAcceptancePhase()
 
 
 class Excursion(TurnPhase):
@@ -142,6 +130,18 @@ class CancellingPhase(TurnPhase):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return self
 
+class ShutdownPhase(TurnPhase):
+    """Native shutdown cannot admit follow-ups or resume model activity."""
+
+    accepts_followup = False
+    can_cancel = False
+    activity_state = ActivityState.WORKING
+    label = "Stopping"
+
+    def observed(self, phase: TurnPhase) -> TurnPhase:
+        return self
+
+
 class PublishingPhase(TurnPhase):
     accepts_followup = False
     label = "Finishing turn"
@@ -151,20 +151,9 @@ class PublishingPhase(TurnPhase):
         return self
 
 
-@dataclass(frozen=True)
 class ModelWaitPhase(TurnPhase):
-    source: RequestProgress | None = None
-
-    @property
-    def summary(self) -> str:
-        return self.detail or (self.source.label if self.source is not None else self.label)
-
     def model_progress(self) -> TurnPhase:
         return self
-
-    @property
-    def request_observations(self) -> tuple[RequestProgress, ...]:
-        return (self.source,) if self.source is not None else ()
 
 
 class SettlingStatsPhase(TurnPhase):
@@ -297,5 +286,5 @@ class ToolRunningPhase(Excursion):
             return self.tool_ended(event.tool_call_id or event.tool_name or "tool")
         return super().on(event, active_tools)
 
-    def stalled(self, accepted: bool) -> tuple[str, str]:
+    def stalled(self, accepted: bool) -> TurnPhase:
         return ModelWaitPhase().stalled(accepted)

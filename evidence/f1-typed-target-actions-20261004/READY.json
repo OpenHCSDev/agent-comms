@@ -1,0 +1,43 @@
+{
+  "state": "SCOPED READY: F1 owner+consumer family with changed native-delete WHOLEApp acceptance",
+  "core_source": "99fa19ef56156c7f79f66495f32a5fdcd43103e3",
+  "core_ready_head_before_final_evidence": "9301fa9b63746a0d675d360cef416c73a5b196ee",
+  "toad_installed_source": "a79f7ae1627e52dcb5e7d3e01c0d12cc3d16ba68",
+  "toad_normal_merged_main_join": "9f484105e05cee25c67a3d1eb9c7baed8e27b870",
+  "product_delta_after_installed": "",
+  "textual": "c1c1ebe5c40499f75dc370c26a7818588114e71d",
+  "native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "source_assets": 927,
+  "sdk": "0.12.1",
+  "normal_packages": 69,
+  "new_gate": {
+    "result": "PASS",
+    "closed_current_history_and_hidden_native": true,
+    "actor_connection_and_reader_unchanged": true,
+    "input_bytes_unchanged": true,
+    "provider_calls": 0,
+    "native_inputs": 0,
+    "whole_app_shutdown_completed": true,
+    "original_sdk_fixture_cleanup_completed": true
+  },
+  "original07": "Start actual SDK/ACP PASS A unchanged/noB0/DM1/sidebar1; subsequent fixture marker refusal preserved, not saved-history evidence",
+  "original08": "App/CLI channel outcomes/archive/current+hidden HISTORY closure and mounted corrected layers PASS49.304; shielded retired delete-a catalog error retained; not error-free wholelogs/physical acceptance",
+  "original09": "callback PASS but WHOLE shutdown FAIL143 preserved; original interleaving cause UNKNOWN",
+  "release_scope": "ONLY original-owner e523 determining two-release-file diff; startup427 qualified same11e event consumer; no full426 sidebars/tab/ancestry/spinner",
+  "not_claimed": [
+    "public delivery",
+    "plain-st physical channel action acceptance",
+    "full recorded417 reader/export",
+    "overall UI speed/smoothness",
+    "original09 proven cause",
+    "allUID borrower clearance"
+  ],
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "new_native_build": false,
+  "new_env": false,
+  "vcs_source_clone": false,
+  "whole_style22_claim_closed": true,
+  "remaining": "parent exact-head review/merge and original public guard; final automatic Debt ratchet exact evidence heads pending",
+  "gate_recipe": "existing tests/declared_target_actions_installed_pilot.py --delete-native-only; no accepted07/08/layers/movie repeated"
+}

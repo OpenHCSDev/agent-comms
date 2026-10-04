@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed02/source.py", line 14, in <module>
+    service.messaging.send_initial_cohort('history-author','history-author','Original retained outbound; no live recipient.')
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/messaging.py", line 119, in send_initial_cohort
+    Message(sender=sender, target=target, body=body, type=type, notice=notice)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 15, in __init__
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/messages.py", line 162, in __post_init__
+    raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")
+agent_comms.errors.RelationViolationError: Thread 'history-author' cannot message itself.
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed02/run.py", line 8, in <module>
+    subprocess.run([str(original),str(here/'source.py'),str(root),str(package)],env=env,check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python', '/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed02/source.py', '/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/post-install-launch-binding555-20261003/installed02/private-root', '/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent']' returned non-zero exit status 1.

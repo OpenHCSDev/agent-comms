@@ -12,7 +12,6 @@ from .compaction_send_admission import native_input_admitted
 from .errors import RelationViolationError
 from .selected_source import SelectedAdmissionSource
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
-from .text_digest import TextDigest
 from .thread_identity import TurnId
 
 if TYPE_CHECKING:
@@ -64,18 +63,17 @@ class OrdinaryTurnBinding(TurnInputBinding):
         text: str,
         already_bound: bool,
     ) -> bool:
-        for key in keys:
-            row = self.dispositions.read().lookup(key)
-            if not row.unresolved or not row.matches_admission(admission):
-                return False
-            if already_bound:
-                if not row.matches_native(native_id=native_id, turn_id=turn.value, text=text):
-                    return False
-            elif not self.dispositions.bind(
-                key, admission=admission, turn_id=turn.value, native_id=native_id, text=text
-            ):
-                return False
-        return True
+        document = self.dispositions.read()
+        if any(not document.lookup(key).unresolved
+               or not document.lookup(key).matches_admission(admission) for key in keys):
+            return False
+        if already_bound:
+            return all(document.lookup(key).matches_native(
+                native_id=native_id, turn_id=turn.value, text=text
+            ) for key in keys)
+        return self.dispositions.bind_originals(
+            keys, admission=admission, turn_id=turn.value, native_id=native_id, text=text
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -104,7 +102,7 @@ class SelectedOriginalBinding(TurnInputBinding):
         # The canonical revision reader already owns absent/unreadable sessions;
         # do not reconstruct that state from the optional path here.
         if (
-            len(keys) != 1
+            not keys
             or already_bound
         ):
             self.invalidate()
@@ -114,29 +112,20 @@ class SelectedOriginalBinding(TurnInputBinding):
         except SessionRevisionUnavailable:
             self.invalidate()
             return False
-        original = self.dispositions.read().lookup(keys[0])
-        if not original.exists:
+        try:
+            source = SelectedAdmissionSource.capture(
+                current, turn, admission, keys, self.dispositions.read(), text,
+                self.selected.original_source.reserved_revision,
+            )
+        except ValueError:
             self.invalidate()
             return False
-        digest = TextDigest.of(text)
-        identity = SelectedAdmissionIdentity(
-            source=SelectedAdmissionSource(
-                incarnation=current.incarnation,
-                owner=current.process_identity,
-                turn=turn,
-                ingress_key=keys[0],
-                admission_generation=admission,
-                correction_witness=f"{admission}:{digest.value}",
-                input_digest=digest,
-                original_digest=original.digest,
-                reserved_revision=self.selected.original_source.reserved_revision,
-            ),
-            session_revision=revision,
-        )
+        identity = SelectedAdmissionIdentity(source=source, session_revision=revision)
         try:
-            self.dispositions.read().compaction_rows(current, keys[0], self.inputs)
+            self.dispositions.read().compaction_rows(current, keys, self.inputs)
         except RelationViolationError:
             self.invalidate()
+            return False
         return self.selected.consume_bound_original(
             wire_root=self.root,
             session_file=current.session_file,

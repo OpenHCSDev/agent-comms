@@ -6,6 +6,7 @@ import math
 import shutil
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .child_process import BoundedRun, TimedOutOutcome
 from .compaction_boundary import HeldCompaction
@@ -16,13 +17,16 @@ from .field_codec import FieldCodec
 from .native_compaction_request import NativeAuthority, NativeRequest
 from .native_package import COMPACTION_HELPER, verify_native_package
 
+if TYPE_CHECKING:
+    from .native_pi import NativePiRpcLaunch
+
 
 class CompactionTransportUnknownError(RuntimeError):
     """Native mutation may have occurred; only exact reconciliation can settle it."""
 
 
 class NativeCompactionWriter:
-    def __init__(self, package_dir: Path):
+    def __init__(self, package_dir: Path, *, native_launch: NativePiRpcLaunch | None = None):
         BoundedRun.require_inherited_deadline()
         self.package_dir = package_dir.resolve(strict=True)
         self.helper = self.package_dir / "dist/agent-comms-compaction-commit-child.mjs"
@@ -35,10 +39,16 @@ class NativeCompactionWriter:
         if environment_launcher is None:
             raise ValueError("Isolated native environment launcher unavailable")
         self.environment_launcher = environment_launcher
-        self.verify()
+        # An independently acquired writer verifies its deployment. A bridge
+        # opened for the retained child borrows that child's original launch;
+        # neither route repeats acquisition under the mutation's bus guard.
+        self.verify(native_launch)
 
-    def verify(self) -> None:
-        verify_native_package(self.package_dir)
+    def verify(self, native_launch: NativePiRpcLaunch | None = None) -> None:
+        if native_launch is None:
+            verify_native_package(self.package_dir)
+        elif native_launch.package != self.package_dir:
+            raise ValueError("Compaction writer differs from its acquired native launch")
         copied_helper = self.package_dir / "dist/agent-comms-compaction-commit-child.mjs"
         if (
             not copied_helper.is_file()
@@ -52,7 +62,6 @@ class NativeCompactionWriter:
     def exchange(
         self, fd: int, request: NativeRequest, timeout: float, retained_fds: tuple[int, ...] = ()
     ) -> NativeOutcome:
-        self.verify()
         encoded = FieldCodec.encode(request)
         encoded["authority"] = FieldCodec.encode(NativeAuthority.capture(fd))
         if not math.isfinite(timeout) or not 0 < timeout <= 30:

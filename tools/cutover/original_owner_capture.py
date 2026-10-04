@@ -48,8 +48,9 @@ class OriginalTypedCapture:
         observed = self.observe(name)
         snapshot = observed.document.snapshot()
         source = observed.selection.require_current(snapshot)
-        retained = RetainedOwnerLaunch.capture(source, snapshot,
-            interpreter=str(self.original_python))
+        # The root decoder and the selected running owner are independent.
+        # RetainedOwnerLaunch observes and fences the owner's actual process.
+        retained = RetainedOwnerLaunch.capture(source, snapshot)
         captured = CapturedOriginalOwner(self, observed.selection, source, retained)
         captured.require_current()
         return captured

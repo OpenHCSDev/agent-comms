@@ -8,21 +8,36 @@ const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // Read the actual selected SettingsManager: it already owns project trust,
 // migrations and in-memory overrides. No detached reader guesses that state.
-function acValidCompactionSettingsRequest(command) {
+function acValidSelectedSourceRequest(command, keys) {
     const text = value => typeof value === "string" && value.length > 0 && value.length <= 4096;
-    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected"]) &&
-        command.type === "agent_comms_compaction_settings" && command.version === 1 && text(command.id) &&
+    return acExactObject(command, keys) && text(command.id) &&
         text(command.sessionId) && text(command.sessionFile) &&
         acExactObject(command.selected, ["provider", "modelId", "contextWindow"]) &&
         text(command.selected.provider) && text(command.selected.modelId) &&
         Number.isSafeInteger(command.selected.contextWindow) && command.selected.contextWindow > 0;
 }
-function acSelectedCompactionSettings(command, session, conflict) {
-    if (conflict || session.isCompacting || !session.isIdle || session.isStreaming || session.isRetrying ||
-        session._retryAttempt || session._nativeInterruptIds || session.pendingMessageCount ||
-        session.agent.steeringQueue.messages.length || session.agent.followUpQueue.messages.length ||
-        session._pendingNextTurnMessages.length || session._pendingCustomMessages.length ||
-        session._pendingBashMessages.length) throw Error("Selected compaction settings require an idle owner");
+function acValidCompactionSettingsRequest(command) {
+    return acValidSelectedSourceRequest(command,
+        ["id", "type", "version", "sessionId", "sessionFile", "selected", "purpose", "boundary"]) &&
+        command.type === "agent_comms_compaction_settings" && command.version === 2 &&
+        ["threshold", "manual"].includes(command.purpose) && Array.isArray(command.boundary) &&
+        command.boundary.length <= 1 && command.boundary.every(ref =>
+            acExactObject(ref, ["seq", "message_id"]) && Number.isSafeInteger(ref.seq) &&
+            ref.seq > 0 && typeof ref.message_id === "string" && ref.message_id.length > 0 &&
+            ref.message_id.length <= 4096);
+}
+function acValidCompactionPreparationRequest(command) {
+    return acValidSelectedSourceRequest(command,
+        ["id", "type", "version", "sessionId", "sessionFile", "selected", "settings", "retainedText"]) &&
+        command.type === "agent_comms_prepare_compaction" && command.version === 1 &&
+        acExactObject(command.settings, ["reserveTokens", "keepRecentTokens"]) &&
+        Number.isSafeInteger(command.settings.reserveTokens) && command.settings.reserveTokens >= 0 &&
+        Number.isSafeInteger(command.settings.keepRecentTokens) && command.settings.keepRecentTokens > 0 &&
+        typeof command.retainedText === "string" && command.retainedText.isWellFormed();
+}
+function acSelectedIdleSettings(command, session, conflict) {
+    if (conflict || !session.isIdleForCompaction)
+        throw Error("Selected compaction settings require an idle owner");
     const model = session.model;
     if (command.sessionId !== session.sessionId || command.sessionFile !== session.sessionFile ||
         !model || command.selected.provider !== model.provider || command.selected.modelId !== model.id ||
@@ -32,15 +47,38 @@ function acSelectedCompactionSettings(command, session, conflict) {
         settings.reserveTokens < 0 || settings.reserveTokens > 10000000 ||
         !Number.isSafeInteger(settings.keepRecentTokens) || settings.keepRecentTokens <= 0 ||
         settings.keepRecentTokens > 10000000) throw Error("Invalid effective compaction settings");
-    // Cold restored history can require compaction before any runtime usage has
-    // been published. The selected session owns both stored admission and usage.
-    const requiresCompaction = session.storedContext.requiresCompaction();
-    const tokens = requiresCompaction ? undefined : session.getContextUsage()?.tokens;
-    return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
+    return settings;
+}
+function acSelectedCompactionSettings(command, session, conflict) {
+    const settings = acSelectedIdleSettings(command, session, conflict);
+    const policy = CompactionPolicy.fromEnvironment();
+    return {version: 2, sessionId: session.sessionId, sessionFile: session.sessionFile,
         selected: command.selected,
         decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
             keepRecentTokens: settings.keepRecentTokens,
-            trigger: requiresCompaction || (tokens != null && shouldCompact(tokens, model.contextWindow, settings))}};
+            taskAware: policy.taskTimingEnabled(), boundary: command.boundary,
+            reason: policy.decision(session, settings, command.purpose, command.boundary)}};
+}
+function acSelectedCompactionPreparation(command, session, conflict) {
+    const settings = acSelectedIdleSettings(command, session, conflict);
+    if (command.settings.reserveTokens !== settings.reserveTokens ||
+        command.settings.keepRecentTokens !== settings.keepRecentTokens)
+        throw Error("Selected preparation settings changed");
+    const manager = session.sessionManager;
+    const revision = manager.entryStore.revision;
+    const prepared = prepareCompaction(manager.entryStore, settings, session.model,
+        manager.getLeafId(), command.retainedText);
+    const preparation = prepared ? {status: "ready",
+        witness: manager.captureCompactionWitness(prepared.firstKeptEntryId),
+        tokensBefore: prepared.tokensBefore, isSplitTurn: prepared.isSplitTurn}
+        : {status: "skip", sessionId: session.sessionId};
+    manager.entryStore.assertCurrent();
+    if (manager.entryStore.revision !== revision)
+        throw Error("Selected preparation source changed");
+    return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
+        selected: command.selected,
+        settings: {reserveTokens: settings.reserveTokens, keepRecentTokens: settings.keepRecentTokens},
+        preparation};
 }
 function acValidSummaryRequest(value) {
     const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings", "retainedText"];
@@ -94,15 +132,12 @@ function acSummaryCompatible(session, binding) {
         (!session._extensionRunnerRef || session._extensionRunnerRef.current === runner) &&
         (!binding || (runner === binding.runner && session.agent.streamFunction === binding.streamFn &&
             session.model === binding.model && session.modelRuntime === binding.modelRuntime &&
+            session.modelRuntime.getProvider(binding.model.provider) === binding.provider &&
             session.settingsManager === binding.settingsManager && session.sessionManager === binding.manager &&
             session.modelRuntime.getAvailableSnapshot() === binding.catalog));
 }
 function acSummaryCurrent(session, request, binding) {
-    if (session.isCompacting || session.isStreaming || !session.isIdle || session.isRetrying ||
-        session._retryAttempt || session._nativeInterruptIds ||
-        (binding && binding.host.session !== session) || session.pendingMessageCount || session.agent.steeringQueue.messages.length ||
-        session.agent.followUpQueue.messages.length || session._pendingNextTurnMessages.length ||
-        session._pendingCustomMessages.length || session._pendingBashMessages.length ||
+    if (!session.isIdleForCompaction || (binding && binding.host.session !== session) ||
         !acSummaryCompatible(session, binding)) return false;
     const model = session.model;
     if (!model || model.provider !== request.selected.provider || model.id !== request.selected.modelId ||
@@ -113,9 +148,10 @@ function acSummaryCurrent(session, request, binding) {
     try {
         const witness = session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId);
         if (Object.keys(request.witness).some(key => witness[key] !== request.witness[key])) return false;
-        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId(), request.retainedText);
-        return preparation &&
-            preparation.firstKeptEntryId === request.witness.firstKeptEntryId;
+        // Admission owns the prepared cut. The witness fences its original
+        // history; checking currentness must not prepare that history again.
+        // Native compact() still admits the generated final context by budget.
+        return true;
     } catch { return false; }
 }
 function acSummaryValidUsage(usage) {
@@ -184,6 +220,7 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     // never reaches the model. Do not reject a valid preparation before chunking.
     const binding = { host, runner: session.extensionRunner, streamFn: session.agent.streamFunction,
         model: session.model, modelRuntime: session.modelRuntime,
+        provider: session.modelRuntime.getProvider(model.provider),
         settingsManager: session.settingsManager, manager: session.sessionManager,
         catalog: session.modelRuntime.getAvailableSnapshot() };
     if (typeof binding.streamFn !== "function" || !acSummaryCurrent(session, request, binding))
@@ -204,8 +241,8 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
     const selectedStream = (model, context, options) => {
         // No standalone getAuth: actual selected streamFn resolves auth on use.
         if (slot.controller.signal.aborted ||
-            !acSummaryCurrent(session, request, binding) || model !== binding.model ||
-            !acSummaryCompatible(session, binding)) throw new Error("Selected route changed before call");
+            !acSummaryCurrent(session, request, binding) || model !== binding.model)
+            throw new Error("Selected route changed before call");
         // Everything after this line, including auth/header hooks, is possibly
         // spent even if the fake transport observes zero network requests.
         slot.started = true;
@@ -312,7 +349,18 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
         const result = await compact(preparation, binding.model, undefined, undefined,
             request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
             { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
-            { onSummaryText: progress,
+            { onRequestProgress: session.agent.onRequestProgress,
+              onSummaryText: progress,
+              summaryPrefix: async (messages, instructions, options) => {
+                  // A context hook can transform the original request. Its
+                  // absence here is a route admission fact, not an alias/mirror.
+                  if (binding.runner.hasHandlers("context")) return undefined;
+                  const context = await SessionContext.prefixContext(session, messages.prefixMessages());
+                  if (!acSummaryCurrent(session, request, binding)) throw new Error("Selected prefix source changed");
+                  return binding.provider?.summaryPrefix?.(binding.model, context, instructions,
+                      { ...options, cacheRetention: undefined,
+                        sessionId: session.agent.sessionId, transport: session.agent.transport });
+              },
               onSummaryProgress: source => progress("", source),
               onSummaryStart: source => progress("", source),
               onSummaryResponse: (_usage, source) => progress("", source) }, undefined);

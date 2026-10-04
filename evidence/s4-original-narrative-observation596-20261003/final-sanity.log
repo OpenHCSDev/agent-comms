@@ -1,0 +1,5 @@
+ERROR: not found: /home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/test_compaction_retention_fixture.py::RecallFixtureTests
+(no match in any of [<Module test_compaction_retention_fixture.py>])
+
+
+no tests ran in 0.13s

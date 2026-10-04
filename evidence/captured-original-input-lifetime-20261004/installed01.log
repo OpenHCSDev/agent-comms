@@ -1,0 +1,5 @@
+ERROR: usage: pytest.main() [options] [file_or_dir] [file_or_dir] [...]
+pytest.main(): error: unrecognized arguments: -n --maxprocesses=8 --dist=worksteal
+  inifile: /home/ts/wt/comms-goal-ledger-schema-carry-20261002/pyproject.toml
+  rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+

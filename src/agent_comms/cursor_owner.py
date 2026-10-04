@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -12,10 +13,13 @@ from .coordinator import Coordination
 from .historical_native_inputs import HistoricalNativeInput
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner, ParticipantOwner
-from .native_input_record import NativeInputReference
+from .native_input_record import NativeInputReference, UnrecordedNativeInputReference
 from .thread_identity import GenerationCounter
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .registry_document import RegistrySnapshot
+
+if TYPE_CHECKING:
+    from .proven_source_coverage import ProvenSourceCoverage
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,32 @@ class CursorOwner(RegistryOwner):
     def require_recorded_input(self, db: sqlite3.Connection, cursor: CurrentNativeCursor) -> None:
         cursor.reference.require_recorded_input(self, db)
 
+    def require_coverage(
+        self, db: sqlite3.Connection, cursor: CurrentNativeCursor,
+        coverage: ProvenSourceCoverage,
+    ) -> None:
+        """Validate the exact SQL row against this operation's original proof.
+
+        A declined advancement may retain an earlier row. Its covered prefix
+        still needs its own admission/reference checks; later evidence cannot
+        turn that old row into a verified observation.
+        """
+        if cursor.owner_identity != self.participant_identity:
+            raise IdentityConflict("current native cursor owner identity differs")
+        if cursor.covered_seq > coverage.covered_seq or (
+            cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
+        ):
+            raise IdentityConflict("current native cursor exceeds canonical source proof")
+        if not self.matches_prefix(db, coverage.evidence(through_seq=cursor.covered_seq)):
+            raise IdentityConflict("current cursor borrows historical owner source proof")
+        proof = coverage.last_proof(cursor.injected_seq)
+        expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
+        if cursor.reference != expected:
+            raise IdentityConflict("current native cursor proof differs from journal")
+        if proof is not None and proof.owner_identity != self.participant_identity:
+            raise IdentityConflict("current native cursor proof belongs to another owner")
+        self.require_recorded_input(db, cursor)
+
     def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:
         row = NativeRuntimeInput.one(db, input_id=reference.input_id)
         if row is None or not row.sent_owner_admission_generation.matches(self.admission_generation):
@@ -94,17 +124,23 @@ class CursorOwner(RegistryOwner):
         prior: CurrentNativeCursor | None,
         committed_input_id: str | None,
     ) -> bool:
-        """Historical evidence cannot seed another live admission generation."""
+        """The original recorded input seeds only its own live admission.
+
+        A settled caller may additionally fence the expected input ID. Idle
+        projection uses the same immutable receipt, not a cached completion ID;
+        absence of that caller assertion does not erase the receipt's admission.
+        """
         if proof is None:
             return True  # Covered no-wake prefix may precede an UNKNOWN gap.
         if proof.owner_identity != self.participant_identity or proof.source_seq != injected_seq:
             raise IdentityConflict("current cursor native proof belongs to another owner")
-        if prior is None or injected_seq > prior.injected_seq:
-            if proof.input_id != committed_input_id:
-                return False
-        elif prior.input_id != proof.input_id:
+        if (
+            prior is not None
+            and injected_seq <= prior.injected_seq
+            and prior.input_id != proof.input_id
+        ):
             raise IdentityConflict("current cursor native input changed")
-        elif committed_input_id is not None and proof.input_id != committed_input_id:
+        if committed_input_id is not None and proof.input_id != committed_input_id:
             return False
         reserved = NativeRuntimeInput.one(db, input_id=proof.input_id)
         if (

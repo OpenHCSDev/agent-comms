@@ -58,7 +58,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
         )
         for key in (first, second)
     }
-    initial = agent.inputs.queue_state("beta")
+    initial = await agent.inputs.queue_state("beta")
     assert initial.scope.admission_generation == generation
     assert initial.projection.items == (
         QueueItem(first, "same text"),
@@ -89,13 +89,13 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     restored = updates[-1]
     assert restored.projection.items == ()
     assert restored.projection.restored == (QueueItem(second, "same text"),)
-    metadata = decode_updates(agent.sessions.metadata("beta", session_id="beta"))
+    metadata = decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
     assert (
         next(f for f in metadata if isinstance(f, QueueChangedUpdate)).projection
         == restored.projection
     )
     comms.registry.register(comms.registry.require("beta"), new_owner=True)
-    current = agent.inputs.queue_state("beta")
+    current = await agent.inputs.queue_state("beta")
     assert current.scope.admission_generation > generation
     assert current.projection.items == current.projection.restored == ()
     assert second in agent.inputs.restored_inputs["beta"]
@@ -118,7 +118,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     assert agent.inputs.dispositions.read().rows["acp:" + exact].declared_name == "reserved"
     state = next(
         f
-        for f in decode_updates(agent.sessions.metadata("beta", session_id="beta"))
+        for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
         if isinstance(f, QueueChangedUpdate)
     )
     assert state.scope.admission.incarnation.name == "beta"
@@ -138,7 +138,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
         receipt = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
         assert receipt.input_id == request.input_id
     assert requests[0].input_id != requests[1].input_id
-    state = agent.inputs.queue_state("beta")
+    state = await agent.inputs.queue_state("beta")
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
     assert all(row.public_status == "unknown" for row in agent.inputs.dispositions.read().rows.values())
     before = inbox.qsize()
@@ -185,15 +185,15 @@ async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path
         )
         for key, text in rows.items()
     }
-    state = agent.inputs.queue_state("beta")
+    state = await agent.inputs.queue_state("beta")
     assert state.scope is not None
     assert isinstance(state.projection, UnavailableQueueProjection)
     assert set(agent.inputs.queued_inputs["beta"]) == set(rows)
 
 
-def test_alias_maps_only_attachment_session_id(tmp_path):
+async def test_alias_maps_only_attachment_session_id(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
-    state = agent.inputs.queue_state("beta")
+    state = await agent.inputs.queue_state("beta")
     (rebased,) = decode_updates(present_session(encode_updates(state), "alias"))
     assert rebased.scope.session_id == "alias"
     assert rebased.scope.admission == state.scope.admission

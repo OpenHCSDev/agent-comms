@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
@@ -22,11 +23,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class TurnInputSource(ABC):
-    keys: tuple[str, ...]
     accepted_id: str | None
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()
+
+    if TYPE_CHECKING:
+        keys: tuple[str, ...]
 
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1
@@ -107,6 +110,10 @@ class OriginalTurnInput(TurnInputSource):
     batch: InputBatch
 
     @property
+    def keys(self) -> tuple[str, ...]:
+        return self.batch.keys
+
+    @property
     def notice_keys(self) -> tuple[str, ...]:
         return ()
 
@@ -117,11 +124,13 @@ class OriginalTurnInput(TurnInputSource):
     def valid_keys(self, text: str) -> bool:
         return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
 
-    def compaction_key(self, session_file: str | None) -> str | None:
-        return self.keys[0] if session_file is not None and len(self.keys) == 1 else None
+    def compaction_keys(self, session_file: str | None) -> tuple[str, ...]:
+        """Every original in this captured input shares its saved-context preparation."""
+        return self.keys if session_file is not None else ()
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int
+        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int,
+        *, custody: ExitStack,
     ) -> OriginalTurnInput:
         """Every original uses the same durable input authority before native preparation.
 
@@ -130,8 +139,10 @@ class OriginalTurnInput(TurnInputSource):
         """
         if self.keys:
             return self
-        key = dispositions.reserve_turn(owner.name, turn, admission, self.prompt)
-        return replace(self, keys=(key,))
+        batch = dispositions.reserve_turn(
+            owner.name, turn, admission, self.prompt, custody=custody,
+        )
+        return replace(self, batch=batch)
 
     def selected_admission(self, inputs: InputDrain, session_id: str):
         return inputs.selected_summary_admissions.get(session_id)
@@ -189,7 +200,10 @@ class ScheduledOriginalInput(DependencyOriginalInput):
     """
 
 
+@dataclass(frozen=True, kw_only=True)
 class FollowingTurnInput(TurnInputSource):
+    keys: tuple[str, ...]
+
     def display(self, dispositions: InputDispositions, text: str) -> str:
         row = dispositions.read().lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text

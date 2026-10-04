@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .child_process import ChildOutcome
 from .compaction_errors import CompactionJournalError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .native_revision_text import NativeRevisionText
+from .private_path import FileRevision
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
@@ -102,7 +104,6 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
-    reconcile_unchanged_source: ClassVar[bool] = False
 
     def project_outcome(self, attempt: SelectedSummaryAttempt, sequence: int):
         """In-flight requests and native-owned summaries add no journal notice."""
@@ -124,16 +125,13 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
             raise CompactionJournalError("Manual compaction cannot admit an original input")
     def require_commit_reservation(self) -> None:
         raise CompactionJournalError("Selected summary is not a commit reservation")
-    def manual_recovery(self) -> SummaryState:
-        raise CompactionJournalError(
-            "Prior selected compaction is uncertain; inspect compaction-status, never replay"
-        )
     def refuse(self, reason: str) -> SummaryState:
         raise CompactionJournalError("Selected summary refusal transition forbidden")
     def fail(self, reason: str) -> SummaryState:
         raise CompactionJournalError("Selected summary failure transition forbidden")
     def retire_unchanged_source(self) -> SummaryState:
-        raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
+        """Settled/link states retain their original disposition during recovery."""
+        return self
     def verifies_original(
         self, journal: CompactionJournal, attempt: SelectedSummaryAttempt
     ) -> bool:
@@ -141,6 +139,13 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 
 
 class ReservedSummary(SummaryState):
+    def retire_unchanged_source(self) -> SummaryState:
+        # A reservation records neither provider completion nor a native write.
+        # Recovery must still prove its original source is unchanged under the
+        # native writer and that no commit/input binding exists. Provider outcome
+        # remains UNKNOWN; this does not restart its request.
+        return RetiredUnknownSummary()
+
     def require_commit_reservation(self) -> None:
         pass
     def refuse(self, reason: str) -> SummaryState:
@@ -157,6 +162,7 @@ class ReservedSummary(SummaryState):
             DeclinedPrestartSummary,
             RefusedSummary,
             FailedSummary,
+            RetiredUnknownSummary,
         )
 
 
@@ -188,7 +194,6 @@ class RefusedSummaryOutcome(SummaryOutcome):
 
 
 class UnknownSummary(UnknownSummaryOutcome, SummaryState):
-    reconcile_unchanged_source = True
     def retire_unchanged_source(self) -> SummaryState:
         return RetiredUnknownSummary()
 
@@ -275,7 +280,7 @@ class RefusedSummary(RefusedSummaryOutcome, SummaryState):
     def __post_init__(self):
         if not self.decline_reason or len(self.decline_reason) > 256:
             raise ValueError("Bounded native refusal reason required")
-    def manual_recovery(self) -> SummaryState:
+    def retire_unchanged_source(self) -> SummaryState:
         return RetiredRefusalSummary(self.decline_reason)
     def refuse(self, reason: str) -> SummaryState:
         if reason != self.decline_reason:
@@ -289,7 +294,7 @@ class RefusedSummary(RefusedSummaryOutcome, SummaryState):
 
 @dataclass(frozen=True)
 class RetiredRefusalSummary(RefusedSummaryOutcome, SummaryState):
-    """An explicit manual command acknowledged a known no-provider refusal."""
+    """Original source custody excluded a native write after a known refusal."""
 
     decline_reason: str = field()
     terminal = True
@@ -331,11 +336,16 @@ class NativeCommitPosition:
     """The committed native entry/revision/leaf shared by receipt and publication."""
 
     entry_id: str = field(metadata={"wire_name": "entryId"})
-    revision: str
+    revision: Annotated[FileRevision, NativeRevisionText]
     leaf_id: str = field(metadata={"wire_name": "leafId"})
     def __post_init__(self):
-        if not self.entry_id or not self.revision or not self.leaf_id:
+        if not self.entry_id or not self.leaf_id:
             raise ValueError("Invalid native metadata receipt; never replay")
+
+    def require_entry(self, entry) -> None:
+        """A returned commit refers to this original journal entry."""
+        if entry.require_entry_id() != self.entry_id:
+            raise CompactionJournalError("Original committed source cut differs")
 
 
 @dataclass(frozen=True)
@@ -399,7 +409,7 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
             return UnknownNativeOutcome("native-metadata-mismatch")
         return self
     def require_saved_revision(self, revision: SessionRevision) -> None:
-        if self.revision != revision.native_stamp:
+        if self.revision != revision.native:
             raise CompactionJournalError("Selected native result is unavailable: saved revision changed")
 
     def require_committed(self) -> CommittedNativeOutcome:
@@ -417,8 +427,8 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
 @dataclass(frozen=True)
 class AbortedNoWriteNativeOutcome(NativeOutcome, declared_name="aborted-no-write"):
     state = AbortedNoWriteOperation()
-    revision: str
+    revision: Annotated[FileRevision, NativeRevisionText]
     leaf_id: str = field(metadata={"wire_name": "leafId"})
     def __post_init__(self):
-        if not self.revision or not self.leaf_id:
+        if not self.leaf_id:
             raise ValueError("Incomplete native no-write receipt")

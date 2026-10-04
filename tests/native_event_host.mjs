@@ -57,6 +57,35 @@ if (process.env.S1_UI_PROBE) {
     });
   });
 }
+if (process.env.S1_REPLACEMENT_PROBE) {
+  extensions.push((api) => {
+    api.on('session_start', (event, ctx) => appendFileSync(process.env.S1_REPLACEMENT_PROBE,
+      JSON.stringify({event: 'session_start', reason: event.reason,
+        sessionId: ctx.sessionManager.getSessionId()}) + '\n'));
+    api.on('session_before_switch', (event) => {
+      if (event.targetSessionFile === process.env.S1_CANCELLED_SESSION) return {cancel: true};
+    });
+  });
+}
+if (process.env.S1_COMPACTION_PROBE) {
+  extensions.push((api) => {
+    let original;
+    const record = (event, ctx) => appendFileSync(process.env.S1_COMPACTION_PROBE,
+      JSON.stringify({event: event.type, sessionId: ctx.sessionManager.getSessionId(),
+        originalSessionId: original?.sessionManager.getSessionId(),
+        entryId: event.compactionEntry?.id, reason: event.reason}) + '\n');
+    api.on('session_start', (event, ctx) => { original = ctx; record(event, ctx); });
+    api.on('session_shutdown', record);
+    api.on('session_compact', async (event, ctx) => {
+      record(event, ctx);
+      if (process.env.S1_COMPACTION_RELEASE) {
+        while (!existsSync(process.env.S1_COMPACTION_RELEASE)) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+    });
+  });
+}
 // Tool declarations and output bounding remain owned by the Python CLI. The
 // fixture supplies only the SDK transport binding, not another tool catalog.
 const invoke = (args) => JSON.parse(execFileSync(process.env.S1_PYTHON,
@@ -68,15 +97,21 @@ const customTools = process.env.S1_COMMS_TOOLS ? invoke(['tools']).tools.map(dec
     return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}], details: result};
   },
 })) : [];
-const loader = new pi.DefaultResourceLoader({cwd, agentDir, settingsManager: settings,
-  noExtensions: true, noSkills: true, noContextFiles: true, noPromptTemplates: true,
-  extensionFactories: extensions});
-await loader.reload();
 const manager = process.argv.includes('--session') ? pi.SessionManager.open(option('--session')) :
   pi.SessionManager.create(cwd, join(agentDir, 'sessions'));
-const {session} = await pi.createAgentSession({cwd, agentDir, modelRuntime: runtime,
-  model: runtime.getModel(option('--provider'), option('--model')), thinkingLevel: 'off',
-  settingsManager: settings, sessionManager: manager, resourceLoader: loader,
-  ...(process.env.S1_COMMS_TOOLS ? {tools: ['read', ...customTools.map(tool => tool.name)], customTools} : {noTools: 'all'}),
+const host = await pi.createAgentSessionRuntime(async (options) => {
+  const services = await pi.createAgentSessionServices({...options, modelRuntime: runtime,
+    settingsManager: settings, resourceLoaderOptions: {
+      noExtensions: true, noSkills: true, noContextFiles: true, noPromptTemplates: true,
+      extensionFactories: extensions,
+    }});
+  const result = await pi.createAgentSessionFromServices({services,
+    sessionManager: options.sessionManager, sessionStartEvent: options.sessionStartEvent,
+    model: runtime.getModel(option('--provider'), option('--model')), thinkingLevel: 'off',
+    ...(process.env.S1_COMMS_TOOLS ? {tools: ['read', ...customTools.map(tool => tool.name)], customTools} : {noTools: 'all'}),
+  });
+  return {...result, services, diagnostics: services.diagnostics};
+}, {
+  cwd, agentDir, sessionManager: manager,
 });
-await runRpcMode({session, setRebindSession() {}, async dispose() {session.dispose();}});
+await runRpcMode(host);

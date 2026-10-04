@@ -1,0 +1,112 @@
+{
+  "owner": "context-explorer309",
+  "purpose": "installed TUI physical interaction video review",
+  "output": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-20261002/capture",
+  "command": [
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "--session",
+    "context547",
+    "--project-dir",
+    "/home/ts/.agent-comms"
+  ],
+  "terminal_command": [
+    "st",
+    "-e",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "--session",
+    "context547",
+    "--project-dir",
+    "/home/ts/.agent-comms"
+  ],
+  "fps": 60,
+  "screen": [
+    1440,
+    1000
+  ],
+  "profiling_requested": false,
+  "state_capture_requested": true,
+  "ui_config": {
+    "source": "/home/ts/.config/toad/toad.json",
+    "home": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-20261002/capture/ui-config",
+    "initial_sha256": "dc7757bf1a59dc9df0b20a575d6453def6b0283742bced0aa3d910edec2b79a2"
+  },
+  "private_root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+  "capture_target": "private",
+  "physical_journey": "context_inspection",
+  "original_owner_before": {
+    "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+    "mode": "private"
+  },
+  "recorder_argv": [
+    "/home/ts/wt/toad-command-discovery-handoff/tests/tools/record_installed_tui.py",
+    "--output",
+    "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-20261002/capture",
+    "--owner",
+    "context-explorer309",
+    "--private-root",
+    "/home/ts/.cache/agent-scratch/m547ctx/w",
+    "--capture-target",
+    "private",
+    "--journey",
+    "context_inspection",
+    "--capture-state",
+    "--review-timing",
+    "deferred",
+    "--fps",
+    "60",
+    "--width",
+    "1440",
+    "--height",
+    "1000",
+    "--fit-window",
+    "--startup-wait",
+    "10",
+    "--max-duration",
+    "80",
+    "--tail-seconds",
+    "1",
+    "--",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "--session",
+    "context547",
+    "--project-dir",
+    "/home/ts/.agent-comms"
+  ],
+  "recorder_source_sha256": "aadeeb53089acd50942f8400eb37e67e7f3875aeffacb373784f6ad679c95a94",
+  "started_utc": "2026-10-02T21:39:27.504891+00:00",
+  "assessment": "unreviewed",
+  "capture_completed": false,
+  "completed": false,
+  "review_timing": "deferred",
+  "review": {
+    "start_seconds": 0,
+    "seconds": 3,
+    "fps": 8,
+    "frames_limit": 24,
+    "slowdown": 8,
+    "timestamp_basis": "source video seconds"
+  },
+  "error": "ValueError: Candidate activation and actual ACP native launch must match",
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 805497,
+        "start_ticks": 45280669,
+        "returncode": 0
+      }
+    ]
+  },
+  "original_owner_after": {
+    "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+    "mode": "private"
+  }
+}

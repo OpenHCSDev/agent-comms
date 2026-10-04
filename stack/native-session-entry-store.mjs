@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { getHeapStatistics } from 'node:v8';
+import { sessionEntryToContextMessages } from './session-manager.js';
 
 function revision(stat) {
     return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
@@ -23,6 +24,7 @@ export class EntryMetadata {
         this.inputDigest = entry.message?.inputDigest ?? null;
         this.commitId = entry.details?.agentCommsCommit?.commitId ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
+        this.contextMessageCount = sessionEntryToContextMessages(entry).length;
         this.model = entry.type === 'model_change'
             ? { provider: entry.provider, modelId: entry.modelId }
             : this.role === 'assistant' ? { provider: entry.message.provider, modelId: entry.message.model } : null;
@@ -108,9 +110,13 @@ export class EntryStore {
         }
         return null;
     }
-    latest(leafId, type) {
-        for (const meta of this.ancestors(leafId)) if (meta.type === type) return this.get(meta.id);
+    latestMetadata(leafId, type) {
+        for (const meta of this.ancestors(leafId)) if (meta.type === type) return meta;
         return undefined;
+    }
+    latest(leafId, type) {
+        const meta = this.latestMetadata(leafId, type);
+        return meta ? this.get(meta.id) : undefined;
     }
     contextSettings(leafId = this.lastId) {
         let model = null, thinkingLevel = null;
@@ -121,16 +127,43 @@ export class EntryStore {
         }
         return { model, thinkingLevel: thinkingLevel ?? 'off' };
     }
-    *contextEntries(leafId = this.lastId) {
-        const compaction = this.latest(leafId, 'compaction');
-        if (!compaction) { yield* this.branch(leafId); return; }
-        yield compaction;
+    *contextMetadata(leafId = this.lastId) {
+        this.assertCurrent();
+        try {
+            const compaction = this.latestMetadata(leafId, 'compaction');
+            if (!compaction) { yield* this.branchMetadata(leafId); return; }
+            yield compaction;
+            yield* this.keptMetadata(leafId, compaction);
+        } finally { this.assertCurrent(); }
+    }
+    *keptMetadata(leafId = this.lastId, compaction = this.latestMetadata(leafId, 'compaction')) {
+        // The same original floor owns both canonical and recent-only views.
+        if (!compaction) throw new Error('Kept-source view requires an original compaction floor');
         let keeping = false;
         for (const meta of this.branchMetadata(leafId)) {
             if (meta.id === compaction.firstKeptEntryId) keeping = true;
             if (meta.id === compaction.id) { keeping = true; continue; }
-            if (keeping) yield this.get(meta.id);
+            if (keeping) yield meta;
         }
+    }
+    *uncompactedMetadata(leafId = this.lastId) {
+        this.assertCurrent();
+        try {
+            for (const meta of this.branchMetadata(leafId)) {
+                // A stored summary replaces source; it is not raw ancestry.
+                if (meta.type !== 'compaction') yield meta;
+            }
+        } finally { this.assertCurrent(); }
+    }
+    *contextEntries(leafId = this.lastId) {
+        for (const meta of this.contextMetadata(leafId)) yield this.get(meta.id);
+    }
+    contextMessageCount(leafId = this.lastId) {
+        let count = 0;
+        for (const meta of this.contextMetadata(leafId)) {
+            count += meta.contextMessageCount;
+        }
+        return count;
     }
     *trackedMetadata() {
         for (const meta of this.metadataEntries()) if (meta.inputId !== null) yield meta;
@@ -196,6 +229,7 @@ export class MemoryEntryStore extends EntryStore {
     get lastId() { this.assertUsable(); return this.#last; }
     get(id) { this.assertUsable(); return this.#entries.get(id); }
     metadata(id) { this.assertUsable(); return this.#metadata.get(id); }
+    assertCurrent() { this.assertUsable(); }
     *metadataEntries() { this.assertUsable(); yield* this.#metadata.values(); }
     *branchMetadata(leafId = this.lastId) { yield* [...this.ancestors(leafId)].reverse(); }
     append(entry) {

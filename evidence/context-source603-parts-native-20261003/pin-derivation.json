@@ -1,0 +1,45 @@
+{
+  "source_checkpoint": "bf294eab8159556a91952496850ff16a4c900c30",
+  "builder_source": "bf294eab8159556a91952496850ff16a4c900c30",
+  "manifest": "d5efa0d56e7ad3962bf3efc009adf1569167a260f1ceb46824c9271a0e7542a2",
+  "tree": "5ff27e716d8adc6cd1a2482fb90d35e24b4c4f837160f262ff05ee2c52769798",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-d5efa0d56e7ad396/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/agent-session.js",
+      "original_sha256": "20c648a193c63521af51eb4d4e366ea0885dc64fba844406b530ebed9f848c4b",
+      "new_sha256": "778c9632b877c0309ce54d7f24940b955d75c143f457071573b71c5136a2583b"
+    },
+    {
+      "path": "dist/core/turn-context.d.ts",
+      "original_sha256": "91383d3e0bf1985605dbbb0a3a3b5ef17da0f29c59c32db5c14af764999e696d",
+      "new_sha256": "e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba"
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "original_sha256": "11bcccebf0234a0ca5e2eeb9293637eb481ba8a73304e9ec14c7f3e4294443e4",
+      "new_sha256": "143e7335e68e5aa89d15c4cf5c012aed3ddf0d0a23c4194b64d1fcb3b00f8db0"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "bb12e541a1e6a28dd7fe183ffc4b39ee5829ca2a3baa1cd44fd34ed1d1d8a791",
+      "new_sha256": "29e16b2015a53cd61fda2574284cdedf8d1c0dacfa03d03b0e98df4cb10a53c7"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-types.d.ts",
+      "original_sha256": "88bce628eb358af08ec861e7596f507c9bb3dfd3f3ed38051b3296273d8165c9",
+      "new_sha256": "4dd447d193a7104230f51a7d09031c9cba81aec19d7d20762ba6c038ec06de51"
+    }
+  ],
+  "all_other_members_equal_native593_89": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138419028,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; Original producer plus recorded-segment read qualification remains Arendt-owned; artifact only, not Ready/live/S4-complete."
+}

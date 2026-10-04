@@ -1,0 +1,13 @@
+{
+  "actual_main": "db620680bf6f52133157209b2a7b557eaef988a1",
+  "normal_merge": "40f557d44fec3e7b7c97b47d8f498609af48a361",
+  "accepted605_files_equal_main": [
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registry_provenance.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/presentation.py"
+  ],
+  "merge_conflicts": 0,
+  "native_d5_changed": false,
+  "no_configured_input_before_merge": true
+}

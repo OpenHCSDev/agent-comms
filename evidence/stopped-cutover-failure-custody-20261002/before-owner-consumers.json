@@ -1,0 +1,172 @@
+{
+  "src/agent_comms": {
+    "parsed": 311,
+    "unparsed": [],
+    "declarations": {
+      "src/agent_comms/owner_cutover.py::OwnerCutover": 22,
+      "src/agent_comms/owner_cutover.py::StoppedOwnerInstallation": 10,
+      "src/agent_comms/owner_cutover.py::PreserveOwnerRuntime": 8,
+      "src/agent_comms/owner_lifecycle.py::restart_owners": 25,
+      "src/agent_comms/owner_restart.py::OwnerRestartHandoff": 25,
+      "src/agent_comms/owner_restart.py::StoppedOwnerBatch": 25,
+      "src/agent_comms/owner_restart.py::FencedOwnerBatch": 22,
+      "src/agent_comms/owner_restart.py::AdmittedOwnerBatch": 40
+    },
+    "consumers": [
+      {
+        "function": "src/agent_comms/cli_commands.py::apply",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "src/agent_comms/owner_lifecycle.py::restart_owners",
+        "calls": [
+          "PreserveOwnerRuntime"
+        ]
+      },
+      {
+        "function": "src/agent_comms/owner_restart.py::complete",
+        "calls": [
+          "OwnerRestartHandoff",
+          "StoppedOwnerBatch"
+        ]
+      },
+      {
+        "function": "src/agent_comms/owner_restart.py::fence",
+        "calls": [
+          "FencedOwnerBatch"
+        ]
+      },
+      {
+        "function": "src/agent_comms/restart_queue.py::step",
+        "calls": [
+          "restart_owners"
+        ]
+      }
+    ],
+    "imports": [
+      "agent_comms.owner_cutover.OwnerCutover",
+      "agent_comms.owner_cutover.PreserveOwnerRuntime",
+      "agent_comms.owner_restart.AdmittedOwnerBatch",
+      "agent_comms.owner_restart.StoppedOwnerBatch"
+    ]
+  },
+  "tools": {
+    "parsed": 52,
+    "unparsed": [],
+    "declarations": {
+      "tools/cutover/cutover_child.py::run_cutover_child": 7
+    },
+    "consumers": [
+      {
+        "function": "tools/cutover/execute_retained_summary_foundation.py::main",
+        "calls": [
+          "PreserveOwnerRuntime"
+        ]
+      },
+      {
+        "function": "tools/cutover/publish_openhcs_recovery.py::main",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tools/cutover/publish_retained_summary.py::publish",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tools/cutover/restart_retained_routing.py::main",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tools/cutover/restart_thread_format.py::main",
+        "calls": [
+          "run_cutover_child"
+        ]
+      },
+      {
+        "function": "tools/cutover/retained_index_installed_pilot.py::main",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tools/cutover/retained_routing_installed_pilot.py::main",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tools/cutover/retained_task_installed_pilot.py::main",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tools/cutover/thread_retirement_cutover.py::validate",
+        "calls": [
+          "run_cutover_child"
+        ]
+      },
+      {
+        "function": "tools/cutover/thread_retirement_cutover.py::complete",
+        "calls": [
+          "run_cutover_child"
+        ]
+      }
+    ],
+    "imports": [
+      "agent_comms.owner_cutover.OwnerCutover",
+      "agent_comms.owner_cutover.PreserveOwnerRuntime",
+      "agent_comms.owner_cutover.StoppedOwnerInstallation",
+      "agent_comms.owner_restart.OwnerRestartHandoff",
+      "agent_comms.owner_restart.StoppedOwnerBatch",
+      "cutover_child.run_cutover_child"
+    ]
+  },
+  "tests": {
+    "parsed": 356,
+    "unparsed": [],
+    "declarations": {},
+    "consumers": [
+      {
+        "function": "tests/test_owner_process.py::test_real_owner_start_restart_and_stop_preserve_thread",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tests/test_owner_process.py::test_stale_stored_birth_does_not_signal_real_process",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tests/test_owner_process.py::test_restart_preflights_all_owners_before_signalling",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tests/test_owner_process.py::test_real_batch_retains_each_launch_and_busy_refuses_every_stop",
+        "calls": [
+          "restart_owners"
+        ]
+      },
+      {
+        "function": "tests/test_owner_release_restart.py::test_released_process_must_exit_before_replacement",
+        "calls": [
+          "restart_owners"
+        ]
+      }
+    ],
+    "imports": [
+      "agent_comms.owner_cutover.StoppedOwnerInstallation"
+    ]
+  }
+}

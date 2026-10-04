@@ -134,7 +134,7 @@ def _selected_claim_boundary(
         _store_lock(comms.registry.store.path),
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
-        canonical = registry.aliases.get(owner_name, owner_name)
+        canonical = registry.canonical_name(owner_name)
         try:
             captured = RegistryOwner.capture(registry, canonical, "Selected wake owner stopped or changed")
             captured.require_active_turn()
@@ -235,6 +235,10 @@ def release_selected_resources(
     claims: tuple[ClaimOwner, ...],
 ) -> None:
     """Release only these observed generations under their current selected owner."""
+    # No resource was acquired, so there is no claim mutation to authorize.
+    # Input/turn settlement retains its own independent current-owner fences.
+    if not claims:
+        return
     with _selected_claim_boundary(comms, store, admission, owner_name) as (
         bus,
         metadata,
@@ -245,26 +249,25 @@ def release_selected_resources(
         projection, _ = bus.log._claim_projection_unlocked(metadata)
         if any(projection.get(assignment.resource) != assignment for assignment in claims):
             raise IdentityConflict("Coding claim changed before release")
-        if claims:
-            target = (
-                initial.message.sender
-                if initial.message.sender != owner.name
-                else BuiltinChannel.ALL.value
-            )
-            bus.publisher.publish_claim_envelope(
-                Message(
-                    owner.name,
-                    target,
-                    "Completed coding tool claims released",
-                    MessageType.INFO,
-                    notice=True,
-                ),
-                worktree=Path(owner.worktree),
-                incarnation=str(owner.created_at),
-                releases=tuple(assignment.resource for assignment in claims),
-                _locked_registry_snapshot=registry,
-                _bus_locked=True,
-            )
+        target = (
+            initial.message.sender
+            if initial.message.sender != owner.name
+            else BuiltinChannel.ALL.value
+        )
+        bus.publisher.publish_claim_envelope(
+            Message(
+                owner.name,
+                target,
+                "Completed coding tool claims released",
+                MessageType.INFO,
+                notice=True,
+            ),
+            worktree=Path(owner.worktree),
+            incarnation=str(owner.created_at),
+            releases=tuple(assignment.resource for assignment in claims),
+            _locked_registry_snapshot=registry,
+            _bus_locked=True,
+        )
 
 
 @contextmanager
@@ -365,7 +368,7 @@ def write_selected_claimed_file(
         _store_lock(comms.registry.store.path),
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
-        canonical = registry.aliases.get(owner_name, owner_name)
+        canonical = registry.canonical_name(owner_name)
         try:
             captured = RegistryOwner.capture(registry, canonical, "Selected write owner stopped or changed")
             captured.require_active_turn()

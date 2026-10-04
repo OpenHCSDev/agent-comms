@@ -14,6 +14,8 @@ from typing import Any, ClassVar, Literal
 from .pi_vocabulary import ThinkingLevel
 from .declared_family import DeclaredFamily
 from .pi_payloads import PiMessage, PiPayload
+from .native_compaction_request import NativeSummaryPayload
+from .pi_summary_payloads import ManagedSummaryFiles, ManagedSummaryMetadata
 from .pi_rpc import unique_fields
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
@@ -52,6 +54,10 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     def retained_tool_calls(self):
         return ()
 
+    def covered_prefix(self, evidence, branch, db):
+        """This entry supplies no journaled compaction or creation coverage."""
+        return frozenset()
+
     def retained_tool_facts(self, session, originals):
         return ()
 
@@ -61,9 +67,15 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @classmethod
     def wire_member(cls, value):
         try:
-            return cls.decode(value.get("type"))
+            member = cls.decode(value.get("type"))
         except ValueError:
             return UnknownEntry
+        return member.wire_variant(value)
+
+    @classmethod
+    def wire_variant(cls, value):
+        """Known external members can refine their original boundary shape."""
+        return cls
 
     @classmethod
     def read(cls, raw: bytes) -> NativeEntry:
@@ -91,6 +103,11 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         return entry
 
     @classmethod
+    def input_evidence(cls, raw: dict) -> NativeEntry | None:
+        """Non-input entries do not contribute a tracked input proof."""
+        return None
+
+    @classmethod
     def read_evidence(cls, session_file):
         """Decode once behind the existing strict private-file trust boundary."""
         with cls.open_evidence(session_file) as evidence:
@@ -100,15 +117,14 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @contextmanager
     def open_evidence(cls, session_file):
         """Acquire a source reader, never input acceptance or replay authority."""
-        from .native_pi import PrivateEvidenceRead, _private_session_dir
+        with NativeEvidenceRead.open(session_file) as evidence:
+            yield evidence
 
-        _private_session_dir(session_file.parent)
-        with PrivateEvidenceRead.open(session_file) as source:
-            evidence = NativeEvidenceRead(source)
-            try:
-                yield evidence
-            finally:
-                evidence.close()
+    @classmethod
+    @contextmanager
+    def open_input_evidence(cls, session_file):
+        with NativeInputEvidenceRead.open(session_file) as evidence:
+            yield evidence
 
     @staticmethod
     def tracked_users(entries):
@@ -196,6 +212,41 @@ class NativeEvidenceRead:
         if self.source.path != session_file:
             raise NativePiUnavailable("Native evidence reader belongs to another source")
 
+    @classmethod
+    @contextmanager
+    def open(cls, session_file):
+        """One original descriptor and byte-verification lifetime for every read."""
+        from .native_pi import PrivateEvidenceRead, _private_session_dir
+
+        _private_session_dir(session_file.parent)
+        with PrivateEvidenceRead.open(session_file) as source:
+            evidence = cls(source)
+            try:
+                yield evidence
+            finally:
+                evidence.close()
+
+    @classmethod
+    @contextmanager
+    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):
+        """Own acquisition and refusal cleanup, without borrowing proof authority.
+
+        A supplied reader stays acquired by its original scope after success.
+        Failed corroboration or cancellation retires its bytes and descriptor;
+        a consumer cannot continue using an observation after that refusal.
+        """
+        session_file = Path(session_file).absolute()
+        if reader is None:
+            with cls.open(session_file) as acquired:
+                yield acquired
+        else:
+            try:
+                reader.require_path(session_file)
+                yield reader
+            except BaseException:
+                reader.close()
+                raise
+
     def close(self):
         self.source.close()
         self.entries = ()
@@ -205,7 +256,7 @@ class NativeEvidenceRead:
 
         try:
             _private_session_dir(self.source.path.parent)
-            appended = tuple(NativeEntry.from_evidence(row) for row in self.source.rows())
+            appended = tuple(self.decode_rows(self.source.rows()))
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise ValueError("Native Pi session header is invalid")
@@ -220,6 +271,9 @@ class NativeEvidenceRead:
         self.entries = entries
         return entries[0], entries
 
+    def decode_rows(self, rows):
+        return (NativeEntry.from_evidence(row) for row in rows)
+
     def retained_task_facts(self, witness):
         """Project only the witnessed branch of this original acquired resource.
 
@@ -228,30 +282,15 @@ class NativeEvidenceRead:
         """
         from .native_session_reopen import NativeSessionIdentity
 
-        witness.require_session(str(self.source.path))
         witness.require_current_file(self.source.path)
         header, entries = self.observe()
-        if header.id != witness.session_id:
+        if not witness.covers(self, witness.revision):
             raise ValueError("Native retained facts belong to another session")
-        originals = {}
-        for entry in entries:
-            coordinates = entry.source_coordinates
-            originals[coordinates.original_id] = (entry, coordinates.parent_id)
-        if len(originals) != len(entries):
-            raise ValueError("Native source has ambiguous original entry identities")
-        branch = []
-        identity = witness.leaf_id
-        while identity is not None:
-            try:
-                entry, parent = originals.pop(identity)
-            except KeyError as error:
-                raise ValueError("Native retained branch is missing or cyclic") from error
-            branch.append(entry)
-            identity = parent
+        branch = self.branch(witness.leaf_id, entries)
         calls = {}
         facts = []
         session = NativeSessionIdentity(header.id, str(self.source.path))
-        for entry in reversed(branch):
+        for entry in branch:
             for call in entry.retained_tool_calls():
                 if call.id in calls:
                     raise ValueError("Native retained SDK call identity was repeated")
@@ -260,9 +299,82 @@ class NativeEvidenceRead:
         witness.require_current_file(self.source.path)
         return tuple(facts)
 
+    def entry_index(self, entries):
+        """Resolve original coordinates only inside this acquired read."""
+        originals = {}
+        for entry in entries:
+            coordinates = entry.source_coordinates
+            originals[coordinates.original_id] = (entry, coordinates.parent_id)
+        if len(originals) != len(entries):
+            raise ValueError("Native source has ambiguous original entry identities")
+        return originals
+
+    def branch(self, leaf_id, entries):
+        """Resolve original ancestry inside this acquired source, never a catalog."""
+        originals = self.entry_index(entries)
+        branch = []
+        identity = leaf_id
+        while identity is not None:
+            try:
+                entry, parent = originals.pop(identity)
+            except KeyError as error:
+                raise ValueError("Native retained branch is missing or cyclic") from error
+            branch.append(entry)
+            identity = parent
+        return tuple(reversed(branch))
+
+    def recorded_source_prefix(self, entries, contexts):
+        """Locate retained ancestry at corroborated live-recorded input anchors.
+
+        The coordinator binds each anchor to this exact admitted session path;
+        its native journal independently corroborates the recorded generation.
+        An ancestor is retained source, not an input-delivery receipt, a fork
+        creation, or a claim that every ancestor entered the model context.
+        Sidecar-only context records cannot supply these anchors.
+        """
+        originals = self.entry_index(entries)
+        covered = set()
+        for context in contexts:
+            self.require_path(context.session_file)
+            pending = set()
+            identity = context.session_entry_id
+            while identity is not None and identity not in covered:
+                try:
+                    entry, identity = originals.pop(identity)
+                except KeyError as error:
+                    raise ValueError("Recorded source ancestry is missing or cyclic") from error
+                pending.add(entry.require_entry_id())
+            covered.update(pending)
+        return frozenset(covered)
+
+    def covered_prefix(self, entries, db):
+        from .compaction_records import NativeForkCreation
+
+        inherited = NativeForkCreation.recorded_prefix(db, self, entries)
+        branch = self.branch(entries[-1].require_entry_id(), entries)
+        entry = next((entry for entry in reversed(branch)
+            if entry.require_entry_id() not in inherited and isinstance(entry, CompactionEntry)), entries[0])
+        return inherited | entry.covered_prefix(self, branch, db)
+
+
+class NativeInputEvidenceRead(NativeEvidenceRead):
+    """Verify every source byte; decode only the header and original input records.
+
+    The inherited descriptor, append and refusal lifetime is unchanged. This is
+    an acquired input-proof projection, not a history index or another store.
+    """
+
+    def decode_rows(self, rows):
+        for index, row in enumerate(rows):
+            # The first physical record must remain the original session header.
+            entry = (NativeEntry.from_evidence(row) if index == 0 and not self.entries
+                     else NativeEntry.wire_member(row).input_evidence(row))
+            if entry is not None:
+                yield entry
+
 
 class NativeEvidenceScope(ExitStack):
-    """One acquired original source for a bounded corroboration operation.
+    """One acquired input-proof source for a bounded corroboration operation.
 
     Only the current descriptor and its decoded bytes are held. Switching
     journals closes the previous reader; no proof, receipt or disposition is
@@ -271,13 +383,27 @@ class NativeEvidenceScope(ExitStack):
 
     def __init__(self) -> None:
         super().__init__()
-        self.readers: dict[Path, NativeEvidenceRead] = {}
+        self.readers: dict[Path, NativeInputEvidenceRead] = {}
 
-    def for_source(self, path: Path) -> NativeEvidenceRead:
+    @classmethod
+    @contextmanager
+    def borrow(cls, scope: NativeEvidenceScope | None = None):
+        """One owner chooses borrowed or newly acquired resource lifetime."""
+        if scope is None:
+            with cls() as acquired:
+                yield acquired
+        else:
+            try:
+                yield scope
+            except BaseException:
+                scope.close()
+                raise
+
+    def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
         if path not in self.readers:
             self.close()
-            self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))
+            self.readers[path] = self.enter_context(NativeInputEvidenceRead.open(path))
         return self.readers[path]
 
     def close(self) -> None:
@@ -315,6 +441,10 @@ class SessionEntry(NativeEntry):
         default=None, metadata={"wire_name": "agentCommsSelectedFresh"}
     )
 
+    @classmethod
+    def input_evidence(cls, raw: dict) -> NativeEntry:
+        return cls.from_evidence(raw)
+
     def require_header(self) -> None:
         if not self.id:
             raise ValueError("Native Pi session header is invalid")
@@ -322,6 +452,17 @@ class SessionEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
+    @classmethod
+    def input_evidence(cls, raw: dict) -> NativeEntry | None:
+        message = raw["message"]
+        if not isinstance(message, dict):
+            raise ValueError("Native message evidence requires an object")
+        if message.get("inputId") is not None:
+            # Same strict original user/content/digest decoding, including the
+            # rejection of tracked IDs hidden in another message role.
+            return cls.from_evidence(raw)
+        return None
+
     message: PiMessage
     is_message = True
 
@@ -382,11 +523,44 @@ class MessageEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionEntry(NativeEntry):
+    """External native summaries grant no managed journal-cut coverage."""
+
     summary: str = ""
+
+    @classmethod
+    def wire_variant(cls, value):
+        # This is the original Pi ingress, before FieldCodec constructs members.
+        details = value.get("details")
+        if isinstance(details, dict) and "agentCommsCommit" in details:
+            return ManagedCompactionEntry
+        return cls
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         text = self.summary.strip()
         return [NoticeTranscript(f"## Context compacted\n\n{text}")] if text else []
+
+
+@dataclass(frozen=True, kw_only=True)
+class ManagedCompactionEntry(CompactionEntry, NativeSummaryPayload):
+    """The native payload owns validation/digests; the journal owns the cut."""
+
+    summary: str
+    first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
+    details: ManagedSummaryFiles | ManagedSummaryMetadata
+
+    def to_wire(self):
+        value = super().to_wire()
+        value["type"] = CompactionEntry.declared_name
+        return value
+
+    def covered_prefix(self, evidence, branch, db):
+        from .compaction_records import CompactionOperation
+
+        operation = CompactionOperation.one(db, commit_id=self.details.agent_comms_commit.commit_id)
+        if operation is None:
+            # A copied marker is not an original journal operation.
+            return super().covered_prefix(evidence, branch, db)
+        return operation.covered_prefix(self, evidence, branch)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -151,13 +151,7 @@ class DeliveryMessage:
         from .wire_record import WireRecord
 
         verified = WireRecord.from_wire(record, root_id)
-        deliveries = verified.deliveries()
-        if deliveries:
-            for delivery in deliveries:
-                yield cls(delivery.message, delivery.audience.sender_lookup)
-        else:
-            for message in verified.messages():
-                yield cls(message)
+        yield from verified.delivery_messages()
 
 
 
@@ -181,7 +175,7 @@ class DeliveryScope(MessageDisplayScope):
             return ChannelDisplayScope(BuiltinChannel.ANY.value, None)
         if is_channel_target(target):
             return ChannelDisplayScope(target, catalog.history_targets(target))
-        peer = snapshot.aliases.get(target, target)
+        peer = snapshot.canonical_name(target)
         if peer not in snapshot.threads:
             from .errors import UnregisteredThreadError
 

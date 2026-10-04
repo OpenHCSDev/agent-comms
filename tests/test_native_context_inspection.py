@@ -7,6 +7,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from agent_comms.comms import Comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
@@ -24,47 +26,13 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(native_backend):
-    fixture = native_backend
-    before = fixture.session.read_bytes()
-    owner = canonical_agent(
-        Comms(fixture.root), agent_bin="pi",
-        agent_args=["--model", "response-local/fixture", "--offline"],
-        auto_wake=False, runtime_enabled=True,
-    )
-    # This fixture owns the root; the existing owner launch and RPC reader remain real.
-    try:
-        await owner._runtime.start()
-        thread = Thread("context-source", frozenset(), str(fixture.project),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            session_file=str(fixture.session), model="response-local/fixture")
-        owner._comms.registry.declare(thread)
-        await owner.load_session(str(fixture.project), thread.name)
-        # Selected startup owns SDK model/thinking declarations. Establish that
-        # original prepared source before asking for read-only context inspection.
-        await owner.turns.prepare_selected_session(thread.name, thread)
-        selected_before = fixture.session.read_bytes()
-        connection = RuntimeConnection(owner._comms, thread.name,
-            socket_path(owner._comms.root, thread.require_process().pid))
-        try:
-            async with asyncio.timeout(20):
-                first = FieldCodec.decode(NativeContextData, await connection.request("context"))
-                second = FieldCodec.decode(NativeContextData, await connection.request("context"))
-            assert first.identity == second.identity
-            assert first.segments == second.segments
-            assert {segment.declared_name for segment in first.segments} >= {"system_layer", "tool_catalog"}
-            selected = Path(first.identity.session_file)
-            assert selected == Path(thread.require_saved_session())
-            assert owner._comms.bus.log.context_manifests(thread.incarnation) == ()
-            assert fixture.session.read_bytes() == selected_before
-        finally:
-            await connection.close()
-    finally:
-        await owner.shutdown()
-        assert fixture.provider.posts == 0
-        assert fixture.session.read_bytes().startswith(before)
-        assert fixture.saved_inputs() == []
+@pytest.mark.parametrize('recorded_readers', [True])
+async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(
+    native_backend, recorded_readers=False
+):
+    from native_context_reader_journey import read_original_context
 
+    await read_original_context(native_backend, recorded_readers=recorded_readers)
 
 async def test_context_manifest_native_acp_and_cli_continuous(
     native_backend, receiving_only=False, authored_operations_only=False
@@ -80,10 +48,9 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     from agent_comms.input_origin import HumanInputOrigin
     from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
     from agent_comms.goal_actions import ClearGoalAction
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_fork import ForkSessionRequest
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
     from agent_comms.compaction_journal import CompactionJournal
-    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.compaction_states import ManualCommittedSummary
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     started = time.monotonic()
@@ -140,14 +107,14 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     peer = Thread("context-peer", frozenset({'team'}), str(project),
                   process_identity=ProcessIdentity.capture(os.getpid()))
     owner._comms.registry.declare(peer)
-    c_identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
-        str(fixture.session), str(project)), cwd=project,
-        env=dict(os.environ, PI_CODING_AGENT_DIR=str(fixture.root.parent / 'c-native-fork')))
+    c_identity = await CompactionJournal(owner._comms.root / 'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(str(package),
+        str(fixture.session), str(project), str(fixture.root.parent / 'c-native-fork')),
+        cwd=project, env=dict(os.environ))
     receiver = Thread('context-receiver', frozenset({'team'}), str(project),
         process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off')
     owner._comms.registry.declare(receiver)
-    peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture")
+    peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture").turn_lease
     output = fixture.root.parent / "context-journey"
     output.mkdir(mode=0o700)
 
@@ -217,7 +184,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                         'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
                         'change': FieldCodec.encode(CorrectionTaskChange(private_choice.reference)),
                     })
-                previous = owner._comms.bus.log.context_manifests(thread.incarnation)
+                previous = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
                 image = {'mimeType': 'image/png',
                     'data': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='} if index == 1 else None
                 original = await observer.submit(text, image=image,
@@ -225,7 +192,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                 originals.append(original)
                 assert isinstance(original.origin.require_human().goal, PresentGoalCheckpoint)
                 assert not failures, failures
-                manifests = owner._comms.bus.log.context_manifests(thread.incarnation)
+                manifests = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
                 assert len(manifests) > len(previous)
                 manifest = manifests[-1]
                 assert {segment.kind for segment in manifest.segments} >= {
@@ -303,7 +270,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                 (c_output / 'actual-committed-summary.svg').write_text(app.export_screenshot())
                 return attempts[0]
             attempt = await observer.run(compact_receiver())
-        captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+        captured = attempt.request
         snapshot = owner._comms.registry.snapshot()
         assert captured.retained.current_authored_sources(snapshot.threads[receiver.name], snapshot) == ()
         assert {fact.source.reference for fact in captured.retained.facts} == {

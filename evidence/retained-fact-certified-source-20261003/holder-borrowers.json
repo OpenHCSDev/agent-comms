@@ -1,0 +1,6 @@
+{
+  "prefix": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534",
+  "direct_process_import_cwd_matches": [],
+  "unreadable_other_processes": 299,
+  "shared_dependency_inode_matches": "lsof mapped pydantic_core matches public runtime-summary529 prefix; actual /proc maps/argv do not reference534. Normal install changes only agent-comms."
+}

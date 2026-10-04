@@ -1,0 +1,35 @@
+{
+  "head": "38eb0345658253b9fc05066fa51dbb17740bbdf8",
+  "parsed": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 28,
+      "declaration": "GitMeasure",
+      "source": "class GitMeasure(Measure):\n    \"\"\"Shared Git collection and alignment for declaration-owned snapshots.\"\"\"\n\n    @classmethod\n    def scope(cls, changed: set[str], present: set[str]) -> set[str]:\n        return changed & present\n\n    @classmethod\n    @abstractmethod\n    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:\n        \"\"\"Measure the selected source declarations.\"\"\"\n\n    @classmethod\n    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:\n        return base, head\n\n    @classmethod\n    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):\n        def snapshot(ref: str) -> dict[str, int]:\n            selected = cls.scope(changed, python_paths(repo, ref, root))\n            return cls.snapshot([(path, git(repo, \"show\", f\"{ref}:{path}\")) for path in sorted(selected)])\n        return cls.align(snapshot(base), snapshot(head))"
+    },
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 69,
+      "declaration": "PerFileOccurrenceMeasure",
+      "source": "class PerFileOccurrenceMeasure(OccurrenceMeasure):\n    \"\"\"An improvement in one file cannot hide a regression in another.\"\"\"\n\n    @classmethod\n    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:\n        return {f\"{cls.__name__}:{path}\": cls.count(source, path) for path, source in sources}\n\n    @classmethod\n    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:\n        identities = sorted(base.keys() | head.keys())\n        return ({key: base.get(key, 0) for key in identities},\n                {key: head.get(key, 0) for key in identities})"
+    },
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 83,
+      "declaration": "FamilyFlattened",
+      "source": "class FamilyFlattened(PerFileOccurrenceMeasure):\n    \"\"\"The original audit collector, enforced independently for each file.\"\"\"\n\n    mechanism_modules = frozenset({\n        (\"agent_comms\", \"field_codec.py\"), (\"agent_comms\", \"typed_table.py\"),\n        (\"agent_comms\", \"coordination_schema.py\"),\n        (\"agent_comms\", \"coordinated_runtime_schema.py\"),\n        (\"toad\", \"agent_schema.py\"), (\"toad\", \"db.py\"),\n    })\n\n    @staticmethod\n    def occurrences(node: ast.AST) -> int:\n        return AuditFamilyFlattened.count(node)\n\n    @classmethod\n    def count(cls, source: bytes, filename: str) -> int:\n        if tuple(Path(filename).parts[-2:]) in cls.mechanism_modules:\n            return 0\n        return super().count(source, filename)"
+    },
+    {
+      "path": "src/agent_comms/debt_ratchet.py",
+      "line": 511,
+      "declaration": "python_paths",
+      "source": "def python_paths(repo: Path, ref: str, root: str) -> set[str]:\n    return {\n        path.decode()\n        for path in git(repo, \"ls-tree\", \"-rz\", \"--name-only\", ref, \"--\", root).split(b\"\\0\")\n        if path.endswith(b\".py\")\n    }"
+    }
+  ],
+  "consumers": [
+    "tests/guards/test_debt_ratchet.py:test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade",
+    "GitMeasure.compare -> snapshot -> PerFileOccurrenceMeasure.snapshot -> FamilyFlattened.count"
+  ]
+}

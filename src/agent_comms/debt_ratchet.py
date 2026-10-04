@@ -12,6 +12,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
+from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
@@ -77,6 +78,29 @@ class PerFileOccurrenceMeasure(OccurrenceMeasure):
         identities = sorted(base.keys() | head.keys())
         return ({key: base.get(key, 0) for key in identities},
                 {key: head.get(key, 0) for key in identities})
+
+
+class FamilyFlattened(PerFileOccurrenceMeasure):
+    """The original audit collector, enforced independently for each file."""
+
+    # GitMeasure supplies complete repository-relative paths. Only those exact
+    # original modules own codec/schema behavior; nested package tails do not.
+    mechanism_modules = frozenset(Path("src", package, module) for package, module in {
+        ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
+        ("agent_comms", "coordination_schema.py"),
+        ("agent_comms", "coordinated_runtime_schema.py"),
+        ("toad", "agent_schema.py"), ("toad", "db.py"),
+    })
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        return AuditFamilyFlattened.count(node)
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        if Path(filename) in cls.mechanism_modules:
+            return 0
+        return super().count(source, filename)
 
 
 class DispatchCases(MroDispatch):

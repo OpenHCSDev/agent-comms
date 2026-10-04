@@ -85,16 +85,20 @@ cp -- "$stack_root/native-compaction-source.mjs" "$native_package/dist/core/comp
 cp -- "$stack_root/native-compaction-source.d.ts" "$native_package/dist/core/compaction/agent-comms-source.d.ts"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
-python3 "$stack_root/patch-native-request-observation.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/patch-native-turn-context.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/patch-native-file-artifact.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
+    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-summary-prefix.patch"
+python3 "$stack_root/patch-native-request-observation.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+python3 "$repo_root/src/agent_comms/native_package.py" --share-resources \
+    "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"

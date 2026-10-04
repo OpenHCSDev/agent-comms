@@ -1,0 +1,1209 @@
+{
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b/node_modules/@earendil-works/pi-coding-agent/dist",
+  "parsed": 268,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "bundle/chunks/bedrock-converse-stream.js",
+      "line": 45,
+      "method": "restore"
+    },
+    {
+      "file": "bundle/chunks/chunk-CLNPYIDP.js",
+      "line": 10,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 141,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 552,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 588,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 588,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 588,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "call": "_setSessionFile"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "method": "setSessionFile"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "call": "_setSessionFile"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 654,
+      "method": "_setSessionFile"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 998,
+      "method": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1225,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "call": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "method": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "method": "bindExtensions"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "call": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "method": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1234,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1235,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1235,
+      "method": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1247,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1247,
+      "method": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1247,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1247,
+      "method": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1247,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "method": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "method": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "method": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1253,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1267,
+      "method": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1267,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1267,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1268,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1268,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1269,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1269,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1274,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1305,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1324,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1326,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1332,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1333,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1333,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1333,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1335,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1335,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1335,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1335,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1342,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1342,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1343,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1343,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "bindExtensions"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1363,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1364,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1364,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1366,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1366,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1376,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "bindExtensions"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1454,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "method": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "method": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "call": "bindExtensions"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "call": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "call": "reload"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "call": "compact"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "call": "switchSession"
+    },
+    {
+      "file": "bundle/chunks/chunk-JVUZSMYM.js",
+      "line": 1459,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/chunk-NUHFSC37.js",
+      "line": 15,
+      "method": "compact"
+    },
+    {
+      "file": "bundle/chunks/node-KG362ECQ.js",
+      "line": 5,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/node-KG362ECQ.js",
+      "line": 6,
+      "call": "dispose"
+    },
+    {
+      "file": "bundle/chunks/node-KG362ECQ.js",
+      "line": 6,
+      "method": "dispose"
+    },
+    {
+      "file": "bundle/chunks/node-KG362ECQ.js",
+      "line": 6,
+      "call": "dispose"
+    },
+    {
+      "file": "cli/startup-ui.js",
+      "line": 172,
+      "call": "dispose"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 35,
+      "declaration": "AgentSessionRuntime"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 103,
+      "method": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 113,
+      "call": "dispose"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 121,
+      "method": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 129,
+      "method": "switchSession"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 137,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 145,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 161,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 170,
+      "call": "restore"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 172,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 207,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 214,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 225,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 232,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 236,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 249,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 287,
+      "call": "teardownCurrent"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 294,
+      "call": "finishSessionReplacement"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 297,
+      "method": "dispose"
+    },
+    {
+      "file": "core/agent-session-runtime.js",
+      "line": 303,
+      "call": "dispose"
+    },
+    {
+      "file": "core/agent-session-services.js",
+      "line": 72,
+      "call": "reload"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 81,
+      "declaration": "AgentSession"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 165,
+      "call": "restore"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 786,
+      "method": "dispose"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 1801,
+      "call": "compact"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 1822,
+      "method": "compact"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 1888,
+      "call": "restore"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2177,
+      "call": "restore"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2255,
+      "method": "bindExtensions"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2428,
+      "call": "compact"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2566,
+      "method": "reload"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2571,
+      "call": "reload"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2574,
+      "call": "reload"
+    },
+    {
+      "file": "core/agent-session.js",
+      "line": 2965,
+      "call": "restore"
+    },
+    {
+      "file": "core/auth-storage.js",
+      "line": 280,
+      "call": "reload"
+    },
+    {
+      "file": "core/auth-storage.js",
+      "line": 307,
+      "method": "reload"
+    },
+    {
+      "file": "core/footer-data-provider.js",
+      "line": 163,
+      "method": "dispose"
+    },
+    {
+      "file": "core/keybindings.js",
+      "line": 306,
+      "method": "reload"
+    },
+    {
+      "file": "core/resource-loader.js",
+      "line": 260,
+      "call": "reload"
+    },
+    {
+      "file": "core/resource-loader.js",
+      "line": 263,
+      "method": "reload"
+    },
+    {
+      "file": "core/resource-loader.js",
+      "line": 275,
+      "call": "reload"
+    },
+    {
+      "file": "core/sdk.js",
+      "line": 77,
+      "call": "reload"
+    },
+    {
+      "file": "core/session-context.js",
+      "line": 6,
+      "declaration": "SessionContext"
+    },
+    {
+      "file": "core/session-context.js",
+      "line": 11,
+      "method": "restore"
+    },
+    {
+      "file": "core/session-context.js",
+      "line": 66,
+      "call": "compact"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 70,
+      "method": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 131,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 142,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 218,
+      "method": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 240,
+      "declaration": "DiskEntryStore",
+      "base": "EntryStore"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 298,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 301,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 304,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 306,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 324,
+      "method": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 340,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 351,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-entry-store.js",
+      "line": 418,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 474,
+      "declaration": "SessionManager"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 509,
+      "call": "_setSessionFile"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 523,
+      "method": "setSessionFile"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 525,
+      "call": "_setSessionFile"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 529,
+      "method": "_setSessionFile"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 781,
+      "method": "reconcileCompactionCommit"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 790,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 834,
+      "method": "appendCompactionIfCurrent"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 876,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/session-manager.js",
+      "line": 1295,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "core/settings-manager.js",
+      "line": 289,
+      "method": "reload"
+    },
+    {
+      "file": "modes/interactive/components/armin.js",
+      "line": 329,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/bordered-loader.js",
+      "line": 45,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/bordered-loader.js",
+      "line": 47,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/countdown-timer.js",
+      "line": 21,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/countdown-timer.js",
+      "line": 26,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/daxnuts.js",
+      "line": 136,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/extension-input.js",
+      "line": 57,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/extension-input.js",
+      "line": 58,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/extension-selector.js",
+      "line": 79,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/extension-selector.js",
+      "line": 80,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/footer.js",
+      "line": 72,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/model-selector.js",
+      "line": 172,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/model-selector.js",
+      "line": 336,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/model-selector.js",
+      "line": 343,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/model-selector.js",
+      "line": 354,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/status-indicator.js",
+      "line": 11,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/status-indicator.js",
+      "line": 38,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/status-indicator.js",
+      "line": 39,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/components/status-indicator.js",
+      "line": 41,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1402,
+      "call": "bindExtensions"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1587,
+      "call": "compact"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1628,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1645,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1702,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1733,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1736,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1805,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1830,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 1984,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 2036,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 2182,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 3234,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 3248,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 3735,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 3745,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4192,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4504,
+      "call": "switchSession"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 4521,
+      "call": "switchSession"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 5014,
+      "call": "reload"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 5016,
+      "call": "reload"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 5520,
+      "call": "compact"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 5534,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/interactive-mode.js",
+      "line": 5535,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/session-share.js",
+      "line": 179,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/interactive/theme/theme-controller.js",
+      "line": 85,
+      "method": "dispose"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 29,
+      "call": "dispose"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 53,
+      "call": "bindExtensions"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 72,
+      "call": "switchSession"
+    },
+    {
+      "file": "modes/print-mode.js",
+      "line": 75,
+      "call": "reload"
+    },
+    {
+      "file": "modes/rpc/rpc-client.js",
+      "line": 235,
+      "method": "compact"
+    },
+    {
+      "file": "modes/rpc/rpc-client.js",
+      "line": 288,
+      "method": "switchSession"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 105,
+      "call": "assertCurrent"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 383,
+      "call": "compact"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 642,
+      "call": "bindExtensions"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 662,
+      "call": "switchSession"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 665,
+      "call": "reload"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 895,
+      "call": "compact"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 952,
+      "call": "switchSession"
+    },
+    {
+      "file": "modes/rpc/rpc-mode.js",
+      "line": 1057,
+      "call": "dispose"
+    }
+  ],
+  "limits": "All original compiled native distJS; excludes JS inside strings and externalextension implementations; runtime/MRO/closure read semantically."
+}

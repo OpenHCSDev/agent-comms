@@ -6,6 +6,7 @@ export interface NativeContextSegmentManifest {
     utf8_bytes: number;
     tokens: number;
     contributors?: readonly NativeContextSegmentManifest[];
+    captured_text?: readonly string[];
 }
 export interface InputContributionCoordinates {
     kind: string;
@@ -24,6 +25,8 @@ export declare class NativeInputClaim {
 export interface NativeContextManifest {
     counter: string;
     segments: readonly NativeContextSegmentManifest[];
+    requestId?: string;
+    values?: NativeContextData['segments'];
 }
 export interface NativeContextData {
     identity: {sessionId: string; sessionFile: string};

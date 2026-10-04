@@ -1,0 +1,43 @@
+........................................................................ [ 69%]
+..........F....................                                          [100%]
+=================================== FAILURES ===================================
+_____ test_sparse_page_decodes_only_index_candidates_after_cold_validation _____
+
+history = (<agent_comms.comms.Comms object at 0x7fe84b042d50>, HistorySource(root='/tmp/pytest-of-ts/pytest-1094/test_sparse_pag...b", "from": "bob", "to": "#noise", "ts": 106, "type": "info", "text": "unrelated 6", "sender_role": "agent"}\n'), ...])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe84a5eef20>
+
+    def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history, monkeypatch):
+        live, source, rows = history
+        channel = live.channels.catalog.read().views(live.registry.snapshot().threads)["#api"]
+        view = ChannelDisplayHistory(channel)
+        decoded = 0
+        captured = 0
+        original_decode = Message.from_wire
+        original_capture = ChannelDisplayScope.capture
+    
+        def decode(cls, raw):
+            nonlocal decoded
+            decoded += 1
+            return original_decode(raw)
+    
+        def capture(cls, channel, snapshot, **kwargs):
+            nonlocal captured
+            captured += 1
+            return original_capture(channel, snapshot, **kwargs)
+    
+        monkeypatch.setattr(Message, "from_wire", classmethod(decode))
+        monkeypatch.setattr(ChannelDisplayScope, "capture", classmethod(capture))
+        cold = live.bus.history.page(view, limit=2)
+        cold_decoded = decoded
+        decoded = captured = 0
+        warm = live.bus.history.page(view, limit=2)
+        assert warm == cold
+        assert [message.seq for message in warm.messages] == [150, 200]
+>       assert decoded == 3  # two returned rows and the earlier-match boundary
+        ^^^^^^^^^^^^^^^^^^^
+E       assert 240 == 3
+
+tests/test_historical_page_scope.py:174: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_historical_page_scope.py::test_sparse_page_decodes_only_index_candidates_after_cold_validation
+1 failed, 102 passed in 26.07s

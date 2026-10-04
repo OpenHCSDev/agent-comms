@@ -1,0 +1,18 @@
+{
+  "source_revision": "90a347622463be29cd538a5dbaa909cf59eb1464",
+  "core_module": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+  "original_code_assets_equal": 342,
+  "python_assets_equal": 311,
+  "code_assets_sha256": "4fdb3990bc31664e7c6e7ebb5104176d861ff90a7846db4d75758486a8ff9ebf",
+  "wheel": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/context603/installed-root/corrected-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "3ff38b35d055ccbe0e59a8540277fc7eb8a3f7504959d27bb7ef172dc2eaf6a8",
+  "wheel_bytes": 869272,
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/context603/installed-root/corrected-wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "native_manifest_sha256": "d5efa0d56e7ad3962bf3efc009adf1569167a260f1ceb46824c9271a0e7542a2",
+  "original606_archive_sha256": "efdc6ddb21b269e8f5261865f100d1519c0ac8a5cbc6c456d4c6de3a6142c5fe",
+  "provider_calls": 0,
+  "new_native_inputs": 0
+}

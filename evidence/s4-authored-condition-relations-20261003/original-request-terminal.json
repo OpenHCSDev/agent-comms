@@ -1,0 +1,12 @@
+{
+  "source_head": "2fbb6dc0",
+  "original_request_completion": {
+    "evaluated": true,
+    "terminal_entry": "8c0849f3",
+    "scope": "Correlated ContextBudget model equals this input's final SDK-selected model; not returned-model or HTTP proof"
+  },
+  "original_budget_available": true,
+  "provider_inputs": 0,
+  "input_replays": 0,
+  "scope": "Read the already completed configured original; not a new provider execution or matched study"
+}

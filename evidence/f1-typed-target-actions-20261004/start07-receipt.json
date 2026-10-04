@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "actor": "beta",
+  "peer": "peer-current",
+  "actor_connection_and_reader_unchanged": true,
+  "no_open_peer_reconnections": 0,
+  "dm_bound_peer_reconnections": 1,
+  "sidebar_bound_peer_reconnections": 1,
+  "alias_preserved": true,
+  "provider_calls": 0,
+  "native_inputs": 0
+}

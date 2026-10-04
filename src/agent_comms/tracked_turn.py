@@ -8,19 +8,20 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager, AsyncExitStack, contextmanager
+from contextlib import AsyncExitStack, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .errors import RelationViolationError
-from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
-from .native_attestation import AttestationError
+from .native_attestation import AttestationError, ObservedAttestation
 from .native_pi import (
     NativeContextProof,
     NativePiPromptRejected,
@@ -28,17 +29,26 @@ from .native_pi import (
     NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
-    _session_location,
     _verify_context,
 )
 from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
+from .diagnostics import PublicationMeasurements
+from .child_process import ProcessIdentity
+from .coordinator import Coordination
+from .request_progress import RequestProgress
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
-from .store_files import _store_lock
+from .selected_session import SelectedSession
+from .turn_context import InputContributionCoordinates
+
+
+if TYPE_CHECKING:
+    from .coordinated_runtime import SelectedExecution
+    from .private_send_admission import PrivateSendAdmission
 
 
 class NativeCommitObservation[T](ABC):
@@ -145,13 +155,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         startup: NativeStartupAdmission,
         selected_tool_mode,
         observe_event,
+        request_observer,
     ):
         super().__init__(
             launch,
             command.message,
-            session_file=launch.session_file,
             model_wait_timeout=model_wait_timeout,
             startup=startup,
+            request_observer=request_observer,
         )
         self.command = command
         self.provider, self.model = provider, model
@@ -172,18 +183,21 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         *,
         input_id: str,
         prompt: str,
+        context_contributions: tuple[InputContributionCoordinates, ...] = (),
         worktree: Path,
-        session_dir: Path,
-        session_file: Path | None = None,
+        session: SelectedSession,
         provider: str = "openrouter",
         model: str = "z-ai/glm-5.3-flash",
         thinking_level: str | None = None,
+        environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
-        prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
+        prompt_send_boundary: PrivateSendAdmission | None = None,
         maintenance_root: Path | None = None,
-        fresh_selected: FreshPrivateSession | None = None,
         selected_tool_mode: NativeToolMode | None = None,
-        observe_event: Callable[[pi.PiEvent | AgentEvent], Awaitable[None]] | None = None,
+        observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
+        acquisition_measurements: PublicationMeasurements | None = None,
+        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
+        launch_owner: SelectedExecution | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -193,83 +207,99 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             not math.isfinite(model_wait_timeout) or model_wait_timeout <= 0
         ):
             raise ValueError("A model progress wait must be positive and finite")
-        launch = NativePiRpcLaunch.tracked(
-            package,
-            worktree=worktree,
-            session_dir=session_dir,
-            session_file=session_file,
-            provider=provider,
-            model=model,
-            thinking_level=thinking_level,
-            selected_thinking_level=(
-                fresh_selected.selected_thinking_level if fresh_selected else None
-            ),
-            selected_tool_mode=selected_tool_mode,
-        )
+        measurements = (acquisition_measurements if acquisition_measurements is not None
+                        else PublicationMeasurements())
+        # Independent execution acquires a fresh artifact. A selected stage
+        # derives from its execution's original pre-claim factory; source/config and
+        # child admission remain fresh. Join the whole construction before custody.
+        with measurements.operation("native_launch_selection"):
+            launch = await Coordination.run_worker(partial(
+                NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,
+                package,
+                worktree=worktree,
+                session=session,
+                provider=provider,
+                model=model,
+                thinking_level=thinking_level,
+                environment=environment,
+                selected_tool_mode=selected_tool_mode,
+            ))
         turn = cls(
             launch,
-            commands.Prompt(id="native-prompt", input_id=input_id, message=prompt),
+            commands.Prompt(
+                id="native-prompt",
+                input_id=input_id,
+                message=prompt,
+                context_contributions=context_contributions,
+            ),
             provider=provider,
             model=model,
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
-            startup=NativeStartupAdmission.for_launch(
-                launch, root=maintenance_root, fresh_selected=fresh_selected,
-                prompt_send_boundary=prompt_send_boundary,
-            ),
+            startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary,
+                                             measurements=measurements),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
+            request_observer=request_observer,
         )
         return await turn.complete()
 
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as custody:
-            self.custody = custody
-            custody.callback(self.startup.release)
-            await self.open_tools(custody)
-            self.native = await self.native_session.open(
-                self.launch,
-                self.session_file,
-                reuse=False,
-                require_input_id=True,
-                startup=self.startup,
-                finish_event=self.finish_event,
-                watchdog=self.watchdog,
-            )
-            custody.push_async_callback(self.native_session.close)
-            await custody.enter_async_context(self.native.failures())
-            custody.callback(self.native.reader.pending.cancel_all)
-            if self.tool_socket is not None:
-                self.tool_socket.expected_pid = self.native.proc.pid
-            self.watchdog.reading()
+            retirement = self.startup.measurements.operation("native_custody_retirement")
+            # Exit this observation after every original resource callback.
+            custody.push(retirement)
             try:
+                self.custody = custody
+                self.native = await self.acquire_native(custody, reuse=False)
+                custody.push_async_callback(self.native_session.close)
+                await custody.enter_async_context(self.native.failures())
+                custody.callback(self.native.reader.pending.cancel_all)
+                if self.tool_socket is not None:
+                    self.tool_socket.expected_pid = self.native.proc.pid
+                self.watchdog.reading()
                 try:
-                    await self.attest()
-                    await self.admit_prompt()
-                    while not self.finished:
-                        event = await self.next_event()
-                        async for update in self.consume_native_event(event):
-                            if self.observe_event is not None:
-                                await self.observe_event(update)
-                        if not self.finished and self.observe_event is not None:
-                            await self.observe_event(event)
-                    return self.result()
-                except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
-                    raise NativePiUnavailable(
-                        f"Native Pi operation failed: {type(error).__name__}: {error}"
-                    ) from error
-            except NativePiUnavailable as error:
-                self.admission.raise_native_failure(error, self.native.attestation)
+                    try:
+                        await self.attest()
+                        if self.prompt_send_boundary is not None:
+                            with self.startup.measurements.operation("selected_context_preparation"):
+                                await self.prompt_send_boundary.prepare_context(self)
+                        await self.admit_prompt()
+                        while not self.finished:
+                            event = await self.next_event()
+                            async for update in self.consume_native_event(event):
+                                if self.observe_event is not None:
+                                    await self.observe_event(update)
+                            if not self.finished and self.observe_event is not None:
+                                await self.observe_event(event)
+                        return await self.result()
+                    except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
+                        raise NativePiUnavailable(
+                            f"Native Pi operation failed: {type(error).__name__}: {error}"
+                        ) from error
+                except NativePiUnavailable as error:
+                    self.admission.raise_native_failure(error, self.native.attestation)
+            finally:
+                # LIFO starts the measurement immediately before cleanup. No
+                # await or manual close may separate this from stack retirement.
+                custody.callback(retirement.__enter__)
 
-    async def open_tools(self, custody: AsyncExitStack) -> None:
+    async def resume_prepared(self, resources: AsyncExitStack) -> None:
+        await super().resume_prepared(resources)
+        if self.tool_socket is not None:
+            self.tool_socket.expected_pid = self.native.proc.pid
+        self.watchdog.reading()
+        await self.attest()
+
+    async def open_transport(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
-                self.launch.session_dir, os.urandom(32).hex()
+                self.launch.session.directory, os.urandom(32).hex()
             )
             custody.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
-            self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.path)
+            self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.address)
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
 
     @property
@@ -306,10 +336,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         payload = self.native.reader.encode(command)
         if self.maintenance_root is not None:
             try:
-                with _store_lock(self.maintenance_root / "wire"):
-                    MaintenanceBarrier(
-                        self.maintenance_root / "registry.json"
-                    ).assert_open_unlocked()
+                async with MaintenanceBarrier(
+                    self.maintenance_root / "registry.json"
+                ).admit_ingress_async():
                     self.write(command, payload)
             except RelationViolationError as error:
                 raise NativePiUnavailable(
@@ -323,8 +352,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def attest(self) -> None:
         request = self.native.attestation.request
-        await self.send(request)
-        event = await self.next_event()
+        with self.startup.measurements.operation("get_state_send"):
+            await self.send(request)
+        with self.startup.measurements.operation("get_state_receive"):
+            event = await self.next_event()
         if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
             raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
         try:
@@ -334,12 +365,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         state = observed.state
         if observed.identity is None:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
-        self.active_session_file = _session_location(self.launch.session_dir, state.session_file)
-        if self.session_file is not None and self.active_session_file != self.session_file:
-            raise NativePiUnavailable("Native Pi rebound its session")
+        self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
         self.startup.release()
         self.startup.attest(state)
+        if self.observe_event is not None:
+            with self.startup.measurements.operation("attestation_publication"):
+                await self.observe_event(observed)
 
     def write(self, command: commands.PiCommand, payload: bytes) -> None:
         if command is self.command:
@@ -348,7 +380,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @contextmanager
     def prompt_boundary(self):
-        with self.startup.prompt_boundary(self.prompt_send_boundary, self.active_session_file):
+        with self.startup.prompt_boundary(self.prompt_send_boundary, self.native.attestation.identity):
             # The isolated writer alone reaches this original granted boundary.
             # The awaiting owner cannot consume native events until it is joined.
             self.grant_prompt()
@@ -358,11 +390,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if self.prompt_send_boundary is None:
             await self.send(self.command)
         else:
-            await send_fenced_prompt(
-                self.native.proc.stdin,
-                self.native.reader.encode(self.command),
-                self.prompt_boundary,
-            )
+            with self.startup.measurements.operation("prompt_writer_join"):
+                await send_fenced_prompt(
+                    self.native.proc.stdin,
+                    self.native.reader.encode(self.command),
+                    self.prompt_boundary,
+                    measurements=self.startup.measurements,
+                )
 
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
@@ -381,9 +415,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.evidence = self.custody.enter_context(
-                NativeEntry.open_evidence(self.active_session_file)
+                NativeEntry.open_input_evidence(self.active_session_file)
             )
-            await asyncio.to_thread(self.evidence.observe)
+            await Coordination.run_worker(self.evidence.observe)
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
@@ -419,23 +453,25 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     def fail_terminal(self, text: str):
         self.terminal = self.terminal.fail(text)
 
-    def context_proof(self) -> NativeContextProof:
+    async def context_proof(self) -> NativeContextProof:
         if not self.admission.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        return _verify_context(
+        # The original event consumer serializes observations. Cancellation
+        # joins this read before the acquired evidence/custody can close.
+        return await Coordination.run_worker(partial(_verify_context,
             self.active_session_file,
             self.command.input_id,
             self.native.attestation.identity.session_id,
             self.input_commit.require(),
             self.context_commit.require(),
             evidence=self.evidence,
-        )
+        ))
 
     @handles(pi.ToolExecutionStart)
     async def tool_started(self, event: pi.ToolExecutionStart) -> None:
         if self.tool_socket is None:
             raise NativePiUnavailable("Native Pi tool preceded tracked context proof")
-        self.context_proof()
+        await self.context_proof()
         self.tool_socket.tool_started(event)
 
     @handles(pi.ToolExecutionEnd)
@@ -446,18 +482,21 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:
-        self.finished = True
+        with self.startup.measurements.operation("native_agent_settled"):
+            self.finished = True
 
-    def result(self) -> NativeTurnResult:
-        proof = self.context_proof()
-        self.terminal.raise_failure(proof, self.provider, self.model)
-        if self.tool_socket is not None:
-            self.tool_socket.assert_complete()
-        response = self.terminal.require_response(self.text_parts)
-        if self.selected_tool_mode is not None:
-            self.selected_tool_mode.finish()
-        return NativeTurnResult(
-            response.strip(),
-            proof,
-            self.tool_socket.selected_call_id if self.tool_socket else None,
-        )
+    async def result(self) -> NativeTurnResult:
+        with self.startup.measurements.operation("native_terminal_result"):
+            with self.startup.measurements.operation("native_terminal_proof"):
+                proof = await self.context_proof()
+            self.terminal.raise_failure(proof, self.provider, self.model)
+            if self.tool_socket is not None:
+                self.tool_socket.assert_complete()
+            response = self.terminal.require_response(self.text_parts)
+            if self.selected_tool_mode is not None:
+                await self.selected_tool_mode.finish()
+            return NativeTurnResult(
+                response.strip(),
+                proof,
+                self.tool_socket.selected_call_id if self.tool_socket else None,
+            )

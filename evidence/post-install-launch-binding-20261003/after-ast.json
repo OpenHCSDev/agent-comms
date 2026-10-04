@@ -1,0 +1,2375 @@
+{
+  "roots": [
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "revision": "325e9f355cf29be3f54594bb2672f7c9aa42c553",
+      "root": "src/agent_comms",
+      "parsed_modules": 311,
+      "parse_omissions": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 523,
+          "kind": "Call",
+          "expression": "comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)"
+        },
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 523,
+          "kind": "Attribute",
+          "expression": "comms.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 65,
+          "kind": "ImportFrom",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 67,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch.from_environment(self.root, os.environ)"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 124,
+          "kind": "Call",
+          "expression": "owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 67,
+          "kind": "Attribute",
+          "expression": "PrivateNkLaunch.from_environment"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 69,
+          "kind": "Call",
+          "expression": "owners.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 124,
+          "kind": "Attribute",
+          "expression": "owners.pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/active_route.py",
+          "line": 69,
+          "kind": "Attribute",
+          "expression": "owners.pin_private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 205,
+          "kind": "Attribute",
+          "expression": "self._complete_latest"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 289,
+          "kind": "Attribute",
+          "expression": "self._complete_latest"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 262,
+          "kind": "Call",
+          "expression": "self._complete_latest.copy()"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 297,
+          "kind": "Call",
+          "expression": "ActivityCheckpoint.capture(self._path, revision, complete, offset)"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 262,
+          "kind": "Attribute",
+          "expression": "self._complete_latest.copy"
+        },
+        {
+          "path": "src/agent_comms/activity.py",
+          "line": 262,
+          "kind": "Attribute",
+          "expression": "self._complete_latest"
+        },
+        {
+          "path": "src/agent_comms/agent_event_updates.py",
+          "line": 111,
+          "kind": "Call",
+          "expression": "ToolCallProgress(session_update='tool_call_update', tool_call_id=event.id, status='completed' if event.ok else 'failed', content=[ContentToolCallContent.model_validate(item) for item in tool_result_content(event.id, event.output or '', event.diff)])"
+        },
+        {
+          "path": "src/agent_comms/agent_events.py",
+          "line": 269,
+          "kind": "Call",
+          "expression": "ScheduledTurn(f\"Project change completed: tools and context now use {project!r}. Continue the user's previous request from this directory. If the request was only to switch projects, report that you are ready; do not invent extra work.\")"
+        },
+        {
+          "path": "src/agent_comms/assignment_states.py",
+          "line": 61,
+          "kind": "Call",
+          "expression": "IdentityConflict('wake assignment is not completed')"
+        },
+        {
+          "path": "src/agent_comms/bus_activity_index.py",
+          "line": 55,
+          "kind": "Call",
+          "expression": "RelationViolationError('Activity source has an incomplete original row')"
+        },
+        {
+          "path": "src/agent_comms/bus_activity_index.py",
+          "line": 71,
+          "kind": "Call",
+          "expression": "RelationViolationError('Activity source has an incomplete original row')"
+        },
+        {
+          "path": "src/agent_comms/bus_route_counts.py",
+          "line": 159,
+          "kind": "Call",
+          "expression": "RelationViolationError('Route projection source has an incomplete original row')"
+        },
+        {
+          "path": "src/agent_comms/channel_coding_tools.py",
+          "line": 169,
+          "kind": "Call",
+          "expression": "SelectedToolDenied('Coding request incomplete or oversized')"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 757,
+          "kind": "ImportFrom",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 781,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch.from_environment(ctx.root, ctx.owners.restart_environment(os.environ))"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 781,
+          "kind": "Attribute",
+          "expression": "PrivateNkLaunch.from_environment"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 782,
+          "kind": "Call",
+          "expression": "ctx.owners.restart_environment(os.environ)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 782,
+          "kind": "Attribute",
+          "expression": "ctx.owners.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/compaction_states.py",
+          "line": 429,
+          "kind": "Call",
+          "expression": "ValueError('Incomplete native no-write receipt')"
+        },
+        {
+          "path": "src/agent_comms/coordination_database.py",
+          "line": 145,
+          "kind": "Call",
+          "expression": "sqlite3.complete_statement(statement)"
+        },
+        {
+          "path": "src/agent_comms/coordination_database.py",
+          "line": 149,
+          "kind": "Call",
+          "expression": "SchemaVersionError('coordination schema has an incomplete statement')"
+        },
+        {
+          "path": "src/agent_comms/coordination_database.py",
+          "line": 145,
+          "kind": "Attribute",
+          "expression": "sqlite3.complete_statement"
+        },
+        {
+          "path": "src/agent_comms/coordination_response.py",
+          "line": 483,
+          "kind": "Call",
+          "expression": "_require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=snapshot.completed_response())"
+        },
+        {
+          "path": "src/agent_comms/coordination_response.py",
+          "line": 483,
+          "kind": "Call",
+          "expression": "snapshot.completed_response()"
+        },
+        {
+          "path": "src/agent_comms/coordination_response.py",
+          "line": 483,
+          "kind": "Attribute",
+          "expression": "snapshot.completed_response"
+        },
+        {
+          "path": "src/agent_comms/coordination_schema.py",
+          "line": 56,
+          "kind": "Call",
+          "expression": "dict(execution_names=_sql_members(ExecutionState), attempt_names=_sql_members(AttemptState), assignment_names=_sql_members(AssignmentState), wake_names=_sql_members(WakePolicy), response_names=_sql_members(ResponseState), recovery_names=_sql_members(RecoveryCondition), execution_edges=_sql_edges(ExecutionState, \"json_extract({row}.lifecycle, '$.kind')\"), attempt_edges=_sql_edges(AttemptState, \"json_extract({row}.lifecycle, '$.kind')\"), assignment_edges=_sql_edges(AssignmentState, \"json_extract({row}.lifecycle, '$.kind')\"), obligation_edges=_sql_edges(ResponseState, \"json_extract({row}.lifecycle, '$.kind')\"), terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal), engaged_execution_names=_sql_members(ExecutionState, lambda member: member.assignment_state().engaged), unstarted_execution_names=_sql_members(ExecutionState, lambda member: member.unstarted), required_attempt_execution_names=_sql_members(ExecutionState, lambda member: member.active or member.completed), optional_attempt_execution_names=_sql_members(ExecutionState, lambda member: member.retry or member.failed), startable_execution_names=_sql_members(ExecutionState, lambda member: member.starts_attempt), successful_response_names=_sql_members(ResponseState, lambda member: member.successful), retryable_response_names=_sql_members(ResponseState, lambda member: member.retryable), intent_response_names=_sql_members(ResponseState, lambda member: member.allows_intent), required_intent_response_names=_sql_members(ResponseState, lambda member: member.requires_intent))"
+        },
+        {
+          "path": "src/agent_comms/coordination_schema.py",
+          "line": 72,
+          "kind": "Call",
+          "expression": "_sql_members(ExecutionState, lambda member: member.active or member.completed)"
+        },
+        {
+          "path": "src/agent_comms/coordination_schema.py",
+          "line": 73,
+          "kind": "Attribute",
+          "expression": "member.completed"
+        },
+        {
+          "path": "src/agent_comms/coordination_snapshot.py",
+          "line": 95,
+          "kind": "Attribute",
+          "expression": "self.execution.lifecycle.completed"
+        },
+        {
+          "path": "src/agent_comms/coordination_snapshot.py",
+          "line": 174,
+          "kind": "Call",
+          "expression": "IntegrityViolationError('snapshot pointer tuple is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/coordination_tables/executions.py",
+          "line": 218,
+          "kind": "Call",
+          "expression": "dataclass_field(init=False, default=None, compare=False, metadata={'snapshot_exclude': True, 'sql': Column(generated=\"CASE\\n        WHEN status = 'active' THEN 'active'\\n        WHEN status = 'completed' THEN 'succeeded'\\n        WHEN status IN ({optional_attempt_execution_names}) AND current_attempt_ordinal IS NOT NULL\\n          THEN 'attempt_failed'\\n    END\")})"
+        },
+        {
+          "path": "src/agent_comms/coordination_tables/executions.py",
+          "line": 224,
+          "kind": "Call",
+          "expression": "Column(generated=\"CASE\\n        WHEN status = 'active' THEN 'active'\\n        WHEN status = 'completed' THEN 'succeeded'\\n        WHEN status IN ({optional_attempt_execution_names}) AND current_attempt_ordinal IS NOT NULL\\n          THEN 'attempt_failed'\\n    END\")"
+        },
+        {
+          "path": "src/agent_comms/execution_states.py",
+          "line": 124,
+          "kind": "Call",
+          "expression": "IntegrityViolationError('active/completed execution requires an attempt')"
+        },
+        {
+          "path": "src/agent_comms/execution_states.py",
+          "line": 171,
+          "kind": "Call",
+          "expression": "IntegrityViolationError('completed wire execution requires terminal obligation')"
+        },
+        {
+          "path": "src/agent_comms/fresh_private_session.py",
+          "line": 350,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Fresh-session bootstrap became incomplete')"
+        },
+        {
+          "path": "src/agent_comms/fresh_private_session.py",
+          "line": 411,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Selected startup file became incomplete')"
+        },
+        {
+          "path": "src/agent_comms/goal_attempts.py",
+          "line": 535,
+          "kind": "Call",
+          "expression": "StorageUncertainError('Incomplete goal attempt schema.')"
+        },
+        {
+          "path": "src/agent_comms/importing.py",
+          "line": 441,
+          "kind": "Call",
+          "expression": "ValueError('Malformed complete record in Codex rollout.')"
+        },
+        {
+          "path": "src/agent_comms/importing.py",
+          "line": 439,
+          "kind": "Call",
+          "expression": "notices.add('An incomplete final source record was omitted.')"
+        },
+        {
+          "path": "src/agent_comms/jsonl_stream.py",
+          "line": 21,
+          "kind": "Attribute",
+          "expression": "asyncio.IncompleteReadError"
+        },
+        {
+          "path": "src/agent_comms/maintenance_barrier.py",
+          "line": 162,
+          "kind": "Call",
+          "expression": "RelationViolationError('Maintenance witness incomplete; admission closed')"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 65,
+          "kind": "Call",
+          "expression": "ValueError('Native entry is not a completed file operation')"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 592,
+          "kind": "Call",
+          "expression": "ValueError('Native startup metadata fields are incomplete or unexpected')"
+        },
+        {
+          "path": "src/agent_comms/native_input_record.py",
+          "line": 295,
+          "kind": "Call",
+          "expression": "IdentityConflict('Native recorded context reference is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 100,
+          "kind": "ImportFrom",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 102,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch.current()"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 452,
+          "kind": "ImportFrom",
+          "expression": "from .private_nk_entrypoint import PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 102,
+          "kind": "Attribute",
+          "expression": "PrivateNkLaunch.current"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 458,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch.current()"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 458,
+          "kind": "Attribute",
+          "expression": "PrivateNkLaunch.current"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 637,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Native Pi evidence file is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 691,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Native Pi evidence prefix is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/native_session_reopen.py",
+          "line": 33,
+          "kind": "Call",
+          "expression": "NativeReopenError('Saved native session identity is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/native_tool_call.py",
+          "line": 148,
+          "kind": "Call",
+          "expression": "self.observation.assert_complete()"
+        },
+        {
+          "path": "src/agent_comms/native_tool_call.py",
+          "line": 148,
+          "kind": "Attribute",
+          "expression": "self.observation.assert_complete"
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "line": 74,
+          "kind": "Call",
+          "expression": "ValueError('Native publication has incomplete evidence')"
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "line": 61,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "line": 73,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/agent_comms/nk_foreground.py",
+          "line": 136,
+          "kind": "Call",
+          "expression": "TimeoutError('Explicit GO did not complete before the foreground deadline')"
+        },
+        {
+          "path": "src/agent_comms/nk_foreground.py",
+          "line": 139,
+          "kind": "Call",
+          "expression": "ValueError('Incomplete GO command')"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_gate.py",
+          "line": 52,
+          "kind": "Call",
+          "expression": "ValueError('Owner compaction requires complete native session evidence')"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_gate.py",
+          "line": 54,
+          "kind": "Call",
+          "expression": "ValueError('Owner compaction requires one complete goal revision')"
+        },
+        {
+          "path": "src/agent_comms/owner_compaction_prepare.py",
+          "line": 97,
+          "kind": "Call",
+          "expression": "RefusedCompactionResult('Selected native history has no complete safe compaction cut')"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 76,
+          "kind": "ClassDef",
+          "name": "StoppedOwnerInstallation",
+          "bases": [
+            "OwnerCutover"
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 14,
+          "kind": "ImportFrom",
+          "expression": "from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 37,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 83,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 88,
+          "kind": "FunctionDef",
+          "name": "bind_target_launch",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 97,
+          "kind": "FunctionDef",
+          "name": "after_stopped",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 107,
+          "kind": "FunctionDef",
+          "name": "after_stopped",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 84,
+          "kind": "Call",
+          "expression": "self.after_stopped(stopped.lifecycle)"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 85,
+          "kind": "Call",
+          "expression": "self.bind_target_launch(stopped.lifecycle)"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 84,
+          "kind": "Attribute",
+          "expression": "self.after_stopped"
+        },
+        {
+          "path": "src/agent_comms/owner_cutover.py",
+          "line": 85,
+          "kind": "Attribute",
+          "expression": "self.bind_target_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 21,
+          "kind": "ImportFrom",
+          "expression": "from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 147,
+          "kind": "FunctionDef",
+          "name": "pin_private_nk_launch",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 224,
+          "kind": "FunctionDef",
+          "name": "restart_entrypoint",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 235,
+          "kind": "FunctionDef",
+          "name": "restart_environment",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 260,
+          "kind": "ImportFrom",
+          "expression": "from .owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 145,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 169,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 169,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch(validated_root, wire_root_id, native_package, None)"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 228,
+          "kind": "Call",
+          "expression": "self._private_nk_launch.validate()"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 262,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest(tuple(names) if names is not None else None, agent_bin, tuple(agent_args) if agent_args is not None else None, expected, runtime, source_interpreter)"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 323,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 226,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 228,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch.validate"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 238,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 239,
+          "kind": "Call",
+          "expression": "self._private_nk_launch.validate()"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 240,
+          "kind": "Call",
+          "expression": "self._private_nk_launch.apply_environment(result)"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 228,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 239,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch.validate"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 240,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch.apply_environment"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 239,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 240,
+          "kind": "Attribute",
+          "expression": "self._private_nk_launch"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 31,
+          "kind": "ClassDef",
+          "name": "OwnerRestartRequest",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 85,
+          "kind": "ClassDef",
+          "name": "OwnerRestartHandoff",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 159,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 199,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 54,
+          "kind": "Call",
+          "expression": "RestartEnvironment.inherit(lifecycle.restart_environment(os.environ if self.runtime is None else self.runtime.encode()))"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 215,
+          "kind": "Call",
+          "expression": "stopped.complete(cutover)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 254,
+          "kind": "Call",
+          "expression": "fenced.complete(cutover)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 54,
+          "kind": "Call",
+          "expression": "lifecycle.restart_environment(os.environ if self.runtime is None else self.runtime.encode())"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 96,
+          "kind": "Call",
+          "expression": "lifecycle._launch_owner_unlocked(thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary), self.agent_args if self.agent_args is not None else source.arguments, environment=self.runtime.apply_runtime(source.environment))"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 161,
+          "kind": "Call",
+          "expression": "operation.complete(self)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 212,
+          "kind": "Call",
+          "expression": "OwnerRestartHandoff(str(self.lifecycle.root), owners, self.runtime, self.request.agent_bin, self.request.agent_args)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 215,
+          "kind": "Attribute",
+          "expression": "stopped.complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 254,
+          "kind": "Attribute",
+          "expression": "fenced.complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 54,
+          "kind": "Attribute",
+          "expression": "lifecycle.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 161,
+          "kind": "Attribute",
+          "expression": "operation.complete"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 97,
+          "kind": "Call",
+          "expression": "lifecycle.restart_entrypoint(source.binary)"
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "line": 97,
+          "kind": "Attribute",
+          "expression": "lifecycle.restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/pi_events.py",
+          "line": 242,
+          "kind": "Call",
+          "expression": "events.CompactionEnd(reason=self.reason.declared_name, aborted=not completed, summary=self.result.display_summary if completed else None, context_used=None, will_retry=self.will_retry is True)"
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "line": 392,
+          "kind": "Call",
+          "expression": "ValueError('Native message is not a completed file operation')"
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "line": 635,
+          "kind": "Call",
+          "expression": "self.completed_artifacts()"
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "line": 628,
+          "kind": "Call",
+          "expression": "self.completed_artifacts()"
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "line": 635,
+          "kind": "Attribute",
+          "expression": "self.completed_artifacts"
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "line": 628,
+          "kind": "Attribute",
+          "expression": "self.completed_artifacts"
+        },
+        {
+          "path": "src/agent_comms/pi_rpc.py",
+          "line": 43,
+          "kind": "Call",
+          "expression": "ValueError('Native RPC record is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/pi_vocabulary.py",
+          "line": 191,
+          "kind": "Call",
+          "expression": "preparation.at_complete_boundary()"
+        },
+        {
+          "path": "src/agent_comms/pi_vocabulary.py",
+          "line": 191,
+          "kind": "Attribute",
+          "expression": "preparation.at_complete_boundary"
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 28,
+          "kind": "ClassDef",
+          "name": "PrivateNkLaunch",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 96,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch.current()"
+        },
+        {
+          "path": "src/agent_comms/private_nk_entrypoint.py",
+          "line": 96,
+          "kind": "Attribute",
+          "expression": "PrivateNkLaunch.current"
+        },
+        {
+          "path": "src/agent_comms/private_registry_guard.py",
+          "line": 174,
+          "kind": "Call",
+          "expression": "_reject('slot write was incomplete')"
+        },
+        {
+          "path": "src/agent_comms/private_registry_guard.py",
+          "line": 248,
+          "kind": "Call",
+          "expression": "_reject('initial slots were incomplete')"
+        },
+        {
+          "path": "src/agent_comms/recovery_projection.py",
+          "line": 166,
+          "kind": "Call",
+          "expression": "ValueError('selected attempt is incomplete')"
+        },
+        {
+          "path": "src/agent_comms/relationships.py",
+          "line": 536,
+          "kind": "Call",
+          "expression": "tuple((message for line in complete if line.strip() for message in WireRecord.public_from_wire(json.loads(line)).messages()))"
+        },
+        {
+          "path": "src/agent_comms/response_conversation.py",
+          "line": 34,
+          "kind": "Call",
+          "expression": "IdentityConflict('Response obligation has no complete original conversation')"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 88,
+          "kind": "Call",
+          "expression": "RestartEnvironment.inherit(comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode()))"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 91,
+          "kind": "Call",
+          "expression": "cls(sys.executable, runtime, comms.owners.restart_entrypoint(source[RestartEnvironment.binary_key]))"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 98,
+          "kind": "Call",
+          "expression": "RestartEnvironment.inherit(comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode()))"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 89,
+          "kind": "Call",
+          "expression": "comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 94,
+          "kind": "Call",
+          "expression": "comms.owners.restart_entrypoint(source[RestartEnvironment.binary_key])"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 99,
+          "kind": "Call",
+          "expression": "comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 103,
+          "kind": "Call",
+          "expression": "comms.owners.restart_entrypoint(self.agent_bin)"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 89,
+          "kind": "Attribute",
+          "expression": "comms.owners.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 94,
+          "kind": "Attribute",
+          "expression": "comms.owners.restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 99,
+          "kind": "Attribute",
+          "expression": "comms.owners.restart_environment"
+        },
+        {
+          "path": "src/agent_comms/restart_queue.py",
+          "line": 103,
+          "kind": "Attribute",
+          "expression": "comms.owners.restart_entrypoint"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 182,
+          "kind": "Call",
+          "expression": "IdentityConflict(\"Selected owner's configured provider/model is incomplete\")"
+        },
+        {
+          "path": "src/agent_comms/selected_pi_route.py",
+          "line": 87,
+          "kind": "Call",
+          "expression": "SelectedPiProbeUnknownError('Incomplete selected settings response')"
+        },
+        {
+          "path": "src/agent_comms/selected_pi_summary_rpc.py",
+          "line": 51,
+          "kind": "Call",
+          "expression": "ValueError('Incomplete selected summary')"
+        },
+        {
+          "path": "src/agent_comms/selected_tool_broker.py",
+          "line": 411,
+          "kind": "Call",
+          "expression": "call.assert_complete()"
+        },
+        {
+          "path": "src/agent_comms/selected_tool_broker.py",
+          "line": 522,
+          "kind": "Call",
+          "expression": "SelectedToolDenied('Selected tool request is incomplete or oversized')"
+        },
+        {
+          "path": "src/agent_comms/selected_tool_broker.py",
+          "line": 411,
+          "kind": "Attribute",
+          "expression": "call.assert_complete"
+        },
+        {
+          "path": "src/agent_comms/selected_write_plan.py",
+          "line": 281,
+          "kind": "Call",
+          "expression": "stream.write(json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(',', ':')).encode())"
+        },
+        {
+          "path": "src/agent_comms/selected_write_plan.py",
+          "line": 281,
+          "kind": "Call",
+          "expression": "json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(',', ':')).encode()"
+        },
+        {
+          "path": "src/agent_comms/selected_write_plan.py",
+          "line": 281,
+          "kind": "Attribute",
+          "expression": "json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(',', ':')).encode"
+        },
+        {
+          "path": "src/agent_comms/selected_write_plan.py",
+          "line": 281,
+          "kind": "Call",
+          "expression": "json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(',', ':'))"
+        },
+        {
+          "path": "src/agent_comms/selected_write_plan.py",
+          "line": 281,
+          "kind": "Call",
+          "expression": "FieldCodec.encode(completed)"
+        },
+        {
+          "path": "src/agent_comms/task_sources.py",
+          "line": 432,
+          "kind": "Attribute",
+          "expression": "self.completed"
+        },
+        {
+          "path": "src/agent_comms/thread_management.py",
+          "line": 420,
+          "kind": "Call",
+          "expression": "_atomic_write_text(intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True)"
+        },
+        {
+          "path": "src/agent_comms/thread_management.py",
+          "line": 421,
+          "kind": "Call",
+          "expression": "json.dumps(completed_intent, sort_keys=True)"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 735,
+          "kind": "Call",
+          "expression": "tool_field('Your explicit observation: completed or unfinished')"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 740,
+          "kind": "Call",
+          "expression": "Subtask.from_admission(owner, self.scope, self.change, completed=self.completed)"
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "line": 740,
+          "kind": "Attribute",
+          "expression": "self.completed"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 239,
+          "kind": "AsyncFunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 103,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Native Pi has no unique authoritative completed response')"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 138,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Native Pi has no unique authoritative completed response')"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 115,
+          "kind": "Call",
+          "expression": "NativePiUnavailable('Native Pi has no unique authoritative completed response')"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 237,
+          "kind": "Call",
+          "expression": "turn.complete()"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 319,
+          "kind": "Call",
+          "expression": "NativePiUnavailable(f\"Native Pi RPC record is incomplete; native exit={self.native.proc.returncode}; stderr={stderr or '(empty)'}\")"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 440,
+          "kind": "Call",
+          "expression": "self.tool_socket.assert_complete()"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 237,
+          "kind": "Attribute",
+          "expression": "turn.complete"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 313,
+          "kind": "Call",
+          "expression": "NativePiUnavailable(f'Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}')"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 440,
+          "kind": "Attribute",
+          "expression": "self.tool_socket.assert_complete"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 484,
+          "kind": "Call",
+          "expression": "self.tool_socket.assert_complete()"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 484,
+          "kind": "Attribute",
+          "expression": "self.tool_socket.assert_complete"
+        },
+        {
+          "path": "src/agent_comms/transcript_receipts.py",
+          "line": 107,
+          "kind": "Call",
+          "expression": "record.incomplete_tail(frontier.offset)"
+        },
+        {
+          "path": "src/agent_comms/transcript_receipts.py",
+          "line": 107,
+          "kind": "Attribute",
+          "expression": "record.incomplete_tail"
+        },
+        {
+          "path": "src/agent_comms/turn_admission.py",
+          "line": 102,
+          "kind": "Attribute",
+          "expression": "session.stats.complete"
+        },
+        {
+          "path": "src/agent_comms/turn_progress.py",
+          "line": 324,
+          "kind": "Call",
+          "expression": "self.comms.messaging.send(self.thread_name, target, f'{prefix}: backend turn did not complete. [Open diagnostic]({diagnostic_path.as_uri()})', MessageType.ALERT, notice=True)"
+        },
+        {
+          "path": "src/agent_comms/turn_stats.py",
+          "line": 31,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/agent_comms/turn_stats.py",
+          "line": 83,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 158,
+          "kind": "Call",
+          "expression": "ReplyIndex(complete=True)"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 162,
+          "kind": "Attribute",
+          "expression": "cached.complete"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 203,
+          "kind": "Call",
+          "expression": "ReplyIndex(revision, through, total, source, complete)"
+        },
+        {
+          "path": "src/agent_comms/view_unread.py",
+          "line": 246,
+          "kind": "Attribute",
+          "expression": "index.complete"
+        },
+        {
+          "path": "src/agent_comms/wake_candidate_index.py",
+          "line": 285,
+          "kind": "Call",
+          "expression": "ProjectionUnavailableError('incomplete candidate bus row')"
+        },
+        {
+          "path": "src/agent_comms/wake_candidate_index.py",
+          "line": 415,
+          "kind": "Call",
+          "expression": "ProjectionUnavailableError('candidate source has an incomplete tail')"
+        },
+        {
+          "path": "src/agent_comms/wake_candidate_index.py",
+          "line": 506,
+          "kind": "Call",
+          "expression": "ProjectionUnavailableError('candidate source has an incomplete tail')"
+        },
+        {
+          "path": "src/agent_comms/wire_record.py",
+          "line": 168,
+          "kind": "Call",
+          "expression": "RelationViolationError('Incomplete bus row blocks keyed publication.')"
+        },
+        {
+          "path": "src/agent_comms/worker.py",
+          "line": 18,
+          "kind": "Call",
+          "expression": "comms.owners.pin_private_nk_launch(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)"
+        },
+        {
+          "path": "src/agent_comms/worker.py",
+          "line": 18,
+          "kind": "Attribute",
+          "expression": "comms.owners.pin_private_nk_launch"
+        }
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "revision": "325e9f355cf29be3f54594bb2672f7c9aa42c553",
+      "root": "tools/cutover",
+      "parsed_modules": 51,
+      "parse_omissions": [],
+      "sites": [
+        {
+          "path": "tools/cutover/install_retained_task_source.py",
+          "line": 30,
+          "kind": "Call",
+          "expression": "ValueError('Original task preimage is not a complete contiguous stream.')"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 9,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 16,
+          "kind": "Call",
+          "expression": "FieldCodec.decode(OwnerRestartHandoff, packet['handoff'])"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 26,
+          "kind": "Call",
+          "expression": "service.owners.pin_private_nk_launch(target.root, target.wire_root_id, target.native_package)"
+        },
+        {
+          "path": "tools/cutover/launch_thread_retirement.py",
+          "line": 26,
+          "kind": "Attribute",
+          "expression": "service.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/native_schema_carry.py",
+          "line": 225,
+          "kind": "Call",
+          "expression": "ValueError('Original complete coordinator declaration preimage differs')"
+        },
+        {
+          "path": "tools/cutover/native_schema_carry.py",
+          "line": 230,
+          "kind": "Call",
+          "expression": "ValueError('Original complete release metadata differs: ' + name)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 28,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 29,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 174,
+          "kind": "ClassDef",
+          "name": "PublishOpenhcsRecovery",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ]
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 191,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 205,
+          "kind": "FunctionDef",
+          "name": "bind_target_launch",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 281,
+          "kind": "FunctionDef",
+          "name": "after_stopped",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 362,
+          "kind": "Call",
+          "expression": "tuple(OwnerRestartRequest().threads(snapshot))"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 194,
+          "kind": "Call",
+          "expression": "super().complete(stopped)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 206,
+          "kind": "Call",
+          "expression": "lifecycle.pin_private_nk_launch(ROOT, ROOT_ID, NATIVE)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 362,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest().threads(snapshot)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 372,
+          "kind": "Call",
+          "expression": "PublishOpenhcsRecovery(audience, owners, original, directory, args.current_prefix, args.receipt, manifest_bytes, sources, carry_proof)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 194,
+          "kind": "Attribute",
+          "expression": "super().complete"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 206,
+          "kind": "Attribute",
+          "expression": "lifecycle.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 362,
+          "kind": "Attribute",
+          "expression": "OwnerRestartRequest().threads"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 393,
+          "kind": "Call",
+          "expression": "json.dump({'phase': 'preflight-complete', 'started': time.time(), 'target': str(TARGET), 'pins': PINS, 'actual_gate_artifacts': gates, 'owners_before': FieldCodec.encode(audience)}, opened, indent=2)"
+        },
+        {
+          "path": "tools/cutover/publish_openhcs_recovery.py",
+          "line": 362,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 24,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 25,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 203,
+          "kind": "ClassDef",
+          "name": "PublishRetainedSummary",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ]
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 280,
+          "kind": "FunctionDef",
+          "name": "after_stopped",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 348,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 360,
+          "kind": "FunctionDef",
+          "name": "bind_target_launch",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 377,
+          "kind": "Call",
+          "expression": "tuple(OwnerRestartRequest().threads(snapshot))"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 349,
+          "kind": "Call",
+          "expression": "super().complete(stopped)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 361,
+          "kind": "Call",
+          "expression": "lifecycle.pin_private_nk_launch(ROOT, self.cohort.original_route.wire_root_id, self.cohort.native)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 377,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest().threads(snapshot)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 387,
+          "kind": "Call",
+          "expression": "PublishRetainedSummary(cohort, audience, owners, task_carry, runtime_installation, directory, receipt)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 121,
+          "kind": "Call",
+          "expression": "RuntimeError('Source proof differs from the complete activation dependencies')"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 131,
+          "kind": "Call",
+          "expression": "RuntimeError('Package/source/native trust is incomplete')"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 311,
+          "kind": "Call",
+          "expression": "self.task_carry.after_stopped(lifecycle)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 349,
+          "kind": "Attribute",
+          "expression": "super().complete"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 361,
+          "kind": "Attribute",
+          "expression": "lifecycle.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 377,
+          "kind": "Attribute",
+          "expression": "OwnerRestartRequest().threads"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 394,
+          "kind": "Call",
+          "expression": "json.dump({'phase': 'preflight-complete', 'started': time.time(), 'cohort': FieldCodec.encode(cohort), 'runtime_installation': FieldCodec.encode(runtime_installation), 'recovery_originals': FieldCodec.encode(operation.recovery_originals), 'owners_before': FieldCodec.encode(audience)}, opened, indent=2)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 244,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest().threads(snapshot)"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 311,
+          "kind": "Attribute",
+          "expression": "self.task_carry.after_stopped"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 377,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 244,
+          "kind": "Attribute",
+          "expression": "OwnerRestartRequest().threads"
+        },
+        {
+          "path": "tools/cutover/publish_retained_summary.py",
+          "line": 244,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/restart_original_thread_format.py",
+          "line": 14,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/restart_original_thread_format.py",
+          "line": 29,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest(agent_bin=packet['target_binary'], runtime=FieldCodec.decode(RestartEnvironment, packet['runtime']), source_interpreter=sys.executable)"
+        },
+        {
+          "path": "tools/cutover/restart_retained_routing.py",
+          "line": 10,
+          "kind": "ImportFrom",
+          "expression": "from retained_routing_cutover import RetainedRoutingCutover"
+        },
+        {
+          "path": "tools/cutover/restart_retained_routing.py",
+          "line": 23,
+          "kind": "Call",
+          "expression": "RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)"
+        },
+        {
+          "path": "tools/cutover/restore_stopped_owners.py",
+          "line": 19,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch"
+        },
+        {
+          "path": "tools/cutover/restore_stopped_owners.py",
+          "line": 21,
+          "kind": "Call",
+          "expression": "FieldCodec.decode(OwnerRestartHandoff, json.load(sys.stdin))"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 14,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 15,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 22,
+          "kind": "ClassDef",
+          "name": "RetainedIndexCutover",
+          "bases": [
+            "StoppedOwnerInstallation"
+          ]
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 54,
+          "kind": "FunctionDef",
+          "name": "after_stopped",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 67,
+          "kind": "FunctionDef",
+          "name": "bind_target_launch",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 68,
+          "kind": "Call",
+          "expression": "lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 68,
+          "kind": "Attribute",
+          "expression": "lifecycle.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 39,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest().threads(snapshot)"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 39,
+          "kind": "Attribute",
+          "expression": "OwnerRestartRequest().threads"
+        },
+        {
+          "path": "tools/cutover/retained_index_cutover.py",
+          "line": 39,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/retained_index_installed_pilot.py",
+          "line": 14,
+          "kind": "ImportFrom",
+          "expression": "from retained_index_cutover import RetainedIndexCutover"
+        },
+        {
+          "path": "tools/cutover/retained_index_installed_pilot.py",
+          "line": 38,
+          "kind": "Call",
+          "expression": "RetainedIndexCutover(old_python, seed['root_id'], Path(os.environ['AC_NATIVE_COPIED_PACKAGE']))"
+        },
+        {
+          "path": "tools/cutover/retained_routing_cutover.py",
+          "line": 8,
+          "kind": "ImportFrom",
+          "expression": "from retained_index_cutover import RetainedIndexCutover"
+        },
+        {
+          "path": "tools/cutover/retained_routing_cutover.py",
+          "line": 12,
+          "kind": "ClassDef",
+          "name": "RetainedRoutingCutover",
+          "bases": [
+            "RetainedIndexCutover"
+          ]
+        },
+        {
+          "path": "tools/cutover/retained_routing_installed_pilot.py",
+          "line": 13,
+          "kind": "ImportFrom",
+          "expression": "from retained_routing_cutover import RetainedRoutingCutover"
+        },
+        {
+          "path": "tools/cutover/retained_routing_installed_pilot.py",
+          "line": 58,
+          "kind": "Call",
+          "expression": "RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')"
+        },
+        {
+          "path": "tools/cutover/retained_task_installed_pilot.py",
+          "line": 90,
+          "kind": "Call",
+          "expression": "AssertionError('A completed carry was applied twice.')"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 13,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 14,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 52,
+          "kind": "FunctionDef",
+          "name": "after_stopped",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 30,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest().threads(snapshot)"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 30,
+          "kind": "Attribute",
+          "expression": "OwnerRestartRequest().threads"
+        },
+        {
+          "path": "tools/cutover/retained_task_source_carry.py",
+          "line": 30,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 123,
+          "kind": "Call",
+          "expression": "service.owners.pin_private_nk_launch(root, root_id, package)"
+        },
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 123,
+          "kind": "Attribute",
+          "expression": "service.owners.pin_private_nk_launch"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 16,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.owner_restart import OwnerRestartRequest"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 61,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 48,
+          "kind": "Call",
+          "expression": "RelationViolationError('Thread retirement requires the complete live batch')"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 46,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest().threads(snapshot)"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 46,
+          "kind": "Attribute",
+          "expression": "OwnerRestartRequest().threads"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_cutover.py",
+          "line": 46,
+          "kind": "Call",
+          "expression": "OwnerRestartRequest()"
+        },
+        {
+          "path": "tools/cutover/thread_retirement_installed_pilot.py",
+          "line": 159,
+          "kind": "Call",
+          "expression": "proof.update(busy_refusal_without_stops=True, retained_distinct_settings=True, renamed_owner_retained=True, both_thread_carriers_retired=True, original_native_wire_unknown_unchanged=True, protected_hashes=hashes, actual_target_runtime_attachment=True, original_python=original_python, target_python=sys.executable, source_head=os.environ['AC_PHASE_CORE_HEAD'], complete=True)"
+        }
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "revision": "89fbca2203ccbabcc8adcb857023645215f6b821",
+      "root": "src/toad",
+      "parsed_modules": 285,
+      "parse_omissions": [],
+      "sites": [
+        {
+          "path": "src/toad/acp/agent_process.py",
+          "line": 250,
+          "kind": "Call",
+          "expression": "self.startup_failed('ACP process closed before session initialization completed.')"
+        },
+        {
+          "path": "src/toad/acp/maintenance_ingress.py",
+          "line": 137,
+          "kind": "ImportFrom",
+          "expression": "from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch"
+        },
+        {
+          "path": "src/toad/acp/maintenance_ingress.py",
+          "line": 162,
+          "kind": "Call",
+          "expression": "PrivateNkLaunch.from_environment(ingress_root, child_env)"
+        },
+        {
+          "path": "src/toad/acp/maintenance_ingress.py",
+          "line": 162,
+          "kind": "Attribute",
+          "expression": "PrivateNkLaunch.from_environment"
+        },
+        {
+          "path": "src/toad/acp/permission_controller.py",
+          "line": 21,
+          "kind": "Call",
+          "expression": "self.future.add_done_callback(self._completed)"
+        },
+        {
+          "path": "src/toad/acp/permission_controller.py",
+          "line": 21,
+          "kind": "Attribute",
+          "expression": "self._completed"
+        },
+        {
+          "path": "src/toad/app.py",
+          "line": 23,
+          "kind": "ImportFrom",
+          "expression": "from textual.await_complete import AwaitComplete"
+        },
+        {
+          "path": "src/toad/channel_preparation.py",
+          "line": 96,
+          "kind": "Call",
+          "expression": "self._pending.discard(completed)"
+        },
+        {
+          "path": "src/toad/channel_preparation.py",
+          "line": 97,
+          "kind": "Call",
+          "expression": "completed.cancelled()"
+        },
+        {
+          "path": "src/toad/channel_preparation.py",
+          "line": 98,
+          "kind": "Call",
+          "expression": "completed.exception()"
+        },
+        {
+          "path": "src/toad/channel_preparation.py",
+          "line": 97,
+          "kind": "Attribute",
+          "expression": "completed.cancelled"
+        },
+        {
+          "path": "src/toad/channel_preparation.py",
+          "line": 98,
+          "kind": "Attribute",
+          "expression": "completed.exception"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 32,
+          "kind": "Call",
+          "expression": "complete.add_words(['ls', 'ls -al', \"echo 'hello'\"])"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 34,
+          "kind": "Call",
+          "expression": "print(complete('l'))"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 38,
+          "kind": "Call",
+          "expression": "print(complete._word_map)"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 32,
+          "kind": "Attribute",
+          "expression": "complete.add_words"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 34,
+          "kind": "Call",
+          "expression": "complete('l')"
+        },
+        {
+          "path": "src/toad/complete.py",
+          "line": 38,
+          "kind": "Attribute",
+          "expression": "complete._word_map"
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 206,
+          "kind": "AsyncFunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 204,
+          "kind": "Call",
+          "expression": "view.call_later(self.complete, reason)"
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 204,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 143,
+          "kind": "Attribute",
+          "expression": "self._on_complete"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 144,
+          "kind": "Attribute",
+          "expression": "self._complete_event"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 152,
+          "kind": "Call",
+          "expression": "self._complete_event.is_set()"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 160,
+          "kind": "Call",
+          "expression": "self._complete_event.set()"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 161,
+          "kind": "Call",
+          "expression": "self._on_complete(self)"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 152,
+          "kind": "Attribute",
+          "expression": "self._complete_event.is_set"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 160,
+          "kind": "Attribute",
+          "expression": "self._complete_event.set"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 161,
+          "kind": "Attribute",
+          "expression": "self._on_complete"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 172,
+          "kind": "Call",
+          "expression": "self._complete_event.wait()"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 201,
+          "kind": "Attribute",
+          "expression": "scan.is_complete"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 204,
+          "kind": "Call",
+          "expression": "Scan(scan_path, on_complete=on_complete)"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 152,
+          "kind": "Attribute",
+          "expression": "self._complete_event"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 160,
+          "kind": "Attribute",
+          "expression": "self._complete_event"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 172,
+          "kind": "Attribute",
+          "expression": "self._complete_event.wait"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 202,
+          "kind": "Call",
+          "expression": "on_complete(scan)"
+        },
+        {
+          "path": "src/toad/directory.py",
+          "line": 172,
+          "kind": "Attribute",
+          "expression": "self._complete_event"
+        },
+        {
+          "path": "src/toad/goal_interaction.py",
+          "line": 91,
+          "kind": "Call",
+          "expression": "view.flash('This goal is completed; set a new goal to continue.')"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 9,
+          "kind": "ImportFrom",
+          "expression": "from toad.complete import Complete"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 29,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 101,
+          "kind": "Call",
+          "expression": "self.complete.add_words([input.split(' ')[0]])"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 101,
+          "kind": "Attribute",
+          "expression": "self.complete.add_words"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 76,
+          "kind": "Call",
+          "expression": "self.complete.add_words(inputs)"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 101,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 76,
+          "kind": "Attribute",
+          "expression": "self.complete.add_words"
+        },
+        {
+          "path": "src/toad/history.py",
+          "line": 76,
+          "kind": "Attribute",
+          "expression": "self.complete"
+        },
+        {
+          "path": "src/toad/path_complete.py",
+          "line": 215,
+          "kind": "Call",
+          "expression": "print(await path_complete(cwd, '~/p'))"
+        },
+        {
+          "path": "src/toad/path_complete.py",
+          "line": 215,
+          "kind": "Call",
+          "expression": "path_complete(cwd, '~/p')"
+        },
+        {
+          "path": "src/toad/path_complete.py",
+          "line": 187,
+          "kind": "Call",
+          "expression": "len(complete_name)"
+        },
+        {
+          "path": "src/toad/path_complete.py",
+          "line": 195,
+          "kind": "Call",
+          "expression": "matched_path.name.startswith(complete_name)"
+        },
+        {
+          "path": "src/toad/path_complete.py",
+          "line": 192,
+          "kind": "Call",
+          "expression": "len(complete_name)"
+        },
+        {
+          "path": "src/toad/path_complete.py",
+          "line": 190,
+          "kind": "Call",
+          "expression": "len(complete_name)"
+        },
+        {
+          "path": "src/toad/plan.py",
+          "line": 75,
+          "kind": "Call",
+          "expression": "text.add_class('-complete')"
+        },
+        {
+          "path": "src/toad/plan.py",
+          "line": 72,
+          "kind": "Attribute",
+          "expression": "previous.complete"
+        },
+        {
+          "path": "src/toad/screens/action_modal.py",
+          "line": 71,
+          "kind": "Call",
+          "expression": "self.operation.command_complete(self, event.event.return_code)"
+        },
+        {
+          "path": "src/toad/screens/action_modal.py",
+          "line": 71,
+          "kind": "Attribute",
+          "expression": "self.operation.command_complete"
+        },
+        {
+          "path": "src/toad/screens/goal_edit.py",
+          "line": 48,
+          "kind": "Call",
+          "expression": "Static('Edit objective \u00b7 @ mentions \u00b7 Tab completes \u00b7 Enter saves', markup=False)"
+        },
+        {
+          "path": "src/toad/screens/mcp_decision.py",
+          "line": 43,
+          "kind": "Call",
+          "expression": "Static('Only the installed Pi MCP package may make this decision. Inspect its complete display; type its challenge yourself. Toad never provides an answer. Cancel kills the child, but cannot undo a package decision already committed; refresh inventory.', markup=False)"
+        },
+        {
+          "path": "src/toad/setting_choices.py",
+          "line": 48,
+          "kind": "Attribute",
+          "expression": "status.completed"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 179,
+          "kind": "Call",
+          "expression": "app.notify(f'{self.completed_label} @{ctx.subject}', title='Session action')"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 91,
+          "kind": "Call",
+          "expression": "self.action.completed(app, ctx, result)"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 91,
+          "kind": "Attribute",
+          "expression": "self.action.completed"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 179,
+          "kind": "Attribute",
+          "expression": "self.completed_label"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 13,
+          "kind": "ImportFrom",
+          "expression": "from textual.await_complete import AwaitComplete"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 132,
+          "kind": "FunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 733,
+          "kind": "AsyncFunctionDef",
+          "name": "complete",
+          "bases": []
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 136,
+          "kind": "Call",
+          "expression": "view.call_later(complete)"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 745,
+          "kind": "Call",
+          "expression": "AwaitComplete(complete())"
+        },
+        {
+          "path": "src/toad/transcript_publication.py",
+          "line": 745,
+          "kind": "Call",
+          "expression": "complete()"
+        },
+        {
+          "path": "src/toad/widgets/comms_transfer.py",
+          "line": 122,
+          "kind": "Call",
+          "expression": "request.completed(self.app, receipt)"
+        },
+        {
+          "path": "src/toad/widgets/comms_transfer.py",
+          "line": 122,
+          "kind": "Attribute",
+          "expression": "request.completed"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1670,
+          "kind": "Call",
+          "expression": "self.input_histories.shell.complete.add_words(self.app.settings.shell.allow_commands.split())"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1259,
+          "kind": "Attribute",
+          "expression": "stop_reason.completed"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1670,
+          "kind": "Attribute",
+          "expression": "self.input_histories.shell.complete.add_words"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1778,
+          "kind": "Call",
+          "expression": "self.input_histories.shell.complete.add_words(self.app.settings.shell.allow_commands.split())"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1670,
+          "kind": "Attribute",
+          "expression": "self.input_histories.shell.complete"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1778,
+          "kind": "Attribute",
+          "expression": "self.input_histories.shell.complete.add_words"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1778,
+          "kind": "Attribute",
+          "expression": "self.input_histories.shell.complete"
+        },
+        {
+          "path": "src/toad/widgets/patch_diff.py",
+          "line": 79,
+          "kind": "Call",
+          "expression": "ValueError('Incomplete patch hunk')"
+        },
+        {
+          "path": "src/toad/widgets/plan.py",
+          "line": 75,
+          "kind": "Call",
+          "expression": "self.set_class(complete, '-all-complete')"
+        },
+        {
+          "path": "src/toad/widgets/plan.py",
+          "line": 72,
+          "kind": "Call",
+          "expression": "all((entry.status.complete for entry in self.entries))"
+        },
+        {
+          "path": "src/toad/widgets/plan.py",
+          "line": 72,
+          "kind": "Attribute",
+          "expression": "entry.status.complete"
+        },
+        {
+          "path": "src/toad/widgets/prepared_markdown.py",
+          "line": 25,
+          "kind": "ImportFrom",
+          "expression": "from textual.await_complete import AwaitComplete"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 33,
+          "kind": "ImportFrom",
+          "expression": "from toad.widgets.slash_complete import SlashComplete"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 39,
+          "kind": "ImportFrom",
+          "expression": "from toad.path_complete import PathComplete"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 156,
+          "kind": "Call",
+          "expression": "Binding('tab', 'tab_complete', 'Complete', tooltip='Complete path (if possible)', priority=True, show=False)"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 365,
+          "kind": "Call",
+          "expression": "shlex.split(pre_complete)"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 380,
+          "kind": "Call",
+          "expression": "self.path_complete(Path(prompt.working_directory), shlex_tokens[-1], exclude_type=exclude_node_type)"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 395,
+          "kind": "Call",
+          "expression": "self.insert(' '.join((token.replace(' ', '\\\\ ') for token in shlex_tokens)) + post_complete + spaces)"
+        },
+        {
+          "path": "src/toad/widgets/prompt.py",
+          "line": 380,
+          "kind": "Attribute",
+          "expression": "self.path_complete"
+        },
+        {
+          "path": "src/toad/widgets/session_tabs.py",
+          "line": 224,
+          "kind": "Call",
+          "expression": "underline.animate('highlight_end', end, duration=0.3, on_complete=partial(self.scroll_to_center, current_label))"
+        },
+        {
+          "path": "src/toad/widgets/streaming_markdown.py",
+          "line": 17,
+          "kind": "ImportFrom",
+          "expression": "from textual.await_complete import AwaitComplete"
+        },
+        {
+          "path": "src/toad/widgets/tool_call.py",
+          "line": 268,
+          "kind": "Attribute",
+          "expression": "status.completed"
+        },
+        {
+          "path": "src/toad/widgets/transcript_history.py",
+          "line": 112,
+          "kind": "Call",
+          "expression": "protocol.ToolCall(tool_call_id=tool_id, title=event.tool_name or 'Tool', status='completed', kind=NativeTool.start(tool_id, event.tool_name, {}).kind)"
+        },
+        {
+          "path": "src/toad/widgets/viewport_body.py",
+          "line": 30,
+          "kind": "ImportFrom",
+          "expression": "from textual.await_complete import AwaitComplete"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 262,
+          "kind": "Call",
+          "expression": "self._thread_tasks.discard(completed)"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 263,
+          "kind": "Call",
+          "expression": "completed.cancelled()"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 264,
+          "kind": "Call",
+          "expression": "completed.exception()"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 263,
+          "kind": "Attribute",
+          "expression": "completed.cancelled"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 264,
+          "kind": "Attribute",
+          "expression": "completed.exception"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 301,
+          "kind": "Call",
+          "expression": "completed.cancelled()"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 302,
+          "kind": "Call",
+          "expression": "completed.exception()"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 301,
+          "kind": "Attribute",
+          "expression": "completed.cancelled"
+        },
+        {
+          "path": "src/toad/work_preparation.py",
+          "line": 302,
+          "kind": "Attribute",
+          "expression": "completed.exception"
+        }
+      ]
+    }
+  ],
+  "limits": "Imported/dotted references are candidates; dynamic dispatch and external/native dependencies are not proven by AST. Actual source callsites and original/target runtime control provide separate evidence.",
+  "deleted_decisions": [
+    "PublishRetainedSummary.publish early target pin",
+    "PublishOpenhcsRecovery.main early target pin",
+    "PublishRetainedSummary.complete copied after_stopped/launch sequence",
+    "PublishOpenhcsRecovery.complete copied after_stopped/launch sequence",
+    "RetainedIndexCutover.after_stopped nested launch binding"
+  ],
+  "owner": "StoppedOwnerInstallation.complete is the sole install/bind/launch algorithm; routing inherits index binding."
+}

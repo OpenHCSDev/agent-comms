@@ -1,0 +1,218 @@
+{
+  "tool": "audit.findings.Package",
+  "scope": "Lexical source references; external member decoding and dynamic method dispatch read separately",
+  "revisions": {
+    "12c1758ee4336c1b15732f166e55f333e329a4d0": {
+      "parse_omissions": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "name": "NativeEvidenceRead",
+          "bases": [],
+          "methods": []
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "name": "MessageEntry",
+          "bases": [
+            "NativeEntry"
+          ],
+          "methods": [
+            "retained_tool_calls",
+            "retained_tool_facts",
+            "require_artifact_request"
+          ]
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "ToolCallContent",
+          "bases": [
+            "PiContent"
+          ],
+          "methods": []
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "PiMessage",
+          "bases": [
+            "PiPayload",
+            "DeclaredFamily"
+          ],
+          "methods": [
+            "retained_tool_calls",
+            "retained_tool_facts",
+            "require_artifact_request"
+          ]
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "ToolResultMessage",
+          "bases": [
+            "ToolDetailsPayload",
+            "PiMessage"
+          ],
+          "methods": [
+            "require_artifact_request",
+            "retained_tool_facts"
+          ]
+        },
+        {
+          "path": "tests/compaction_retention_fixture.py",
+          "name": "ScoredScenario",
+          "bases": [
+            "ScoreView"
+          ],
+          "methods": []
+        },
+        {
+          "path": "tests/compaction_retention_fixture.py",
+          "name": "Question",
+          "bases": [],
+          "methods": [
+            "proposed_action"
+          ]
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "name": "RecordedNativeProbe",
+          "bases": [],
+          "methods": []
+        }
+      ],
+      "consumer_paths": [
+        "src/agent_comms/attempt_recovery.py",
+        "src/agent_comms/compaction_boundary.py",
+        "src/agent_comms/native_entries.py",
+        "src/agent_comms/native_pi.py",
+        "src/agent_comms/native_prompt_binding.py",
+        "src/agent_comms/owner_compaction_commit.py",
+        "src/agent_comms/owner_compaction_prepare.py",
+        "src/agent_comms/pi_events.py",
+        "src/agent_comms/pi_payloads.py",
+        "src/agent_comms/selected_tool_broker.py",
+        "tests/compaction_retention_fixture.py",
+        "tests/retained_native_fixture.py",
+        "tests/shared_bus_restart_native.py",
+        "tests/test_channel_coding_tools.py",
+        "tests/test_compaction_retention_fixture.py",
+        "tests/test_native_file_artifact.py",
+        "tests/test_native_tool_lifecycle.py",
+        "tests/test_native_transcript.py",
+        "tests/test_pi_payloads.py",
+        "tests/test_recorded_retention_measurements.py",
+        "tests/test_retained_native_tool_latency.py",
+        "tests/test_selected_tool_broker.py",
+        "tests/test_transcript_input_display.py",
+        "tests/three_cut_retention_configured_journey.py"
+      ]
+    },
+    "fd4e1c8cc156fc8eeb2b6d836795338fb28e8c75": {
+      "parse_omissions": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "name": "NativeEvidenceRead",
+          "bases": [],
+          "methods": []
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "name": "MessageEntry",
+          "bases": [
+            "NativeEntry"
+          ],
+          "methods": [
+            "retained_tool_calls",
+            "retained_tool_facts",
+            "require_artifact_request"
+          ]
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "ToolCallContent",
+          "bases": [
+            "PiContent"
+          ],
+          "methods": []
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "PiMessage",
+          "bases": [
+            "PiPayload",
+            "DeclaredFamily"
+          ],
+          "methods": [
+            "retained_tool_calls",
+            "retained_tool_facts",
+            "require_artifact_request"
+          ]
+        },
+        {
+          "path": "src/agent_comms/pi_payloads.py",
+          "name": "ToolResultMessage",
+          "bases": [
+            "ToolDetailsPayload",
+            "PiMessage"
+          ],
+          "methods": [
+            "require_tool_request",
+            "require_artifact_request",
+            "retained_tool_facts"
+          ]
+        },
+        {
+          "path": "tests/compaction_retention_fixture.py",
+          "name": "ScoredScenario",
+          "bases": [
+            "ScoreView"
+          ],
+          "methods": []
+        },
+        {
+          "path": "tests/compaction_retention_fixture.py",
+          "name": "Question",
+          "bases": [],
+          "methods": [
+            "proposed_action",
+            "executed_action"
+          ]
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "name": "RecordedNativeProbe",
+          "bases": [],
+          "methods": [
+            "tool_steps"
+          ]
+        }
+      ],
+      "consumer_paths": [
+        "src/agent_comms/attempt_recovery.py",
+        "src/agent_comms/compaction_boundary.py",
+        "src/agent_comms/native_entries.py",
+        "src/agent_comms/native_pi.py",
+        "src/agent_comms/native_prompt_binding.py",
+        "src/agent_comms/owner_compaction_commit.py",
+        "src/agent_comms/owner_compaction_prepare.py",
+        "src/agent_comms/pi_events.py",
+        "src/agent_comms/pi_payloads.py",
+        "src/agent_comms/selected_tool_broker.py",
+        "tests/compaction_retention_fixture.py",
+        "tests/retained_native_fixture.py",
+        "tests/shared_bus_restart_native.py",
+        "tests/test_channel_coding_tools.py",
+        "tests/test_compaction_retention_fixture.py",
+        "tests/test_native_file_artifact.py",
+        "tests/test_native_tool_lifecycle.py",
+        "tests/test_native_transcript.py",
+        "tests/test_pi_payloads.py",
+        "tests/test_recorded_retention_measurements.py",
+        "tests/test_retained_native_tool_latency.py",
+        "tests/test_selected_tool_broker.py",
+        "tests/test_transcript_input_display.py",
+        "tests/three_cut_retention_configured_journey.py"
+      ]
+    }
+  }
+}

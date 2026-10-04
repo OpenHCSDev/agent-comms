@@ -1,0 +1,17 @@
+{
+  "declaration": "agent_comms.compaction_records.SelectedSummaryAttempt",
+  "fields": [
+    "operation_id",
+    "session_file",
+    "source_json",
+    "request",
+    "state"
+  ],
+  "ddl": [
+    "CREATE TABLE \"selected_summary_attempts\" (\"operation_id\" TEXT NOT NULL, \"session_file\" TEXT NOT NULL, \"source_json\" TEXT NOT NULL, \"request\" TEXT NOT NULL, \"state\" TEXT NOT NULL, PRIMARY KEY (\"operation_id\")) STRICT",
+    "CREATE UNIQUE INDEX \"selected_summary_attempts_0_idx\" ON \"selected_summary_attempts\" (\"session_file\") WHERE json_extract(state, '$.kind') IN ('reserved','unknown')"
+  ],
+  "source_json_role": "immutable exact original native SHA input; never runtime decoded",
+  "request_role": "one mandatory typed current SelectedSummarySource",
+  "migration": "Mendel510 stopped authentic old declaration transform; no admission receipt or old epoch readmission"
+}

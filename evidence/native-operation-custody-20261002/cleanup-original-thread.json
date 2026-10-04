@@ -1,0 +1,27 @@
+{
+  "name": "dedicated-worktree-cleanup-20261001",
+  "tags": [
+    "cleanup",
+    "comms"
+  ],
+  "worktree": "/home/ts/.agent-comms",
+  "created_at": 1790874801.3895755,
+  "session_file": null,
+  "title": null,
+  "parent": "agent-comms-ux",
+  "task": "Sole authorized disk cleanup owner; bounded retained-worktree internals audit; preserve original sessions, sources, frozen/native build donors and current prefixes. No provider process or goal.",
+  "process_identity": {
+    "pid": 702428,
+    "start_time": 44958513
+  },
+  "model": null,
+  "thinking_level": null,
+  "goal": null,
+  "previous_worktrees": [],
+  "auto_title_pending": false,
+  "role": "agent",
+  "active_turn": null,
+  "channel_scope_generation": 0,
+  "turn_generation": 0,
+  "last_finished_turn_id": null
+}

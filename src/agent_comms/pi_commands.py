@@ -11,14 +11,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import uuid4
 
+from .turn_phase import ShutdownPhase
+
 from .native_turn_context import NativeContextData
-from .pi_vocabulary import ThinkingLevel
+from .native_compaction_request import ReconcileNativeRequest
+from .compaction_states import CommittedNativeOutcome
+from .pi_vocabulary import ThinkingLevel, CompactionReason, ThresholdCompactionReason
+from .message_reference import MessageReference
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
-from .turn_context import InputContributionCoordinates
-from .owner_compaction_prepare import NativeWitness
+from .turn_context import InputContributionCoordinates, SegmentManifest
+from .native_session_reopen import NativeSessionIdentity
+from .owner_compaction_prepare import NativeWitness, PrepareCompactionHelper
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
     CompactionData,
@@ -27,10 +33,12 @@ from .pi_payloads import (
     PiResponseData,
     SessionStatsData,
     StateData,
+    SessionSwitchData,
     ThinkingLevelsData,
     UnknownData,
 )
 from .pi_summary_payloads import (
+    CompactionPreparationData,
     CompactionSettingsData,
     SelectedModel,
     SelectedSummaryData,
@@ -65,8 +73,7 @@ class MutatesSession:
         session.rejected_commands.append(
             events.Error(
                 reason_code="steering_command_rejected",
-                command=self.declared_name,
-                id=self.id,
+                command=self,
                 text=f"Mid-turn {self.declared_name} is not supported.",
             )
         )
@@ -190,7 +197,7 @@ class Prompt(PiCommand):
             else:
                 error = session.output.error(str(response.error or "Prompt was rejected"))
                 yield session.watchdog.state(
-                    session, "failed", "prompt_rejected", 0, event_phase="shutdown"
+                    "failed", "prompt_rejected", 0, phase=ShutdownPhase()
                 )
                 yield error
                 session.finished = True
@@ -199,8 +206,42 @@ class Prompt(PiCommand):
             session.inputs.acknowledge(response)
 
 
+class NativeQuery(PiCommand):
+    """One correlated RPC transaction; command capabilities own its effects."""
+
+    @property
+    @abstractmethod
+    def response_payload(self) -> type[PiResponseData]: ...
+
+    @asynccontextmanager
+    async def pending_response(self, channel, writer):
+        command = replace(self, id=self.id or uuid4().hex)
+        future = channel.track(command)
+        try:
+            writer.write(channel.command_bytes(command))
+            await writer.drain()
+            yield future
+        finally:
+            channel.pending.discard(type(command), command.id)
+            future.cancel()
+
+    async def exchange(
+        self, channel: PiRpcChannel, writer: asyncio.StreamWriter, *,
+        strict: bool = False, max_bytes: int | None = None,
+    ) -> Response:
+        from .pi_events import Response
+        async with self.pending_response(channel,writer) as future:
+            while not future.done():
+                event = await channel.receive(strict=strict, max_bytes=max_bytes)
+                if event is None:
+                    raise EOFError("Pi RPC ended before the requested response")
+                if isinstance(event,Response):
+                    channel.correlate(event)
+            return future.result()
+
+
 @dataclass(frozen=True, kw_only=True)
-class GetState(SessionSnapshot, PiCommand):
+class GetState(SessionSnapshot, NativeQuery):
     response_payload = StateData
 
     @classmethod
@@ -242,37 +283,6 @@ class GetSessionStats(SessionSnapshot, PiCommand):
             yield session.context_info()
             if session.persistent_session is None:
                 session.finished = True
-
-
-class NativeQuery(PiCommand):
-    """One read-only native query owns launch, correlation and child retirement."""
-
-    @property
-    @abstractmethod
-    def response_payload(self) -> type[PiResponseData]: ...
-
-    @asynccontextmanager
-    async def pending_response(self, channel, writer):
-        command = replace(self, id=self.id or uuid4().hex)
-        future = channel.track(command)
-        try:
-            writer.write(channel.command_bytes(command))
-            await writer.drain()
-            yield future
-        finally:
-            channel.pending.discard(type(command), command.id)
-            future.cancel()
-
-    async def exchange(self, channel: PiRpcChannel, writer: asyncio.StreamWriter) -> Response:
-        from .pi_events import Response
-        async with self.pending_response(channel,writer) as future:
-            while not future.done():
-                event = await channel.receive()
-                if event is None:
-                    raise EOFError("Pi RPC ended before the requested response")
-                if isinstance(event,Response):
-                    channel.correlate(event)
-            return future.result()
 
 
 class CatalogQuery(NativeQuery):
@@ -400,8 +410,10 @@ class NewSession(MutatesSession, PiCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SwitchSession(MutatesSession, PiCommand):
-    pass
+class SwitchSession(MutatesSession, NativeQuery):
+    response_payload = SessionSwitchData
+    strict_response = True
+    session_path: str = field(metadata={"wire_name": "sessionPath"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -431,15 +443,58 @@ class AgentCommsSummarizeCompaction(PiCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentCommsCompactionSettings(PiCommand):
+class AgentCommsCompactionSettings(NativeQuery):
     response_payload = CompactionSettingsData
     strict_response = True
+    observation_timeout_seconds: ClassVar[float] = 5
+    default_observation_timeout_seconds: ClassVar[float] = 3
+    version: int = 2
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    selected: SelectedModel
+    purpose: type[CompactionReason] = ThresholdCompactionReason
+    boundary: tuple[MessageReference, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsPrepareCompaction(NativeQuery):
+    response_payload = CompactionPreparationData
+    strict_response = True
+    # Preparing the whole history retains the original preparation operation's
+    # budget. It is not the inexpensive selected-settings observation.
+    observation_timeout_seconds: ClassVar[float] = PrepareCompactionHelper.timeout_seconds
     version: int = 1
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
+    settings: PiCompactionSettings
+    retained_text: str = field(default="", metadata={"wire_name": "retainedText"})
 
 
 @dataclass(frozen=True, kw_only=True)
 class AgentCommsInspectContext(NativeQuery):
     response_payload = NativeContextData
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsInspectContextSegment(NativeQuery):
+    response_payload = NativeContextData
+    identity: NativeSessionIdentity
+    entries: tuple[str, ...]
+    expected: SegmentManifest
+    parts: tuple[SegmentManifest, ...]
+
+    @classmethod
+    def for_manifest(cls, expected: SegmentManifest):
+        return cls(identity=expected.native_identity(), entries=expected.journal_entries(),
+                   expected=expected, parts=expected.requested_parts())
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsRestoreCompaction(MutatesSession, NativeQuery):
+    """Install an already committed source, retaining its acquired SDK runtime."""
+    response_payload = EmptyData
+    strict_response = True
+    reconciliation: ReconcileNativeRequest
+    expected: CommittedNativeOutcome
+    reason: type[CompactionReason]

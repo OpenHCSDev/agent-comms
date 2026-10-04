@@ -1,0 +1,50 @@
+{
+  "state": "READY_SCOPED_INSTALLED_MCP_OWNER_CONTROLS",
+  "source_head": "14884a5044983ddeb176ae1a42dcbb70e1d58c3f",
+  "implementation_head": "e91a58be86c4b27d6a6b0117eea70b3b6b275c20",
+  "base": "d41601c16d74e9e3e4195b6527fb218b8fe14af9",
+  "production_diff": "",
+  "files": [
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "added": 6,
+      "deleted": 12
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "added": 91,
+      "deleted": 84
+    }
+  ],
+  "added": 97,
+  "deleted": 96,
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel613-execution-only-grant.json",
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "installed_members_equal": 342,
+  "wheel_sha256": "4e3ff32503360fe7975ec71da19479774c0ff04ac6b0a2aa09ee38a1521219ba",
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "controls": {
+    "passed": 3,
+    "failed": 0,
+    "seconds": 13.53,
+    "log": "installed01.log",
+    "cases": [
+      "receipt projection requires actual current owner/session/lease; settled/old/unbound/missing lease rejected",
+      "actual successor lease denies original delayed permission, wrong/absent controller denied, bounded permission refusal retained",
+      "original RuntimePromptRequest token selection and socket permission reply; forged/absent token denied, disconnect does not transfer controller"
+    ]
+  },
+  "native_inputs": 0,
+  "provider_requests": 0,
+  "public_writes": 0,
+  "package_writes": 0,
+  "owned_retirement": "Every saved_owner asserts unchanged SDK-authored saved bytes, zero provider posts/native starts, actual owned children absent and original groups empty. Original permission tasks are cancelled/joined on scope exit; subscriber proxies closed. Tool98894 terminal0.",
+  "scratch": "/home/ts/.cache/agent-scratch/mendel-mcp613-installed01",
+  "limits": [
+    "Actual SDK/private registry/native GetState/stats/OwnedTurn and runtime socket/controller contract; supplied permission operation is not native extension dialog emission, native prompt or provider/tool success",
+    "Recorded child-pipe protocol controls and unchanged real native MCP/provider acceptance are not rerun or qualified by this gate",
+    "Historical13/98s latency and physical04 EOF attribution remain open",
+    "Other adjacent retired active_turns fixtures are recorded by AST, not represented as migrated"
+  ]
+}

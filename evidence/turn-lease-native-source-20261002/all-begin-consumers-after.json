@@ -1,0 +1,478 @@
+[
+  {
+    "path": "src/agent_comms/manual_compaction_bridge.py",
+    "line": 39,
+    "call": "runner.comms.agents.begin_turn(thread_name, turn_id, \"Compacting context\")",
+    "consumption": "Assign",
+    "lease_projection": false
+  },
+  {
+    "path": "src/agent_comms/owned_turn.py",
+    "line": 156,
+    "call": "self.runner.comms.agents.begin_turn(\n            self.thread_name, self.turn_id, self.task[:80], self.routing\n        )",
+    "consumption": "Assign",
+    "lease_projection": false
+  },
+  {
+    "path": "src/agent_comms/turn_runner.py",
+    "line": 249,
+    "call": "self.comms.agents.begin_turn(\n                    thread_name, turn_id, \"Waiting for replies\"\n                )",
+    "consumption": "Assign",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/selected_summary_recovery_installed_journey.py",
+    "line": 149,
+    "call": "service.agents.begin_turn('recovery523', f'prior-{kind}')",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/selected_summary_recovery_installed_journey.py",
+    "line": 171,
+    "call": "service.agents.begin_turn('recovery523', f'distinct-recovery-{kind}')",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_acp.py",
+    "line": 202,
+    "call": "agent._comms.agents.begin_turn(\"proj\", turn_id, \"Compacting context\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_acp.py",
+    "line": 1988,
+    "call": "wired.agents.begin_turn(\"child\", \"child-metadata-work\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_acp_private_nk_delivery.py",
+    "line": 742,
+    "call": "comms.agents.begin_turn(\"beta\", \"human-live-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_acp_queue_contract.py",
+    "line": 106,
+    "call": "comms.agents.begin_turn(\"beta\", \"active\", \"Held native fixture\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_acp_queue_contract.py",
+    "line": 131,
+    "call": "comms.agents.begin_turn(\"beta\", \"active\", \"Held native fixture\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_acp_queue_contract.py",
+    "line": 156,
+    "call": "comms.agents.begin_turn(\"beta\", \"active\", \"Held native fixture\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_active_turn.py",
+    "line": 36,
+    "call": "comms.agents.begin_turn(\"worker\", \"second\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_active_turn.py",
+    "line": 20,
+    "call": "comms.agents.begin_turn(\"worker\", \"first\", \"Long-running work\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_agent_events.py",
+    "line": 192,
+    "call": "comms.agents.begin_turn(\"bot\", \"turn\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_agent_events.py",
+    "line": 230,
+    "call": "comms.agents.begin_turn(\"bot\", \"turn\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_atomic_turn_source_owner.py",
+    "line": 54,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "consumption": "Assign",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_atomic_turn_source_owner.py",
+    "line": 58,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "consumption": "Assign",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_channels.py",
+    "line": 423,
+    "call": "comms.agents.begin_turn(\"peer\", \"active-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_coordinated_runtime.py",
+    "line": 1776,
+    "call": "comms.agents.begin_turn(\"beta\", \"existing-real-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_coordinated_runtime.py",
+    "line": 1692,
+    "call": "comms.agents.begin_turn(\"beta\", \"old-authorized-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_current_input_origin.py",
+    "line": 62,
+    "call": "comms.agents.begin_turn(\"beta\", \"held-native\", \"Existing original\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_declarations.py",
+    "line": 357,
+    "call": "comms.agents.begin_turn(\"a\", \"revived\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_declarations.py",
+    "line": 387,
+    "call": "comms.agents.begin_turn(\"a\", \"must-not-claim\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_input_review.py",
+    "line": 34,
+    "call": "comms.agents.begin_turn(\"parent\", \"parent-delegation-in-flight\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_input_review.py",
+    "line": 147,
+    "call": "comms.agents.begin_turn(\"parent\", \"new-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_resume.py",
+    "line": 63,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-assistant-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_resume.py",
+    "line": 92,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-assistant-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 190,
+    "call": "comms.agents.begin_turn(\"carol\", \"carol-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 304,
+    "call": "comms.agents.begin_turn(\"bob\", \"bob-independent-new\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 89,
+    "call": "comms.agents.begin_turn(name, f\"{name}-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 122,
+    "call": "comms.agents.begin_turn(name, f\"{name}-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 151,
+    "call": "comms.agents.begin_turn(name, f\"{name}-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 181,
+    "call": "comms.agents.begin_turn(name, f\"{name}-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 227,
+    "call": "comms.agents.begin_turn(name, f\"{name}-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 280,
+    "call": "comms.agents.begin_turn(name, f\"{name}-first\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "line": 325,
+    "call": "comms.agents.begin_turn(name, f\"{name}-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 344,
+    "call": "comms.agents.begin_turn(\"child\", \"work\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 77,
+    "call": "comms.agents.begin_turn(name, turn_id)",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 501,
+    "call": "comms.agents.begin_turn(child, \"child-turn\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "line": 547,
+    "call": "comms.agents.begin_turn(child, \"new-child-turn\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_goal_wait_certified_reply.py",
+    "line": 65,
+    "call": "comms.agents.begin_turn(\"peer\", \"original-work\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_goal_wait_certified_reply.py",
+    "line": 30,
+    "call": "comms.agents.begin_turn(\"peer\", \"original-work\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_goal_wait_certified_reply.py",
+    "line": 110,
+    "call": "comms.agents.begin_turn(\"peer\", \"peer-work\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_history_view_declaration.py",
+    "line": 56,
+    "call": "comms.agents.begin_turn(\"beta\", \"ordinary-snapshot-active-participant\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_l0_goal_input_closure.py",
+    "line": 117,
+    "call": "comms.agents.begin_turn(\"peer\", \"peer-turn\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_live_drain_failure.py",
+    "line": 71,
+    "call": "comms.agents.begin_turn(\"beta\", \"ordinary-unrelated-turn\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_maintenance_barrier.py",
+    "line": 87,
+    "call": "comms.agents.begin_turn(\"owner\", \"before\")",
+    "consumption": "Assert",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_maintenance_barrier.py",
+    "line": 94,
+    "call": "comms.agents.begin_turn(\"owner\", \"after\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_message_notifications.py",
+    "line": 47,
+    "call": "comms.agents.begin_turn('beta', 'test-active-turn')",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_message_notifications.py",
+    "line": 75,
+    "call": "comms.agents.begin_turn('renamed', 'individual-active-turn')",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_native_context_inspection.py",
+    "line": 149,
+    "call": "owner._comms.agents.begin_turn(peer.name, \"context-fixture-peer\", \"Independent context fixture\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_runtime_goal_snapshot.py",
+    "line": 51,
+    "call": "comms.agents.begin_turn(\"child\", \"child-work-in-flight\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_selected_owner_followup.py",
+    "line": 213,
+    "call": "comms.agents.begin_turn(\"sender\", \"dependency\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_selected_owner_followup.py",
+    "line": 383,
+    "call": "comms.agents.begin_turn(\"sender\", \"dependency-running\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_selected_owner_followup.py",
+    "line": 49,
+    "call": "comms.agents.begin_turn(\"sender\", \"dependency-work\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_selected_summary_exchange.py",
+    "line": 72,
+    "call": "comms.agents.begin_turn(\"owner\", \"native-summary-negative\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_selected_summary_exchange.py",
+    "line": 511,
+    "call": "comms.agents.begin_turn(\"summary-owner\", \"native-summary-exchange\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_stack_goal_standby.py",
+    "line": 201,
+    "call": "comms.agents.begin_turn(\"child\", \"child-report-in-flight\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_thread_identity.py",
+    "line": 95,
+    "call": "comms.agents.begin_turn(\"owner\", \"reused\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_thread_identity.py",
+    "line": 99,
+    "call": "comms.agents.begin_turn(\"renamed\", \"reused\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_tool_output.py",
+    "line": 186,
+    "call": "comms.agents.begin_turn(\"a\", \"next-a-result-in-flight\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_tool_output.py",
+    "line": 230,
+    "call": "comms.agents.begin_turn(\"a\", \"a-review-in-flight\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_turn_context_wire.py",
+    "line": 73,
+    "call": "comms.agents.begin_turn('Alice', 'owned-context-recording515')",
+    "consumption": "Assign",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 29,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "consumption": "Expr",
+    "lease_projection": false
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 36,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 40,
+    "call": "comms.agents.begin_turn(\"owner\", \"same-id\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tests/test_turn_lease_release.py",
+    "line": 52,
+    "call": "comms.agents.begin_turn(\"owner\", \"turn\")",
+    "consumption": "Attribute",
+    "lease_projection": true
+  },
+  {
+    "path": "tools/cutover/seed_retained_routing_fixture.py",
+    "line": 57,
+    "call": "service.agents.begin_turn('alpha', 'retained-original-turn', 'Original no-provider custody',\n                             TurnRouting((), MessageRoute('alpha', ('#team',))))",
+    "consumption": "Expr",
+    "lease_projection": false
+  }
+]

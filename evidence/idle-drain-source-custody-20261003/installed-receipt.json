@@ -1,0 +1,455 @@
+{
+  "result": "INSTALLED_READ_ONLY_19_IDLE_OWNER_OBSERVATIONS_PASS",
+  "source_head": "cc64bf6bc7e6f30e513f4fea18a50cb580efe8aa",
+  "python": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/python",
+  "package": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "root_id": "e206f3766e60451a989ca34df0e2a94b",
+  "direct_url": {
+    "url": "file:///home/ts/.cache/agent-scratch/mendel-idle-source558-20261003/wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "sdk": "0.12.1",
+  "source_files_equal": 339,
+  "elapsed_seconds": 0.6566735539818183,
+  "observations": [
+    {
+      "thread": "agent-comms-ux",
+      "incarnation": {
+        "name": "agent-comms-ux",
+        "created_at": 1790049004.0955005
+      },
+      "process": {
+        "pid": 1311298,
+        "start_time": 46488744
+      },
+      "admission": 2171,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.018124471011105925
+    },
+    {
+      "thread": "nra-architecture",
+      "incarnation": {
+        "name": "nra-architecture",
+        "created_at": 1790049182.3907015
+      },
+      "process": {
+        "pid": 1311310,
+        "start_time": 46488886
+      },
+      "admission": 2172,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.03541334695182741
+    },
+    {
+      "thread": "nra-class-first-name-review",
+      "incarnation": {
+        "name": "nra-class-first-name-review",
+        "created_at": 1790229371.6420214
+      },
+      "process": {
+        "pid": 1311324,
+        "start_time": 46489029
+      },
+      "admission": 2173,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.06080507504520938
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "incarnation": {
+        "name": "nra-domain-mapping",
+        "created_at": 1790116627.8997042
+      },
+      "process": {
+        "pid": 1311334,
+        "start_time": 46489171
+      },
+      "admission": 2174,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.08962642401456833
+    },
+    {
+      "thread": "nra-ordered-branch-call-review",
+      "incarnation": {
+        "name": "nra-ordered-branch-call-review",
+        "created_at": 1790232054.218321
+      },
+      "process": {
+        "pid": 1311471,
+        "start_time": 46489313
+      },
+      "admission": 2175,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.11617409402970225
+    },
+    {
+      "thread": "nra-roster-heuristic-map",
+      "incarnation": {
+        "name": "nra-roster-heuristic-map",
+        "created_at": 1790218471.1256046
+      },
+      "process": {
+        "pid": 1311493,
+        "start_time": 46489458
+      },
+      "admission": 2176,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.14602291001938283
+    },
+    {
+      "thread": "refactor-r1",
+      "incarnation": {
+        "name": "refactor-r1",
+        "created_at": 1790606381.4139948
+      },
+      "process": {
+        "pid": 1311897,
+        "start_time": 46489611
+      },
+      "admission": 2177,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.16751850204309449
+    },
+    {
+      "thread": "openhcs-architecture-memory",
+      "incarnation": {
+        "name": "openhcs-architecture-memory",
+        "created_at": 1790654215.0835924
+      },
+      "process": {
+        "pid": 1312445,
+        "start_time": 46489801
+      },
+      "admission": 2178,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.24586774699855596
+    },
+    {
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "incarnation": {
+        "name": "openhcs-pr159-viewer-bind-owner",
+        "created_at": 1790657026.7285714
+      },
+      "process": {
+        "pid": 1312806,
+        "start_time": 46489952
+      },
+      "admission": 2179,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.27254857803927734
+    },
+    {
+      "thread": "nominal-refactor-advisor-2",
+      "incarnation": {
+        "name": "nominal-refactor-advisor-2",
+        "created_at": 1790700391.614946
+      },
+      "process": {
+        "pid": 1313066,
+        "start_time": 46490096
+      },
+      "admission": 2180,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": true,
+      "elapsed_seconds": 0.2995069260359742
+    },
+    {
+      "thread": "openhcs-helper",
+      "incarnation": {
+        "name": "openhcs-helper",
+        "created_at": 1790708584.4423254
+      },
+      "process": {
+        "pid": 1313585,
+        "start_time": 46490243
+      },
+      "admission": 2181,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.32625310198636726
+    },
+    {
+      "thread": "openhcs-helper2",
+      "incarnation": {
+        "name": "openhcs-helper2",
+        "created_at": 1790713653.7134795
+      },
+      "process": {
+        "pid": 1313980,
+        "start_time": 46490389
+      },
+      "admission": 2182,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.35455634898971766
+    },
+    {
+      "thread": "comms428",
+      "incarnation": {
+        "name": "comms428",
+        "created_at": 1790725198.0008519
+      },
+      "process": {
+        "pid": 1314203,
+        "start_time": 46490536
+      },
+      "admission": 2183,
+      "participant_generation": 2,
+      "pending_wire_seq": 243,
+      "cursor_present": false,
+      "elapsed_seconds": 0.48439413600135595
+    },
+    {
+      "thread": "openhcs-audit-merged-runtime",
+      "incarnation": {
+        "name": "openhcs-audit-merged-runtime",
+        "created_at": 1790873422.6705143
+      },
+      "process": {
+        "pid": 1314361,
+        "start_time": 46490678
+      },
+      "admission": 2184,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.4241221330012195
+    },
+    {
+      "thread": "openhcs-audit-merged-models",
+      "incarnation": {
+        "name": "openhcs-audit-merged-models",
+        "created_at": 1790873447.6164267
+      },
+      "process": {
+        "pid": 1314515,
+        "start_time": 46490819
+      },
+      "admission": 2185,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.5307080480270088
+    },
+    {
+      "thread": "openhcs-audit-merged-boundaries",
+      "incarnation": {
+        "name": "openhcs-audit-merged-boundaries",
+        "created_at": 1790873473.1996155
+      },
+      "process": {
+        "pid": 1314726,
+        "start_time": 46490964
+      },
+      "admission": 2186,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.5559376680175774
+    },
+    {
+      "thread": "openhcs-audit-open-prs",
+      "incarnation": {
+        "name": "openhcs-audit-open-prs",
+        "created_at": 1790873496.352646
+      },
+      "process": {
+        "pid": 1314937,
+        "start_time": 46491112
+      },
+      "admission": 2187,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.5809783710283227
+    },
+    {
+      "thread": "compaction499-live-architecture-memory",
+      "incarnation": {
+        "name": "compaction499-live-architecture-memory",
+        "created_at": 1790895107.1284342
+      },
+      "process": {
+        "pid": 1315290,
+        "start_time": 46491254
+      },
+      "admission": 2188,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.6294125029817224
+    },
+    {
+      "thread": "compaction501-live-architecture-memory",
+      "incarnation": {
+        "name": "compaction501-live-architecture-memory",
+        "created_at": 1790900050.675298
+      },
+      "process": {
+        "pid": 1315315,
+        "start_time": 46491399
+      },
+      "admission": 2189,
+      "participant_generation": 1,
+      "pending_wire_seq": null,
+      "cursor_present": false,
+      "elapsed_seconds": 0.6539655899978243
+    }
+  ],
+  "source_revisions_unchanged": {
+    "agent-comms-ux": [
+      2084,
+      7887122,
+      146086525,
+      1790921450331511268
+    ],
+    "nra-architecture": [
+      2084,
+      2659658,
+      41294021,
+      1790884840574751579
+    ],
+    "nra-class-first-name-review": [
+      2084,
+      2131083,
+      33922810,
+      1790655649458505842
+    ],
+    "nra-domain-mapping": [
+      2084,
+      2135684,
+      13212421,
+      1790617151965502838
+    ],
+    "nra-ordered-branch-call-review": [
+      2084,
+      2131153,
+      34823262,
+      1790430705822292509
+    ],
+    "nra-roster-heuristic-map": [
+      2084,
+      2135372,
+      31647797,
+      1790431475209826027
+    ],
+    "openhcs-architecture-memory": [
+      2084,
+      2132406,
+      42560849,
+      1790985050947411494
+    ],
+    "openhcs-pr159-viewer-bind-owner": [
+      2084,
+      7911772,
+      42639261,
+      1790985056898533904
+    ],
+    "openhcs-helper": [
+      2084,
+      7887398,
+      43161004,
+      1790985051711427209
+    ],
+    "openhcs-helper2": [
+      2084,
+      7888084,
+      43175204,
+      1790985052267438646
+    ],
+    "comms428": [
+      2084,
+      2665625,
+      44702607,
+      1790828092541402709
+    ],
+    "openhcs-audit-merged-runtime": [
+      2084,
+      7878896,
+      42296409,
+      1790985052462442657
+    ],
+    "openhcs-audit-merged-models": [
+      2084,
+      7878900,
+      42259076,
+      1790985053225458352
+    ],
+    "openhcs-audit-merged-boundaries": [
+      2084,
+      7878902,
+      42026443,
+      1790985059387585102
+    ],
+    "openhcs-audit-open-prs": [
+      2084,
+      7878907,
+      42247609,
+      1790985049159374715
+    ],
+    "compaction499-live-architecture-memory": [
+      2084,
+      7878913,
+      42821402,
+      1790985052728448129
+    ],
+    "compaction501-live-architecture-memory": [
+      2084,
+      7912515,
+      42367615,
+      1790985050421400674
+    ]
+  },
+  "input_proof_hashes_unchanged": {
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl.input-proof": "03b50b06318bdebee906a6306108fe7955f86a7ec72c8253ca406600ba751a08",
+    "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl.input-proof": "bb4e20406a80c45271f7b79d514b40faa79a1d07a632097eee401eb51c5da3e6",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T05-56-25-895Z_01a0d1fc-92a7-73f8-bb18-c7b0ea66b194.jsonl.input-proof": "3ff6d88c7fa1be023bf82495cc1364237f5d3997228dcc36e9765cbe5ffcbfb4",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-22T22-37-11-574Z_01a0cb44-1415-76ac-b5a0-26d3eb905f55.jsonl.input-proof": "a2b672363cb65cfa2bebad4300e209cb816f33e028734749a0b1efc59ae5c99e",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T06-41-01-603Z_01a0d225-66a2-7297-99ec-8ea7702f4404.jsonl.input-proof": "35d7ccb4d192cf70a68fae32adfbb4956ff0682b43556750702185d8131b3fa5",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T02-54-37-390Z_01a0d156-1f4d-7042-a6bd-b9a7a8f962cf.jsonl.input-proof": "3058df6fd975ffc0982ef0dba25ff64e59e657055ca2ec6dd1bb9bc4698a3fea",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-29T04-00-11-362Z_01a0eb51-f263-778e-b2f4-a2d3a9b65d01.jsonl.input-proof": "5211dded4265caeb74afbdf02690bad623b8432ec178fb27efc2c10d0377c902",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl.input-proof": "db1383f1c770fd285e03620c9698af83aae385a9b10e8d861db21b848e1754b2",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl.input-proof": "86d76a065d5a3947bfc6a2f79766b4fc4f9fc73414870cbcc1f7c96e91c836d9",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl.input-proof": "96ec7f7efd8cf9724321ac34c468a26123cc7adc4a36a5043f7c1a3274af79be",
+    "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-29T23-39-56-904Z_01a0ef8a-0c69-75a1-86fe-53cd38ab0d18.jsonl.input-proof": "14d08d549ec6e66454ac17cdb2557ed08a3e68b373d15b26f17860380837e1b2",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl.input-proof": "427c98384431ea8fcfb6c6a34dc10f163be45c7f842ba4170caf91bdad3046d9",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-46-206Z_01a0f860-273f-749b-b07a-3c8b4cf6290e.jsonl.input-proof": "54a28d2a1ce00e02576a69dac1c263bde217acaa1ab9a7edb1932c31ebbab4ba",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "739e95c253b589a40722c460a26ab8439920c0419c35d2b49293b4d4f9ef8ef3",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-35-321Z_01a0f860-e719-7127-8b6d-b4a808991c79.jsonl.input-proof": "66b2e7feee2b9834ccbc83e83c631986057d7bb0a2e291d2b55a3c1b59b956a7",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T22-51-46-051Z_01a0f9aa-a804-77e8-8107-3d93fcaec806.jsonl.input-proof": "6381227f6ca7eba159eddbdb0e469c7a85711fca85fbb2e33ae822422e254d0d",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-02T00-14-09-575Z_01a0f9f6-16a7-7101-ac0f-6cb7639f1949.jsonl.input-proof": "0f81343ddc589c68f3443aa1d54c46d231f1f502b7c4997b7b6a28d6243b28db"
+  },
+  "wire_revision_unchanged": [
+    2083,
+    4606680,
+    15680702,
+    1790985051545423795
+  ],
+  "marker_sha256_unchanged": "bf516d83f5749f718cdf10540f48b631ca2212c4ca5bb42d637a8ef6c49ebf79",
+  "public_owner_changes": 0,
+  "inputs_or_drains_or_provider_calls": 0,
+  "owned_child_processes": [],
+  "limits": "Detached installed observer, not patched public workers or physical UI. Runtime disabled; original registry/participant/pending/cursor reads only. No throughput or terminal latency claim."
+}

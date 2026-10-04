@@ -1,0 +1,13 @@
+{
+  "original_entry": "b3f9408e",
+  "content_types": [
+    "ThinkingContent",
+    "ToolCallContent"
+  ],
+  "public_text_bytes": 0,
+  "selected_child_coords": [
+    "b3f9408e"
+  ],
+  "same_sealed_request": "f948ca63-c6b5-4ca5-a4d5-f7c624762478",
+  "interpretation": "Exact empty public child, not missing text; original non-text content omitted by existing PiMessage renderer"
+}

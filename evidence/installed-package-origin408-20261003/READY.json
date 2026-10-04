@@ -1,0 +1,33 @@
+{
+  "state": "SCOPED_READY existing-origin/source-proof owner",
+  "source_head": "c5ed38fdb4607aeacce2910a4c933a1df77f1f74",
+  "tool_only": true,
+  "installed_core_library": "3e5c97f9a38d10e65c3a5d06919d85d8e38b98ab",
+  "prefix": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001",
+  "source_members": 928,
+  "package_count": 69,
+  "native_manifest": "89b56aea0bb128c4bf3e2c979de8a5afa79ac88b1f51a74c49cc1cab46da60d2",
+  "sourceproof_sha256": "8164f979815bc6b5c8b9c41d2f1751fb8f9d22b60ac8efd5fd4e62e89ac45176",
+  "origin_checks": 25,
+  "archive_origins_actual": [
+    {
+      "agent_comms": {
+        "url": "file:///home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/installed-package-origin408-20261003/core599-wheel/agent_comms-0.1.0-py3-none-any.whl",
+        "archive_info": {}
+      }
+    },
+    {
+      "toad": {
+        "url": "file:///home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/headless-response403-frame405-receiving-20261003/toad408-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+        "archive_info": {}
+      }
+    }
+  ],
+  "ast_modules_after": 1015,
+  "ast_omissions_after": [],
+  "tool_delta_vs_main_numstat": "59\t4\ttools/cutover/publish_retained_summary.py\n35\t1\ttools/cutover/retained_summary_stage_controls.py\n",
+  "new_core_build_for_tool_only": false,
+  "provider_calls": 0,
+  "public_actions": 0,
+  "source_revision_bound_by": "Full installed-source equality plus reviewed sourceproof; independently exact ReviewedArtifact wheelSHA. No inventedVCS/archive data."
+}

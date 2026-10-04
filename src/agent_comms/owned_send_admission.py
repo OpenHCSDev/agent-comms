@@ -22,7 +22,6 @@ from .ordinary_admission_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
-from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_input_binding import OrdinaryTurnBinding, SelectedOriginalBinding, TurnInputBinding
 from .turn_input_source import (
@@ -141,10 +140,9 @@ class OwnedSendAdmission:
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
     ) -> Iterator[bool | None]:
         # No await/provider/ACK while held: the same lock spans final checks and write.
-        with _store_lock(self.comms._wire_lock_path):
-            self.comms.owners.maintenance.assert_open_unlocked()
+        with self.comms.owners.maintenance.admit_ingress():
             snapshot = self.comms.registry.snapshot()
-            canonical = snapshot.aliases.get(self.thread.name, self.thread.name)
+            canonical = snapshot.canonical_name(self.thread.name)
             current = snapshot.threads.get(canonical)
             wait = self.comms.goals.goal_wait(canonical) if current is not None else None
             source = self.source(public_id)

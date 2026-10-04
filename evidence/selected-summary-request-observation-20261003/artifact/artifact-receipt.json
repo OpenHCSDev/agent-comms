@@ -1,0 +1,64 @@
+{
+  "source_checkpoint": "38affa3c3b6ee7db03a82812f3d73e14de8b2e08",
+  "builder_source": "d2799ba63ce28b8c6a7a48d5a8fdf7a5c1abcbf7",
+  "manifest": "de16647979cbad28be4f60349d39a420e83aaffb1d678941609449d306109968",
+  "tree": "7bf47002b579908fc556548c19451b925afd688606954ad485180a49da5c133d",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/agent-session.d.ts",
+      "original_sha256": "39c0b4203c25509f64089bbff3a9dceec9281cfc80a205d7c49d64a73fc09e16",
+      "new_sha256": "d457ef09397b5e9e41697f9f56aa01f06caeef70e3e89af2b8e04362ed4eec80"
+    },
+    {
+      "path": "dist/core/agent-session.js",
+      "original_sha256": "709bcbf952a648587e3f1961b79cf1e7a95095758018bd1f956b416784bfa06f",
+      "new_sha256": "59e1b9c59ad80a9b31881032ba4e042dad74b72f0b65e3a788d3ded55b7b1db8"
+    },
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "original_sha256": "415969b78bdedfaaa377559c5d55eb878a45b21fa7ba90a8d7f2e23d92fe070d",
+      "new_sha256": "fe1d27fe3f641b2cc6f848b7a981186f29ba5f3daad7abb47b11a80548b1aa59"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "46ded2e74b28f143c9d94d2b17d0cbe19f1c26f6aa0b05d0c1ba4c1316e910b5",
+      "new_sha256": "2d6124dbd0d108572d2f8fe8d5b57d8f2d00fd9f892e58c63c53dedc8c68fe8c"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "original_sha256": "a2807c7397e69f560e9dc6f40b3b266cbd6f09da57826ad7012c5553638f6043",
+      "new_sha256": "9a9d83766216bad1bfd4bbc7307a2a610843548bfd15b031a555f74d4ff4bb28"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts",
+      "original_sha256": "c275d4a0f33742607136ec6fbeac785e301d1a8f7eb0c268f9d80f527b301150",
+      "new_sha256": "c34367013db36532374819b0b78739e15949a376220e4f848c17aba23458ae91"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js",
+      "original_sha256": "9e9c9ea5eb3e33c301c25d86bae866cc41a8ff21266badc458fcdff766d464a9",
+      "new_sha256": "376f78f7fe90e1e9810e56b528a4dde331eae03b472ead2f28f7dba55a21ec2c"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/utils/retry.d.ts",
+      "original_sha256": "7bd72530a16a91d5cc5336b52614cc01326bb22dec1c1c64b57b60e39a8d681a",
+      "new_sha256": "8209e570ef6044ce26f2ee7c95a1bcfda926457cf90b83d3356e10f54355004e"
+    }
+  ],
+  "all_other_members_equal_native960": true,
+  "generated_source_seven_module_hashes_equal": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138407873,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "single_stock_assembly": true,
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; configured summary request clocks and subsequent original turn acceptance remains Mendel-owned, not Ready/live.",
+  "original_native960_tree_reverified": "01de56aa9550de0fe8bf93b5df8815429cba26c64b676704a9653ebf831e0e9d",
+  "canonical_prepare_exit": 0,
+  "canonical_prepare_log_sha256": "99d7867d7b9b8e03fcc712f01e4cdbc8270a888f780c6b0fadb4a68fda13f1e9"
+}

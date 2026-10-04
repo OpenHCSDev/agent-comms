@@ -1,6 +1,7 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
 import json
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from unittest.mock import patch
 
@@ -18,6 +19,69 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.locked_store import LockedStore
+from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
+from agent_comms.errors import RelationViolationError
+from agent_comms.thread_identity import TurnId
+
+
+def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    args = dict(seq=None, owner="worker", admission=1, target="worker", text="Prior input")
+    assert store.record("prior", **args)
+    assert store.record("unknown", **args)
+    assert store.bind("unknown", admission=1, turn_id="old", native_id="a" * 32,
+                      text="Original sent input")
+    prior = store.read()
+    first = ReservedInput("first", None, "worker", 1, "worker", "First input")
+    second = ReservedInput("second", None, "worker", 1, "worker", "Second input")
+    with ExitStack() as custody:
+        document = store.record_originals(
+            ReservedInput("prior", None, "worker", 1, "worker", "Must not replace"),
+            ReservedInput("unknown", None, "worker", 1, "worker", "Must not replay"),
+            first, replace(first, source_text="Duplicate must not replace"), second,
+            custody=custody,
+        )
+        assert document.originals((first.key, second.key)) == (first, second)
+        assert document.rows[first.key] is first and document.rows[second.key] is second
+        assert document.rows["prior"] == prior.rows["prior"]
+        assert document.rows["unknown"] == prior.rows["unknown"]
+        saved = store.path.read_bytes()
+        assert store.record_originals() == document
+        assert not store.record("first", **args)
+        assert store.path.read_bytes() == saved
+    retired = store.read()
+    assert isinstance(retired.rows[first.key], NotSentInput)
+    assert isinstance(retired.rows[second.key], NotSentInput)
+    assert retired.rows["prior"] == prior.rows["prior"]
+    assert retired.rows["unknown"] == prior.rows["unknown"]
+
+
+def test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback(tmp_path, monkeypatch):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    publish = LockedStore._publish_unlocked
+
+    def lose_ack(self, document):
+        publish(self, document)
+        if self.path == store.path and any(isinstance(row, ReservedInput)
+                                          for row in document.rows.values()):
+            raise OSError("Original publication acknowledgement lost")
+
+    monkeypatch.setattr(LockedStore, "_publish_unlocked", lose_ack)
+    rows = tuple(ReservedInput(f"acp:original:{seq}", None, "worker", 1, "worker", "Original")
+                 for seq in (1, 2))
+    with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
+        store.record_originals(*rows, custody=custody)
+    assert all(isinstance(row, NotSentInput) for row in store.read().originals(
+        tuple(row.key for row in rows)
+    ))
+    with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
+        store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", custody=custody)
+    scheduled = store.read()
+    assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
+    saved = store.path.read_bytes()
+    with ExitStack() as custody, pytest.raises(RelationViolationError, match="already reserved"):
+        store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", custody=custody)
+    assert store.path.read_bytes() == saved
 
 
 def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
@@ -212,8 +276,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     for name in ("native_id", "turn_id", "sent_text"):
         assert name not in {item.name for item in fields(reserved)}
         assert not hasattr(reserved, name)
-    assert store.settle_unbound(("acp:input",))
-    unsent = store.read().lookup("acp:input")
+    unsent = store.settle_unbound(("acp:input",)).lookup("acp:input")
     assert isinstance(unsent, NotSentInput) and unsent.unresolved
     assert not unsent.accepts_reservation
     assert not store.bind("acp:input", admission=4, turn_id="new", native_id="b" * 32, text="keep")
@@ -221,6 +284,70 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     assert "unknown" not in InputAttempt.names()
     with pytest.raises(ValueError, match="document key"):
         InputDocument(rows={"missing": missing})
+
+
+def test_compaction_input_custody_survives_attention_and_admission_changes(tmp_path):
+    from agent_comms.thread_identity import ThreadIncarnation
+
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    owner = ThreadIncarnation("owner", 1.0)
+    for key, admission in (("acp:old", 1), ("acp:current", 2)):
+        assert store.record(key, seq=None, owner="owner", admission=admission,
+                            target="owner", text=key)
+    # A reserved predecessor cannot disappear through a later admission.
+    with pytest.raises(RelationViolationError):
+        store.read().require_compaction_ready(owner, ("acp:current",))
+    assert isinstance(store.settle_unbound(("acp:old",)).lookup("acp:old"), NotSentInput)
+    before = store.path.read_bytes()
+    store.read().require_compaction_ready(owner, ("acp:current",))
+    assert store.path.read_bytes() == before
+    assert store.read().lookup("acp:old").unresolved  # Attention is still required.
+
+    assert store.bind("acp:current", admission=2, turn_id="actual-turn",
+                      native_id="a" * 32, text="acp:current")
+    before = store.path.read_bytes()
+    # Even naming this bound original as pending must not grant a new send.
+    for pending in ((), ("acp:current",), ("acp:future",)):
+        with pytest.raises(RelationViolationError):
+            store.read().require_compaction_ready(owner, pending)
+    assert isinstance(store.settle_unbound(("acp:current",)).lookup("acp:current"),
+                      BoundUnknownInput)
+    assert store.path.read_bytes() == before
+    assert store.started("acp:current", turn_id="actual-turn", native_id="a" * 32,
+                         text="acp:current")
+    store.read().require_compaction_ready(owner, ())
+
+
+def test_batch_retirement_returns_published_cut_without_changing_native_evidence(tmp_path):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    keys = ("acp:reserved", "acp:bound", "acp:started", "acp:unsent", "acp:unrelated")
+    for key in keys:
+        assert store.record(key, seq=None, owner="owner", admission=1,
+                            target="owner", text=key)
+    for key in ("acp:bound", "acp:started"):
+        assert store.bind(key, admission=1, turn_id="original-turn",
+                          native_id="a" * 32, text=key)
+    assert store.started("acp:started", turn_id="original-turn", native_id="a" * 32,
+                         text="acp:started")
+    store.settle_unbound(("acp:unsent",))
+    original = store.read()
+    selected = (*keys[:-1], "acp:missing")
+    published = store.settle_unbound(selected)
+    assert published == InputDispositions(store.path).read()
+    assert isinstance(published.lookup("acp:reserved"), NotSentInput)
+    assert published.lookup("acp:reserved").context_provenance() == (
+        original.lookup("acp:reserved").context_provenance()
+    )
+    assert published.lookup("acp:reserved").source_text == "acp:reserved"
+    assert {key: published.lookup(key) for key in keys[1:]} == {
+        key: original.lookup(key) for key in keys[1:]
+    }
+    assert isinstance(published.lookup("acp:missing"), MissingInput)
+    assert "acp:missing" not in published.rows
+    saved = store.path.read_bytes(), store.path.stat().st_ino
+    assert store.settle_unbound(selected) == published
+    assert store.settle_unbound(()) == published
+    assert (store.path.read_bytes(), store.path.stat().st_ino) == saved
 
 
 @pytest.mark.parametrize(
@@ -277,14 +404,14 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
     record = json.loads(store.path.read_text())["rows"]["acp:x"]
     assert record["kind"] == "reserved"
     assert not {"status", "native_id", "turn_id", "sent_text"}.intersection(record)
-    assert store.settle_unbound(("acp:x",))
+    assert isinstance(store.settle_unbound(("acp:x",)).lookup("acp:x"), NotSentInput)
     record = json.loads(store.path.read_text())["rows"]["acp:x"]
     assert record["kind"] == "not_sent"
     assert not {"native_id", "turn_id", "sent_text"}.intersection(record)
 
 
 @pytest.mark.parametrize(
-    "mismatch", [None, "owner", "admission", "turn", "sent", "original"]
+    "mismatch", [None, "owner", "admission", "turn", "sent", "original", "original_key"]
 )
 def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
     from agent_comms.text_digest import TextDigest
@@ -299,7 +426,7 @@ def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
         admission=1,
         turn=TurnId("turn"),
         sent_digest=TextDigest.of("wrapped input"),
-        original_digest=TextDigest.of("original"),
+        original=reserved,
     )
     for state in (MissingInput(), reserved, bound, reserved.finish_unbound()):
         assert not state.proves_started(**proof)
@@ -317,7 +444,9 @@ def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
     elif mismatch == "sent":
         proof["sent_digest"] = TextDigest.of("different wrapper")
     elif mismatch == "original":
-        proof["original_digest"] = TextDigest.of("different original")
+        proof["original"] = replace(reserved, source_text="different original")
+    elif mismatch == "original_key":
+        proof["original"] = replace(reserved, key="acp:foreign")
     assert started.proves_started(**proof) is (mismatch is None)
 
 
@@ -341,13 +470,16 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     assert store.record(
         key, seq=sequence, owner="owner", admission=1, target=target, text="original"
     )
+    retained = RetainedTaskFacts((InputTaskFact(store.read().rows[key]),))
     assert store.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
     assert store.started(key, turn_id="turn", native_id="a" * 32, text="wrapped input")
     document = store.read()
-    assert source.original_has_started(document)
+    assert source.original_has_started(document, retained)
     # A bus/channel delivery is still genuine native-start evidence. It cannot
     # lend that evidence to a different selected source's original ingress.
-    assert not replace(source, ingress_key="acp:foreign").original_has_started(document)
+    foreign = replace(source, originals=(replace(source.originals[0], key="acp:foreign"),))
+    with pytest.raises(RelationViolationError, match="unique original input"):
+        foreign.original_has_started(document, retained)
     original_bytes = store.path.read_bytes()
     # Routing cannot be rewritten by recording another target at the original
     # key. That ownership belongs to first durable acceptance, not start proof.
@@ -356,4 +488,4 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     )
     assert store.path.read_bytes() == original_bytes
     assert store.read().lookup(key).target == target
-    assert source.original_has_started(store.read())
+    assert source.original_has_started(store.read(), retained)

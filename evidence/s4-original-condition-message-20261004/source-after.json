@@ -1,0 +1,132 @@
+{
+  "revision": "74707adbc3286b1b81d34dde52fdaedf4316977d",
+  "modules": 729,
+  "parse_omissions": [],
+  "owners_and_consumers": {
+    "src/agent_comms/cli_commands.py": [
+      "913:Name:NativeContextData"
+    ],
+    "src/agent_comms/native_turn_context.py": [
+      "42:ClassDef:NativeContextData"
+    ],
+    "src/agent_comms/pi_commands.py": [
+      "477:Name:NativeContextData",
+      "482:Name:NativeContextData"
+    ],
+    "src/agent_comms/turn_context.py": [
+      "405:ClassDef:NativeMessages",
+      "434:Name:NativeMessages",
+      "439:Name:NativeMessages",
+      "444:Name:NativeMessages"
+    ],
+    "tests/compaction_retention_fixture.py": [
+      "39:Name:RecordedNativeProbe",
+      "40:Name:RecordedNativeCheckpoint",
+      "609:Name:RecordedNativeProbe",
+      "82:Name:RecordedNativeCheckpoint",
+      "876:Name:RecordedNativeCheckpoint",
+      "879:Name:RecordedNativeCheckpoint"
+    ],
+    "tests/native_context_reader_journey.py": [
+      "110:Name:NativeContextData",
+      "123:Name:NativeContextData",
+      "76:Name:NativeContextData",
+      "80:Name:NativeContextData"
+    ],
+    "tests/retained_native_fixture.py": [
+      "290:Name:RecordedNativeCheckpoint",
+      "419:ClassDef:RecordedNativeProbe",
+      "427:Name:RecordedNativeCheckpoint",
+      "469:FunctionDef:applied_condition",
+      "497:Attribute:condition_message_binding",
+      "500:FunctionDef:condition_message_binding",
+      "539:Name:RecordedNativeCheckpoint",
+      "572:Name:NativeContextData",
+      "572:Name:RecordedNativeCheckpoint",
+      "588:Name:RecordedNativeCheckpoint",
+      "599:FunctionDef:serialized_construction",
+      "611:Name:RecordedNativeCheckpoint",
+      "625:Name:NativeMessages",
+      "669:Name:RecordedNativeCheckpoint",
+      "713:FunctionDef:construction",
+      "780:Attribute:applied_condition",
+      "857:Attribute:serialized_construction",
+      "899:Attribute:construction",
+      "95:ClassDef:RecordedNativeCheckpoint"
+    ],
+    "tests/test_compaction_retention_fixture.py": [
+      "212:Name:RecordedNativeProbe",
+      "213:Name:RecordedNativeProbe"
+    ],
+    "tests/test_context_source_inspection.py": [
+      "119:Name:NativeContextData",
+      "157:Name:NativeContextData",
+      "192:Name:NativeContextData",
+      "47:Name:NativeContextData",
+      "70:Name:NativeContextData"
+    ],
+    "tests/test_recorded_retention_measurements.py": [
+      "112:Name:RecordedNativeProbe",
+      "129:Name:RecordedNativeProbe",
+      "193:Name:RecordedNativeProbe",
+      "218:Name:RecordedNativeProbe",
+      "267:Name:RecordedNativeProbe",
+      "271:Name:RecordedNativeProbe",
+      "272:Name:RecordedNativeProbe",
+      "305:Name:RecordedNativeProbe",
+      "312:Name:RecordedNativeProbe",
+      "341:Name:RecordedNativeProbe",
+      "349:Attribute:construction",
+      "354:Attribute:construction",
+      "361:Attribute:construction",
+      "362:Attribute:construction",
+      "423:Name:RecordedNativeProbe",
+      "455:Name:RecordedNativeProbe",
+      "474:Name:NativeContextData",
+      "478:Name:RecordedNativeProbe",
+      "484:Attribute:serialized_construction",
+      "484:Name:construction",
+      "485:Name:construction",
+      "488:Name:construction",
+      "489:Name:construction",
+      "490:Name:construction",
+      "491:Name:construction",
+      "492:Name:construction",
+      "493:Name:construction",
+      "495:Attribute:serialized_construction",
+      "501:Attribute:serialized_construction",
+      "504:Attribute:serialized_construction",
+      "527:Name:NativeContextData",
+      "531:Name:RecordedNativeProbe",
+      "533:Attribute:serialized_construction",
+      "541:Attribute:condition_message_binding",
+      "544:Attribute:condition_message_binding",
+      "545:Attribute:condition_message_binding",
+      "547:Attribute:condition_message_binding",
+      "54:Name:RecordedNativeCheckpoint",
+      "553:Attribute:condition_message_binding",
+      "555:Attribute:condition_message_binding",
+      "70:Name:RecordedNativeProbe"
+    ],
+    "tests/test_selected_summary_failure_native.py": [
+      "308:Name:RecordedNativeCheckpoint"
+    ],
+    "tests/three_cut_retention_configured_journey.py": [
+      "140:Name:RecordedNativeProbe",
+      "145:Name:construction",
+      "146:Name:construction",
+      "147:Name:construction",
+      "148:Name:construction",
+      "149:Name:construction",
+      "220:Name:RecordedNativeProbe",
+      "245:Name:RecordedNativeCheckpoint",
+      "270:Name:RecordedNativeCheckpoint",
+      "275:Name:RecordedNativeProbe",
+      "280:Name:RecordedNativeProbe",
+      "385:Name:RecordedNativeCheckpoint",
+      "396:Name:RecordedNativeProbe",
+      "95:Name:RecordedNativeCheckpoint"
+    ]
+  },
+  "limits": "Lexical Python source, not dynamic or native resolution. Native callback frame and shared SDK owners read directly."
+}

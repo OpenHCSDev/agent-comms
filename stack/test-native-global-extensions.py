@@ -6,6 +6,7 @@ native copy is never modified here. Linux seccomp denies all network syscalls.
 """
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -89,6 +90,11 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     if args.session:
         for suffix in ("", ".input-proof"):
             source = Path(str(args.session) + suffix)
+            # A native fork has historical messages but no child's committed
+            # context journal until its first original input. Copy an existing
+            # journal exactly; absence never grants input or replay authority.
+            if suffix == ".input-proof" and not source.exists():
+                continue
             subprocess.run(["cp", "--reflink=auto", str(source), str(session) + suffix], check=True)
             Path(str(session) + suffix).chmod(0o600)
     else:
@@ -96,6 +102,9 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
             "id":"00000000-0000-4000-8000-000000000001", "timestamp":"2026-09-28T00:00:00.000Z",
             "cwd":str(project)}) + "\n")
         session.chmod(0o600)
+    saved_source_sha256 = hashlib.sha256(session.read_bytes()).hexdigest()
+    settings_sha256 = hashlib.sha256((agent / "settings.json").read_bytes()).hexdigest()
+    started = time.monotonic()
     child = subprocess.Popen(prefix + ["--import", str(package / "dist/agent-comms-project-bootstrap.mjs"),
         str(package / "dist/cli.js"), "--offline", "--mode", "rpc", "--session-dir", str(root), "--session", str(session)],
         cwd=project, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -119,15 +128,25 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
                 break
         assert reply and reply.get("success"), f"No successful get_state; exit={child.poll()}"
         assert reply["data"]["nativeInputProofCapability"] == "pi-native-input-v1-live-only", reply
+        state_received_seconds = time.monotonic() - started
     finally:
         child.terminate()
         _, stderr = child.communicate(timeout=10)
         (root / "startup-stderr.txt").write_text(stderr)
     assert "Failed to load extension" not in stderr, stderr
+    model = reply["data"].get("model")
     print(json.dumps({"ok":True, "automatic_extensions":registered, "get_state":{
         "success":reply["success"], "messageCount":reply["data"]["messageCount"],
-        "nativeInputProofCapability":reply["data"]["nativeInputProofCapability"]},
+        "nativeInputProofCapability":reply["data"]["nativeInputProofCapability"],
+        "model_field_present":"model" in reply["data"],
+        "model":{key:model[key] for key in ("provider", "id")} if model else None,
+        "thinkingLevel":reply["data"]["thinkingLevel"]},
         "saved_session_bytes":session.stat().st_size, "network":"kernel-denied",
+        "saved_source_sha256_before":saved_source_sha256,
+        "saved_source_sha256_after":hashlib.sha256(session.read_bytes()).hexdigest(),
+        "settings_sha256_before":settings_sha256,
+        "settings_sha256_after":hashlib.sha256((agent / "settings.json").read_bytes()).hexdigest(),
+        "state_received_seconds":state_received_seconds, "native_child_retired":child.poll() is not None,
         "provider_prompts":0}, indent=2))
 
 

@@ -8,10 +8,10 @@ from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
-from .channel_management import TagAction
+from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
-from .cli_commands import ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand
+from .cli_commands import (ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand, StartCliCommand, ForkCliCommand, DeleteViewCliCommand, PinChannelCliCommand, ChannelActivityCliCommand, PinThreadCliCommand)
 from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
@@ -28,7 +28,7 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .messages import MessageType
 from .task_sources import (
-    CurrentTaskScopeSelection, Constraint, Decision, TaskChange,
+    CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
 from .thread_identity import TurnId
@@ -71,6 +71,7 @@ def tool_field(
     description: str,
     *,
     default=MISSING,
+    default_factory=MISSING,
     wire_name=None,
     binding: type[ContextBinding] | None = None,
     choices=None,
@@ -82,7 +83,7 @@ def tool_field(
         metadata["context_binding"] = binding
     if choices is not None:
         metadata["wire_choices"] = choices
-    return field(default=default, metadata=metadata)
+    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,7 +137,7 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
             request = cls.from_payload({**arguments, cls.family_discriminator: cls.declared_name})
         except (TypeError, ValueError) as error:
             raise ValueError(f"Invalid {cls.declared_name} arguments: {error}") from error
-        return request.apply(comms)
+        return FieldCodec.encode(request.apply(comms))
 
 
 def _executing_thread() -> str:
@@ -222,7 +223,7 @@ class CommsPinChannelTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms) -> JsonObject:
-        return comms.channels.set_channel_pinned(self.name, self.pinned).to_wire()
+        return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -239,7 +240,7 @@ class CommsPinThreadTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         channel = self.channel
-        comms.channels.set_thread_pinned(channel, self.name, self.pinned)
+        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
         canonical = channel if channel.startswith("#") else f"#{channel}"
         return next(
             view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
@@ -305,9 +306,12 @@ class CommsTagsTool(ToolRequest):
     action: TagAction = tool_field("Operation", default=TagAction.LIST)
     name: str = tool_field("Tag name", default="")
     new_name: str = tool_field("Replacement tag for rename", default="")
+    disposition: TagDisposition = tool_field("Tagged-thread operation", default_factory=KeepThreadsTagDisposition)
+    confirmed: bool = tool_field("Confirm thread archiving or deletion", default=False)
 
     def apply(self, comms: Comms) -> JsonObject:
-        tags = self.action.apply(comms.channels, self.name, self.new_name)
+        tags = self.action.apply(comms.channels, self.name, self.new_name,
+                                disposition=self.disposition, confirmed=self.confirmed)
         return {"tags": sorted(tags)}
 
 
@@ -393,7 +397,7 @@ class CommsDeleteViewTool(ToolRequest):
     name: str = tool_field("Saved view name")
 
     def apply(self, comms: Comms) -> JsonObject:
-        comms.channels.delete_saved_view(self.name)
+        DeleteViewCliCommand(name=self.name).apply(comms)
         return CommsChannelsTool().apply(comms)
 
 
@@ -724,6 +728,26 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsSubtaskTool(CommsAuthoredTaskTool):
+    label = "Record Subtask"
+    description = (
+        "Explicitly record whether a described subtask is completed or unfinished. "
+        "This is not assistant-turn termination or goal completion. Original author, "
+        "turn, scope and correction reference use the existing admitted task owner. "
+        "A completed observation may permit optional compaction when enabled.")
+    text: str = tool_field("Exact description of the observed subtask")
+    completed: bool = tool_field("Your explicit observation: completed or unfinished")
+
+    def declaration(self, owner):
+        if not self.text.strip():
+            raise ValueError("A subtask observation requires its exact description")
+        return Subtask.from_admission(owner, self.scope, self.change, completed=self.completed)
+
+    def original_body(self, declaration):
+        return self.text
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
@@ -788,18 +812,9 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms) -> JsonObject:
-        tags = _tag_set(self.tags) if self.tags is not None else None
-        prompt = self.prompt
-        child = comms.threads.fork(
-            ForkSpec(
-                name=self.name,
-                parent=self.parent,
-                task=self.task,
-                tags=tags,
-                prompt=prompt if prompt is not None else None,
-            )
-        )
-        return {"forked": child.name, "pid": child.pid}
+        return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
+                              tags=_tag_set(self.tags) if self.tags is not None else None,
+                              prompt=self.prompt).apply(comms)
 
 
 class OwnerLifecycleControl:
@@ -841,7 +856,7 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
         return status.allows_owner_start(owner_pid=owner_pid)
 
     def apply(self, comms: Comms) -> JsonObject:
-        return asdict(comms.owners.start(self.name))
+        return StartCliCommand(name=self.name).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)

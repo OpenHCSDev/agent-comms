@@ -1,0 +1,19 @@
+ERROR: found no collectors for /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_acp.py::TestAgentTurn::test_blocked_goal_retry_is_explicit_and_restores_owner_grant
+
+ERROR: found no collectors for /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_acp.py::TestAgentTurn::test_owner_resume_checks_attempt_before_publishing_active
+
+
+==================================== ERRORS ====================================
+______________________ ERROR collecting tests/test_acp.py ______________________
+ImportError while importing test module '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_acp.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_acp.py:26: in <module>
+    from agent_comms.acp_extension import (
+E   ImportError: cannot import name 'TurnSettledUpdate' from 'agent_comms.acp_extension' (/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_extension.py)
+=========================== short test summary info ============================
+ERROR tests/test_acp.py
+1 error in 1.26s

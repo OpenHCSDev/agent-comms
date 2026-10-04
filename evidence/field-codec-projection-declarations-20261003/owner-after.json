@@ -1,0 +1,161 @@
+{
+  "revision": "ee4850422d18e99c76b3e69d455cb8331606cfcc",
+  "roots": [
+    {
+      "root": "src",
+      "modules": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "modules": 362,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "modules": 53,
+      "omissions": []
+    }
+  ],
+  "projection_consumers": [
+    {
+      "file": "src/agent_comms/field_codec.py",
+      "line": 420,
+      "expression": "cls._projections",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/field_codec.py",
+      "line": 509,
+      "expression": "cls._projections",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/field_codec.py",
+      "line": 294,
+      "expression": "cls._projections",
+      "context": "Load"
+    }
+  ],
+  "owner_declarations": [
+    {
+      "name": "Projected",
+      "line": 172,
+      "bases": [
+        "property"
+      ],
+      "decorators": []
+    },
+    {
+      "name": "FieldCodec",
+      "line": 185,
+      "bases": [
+        "Sealed"
+      ],
+      "decorators": []
+    },
+    {
+      "name": "encode",
+      "line": 44,
+      "bases": [],
+      "decorators": [
+        "classmethod",
+        "abstractmethod"
+      ]
+    },
+    {
+      "name": "encode",
+      "line": 68,
+      "bases": [],
+      "decorators": [
+        "classmethod"
+      ]
+    },
+    {
+      "name": "encode",
+      "line": 150,
+      "bases": [],
+      "decorators": [
+        "classmethod"
+      ]
+    },
+    {
+      "name": "encode",
+      "line": 162,
+      "bases": [],
+      "decorators": [
+        "classmethod"
+      ]
+    },
+    {
+      "name": "_fields",
+      "line": 227,
+      "bases": [],
+      "decorators": [
+        "staticmethod",
+        "lru_cache(maxsize=_declaration_cache_capacity)"
+      ]
+    },
+    {
+      "name": "_types",
+      "line": 252,
+      "bases": [],
+      "decorators": [
+        "staticmethod",
+        "lru_cache(maxsize=_declaration_cache_capacity)"
+      ]
+    },
+    {
+      "name": "encode",
+      "line": 257,
+      "bases": [],
+      "decorators": [
+        "overload",
+        "classmethod"
+      ]
+    },
+    {
+      "name": "encode",
+      "line": 261,
+      "bases": [],
+      "decorators": [
+        "overload",
+        "classmethod"
+      ]
+    },
+    {
+      "name": "encode",
+      "line": 264,
+      "bases": [],
+      "decorators": [
+        "classmethod"
+      ]
+    },
+    {
+      "name": "project",
+      "line": 402,
+      "bases": [],
+      "decorators": [
+        "classmethod"
+      ]
+    },
+    {
+      "name": "_projections",
+      "line": 432,
+      "bases": [],
+      "decorators": [
+        "staticmethod",
+        "lru_cache(maxsize=_declaration_cache_capacity)"
+      ]
+    },
+    {
+      "name": "_decode",
+      "line": 443,
+      "bases": [],
+      "decorators": [
+        "classmethod"
+      ]
+    }
+  ],
+  "semantics": "All original consumers invoke current getters; no property value cache. One existing codec owns immutable descriptor discovery and one capacity declaration."
+}

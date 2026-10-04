@@ -12,6 +12,7 @@ from typing import ClassVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.native_package import verify_native_package
 from agent_comms.wire_metadata import WireRootIdText
 from checkpoint_schema import declared_schema_digest
@@ -25,16 +26,19 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
     writer_script: ClassVar[str] = 'retained_index_writer.py'
     installer_script: ClassVar[str] = 'install_retained_index.py'
 
+    def failed(self, failure):
+        # Reset/carry may have committed a new index. Routing inherits this
+        # same disposition; neither one-shot may reinterpret it as old format.
+        self.leave_stopped(failure)
+
     @property
     def operation_arguments(self) -> tuple[str, ...]:
         return ()
 
     def require_selection(self, snapshot, owners) -> None:
-        audience = {thread.name for thread in snapshot.threads.values()
-                    if thread.role.executable and snapshot.statuses[thread.name].active
-                    and thread.process_alive}
+        audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if {thread.name for thread in owners} != audience:
-            raise RelationViolationError('Index cutover requires every live executable owner.')
+            raise RelationViolationError('Index cutover requires every managed restart owner.')
         if not self.original_python.is_absolute() or not self.original_python.is_file():
             raise RelationViolationError('Original installed writer interpreter is required.')
         WireRootIdText.from_text(self.wire_root_id)
@@ -59,4 +63,6 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
             str(Path(__file__).with_name(self.installer_script)), self.wire_root_id,
             *self.operation_arguments,
         ], env=environment, check=True)
+
+    def bind_target_launch(self, lifecycle) -> None:
         lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)

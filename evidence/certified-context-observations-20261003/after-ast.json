@@ -1,0 +1,4531 @@
+{
+  "head": "d24d3ba67fdee6f4c9f24a4be7bfe08304593c0b",
+  "roots": [
+    "src",
+    "tests",
+    "tools",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad"
+  ],
+  "module_count": 1002,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 89,
+      "name": "CertifiedSourceRead",
+      "bases": [],
+      "members": [
+        "require_marker",
+        "require_current",
+        "require_open_prefix",
+        "committed_sequence",
+        "capture_sources",
+        "references",
+        "delivery",
+        "addressed_page",
+        "conversation_sources",
+        "context_manifests",
+        "keyed_receipt"
+      ],
+      "annotations": [
+        "path: Path",
+        "marker: WireMetadata",
+        "connection: sqlite3.Connection",
+        "stream: BinaryIO",
+        "witness: PrefixWitness"
+      ]
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 308,
+      "name": "CheckpointTable",
+      "bases": [],
+      "members": [],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 318,
+      "name": "WireSourcePointer",
+      "bases": [
+        "Generic[OriginalSource]",
+        "ABC"
+      ],
+      "members": [
+        "decode_bytes",
+        "read_bytes"
+      ],
+      "annotations": [
+        "offset: int = field(metadata={'sql': Column(check='offset>=0')})",
+        "length: int = field(metadata={'sql': Column(check='length>0')})"
+      ]
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 340,
+      "name": "DeliverySources",
+      "bases": [
+        "WireSourcePointer['CommittedDelivery']",
+        "CheckpointTable",
+        "TypedTable"
+      ],
+      "members": [
+        "delivery",
+        "decode_bytes",
+        "reference"
+      ],
+      "annotations": [
+        "seq: int = field(metadata={'sql': Column(primary_key=True, check='seq>0')})",
+        "message_id: str",
+        "sender_lookup: str"
+      ]
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 378,
+      "name": "ContextManifestSources",
+      "bases": [
+        "WireSourcePointer['ContextManifest']",
+        "CheckpointTable",
+        "TypedTable"
+      ],
+      "members": [
+        "decode_bytes"
+      ],
+      "annotations": [
+        "thread: ThreadIncarnation"
+      ]
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 23,
+      "name": "ThreadIncarnation",
+      "bases": [],
+      "members": [
+        "__post_init__",
+        "require_recorded",
+        "resolved",
+        "current",
+        "matches_recorded_name",
+        "recorded_names"
+      ],
+      "annotations": [
+        "name: str",
+        "created_at: float"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 422,
+      "name": "ContextManifest",
+      "bases": [],
+      "members": [
+        "changed_from_history",
+        "changed_since"
+      ],
+      "annotations": [
+        "thread: ThreadIncarnation",
+        "turn: ContextTurn",
+        "segments: tuple[SegmentManifest, ...]",
+        "counter: str"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 53,
+      "name": "WireLog",
+      "bases": [],
+      "members": [
+        "__init__",
+        "locked",
+        "certified_read",
+        "conversation_sources",
+        "addressed_sources",
+        "full_history",
+        "delivery_snapshot",
+        "record_context",
+        "context_manifests",
+        "retained_task_facts_unlocked",
+        "_retained_task_facts",
+        "retained_sources",
+        "retained_context",
+        "_assert_private_directory",
+        "_claim_projection_unlocked",
+        "_claim_projection",
+        "claim_projection",
+        "_private_marker_unlocked",
+        "verified_records_unlocked",
+        "_append_private_unlocked",
+        "read_delivery_cohort",
+        "delivery_cohorts_unlocked",
+        "_keyed_receipt_unlocked",
+        "read_keyed_response",
+        "_public_page_records",
+        "_opened_wire_snapshot",
+        "verified_snapshot",
+        "projection_snapshot",
+        "_snapshot_records",
+        "_record_snapshot",
+        "full_history_snapshot",
+        "message_by_id",
+        "messages_for_references",
+        "deliveries_for_references",
+        "total_messages",
+        "latest_sequence",
+        "_iter_log_unlocked",
+        "_committed_sequence_unlocked",
+        "claim_gate_enabled",
+        "verify_before_read_unlocked",
+        "metadata_path",
+        "read_metadata_unlocked",
+        "write_metadata_unlocked",
+        "require_fresh_private_root_unlocked"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 27,
+      "name": "WireRecord",
+      "bases": [
+        "ABC"
+      ],
+      "members": [
+        "from_wire",
+        "public_from_wire",
+        "messages",
+        "context_manifests",
+        "compaction_messages_for",
+        "sequence_after",
+        "deliveries",
+        "delivery_messages",
+        "record_key",
+        "require_admission",
+        "checkpoint_rows"
+      ],
+      "annotations": [
+        "receipt: KeyedResponseReceipt | None = None"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 95,
+      "name": "WireObservation",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "members": [
+        "context_manifests",
+        "checkpoint_rows"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 106,
+      "name": "ContextManifestWireObservation",
+      "bases": [
+        "WireObservation"
+      ],
+      "members": [
+        "__post_init__",
+        "context_manifests",
+        "checkpoint_rows"
+      ],
+      "annotations": [
+        "manifest: 'ContextManifest'"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 122,
+      "name": "ObservationWireRecord",
+      "bases": [
+        "WireRecord"
+      ],
+      "members": [
+        "context_manifests",
+        "sequence_after",
+        "require_admission",
+        "checkpoint_rows",
+        "to_wire"
+      ],
+      "annotations": [
+        "observation: WireObservation"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 154,
+      "name": "WireScan",
+      "bases": [],
+      "members": [
+        "read"
+      ],
+      "annotations": [
+        "metadata: WireMetadata",
+        "previous_sequence: int = 0",
+        "seen_keys: set[str] = field(default_factory=set)"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/core/context_inspection.py",
+      "line": 201,
+      "name": "ContextInspection",
+      "bases": [],
+      "members": [
+        "read",
+        "same_native_source",
+        "recorded",
+        "native",
+        "active"
+      ],
+      "annotations": [
+        "owner: Thread",
+        "manifests: tuple[ContextManifest, ...]",
+        "source: SessionObservation"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/widgets/context_explorer.py",
+      "line": 25,
+      "name": "ContextExplorer",
+      "bases": [
+        "SidebarVisibilityObserver",
+        "Vertical"
+      ],
+      "members": [
+        "__init__",
+        "compose",
+        "on_mount",
+        "presentation_visible",
+        "on_show",
+        "sidebar_visibility_changed",
+        "_observed",
+        "context_read_finished",
+        "set_identity",
+        "action_refresh",
+        "_reading",
+        "_working",
+        "_read",
+        "_read_native",
+        "_present",
+        "_restore_cursor",
+        "_add",
+        "_owns_node",
+        "_expand",
+        "node_expanded",
+        "node_collapsed",
+        "node_selected",
+        "_selected",
+        "_show_detail",
+        "on_unmount"
+      ],
+      "annotations": []
+    }
+  ],
+  "consumer_candidates": [
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 117,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 288,
+      "call": "(entry / 'cmdline').read_bytes"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 242,
+      "call": "DeliverySources"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 765,
+      "call": "ctx.bus.log.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 179,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 61,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 88,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 89,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 93,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 140,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 154,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 333,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 397,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 49,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 102,
+      "call": "self.log.projection_snapshot"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 214,
+      "call": "self.log.projection_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 45,
+      "call": "copied_helper.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 45,
+      "call": "COMPACTION_HELPER.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 463,
+      "call": "MANIFEST.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 18,
+      "call": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 158,
+      "call": "Path(f'/proc/{process.pid}/environ').read_bytes"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 152,
+      "call": "Path(f'/proc/{process.pid}/cmdline').read_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 505,
+      "call": "record.checkpoint_rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 156,
+      "call": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 164,
+      "call": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 243,
+      "call": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 270,
+      "call": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 348,
+      "call": "self.decode_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 387,
+      "call": "record.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 139,
+      "call": "row.decode_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 194,
+      "call": "self.capture_sources"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 348,
+      "call": "self.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 763,
+      "call": "CertifiedSourceRead"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 136,
+      "call": "row.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 265,
+      "call": "incarnation.recorded_names"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 802,
+      "call": "WireScan"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 71,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 50,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 70,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 113,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 83,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 87,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 135,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 139,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 201,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 137,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 318,
+      "call": "receipt.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 183,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 82,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 292,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 97,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 555,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/thread_provenance.py",
+      "line": 41,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 54,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 77,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 81,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 309,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "line": 35,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 435,
+      "call": "WireLog"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 88,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 509,
+      "call": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 275,
+      "call": "WireScan"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 443,
+      "call": "WireScan"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 110,
+      "call": "self.verified_snapshot"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 116,
+      "call": "self.verified_snapshot"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 125,
+      "call": "ObservationWireRecord"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 496,
+      "call": "self.verified_snapshot"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 125,
+      "call": "ContextManifestWireObservation"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 138,
+      "call": "source.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 126,
+      "call": "self.observation.context_manifests"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 136,
+      "call": "self.observation.checkpoint_rows"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 118,
+      "call": "ContextManifestSources"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 177,
+      "call": "native.read_bytes"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 181,
+      "call": "native.read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 107,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 113,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 116,
+      "call": "(copied / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 117,
+      "call": "(original / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 118,
+      "call": "(original / 'private_bus_checkpoint.sqlite3').read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 98,
+      "call": "session_path.read_bytes"
+    },
+    {
+      "path": "tests/attached_history_installed_pilot.py",
+      "line": 119,
+      "call": "session_path.read_bytes"
+    },
+    {
+      "path": "tests/certified_sequence_channel_installed_journey.py",
+      "line": 80,
+      "call": "ledger.read_bytes"
+    },
+    {
+      "path": "tests/certified_sequence_channel_installed_journey.py",
+      "line": 93,
+      "call": "ledger.read_bytes"
+    },
+    {
+      "path": "tests/certified_sequence_channel_installed_journey.py",
+      "line": 73,
+      "call": "native.read_bytes"
+    },
+    {
+      "path": "tests/certified_sequence_channel_installed_journey.py",
+      "line": 74,
+      "call": "service.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 58,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 58,
+      "call": "(installed / path.relative_to(checkout / 'src/agent_comms')).read_bytes"
+    },
+    {
+      "path": "tests/config_option_authority_installed_pilot.py",
+      "line": 118,
+      "call": "(service.root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/config_option_authority_installed_pilot.py",
+      "line": 121,
+      "call": "(service.root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 129,
+      "call": "retained.read_bytes"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 132,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 201,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 118,
+      "call": "SOURCE.read_bytes"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 193,
+      "call": "SOURCE.read_bytes"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 38,
+      "call": "(installed / original.relative_to(checkout / 'src/agent_comms')).read_bytes"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 38,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 56,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 181,
+      "call": "Path(path).read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 27,
+      "call": "Path(fresh_session).read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 31,
+      "call": "(fixture.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 90,
+      "call": "Path(fresh_session).read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 109,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 110,
+      "call": "Path(fresh_session).read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 111,
+      "call": "(fixture.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 88,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 109,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 77,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 40,
+      "call": "WireLog"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 82,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 83,
+      "call": "(Path(source.root) / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 83,
+      "call": "(Path(original.root) / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 35,
+      "call": "(original / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 36,
+      "call": "(original / 'private_bus_checkpoint.sqlite3').read_bytes"
+    },
+    {
+      "path": "tests/retained_history_cutover_pilot.py",
+      "line": 84,
+      "call": "WireLog"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 35,
+      "call": "(installed / original.relative_to(checkout / 'src/agent_comms')).read_bytes"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 35,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 109,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 127,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 27,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 80,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 50,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 50,
+      "call": "(installed / original.relative_to(checkout / 'src/agent_comms')).read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 473,
+      "call": "original_receipt.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 496,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 574,
+      "call": "original_receipt.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 133,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 71,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 142,
+      "call": "original.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 971,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1392,
+      "call": "Path(source).read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 584,
+      "call": "Path(path).read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 801,
+      "call": "Path(path).read_bytes"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 397,
+      "call": "Path(path).read_bytes"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 50,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 237,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 260,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 206,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 55,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 182,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 144,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 196,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 189,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 231,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 365,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 212,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 225,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 369,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 59,
+      "call": "comms.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 62,
+      "call": "comms.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 41,
+      "call": "agent.inputs.dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 55,
+      "call": "(wired.root / 'goal_pause_events.json').read_bytes"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 85,
+      "call": "(wired.root / 'goal_pause_events.json').read_bytes"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 87,
+      "call": "agent.inputs.dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 19,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 53,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 27,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 64,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 50,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 101,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 158,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 59,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 113,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 170,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_catalog_document.py",
+      "line": 19,
+      "call": "comms.channels.catalog.path.read_bytes"
+    },
+    {
+      "path": "tests/test_catalog_document.py",
+      "line": 23,
+      "call": "comms.channels.catalog.path.read_bytes"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 94,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 49,
+      "call": "comms.bus.reads.path.read_bytes"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 50,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 60,
+      "call": "comms.bus.reads.path.read_bytes"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 61,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 44,
+      "call": "tmp_path.joinpath('bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 63,
+      "call": "tmp_path.joinpath('bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 80,
+      "call": "metadata.read_bytes"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 86,
+      "call": "metadata.read_bytes"
+    },
+    {
+      "path": "tests/test_checkpoint_seals.py",
+      "line": 118,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_checkpoint_seals.py",
+      "line": 129,
+      "call": "WireLog"
+    },
+    {
+      "path": "tests/test_checkpoint_seals.py",
+      "line": 122,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_child_process.py",
+      "line": 376,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 185,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 209,
+      "call": "external.read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 210,
+      "call": "(displaced / 'module.py').read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 231,
+      "call": "external.read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 232,
+      "call": "(displaced / 'module.py').read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 238,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 248,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 281,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 59,
+      "call": "extension.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 325,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 212,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 230,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 266,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 283,
+      "call": "external.read_bytes"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 402,
+      "call": "resource.read_bytes"
+    },
+    {
+      "path": "tests/test_command_families.py",
+      "line": 211,
+      "call": "(live.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_command_families.py",
+      "line": 224,
+      "call": "(live.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 32,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 67,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 84,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 89,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 101,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 137,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 144,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 104,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 132,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 79,
+      "call": "native.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 82,
+      "call": "native.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 85,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 214,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 230,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 66,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 66,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 81,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 81,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 320,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 320,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 380,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 380,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 69,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 69,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 86,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 86,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 314,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 327,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 327,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 374,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 386,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 386,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 358,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 107,
+      "call": "extension.read_bytes"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 254,
+      "call": "bus_path.read_bytes"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 386,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_coordination_cohort.py",
+      "line": 389,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 419,
+      "call": "db_path.read_bytes"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 203,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 228,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 240,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 241,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 96,
+      "call": "snapshot.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 100,
+      "call": "snapshot.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 534,
+      "call": "guard.read_bytes"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 538,
+      "call": "guard.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 210,
+      "call": "(tmp_path / 'read_ledger.json').read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 34,
+      "call": "(tmp_path / 'read_ledger.json').read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 46,
+      "call": "(tmp_path / 'read_ledger.json').read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 110,
+      "call": "marker_path.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 119,
+      "call": "marker_path.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 221,
+      "call": "(tmp_path / 'read_ledger.json').read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 67,
+      "call": "markers.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 96,
+      "call": "markers.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 149,
+      "call": "marker_path.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 70,
+      "call": "markers.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 100,
+      "call": "markers.read_bytes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 152,
+      "call": "marker_path.read_bytes"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 514,
+      "call": "marker.read_bytes"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 68,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 653,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 690,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 691,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_export_families.py",
+      "line": 66,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_export_families.py",
+      "line": 66,
+      "call": "(FIXTURES / name).read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 380,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 190,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 382,
+      "call": "markers.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 391,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 128,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 177,
+      "call": "full_path.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 191,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 214,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 392,
+      "call": "markers.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 129,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_exporting.py",
+      "line": 371,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 344,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 395,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 433,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 359,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 596,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 515,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 523,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 601,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 42,
+      "call": "(tmp_path / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 67,
+      "call": "(tmp_path / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 59,
+      "call": "(tmp_path / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 52,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 215,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 289,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 296,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 165,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 280,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 329,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 89,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 166,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 229,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 101,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 169,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 237,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 275,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 309,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 282,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 312,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 111,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 112,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 115,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 116,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 36,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 64,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 71,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 78,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 181,
+      "call": "comms.relationships.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 239,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 240,
+      "call": "comms.relationships.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 258,
+      "call": "comms.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 192,
+      "call": "comms.relationships.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 250,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 251,
+      "call": "comms.relationships.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 266,
+      "call": "comms.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 412,
+      "call": "(comms.root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 418,
+      "call": "(comms.root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 432,
+      "call": "GoalWaits(comms.root / 'goal_waits.json').path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 435,
+      "call": "GoalWaits(comms.root / 'goal_waits.json').path.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 118,
+      "call": "(comms.root / name).read_bytes"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 127,
+      "call": "(comms.root / name).read_bytes"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 107,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 170,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 44,
+      "call": "(live.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 47,
+      "call": "(live.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 196,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 199,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 205,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 28,
+      "call": "prior.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 47,
+      "call": "prior.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 58,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 501,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 65,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 504,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 79,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 33,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 82,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 39,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 15,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 31,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 60,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 107,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 163,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 232,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 240,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 247,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 283,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 301,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 389,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 65,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 143,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 154,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 166,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 209,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 211,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 242,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 253,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 286,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 304,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 345,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 395,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 212,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 331,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 135,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 140,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 46,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 64,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 261,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 117,
+      "call": "checkpoint.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 264,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 123,
+      "call": "checkpoint.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 107,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 189,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 217,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 254,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 58,
+      "call": "log.read_bytes"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 79,
+      "call": "log.read_bytes"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 60,
+      "call": "log.read_bytes"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 81,
+      "call": "log.read_bytes"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 132,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_locked_store.py",
+      "line": 137,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 37,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 157,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 127,
+      "call": "native_path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 129,
+      "call": "proof_path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 130,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 141,
+      "call": "native_path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 142,
+      "call": "proof_path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 143,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 165,
+      "call": "native_path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 107,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 148,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 162,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 43,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 50,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 434,
+      "call": "Path(before.threads[name].session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 445,
+      "call": "Path(current.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 464,
+      "call": "Path(after.threads['questioner'].session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 491,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 31,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 114,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 190,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 196,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 56,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 66,
+      "call": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 67,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 73,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 228,
+      "call": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 236,
+      "call": "owner._comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 370,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 53,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 273,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 26,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 122,
+      "call": "fresh.path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 34,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 132,
+      "call": "fresh.path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 73,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 37,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_evidence_custody.py",
+      "line": 131,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 74,
+      "call": "saved.read_bytes"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 35,
+      "call": "target.read_bytes"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 100,
+      "call": "saved.read_bytes"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 171,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 99,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 73,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_package.py",
+      "line": 216,
+      "call": "(staged / 'dist/cli.js').read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 139,
+      "call": "journal.read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 158,
+      "call": "journal.read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 253,
+      "call": "policy.read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 258,
+      "call": "policy.read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 666,
+      "call": "fresh.path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1470,
+      "call": "journal.read_bytes"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 112,
+      "call": "journal.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 62,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 155,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 238,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 329,
+      "call": "proof.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 320,
+      "call": "proof.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 320,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 167,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 292,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 300,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 353,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 354,
+      "call": "proof.read_bytes"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 78,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 406,
+      "call": "received.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 51,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 161,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 85,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 176,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 60,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 88,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_session_reopen.py",
+      "line": 70,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 289,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 199,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 237,
+      "call": "owner.session.read_bytes"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 108,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 123,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 645,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 665,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 695,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 169,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 190,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 174,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 196,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 25,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 121,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 35,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 159,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 270,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 57,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 168,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 283,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 329,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 221,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 367,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 697,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 778,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 795,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 252,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 372,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 382,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 703,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 782,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 806,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 879,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 998,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 892,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 1048,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 1062,
+      "call": "Path(witness.session_file).read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 71,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 114,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 611,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 648,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1004,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1006,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 83,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 93,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 124,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 624,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 668,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1014,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 788,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 826,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 333,
+      "call": "starts.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 998,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 904,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 378,
+      "call": "exits.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 781,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 290,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 211,
+      "call": "bus.path.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 394,
+      "call": "artifact.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 219,
+      "call": "bus.path.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 321,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 398,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 338,
+      "call": "artifact.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 161,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 195,
+      "call": "db_path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 399,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 423,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 408,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 172,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 231,
+      "call": "db_path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 201,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 166,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 238,
+      "call": "route_file.read_bytes"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 241,
+      "call": "route_file.read_bytes"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 262,
+      "call": "route_file.read_bytes"
+    },
+    {
+      "path": "tests/test_private_path.py",
+      "line": 62,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 105,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 140,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 179,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 220,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 76,
+      "call": "external.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 110,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 159,
+      "call": "external.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 186,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_private_sidecar.py",
+      "line": 230,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 25,
+      "call": "FIXTURE.read_bytes"
+    },
+    {
+      "path": "tests/test_publication_snapshot_identity.py",
+      "line": 96,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_publication_snapshot_identity.py",
+      "line": 99,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_publication_snapshot_identity.py",
+      "line": 77,
+      "call": "case.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_read_ledger.py",
+      "line": 180,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_registration_authority.py",
+      "line": 56,
+      "call": "registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_registration_authority.py",
+      "line": 59,
+      "call": "registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 49,
+      "call": "registration.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 54,
+      "call": "registration.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_registry_marker_contention.py",
+      "line": 97,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_registry_marker_contention.py",
+      "line": 105,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 118,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_relationship_store.py",
+      "line": 141,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 109,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_restart.py",
+      "line": 27,
+      "call": "comms.agents.runtime_info.path.read_bytes"
+    },
+    {
+      "path": "tests/test_restart.py",
+      "line": 28,
+      "call": "comms.ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_restart.py",
+      "line": 48,
+      "call": "comms.agents.runtime_info.path.read_bytes"
+    },
+    {
+      "path": "tests/test_restart.py",
+      "line": 49,
+      "call": "comms.ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 153,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 269,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 282,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 211,
+      "call": "fixture.session.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 97,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 119,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 126,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 183,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 213,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 219,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 129,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 132,
+      "call": "(comms.root / 'other.md').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 124,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 150,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 188,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 218,
+      "call": "destination.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 225,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 231,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 68,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 88,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 184,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 66,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 184,
+      "call": "saved.read_bytes"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 199,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 43,
+      "call": "current.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 44,
+      "call": "old.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 58,
+      "call": "current.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 80,
+      "call": "current.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 55,
+      "call": "current.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 56,
+      "call": "old.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 60,
+      "call": "current.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 83,
+      "call": "current.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 109,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 121,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 170,
+      "call": "current.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 181,
+      "call": "current.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 46,
+      "call": "WireLog"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 59,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 37,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 97,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 115,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 184,
+      "call": "log._path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 99,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 119,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 190,
+      "call": "log._path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 60,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 66,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 57,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 65,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 166,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 254,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 29,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 132,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 44,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 49,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 162,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 74,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 798,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 534,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 809,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1042,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1044,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1057,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 552,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 572,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 596,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 604,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1093,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1119,
+      "call": "Path(file).read_bytes"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1058,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 133,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 485,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 111,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 129,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 144,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 163,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 186,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 195,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 239,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 253,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 259,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 275,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 293,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 223,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 339,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 554,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 570,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 163,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 296,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 305,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 392,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 400,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 344,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 45,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 110,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 124,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 173,
+      "call": "file.read_bytes"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 53,
+      "call": "Path(broker.__file__).with_name('selected_claimed_write.mjs').read_bytes"
+    },
+    {
+      "path": "tests/test_selected_tool_native_fake.py",
+      "line": 34,
+      "call": "Path(broker.__file__).with_name('selected_claimed_write.mjs').read_bytes"
+    },
+    {
+      "path": "tests/test_selected_tool_native_package.py",
+      "line": 22,
+      "call": "extension.read_bytes"
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "line": 86,
+      "call": "(owner._comms.root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "line": 91,
+      "call": "(owner._comms.root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 257,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 276,
+      "call": "session.read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 198,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 104,
+      "call": "Path(session).read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 105,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 205,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 119,
+      "call": "Path(session).read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 120,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 141,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 157,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 64,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 86,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 129,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 178,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 255,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 312,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 356,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 377,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 490,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 95,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 135,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 183,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 259,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 272,
+      "call": "bus.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 320,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 362,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 381,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 440,
+      "call": "saved.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 440,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 518,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 85,
+      "call": "(comms.root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 450,
+      "call": "saved.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 450,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 456,
+      "call": "saved.read_bytes"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 456,
+      "call": "inputs.path.read_bytes"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 138,
+      "call": "ThreadIncarnation"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 81,
+      "call": "registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 116,
+      "call": "registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 84,
+      "call": "registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 121,
+      "call": "registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_threads_scaling.py",
+      "line": 168,
+      "call": "bus_path.read_bytes"
+    },
+    {
+      "path": "tests/test_threads_scaling.py",
+      "line": 144,
+      "call": "bus_path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 53,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 97,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 108,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 159,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 262,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 299,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 71,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 100,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 117,
+      "call": "ledger.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 170,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 179,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 280,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 293,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 302,
+      "call": "dispositions.path.read_bytes"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 75,
+      "call": "artifact.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "line": 82,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "line": 84,
+      "call": "proof.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "line": 150,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "line": 151,
+      "call": "proof.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_input_display.py",
+      "line": 82,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_input_display.py",
+      "line": 88,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 30,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 32,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 23,
+      "call": "ContextManifest"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 175,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 179,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 194,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 208,
+      "call": "ObservationWireRecord"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 220,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 221,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 228,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 230,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 231,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 233,
+      "call": "reopened.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 264,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 265,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 266,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 208,
+      "call": "ContextManifestWireObservation"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 235,
+      "call": "reopened.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 248,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 249,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 269,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 275,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 285,
+      "call": "Comms(comms.root).bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 294,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 140,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 141,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 180,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 181,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 283,
+      "call": "comms.bus.log.record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 286,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 292,
+      "call": "index.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 65,
+      "call": "original.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 62,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 154,
+      "call": "p.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 42,
+      "call": "comms.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 44,
+      "call": "comms.registry.store.path.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 188,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 227,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 207,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 260,
+      "call": "native.session.read_bytes"
+    },
+    {
+      "path": "tests/test_viewer_snapshot_index.py",
+      "line": 59,
+      "call": "bus_path.read_bytes"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 401,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 415,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_wake_candidate_index.py",
+      "line": 377,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_wake_candidate_index.py",
+      "line": 374,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 80,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 95,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 83,
+      "call": "comms.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 143,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 300,
+      "call": "service.bus.log.record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 306,
+      "call": "service.bus.log.record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 134,
+      "call": "selected.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 155,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 243,
+      "call": "service.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 292,
+      "call": "service.bus.log.record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 329,
+      "call": "reopened.bus.log.context_manifests"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 137,
+      "call": "selected.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 161,
+      "call": "selected.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 308,
+      "call": "service.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 334,
+      "call": "service.bus.log.path.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 79,
+      "call": "original_file.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 202,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 162,
+      "call": "original_file.read_bytes"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 250,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 24,
+      "call": "manifest.read_bytes"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 71,
+      "call": "manifest.read_bytes"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 34,
+      "call": "registry_path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 32,
+      "call": "(root / name).read_bytes"
+    },
+    {
+      "path": "tools/cutover/carry_history_provenance.py",
+      "line": 55,
+      "call": "(root / name).read_bytes"
+    },
+    {
+      "path": "tools/cutover/install_retained_index.py",
+      "line": 22,
+      "call": "WireLog"
+    },
+    {
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 75,
+      "call": "(root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 24,
+      "call": "WireScan"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 44,
+      "call": "bus.path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 65,
+      "call": "(originals / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 67,
+      "call": "(originals / 'bus_meta.json').read_bytes"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 67,
+      "call": "bus.metadata_path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 83,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 614,
+      "call": "staging.path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 174,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/original_input_consumer_installed_pilot.py",
+      "line": 23,
+      "call": "(installed / name).read_bytes"
+    },
+    {
+      "path": "tools/cutover/original_input_consumer_installed_pilot.py",
+      "line": 24,
+      "call": "(checkout / 'src/agent_comms' / name).read_bytes"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture_installed_pilot.py",
+      "line": 16,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 350,
+      "call": "manifest.read_bytes"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 215,
+      "call": "self.manifest.read_bytes"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 300,
+      "call": "self.manifest.read_bytes"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 103,
+      "call": "(entry / 'cmdline').read_bytes"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 113,
+      "call": "(entry / 'environ').read_bytes"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 223,
+      "call": "WireLog"
+    },
+    {
+      "path": "tools/cutover/read_original_task_preimage.py",
+      "line": 22,
+      "call": "WireLog"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 51,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 77,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 56,
+      "call": "(root / 'preimages' / name).read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 33,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 86,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 32,
+      "call": "a_path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 33,
+      "call": "p_path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 33,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 84,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 62,
+      "call": "(originals / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 91,
+      "call": "(root / 'bus.jsonl').read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 15,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 16,
+      "call": "WireLog"
+    },
+    {
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 34,
+      "call": "bus.path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 35,
+      "call": "bus.metadata_path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 37,
+      "call": "(root / 'private_bus_checkpoint.sqlite3').read_bytes"
+    },
+    {
+      "path": "tools/cutover/routing_carry.py",
+      "line": 166,
+      "call": "(root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tools/cutover/routing_carry.py",
+      "line": 112,
+      "call": "(root / 'registry.json').read_bytes"
+    },
+    {
+      "path": "tools/cutover/routing_recovery.py",
+      "line": 29,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 73,
+      "call": "self.route_path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 71,
+      "call": "store.path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 61,
+      "call": "WireLog"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 38,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "tools/cutover/user_task_installed_pilot.py",
+      "line": 43,
+      "call": "(installed / name).read_bytes"
+    },
+    {
+      "path": "tools/cutover/user_task_installed_pilot.py",
+      "line": 44,
+      "call": "(checkout / 'src/agent_comms' / name).read_bytes"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/render_identity.py",
+      "line": 45,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/clipboard_image.py",
+      "line": 61,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/core/context_inspection.py",
+      "line": 210,
+      "call": "comms.bus.log.context_manifests"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/prompt/resource.py",
+      "line": 64,
+      "call": "resource_path.read_bytes"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/widgets/session_thread_panels.py",
+      "line": 121,
+      "call": "ContextExplorer"
+    }
+  ],
+  "removed_capture_deliveries_references": [],
+  "limitations": "Conservative AST receiver candidates; dynamic MRO/import resolution not proven. Native format untouched; no native producer changes."
+}

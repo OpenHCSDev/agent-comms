@@ -21,6 +21,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import ThreadSort
 from .errors import UnregisteredThreadError
+from .goals import GoalMentionBinding
 from .locked_store import LockedStore
 from .wire_record import WireRecord
 from .messages import Message
@@ -145,7 +146,7 @@ class GoalMentionDiagnostic:
     goal_id: str
     text_revision: int
     token: str
-    reason: str
+    reason: type[GoalMentionBinding] | Literal["stale_incarnation"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -489,7 +490,7 @@ class ThreadRelationships:
             if not first.role.executable:
                 raise ValueError("Collaborations relate agent threads")
             registry = self.registry.snapshot()
-            peer = registry.aliases.get(peer, peer)
+            peer = registry.canonical_name(peer)
             result = None
 
             def change(document: RelationshipDocument) -> RelationshipDocument:
@@ -561,7 +562,7 @@ class ThreadRelationships:
         messages, limited = self._recent_messages()
 
         def canonical(name: str) -> str:
-            return registry.aliases.get(name, name)
+            return registry.canonical_name(name)
 
         def entry(
             name: str, *, message: Message | None = None, detail: str = ""

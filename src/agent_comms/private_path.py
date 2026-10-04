@@ -8,9 +8,14 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from abc import abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import ClassVar
+from collections.abc import Iterator
 
 from .declared_family import DeclaredFamily
 
@@ -95,6 +100,36 @@ class PrivateSocketRole(PrivateRole):
     @classmethod
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISSOCK(mode)
+
+    @classmethod
+    @contextmanager
+    def address(cls, path: Path) -> Iterator[Path]:
+        """Borrow a directory, not its arbitrarily long pathname, for AF_UNIX.
+
+        The socket inode remains at path. Linux resolves this short proc address
+        through the held directory FD; native children may use it while the
+        listener owns that FD. Receipt paths never derive from this address.
+        POSIX platforms without proc use a private, temporary directory link
+        for the same inode. No socket or receipt moves into that directory.
+        """
+        path = Path(path).absolute()
+        observed = path.parent.lstat()
+        TrustedAncestorRole.require(observed)
+        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            if not os.path.samestat(observed, os.fstat(fd)):
+                raise ValueError("Socket directory changed during acquisition")
+            if sys.platform.startswith("linux"):
+                yield Path(f"/proc/{os.getpid()}/fd/{fd}") / path.name
+            else:
+                with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
+                    parent = Path(directory) / "d"
+                    parent.symlink_to(path.parent, target_is_directory=True)
+                    if not os.path.samestat(os.stat(parent), os.fstat(fd)):
+                        raise ValueError("Socket directory changed during address acquisition")
+                    yield parent / path.name
+        finally:
+            os.close(fd)
 
 
 class TrustedAncestorRole(FilesystemRole):

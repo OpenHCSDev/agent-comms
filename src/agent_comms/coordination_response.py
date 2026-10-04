@@ -20,10 +20,12 @@ import json
 import sqlite3
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Literal
+from .diagnostics import PublicationMeasurements
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import assert_cohort_schema
@@ -44,6 +46,7 @@ from agent_comms.coordination_tables.publications import (
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.native_admission_rules import RegistryAdmissionCheck
@@ -192,7 +195,7 @@ def install_private_response_schema(store: Coordination) -> None:
         exists = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",
-                (ResponseSchemaMeta.declared_name,),
+                (FieldCodec.encode(ResponseSchemaMeta),),
             )
         )
         if not exists:
@@ -205,19 +208,27 @@ def install_private_response_schema(store: Coordination) -> None:
 
 @contextmanager
 def _response_boundary(bus: MessageBus, *, blocking: bool = True,
-                       contention: StoreLockContention | None = None) -> Iterator[RegistrySnapshot]:
+                       contention: StoreLockContention | None = None,
+                       measurements: PublicationMeasurements | None = None) -> Iterator[RegistrySnapshot]:
     """Total lock order: shared wire -> bus -> registry -> SQLite.
 
     Raw keyed appends acquire bus then registry; Comms register takes shared
     wire then registry. No registry API that reacquires its lock may be used in
     this boundary: the bus append receives this immutable loaded revision.
     """
-    with (
-        _store_lock(bus.log.path.parent / "wire", blocking=blocking, contention=contention),
-        bus.log.locked(blocking=blocking, contention=contention),
-        _store_lock(bus._registry.store.path, blocking=blocking, contention=contention),
-    ):
-        yield bus._registry.store._read_unlocked().snapshot()
+    observations = measurements if measurements is not None else PublicationMeasurements()
+    with ExitStack() as custody:
+        with observations.operation("wire_exclusion"):
+            custody.enter_context(_store_lock(bus.log.path.parent / "wire", blocking=blocking,
+                                             shared=True, contention=contention))
+        with observations.operation("bus_certified_exclusion"):
+            custody.enter_context(bus.log.locked(blocking=blocking, contention=contention))
+        with observations.operation("registry_exclusion"):
+            custody.enter_context(_store_lock(bus._registry.store.path, blocking=blocking,
+                                             contention=contention))
+        with observations.operation("registry_snapshot"):
+            snapshot = bus._registry.store._read_unlocked().snapshot()
+        yield snapshot
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -235,6 +246,48 @@ class LiveResponseOwner(RegistryOwner):
         if self.thread.name != fence.owner_thread:
             raise StaleFence("response turn belongs to a different fenced owner")
         self.require_active_turn()
+
+    async def publish_responses(
+        self, store_path: Path, bus: MessageBus, fence: OwnerFence,
+        replies: tuple[Message, ...],
+    ) -> RecoverySnapshot:
+        """Join all original route publications before releasing turn custody.
+
+        The worker owns its connection and each original ordered write fence.
+        Only frozen proposals and the original owner/fence cross into it; no
+        selected participant, caller connection or native work is transferred.
+        """
+        return await Coordination.run_async(
+            store_path, partial(self._publish_owned, bus, fence, replies)
+        )
+
+    def _publish_owned(
+        self, bus: MessageBus, fence: OwnerFence,
+        replies: tuple[Message, ...], store: Coordination,
+    ) -> RecoverySnapshot:
+        # SelectedSourceBatch.response_messages already requires complete,
+        # nonempty original routes. Preparation freezes all of them before
+        # the first append, preserving the original multi-route algorithm.
+        for reply in replies:
+            prepare_fenced_response(
+                store, bus, fence, reply.body,
+                exact_target=reply.target, owner_witness=self,
+            )
+        published: RecoverySnapshot
+        for reply in replies:
+            published = publish_fenced_response(
+                store, bus, fence, exact_target=reply.target, owner_witness=self,
+            ).value
+            published.require_published_evidence(reply.target)
+        # The last canonical snapshot contains every original assignment.
+        # Complete required dependency settlement before the acquired worker
+        # can close or report cancellation; no input/goal is reconstructed.
+        from .comms import Comms
+
+        goals = Comms(bus.log.path.parent).goals
+        for assignment in published.assignments:
+            goals.consume_reply_wait(self, assignment.source)
+        return published
 
 
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:

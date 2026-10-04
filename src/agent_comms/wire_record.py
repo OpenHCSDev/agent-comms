@@ -54,15 +54,16 @@ class WireRecord(ABC):
     def context_manifests(self):
         return ()
 
-    def compaction_messages_for(self, recipient_lookup):
-        """Unaddressed records grant no applicability to a retained source."""
-        return ()
-
     @abstractmethod
     def sequence_after(self, previous: int) -> int: ...
 
     def deliveries(self) -> tuple[CommittedDelivery, ...]:
         return ()
+
+    def delivery_messages(self):
+        from .routing import DeliveryMessage
+
+        return tuple(DeliveryMessage(message) for message in self.messages())
 
     def record_key(self, seen: set[str]) -> None:
         if self.receipt is not None:
@@ -93,6 +94,9 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
     @abstractmethod
     def context_manifests(self): ...
 
+    @abstractmethod
+    def checkpoint_rows(self, offset: int, length: int): ...
+
 
 @dataclass(frozen=True)
 class ContextManifestWireObservation(WireObservation):
@@ -103,6 +107,11 @@ class ContextManifestWireObservation(WireObservation):
 
     def context_manifests(self):
         return (self.manifest,)
+
+    def checkpoint_rows(self, offset: int, length: int):
+        from .private_bus_checkpoint import ContextManifestSources
+
+        return (ContextManifestSources(self.manifest.thread, offset=offset, length=length),)
 
 
 @dataclass(frozen=True)
@@ -120,7 +129,7 @@ class ObservationWireRecord(WireRecord):
         return None
 
     def checkpoint_rows(self, offset: int, length: int):
-        return ()
+        return self.observation.checkpoint_rows(offset, length)
 
     def to_wire(self):
         return FieldCodec.encode(self)

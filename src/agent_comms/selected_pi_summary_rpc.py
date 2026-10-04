@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from functools import partial
 
 from .agent_events import AgentEvent, CompactionSummaryProgress
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession
@@ -20,13 +21,18 @@ from .compaction_records import SelectedSummarySource
 from .fresh_private_session import FreshPrivateSession
 from .input_disposition import FutureInputQueue
 from .native_pi import NativePiUnavailable
-from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
+from .pi_vocabulary import CompactionReason
 from .threads import Thread
 from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
+from .request_progress import RequestProgress
+from .child_process import ProcessIdentity
+from .compaction_identity import SummaryOperationIdentity
+from .coordinator import Coordination
+from .native_entries import NativeEvidenceRead
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
@@ -62,6 +68,11 @@ class SelectedSummarySlot:
     owner: str
     session: str
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # Optional diagnostic sink, not source/input/lifecycle state. The acquired
+    # child lends its exact process identity only inside the RPC read lifetime.
+    request_observer: Callable[[RequestProgress, ProcessIdentity, SummaryOperationIdentity], None] | None = field(
+        default=None, kw_only=True, repr=False, compare=False,
+    )
 
     async def run_selected_summary(
         self,
@@ -77,9 +88,10 @@ class SelectedSummarySlot:
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
         future_queue: FutureInputQueue | None = None,
+        native_reader: NativeEvidenceRead | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
-        reason: str = "adaptive",
+        reason: type[CompactionReason],
     ) -> SelectedSummaryData:
         """Reserve durably, exchange once, and leave settlement to the owner.
 
@@ -112,21 +124,27 @@ class SelectedSummarySlot:
             session_file = witness.session_file
             try:
                 retained = persistent.custody.idle().selected(
-                    NativeSessionIdentity(self.session, session_file), expected_package
+                    witness, expected_package
                 )
             except NativePiUnavailable as error:
                 raise SelectedChildUnknown(str(error)) from error
-            if witness.revision != retained.revision.native_stamp:
+            if witness.revision != retained.revision.native:
                 raise SelectedChildUnknown("Selected source witness is stale")
             proc, reader = retained.child.proc, retained.child.reader
-            operation = journal.summaries.reserve(
+            operation = await Coordination.run_worker(partial(journal.summaries.reserve,
                 session_file,
                 source,
                 fresh_session=fresh_session,
                 admission_generation=admission_generation,
                 future_queue=future_queue,
-            )
+                native_reader=native_reader,
+            ))
             request = replace(request, operation_id=operation)
+            identity = SummaryOperationIdentity(session_file, operation)
+
+            def observation(progress):
+                if self.request_observer is not None:
+                    self.request_observer(progress, proc.identity, identity)
             # The durable reservation blocks new inputs even after process
             # death; retain it for exact commit linkage on a complete result.
             try:
@@ -140,6 +158,10 @@ class SelectedSummarySlot:
                     async with asyncio.timeout_at(deadline):
                         raw = await reader.readline()
                     event = PiRpcChannel.decode_record(raw, strict=True)
+                    if event.observe_request(observation):
+                        # A timing sample cannot settle this journal operation
+                        # or renew its progress deadline. Continue the same read.
+                        continue
                     if not isinstance(event, AgentCommsCompactionProgress):
                         break
                     if event.id != request.id or event.operation_id != operation:
@@ -157,13 +179,12 @@ class SelectedSummarySlot:
                 result = _summary_response(raw, request, tokens_before)
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
-                result.settle(journal)
             except BaseException as error:
-                persistent.require_reopen(session_file)
+                persistent.require_reopen(witness)
                 # Keep the child marked unusable even if cancellation interrupts
                 # its reap. PersistentPiSession owns the shielded close task.
                 try:
-                    journal.summaries.mark_unknown(operation)
+                    await Coordination.run_worker(partial(journal.summaries.mark_unknown, operation))
                 finally:
                     with suppress(asyncio.CancelledError):
                         await persistent.close()
@@ -180,4 +201,7 @@ class SelectedSummarySlot:
                 ) from error
             # Raise only after attestation and durable settlement succeed. This
             # known terminal outcome must not enter the transport UNKNOWN handler.
+            # Cancellation joins its SQL publication; it must not turn a known
+            # failure/refusal into a second, contradictory UNKNOWN transition.
+            await Coordination.run_worker(partial(result.settle, journal))
             return result.require_result()

@@ -1,0 +1,87 @@
+{
+  "source_head": "fd4e1c8cc156fc8eeb2b6d836795338fb28e8c75",
+  "installed_source_files_equal": 339,
+  "source_mismatches": [],
+  "scorer_exit_code": 0,
+  "report_sha256": "641f625603b0c43f74b0fce3cb5012bd4b0567b5ed96fa7f203727ef99ca79ce",
+  "wheel_sha256": "601b5a685605657e937cf50986a7ea63b7f8ee7f85b2b39d95e869917b765a85",
+  "command": "PYTHONPATH=.artifacts/s4-construction-installed-site:tests <existing runtime563>/bin/python tests/compaction_retention_fixture.py --scenario-file <same original frozen oracle> --recorded-run <same original continued-run> --condition task-memory",
+  "controls": {
+    "synchronous_scorer_and_action_controls_passed": 24,
+    "subtests_passed": 19,
+    "original_sdk_file_mutation_and_retention_passed": 1,
+    "async_loopback_fixture": "Not repeated; initial batch lacked its pytest async plugin. Installed original-record path is qualified separately."
+  },
+  "totals": {
+    "correct": 9,
+    "questions": 9,
+    "stale": 0,
+    "missing": 0
+  },
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "original_tool_observations": {
+    "cut-1": {
+      "attempts": 0,
+      "original_results": 0,
+      "successful_results": 0,
+      "action_questions": 0
+    },
+    "cut-2": {
+      "attempts": 1,
+      "original_results": 1,
+      "successful_results": 1,
+      "action_questions": 0
+    },
+    "cut-3": {
+      "attempts": 1,
+      "original_results": 1,
+      "successful_results": 1,
+      "action_questions": 0
+    }
+  },
+  "original_capture_hash_matches": {
+    "continuation-2-receipt.json": true,
+    "continued-run.private.json": true,
+    "original-measurements.private.json": true,
+    "cut-3-checkpoint.private.json": true,
+    "cut-3-registry.private.json": true,
+    "cut-3-manifest.private.json": true,
+    "cut-3-inputs.private.json": true
+  },
+  "prior_started_input_rows_match": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "original_input_disposition": "Started/ACP_UNCONFIRMED unchanged",
+  "provider_calls": 0,
+  "native_model_launches": 0,
+  "public_mutations": 0,
+  "new_environment": false,
+  "scope": "Installed normal package reads the same completed configured three-cut records; SDK result observations, not a new configured execution or action-validity study",
+  "unqualified": [
+    "Condition-specific intervention/control construction",
+    "Original dispatch capacity/final HTTP payload",
+    "Binding a proposed Decision alternative to executed tool arguments",
+    "Every task constraint/action validity",
+    "Registered comparative study"
+  ]
+}

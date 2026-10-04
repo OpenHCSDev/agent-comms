@@ -1,0 +1,34 @@
+{
+  "released_runtime_code_borrow": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-historical-handling290-current-20261001",
+  "scope": "Arendt S4 package-code borrow only; other owners determine their own usage",
+  "running_S4_borrowers": 0,
+  "original_package_metadata": [
+    {
+      "original": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/staging-historical-handling290-current-20261001/activation-input.json",
+      "retained": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-runtime290-original-metadata/activation-input.json",
+      "sha256": "6229d73a08c03aeb4231dd3b4f8d0419aa9e51b4f68cc19e6955d2e7a244b6c4",
+      "bytes": 2360
+    },
+    {
+      "original": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/staging-historical-handling290-current-20261001/source-inventory.json",
+      "retained": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-runtime290-original-metadata/source-inventory.json",
+      "sha256": "27d049811112b063dda8fcd5acb84bbdb714d1b6202ff8cab248feed3da3ec49",
+      "bytes": 40339
+    },
+    {
+      "original": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/staging-historical-handling290-current-20261001/wheel-source-proof.json",
+      "retained": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-runtime290-original-metadata/wheel-source-proof.json",
+      "sha256": "cfce816a46408e295430f0c4e42527979027562fc8d35982c6458af4157dda65",
+      "bytes": 788
+    }
+  ],
+  "completed_qualification": "three-cut-functional.json at7c3d4ba9, terminalCore5634c30/de166",
+  "protected": [
+    ".artifacts/s4-three-cuts-configured01",
+    "original S4 logs",
+    ".artifacts/s4-runtime290-original-metadata",
+    "original native de166 package",
+    "runtime-bundled-485-488-278-20261001 (separate current563 donor)"
+  ],
+  "no_original_or_uncertain_record_release": true
+}

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
@@ -16,14 +17,17 @@ from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
+from .pi_vocabulary import CompactionReason, ManualCompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .pi_commands import PiCommand
     from .native_turn_context import NativeContextManifestData
     from .comms import Comms
     from .goal_presentation import GoalExecution
     from .goals import Goal
+    from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
 
 
@@ -151,7 +155,7 @@ class ToolEnd(ToolEvent):
 
 @dataclass(frozen=True)
 class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
-    reason: str = "unknown"
+    reason: type[CompactionReason] = UnknownCompactionReason
 
     @property
     @abstractmethod
@@ -236,7 +240,7 @@ class CompactionSkipped(CompactionEnd):
 class ManualCompactionEnd(CompactionEnd):
     """An explicit manual result includes its safe failure explanation."""
 
-    reason: str = "manual"
+    reason: type[CompactionReason] = ManualCompactionReason
 
     @property
     def publication_summary(self) -> str | None:
@@ -302,8 +306,7 @@ class Notice(AgentEvent):
 class Error(AgentEvent):
     text: str
     reason_code: str | None = None
-    command: str | None = None
-    id: str | None = None
+    command: PiCommand | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
 
 
@@ -335,14 +338,18 @@ class McpLiveStatus(AgentEvent):
 
 @dataclass(frozen=True)
 class TurnState(AgentEvent):
+    """Watchdog observation, not an input disposition or replay assessment.
+
+    Retry permission belongs to the original execution's ReplayAssessments.
+    The original Pi retry event carries its own attempt data without another
+    tuple, session copy or interpretation of that data here.
+    """
+
     state: str
     reason_code: str
     elapsed_ms: int
-    phase: str
-    retryable: bool
-    replay_safe: bool
-    side_effects_possible: bool
-    attempt: dict[str, int | None] | None = None
+    phase: TurnPhase
+    attempt: RetryAttemptEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -352,18 +359,20 @@ class TurnSettled(AgentEvent):
     turn_id: str
 
 
-class AgentEventConsumer(MroDispatch, ABC):
+class AgentEventConsumer(MroDispatch):
     """Shared activity and metadata algorithms; owners supply their context."""
 
-    @property
-    @abstractmethod
-    def comms(self) -> Comms:
-        pass
+    def __init__(self, *, comms: Comms, thread_name: str):
+        self._comms = comms
+        self._thread_name = thread_name
 
     @property
-    @abstractmethod
+    def comms(self) -> Comms:
+        return self._comms
+
+    @property
     def thread_name(self) -> str:
-        pass
+        return self._thread_name
 
     async def before_agent_info(self, event: AgentInfo) -> None:
         pass
@@ -373,12 +382,15 @@ class AgentEventConsumer(MroDispatch, ABC):
 
     @handles(AgentInfo)
     async def record_agent_info(self, event: AgentInfo) -> None:
+        from .coordinator import Coordination
+
         await self.before_agent_info(event)
-        self.comms.agents.set_agent_info(
+        await Coordination.run_worker(partial(
+            self.comms.agents.set_agent_info,
             self.thread_name,
             model=event.model,
             session_name=event.session_name,
             context_used=event.context_used,
             context_size=event.context_size,
-        )
+        ))
         await self.after_agent_info(event)

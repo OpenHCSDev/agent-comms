@@ -4,6 +4,8 @@ import asyncio
 import argparse
 import os
 import signal
+from functools import partial
+from .coordinator import Coordination
 from contextlib import suppress
 
 from .acp import CommsAgent
@@ -19,7 +21,7 @@ async def run() -> None:
             private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
         )
     name = os.environ["AGENT_COMMS_THREAD"]
-    thread = comms.registry.require(name)
+    thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -52,14 +54,17 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
     from .store_files import _store_lock
 
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
-        with _store_lock(agent._comms._wire_lock_path):
-            snapshot = agent._comms.registry.snapshot()
-            owner = snapshot.threads[name]
-            row = agent.inputs.dispositions.read().rows[key]
-            if not row.queued_for(
-                owner.incarnation, snapshot.admission_generations[name], row.source_text
-            ):
-                raise ValueError("Startup input no longer belongs to this owner admission")
+        def capture():
+            with _store_lock(agent._comms._wire_lock_path):
+                snapshot = agent._comms.registry.snapshot()
+                owner = snapshot.threads[name]
+                row = agent.inputs.dispositions.read().rows[key]
+                if not row.queued_for(
+                    owner.incarnation, snapshot.admission_generations[name], row.source_text
+                ):
+                    raise ValueError("Startup input no longer belongs to this owner admission")
+            return row
+        row = await Coordination.run_worker(capture)
         await agent.inputs.emit_input_disposition(name, row)
         await agent.turns.run_agent_turn(
             name,

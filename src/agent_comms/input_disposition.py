@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -22,9 +23,11 @@ from .messages import Message
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .channel_input_batch import SingleInputBatch
     from .registry_document import RegistrySnapshot
+    from .input_origin import InputProvenance
     from .selected_source import SelectedSource
-    from .thread_identity import TurnId
+    from .thread_identity import ThreadIncarnation, TurnId
     from .turn_lease import TurnLeaseFence
 
 
@@ -46,13 +49,13 @@ class FutureInputQueue(ABC):
             incarnation=owner.incarnation,
             owner=owner.process_identity,
             turn=TurnId(owner.active_turn.id),
-            pending_input_key=source.pending_input_key,
+            pending_input_keys=source.pending_input_keys,
         ).require_valid()
-        return replace(inputs, rows=inputs.compaction_rows(owner, source.pending_input_key, self))
+        return replace(inputs, rows=inputs.compaction_rows(owner, source.pending_input_keys, self))
 
     @abstractmethod
     def future_inputs(
-        self, owner: Thread, pending_input_key: str | None
+        self, owner: Thread, pending_input_keys: tuple[str, ...]
     ) -> dict[str, InputAttempt]: ...
 
 
@@ -68,42 +71,92 @@ class InputDocument:
     def lookup(self, key: str | None) -> InputAttempt:
         return self.rows.get(key, MissingInput())
 
+    def record(self, *originals: ReservedInput) -> InputDocument:
+        """An existing original cannot be replaced by another reservation."""
+        additions = {}
+        for row in originals:
+            if row.key not in self.rows:
+                additions.setdefault(row.key, row)
+        return replace(self, rows={**self.rows, **additions}) if additions else self
+
+    def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:
+        """Capture ordered originals from their sole durable declaration owner."""
+        if len(set(keys)) != len(keys):
+            raise ValueError("Original input membership contains duplicate keys")
+        try:
+            return tuple(self.rows[key] for key in keys)
+        except KeyError as error:
+            raise ValueError("Original input receipt is unavailable") from error
+
+    def original_provenances(self, keys: tuple[str, ...]) -> tuple[InputProvenance, ...]:
+        """Source proofs reference originals without copying mutable disposition data."""
+        return tuple(row.context_provenance() for row in self.originals(keys))
+
+    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+        """Original members decide retirement; bound/started evidence stays intact."""
+        successors = {
+            key: successor
+            for key in keys
+            if (successor := self.lookup(key).finish_unbound()) is not None
+        }
+        return replace(self, rows={**self.rows, **successors}) if successors else self
+
+    def require_compaction_ready(
+        self, owner: ThreadIncarnation, pending_input_keys: tuple[str, ...]
+    ) -> None:
+        """Original input members own custody; notices never decide source admission.
+
+        A live future queue may select a view before this check. Neither an old
+        admission nor naming an uncertain native binding makes it settled.
+        """
+        if any(row.matches_owner(owner) and row.unsettled_for(pending_input_keys)
+               for row in self.rows.values()):
+            raise RelationViolationError("Unsettled owner input; compaction not dispatched")
+
     def compaction_rows(
-        self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None = None
+        self, owner: Thread, pending_input_keys: tuple[str, ...], queue: FutureInputQueue | None = None
     ) -> dict[str, StoredInput]:
         """Caller holds wire; native CAS additionally retains document lock."""
         assert owner.active_turn is not None
-        pending = self.lookup(pending_input_key)
-        if pending_input_key is not None and not pending.pending_for(owner):
+        if len(set(pending_input_keys)) != len(pending_input_keys) or any(
+            not self.lookup(key).pending_for(owner) for key in pending_input_keys
+        ):
             raise RelationViolationError("Original owner input already attempted")
-        future = queue.future_inputs(owner, pending_input_key) if queue is not None else {}
+        future = queue.future_inputs(owner, pending_input_keys) if queue is not None else {}
         if any(self.lookup(key) != receipt for key, receipt in future.items()):
             raise RelationViolationError("Queued owner input changed after acceptance")
         relevant = {}
         for key, row in self.rows.items():
             if not row.matches_owner(owner.incarnation):
                 continue
-            if key != pending_input_key and key in future and row.pending_for(owner):
+            if key not in pending_input_keys and key in future and row.pending_for(owner):
                 continue
-            if row.unsettled_for(owner, pending_input_key):
-                raise RelationViolationError("Unsettled owner input; compaction not dispatched")
             relevant[key] = row
+        replace(self, rows=relevant).require_compaction_ready(owner.incarnation, pending_input_keys)
         return relevant
 
-    def source_texts(self, keys: tuple[str, ...]) -> tuple[str, ...] | None:
-        if any(key not in self.rows for key in keys):
-            return None
-        return tuple(self.rows[key].source_text for key in keys)
-
-    def compaction_material(self, owner: Thread, pending_input_key: str | None,
+    def compaction_material(self, owner: Thread, pending_input_keys: tuple[str, ...],
                             queue: FutureInputQueue | None):
         """Project exactly the input source selected by existing queue custody.
 
         Unadmitted future inputs remain in their original durable queue; they
         cannot become the source of an earlier native checkpoint.
         """
-        rows = self.compaction_rows(owner, pending_input_key, queue)
-        return rows, tuple(row.origin.retained_fact(row) for row in rows.values())
+        rows = self.compaction_rows(owner, pending_input_keys, queue)
+        return rows, self.retained_task_facts(tuple(rows))
+
+    def retained_task_facts(self, keys: tuple[str, ...]):
+        """The original input origin owns fact membership and provenance."""
+        return tuple(row.origin.retained_fact(row) for row in self.originals(keys))
+
+    def owner_originals(self, owner: Thread) -> tuple[str, ...]:
+        """Observe durable membership without selecting a compaction queue.
+
+        Reserved and UNKNOWN rows keep their exact recorded disposition. Only
+        compaction_rows, with the live queue's custody, can admit a source cut.
+        """
+        return tuple(key for key, row in self.rows.items()
+                     if row.matches_owner(owner.incarnation))
 
     def started_for_native(
         self, lease: TurnLeaseFence, native_id: str, sent_text: str,
@@ -187,31 +240,41 @@ class InputDispositions(LockedStore[InputDocument]):
 
     def record(
         self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
-        origin: InputOrigin = UnattributedInputOrigin(),
+        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
     ) -> bool:
-        """Return acceptance only after the reservation and directory are fsynced."""
+        """Enlist supplied reservation custody before publishing acceptance."""
         row = ReservedInput(key, seq, owner, admission, target, text,
                             origin=origin)
-        recorded = False
+        document = self.record_originals(row, custody=custody)
+        return document.rows[key] is row
 
-        def change(document: InputDocument) -> InputDocument:
-            nonlocal recorded
-            if key in document.rows:
-                return document
-            recorded = True
-            return replace(document, rows={**document.rows, key: row})
+    def record_originals(
+        self, *originals: ReservedInput, custody: ExitStack | None = None,
+    ) -> InputDocument:
+        """Publish one original cohort; return its exact captured document."""
+        def reserve(original: InputDocument) -> InputDocument:
+            changed = original.record(*originals)
+            if changed is not original and custody is not None:
+                custody.callback(
+                    self.settle_unbound,
+                    tuple(key for key in changed.rows if key not in original.rows),
+                )
+            return changed
 
-        self.update(change)
-        return recorded
+        return self.update(reserve)
 
-    def reserve_turn(self, owner: str, turn: TurnId, admission: int, text: str) -> str:
-        """Reserve one original with no external ingress in the existing input store."""
-        key = f"turn:{turn.value}"
-        if not self.record(
-            key, seq=None, owner=owner, admission=admission, target=owner, text=text
-        ):
+    def reserve_turn(
+        self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
+    ) -> SingleInputBatch:
+        """Enlist rollback before publication; caller retains the original wire scope."""
+        from .channel_input_batch import SingleInputBatch
+
+        row = ReservedInput(f"turn:{turn.value}", None, owner, admission, owner, text)
+
+        document = self.record_originals(row, custody=custody)
+        if document.rows[row.key] is not row:
             raise RelationViolationError("Original turn input was already reserved")
-        return key
+        return SingleInputBatch(document.originals((row.key,)))
 
     def _transition(self, key: str, change) -> bool:
         changed = False
@@ -228,34 +291,39 @@ class InputDispositions(LockedStore[InputDocument]):
         return changed
 
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
-        return self._transition(
-            key,
-            lambda row: row.bind(
-                admission=admission, turn_id=turn_id, native_id=native_id, text=text
-            ),
+        return self.bind_originals(
+            (key,), admission=admission, turn_id=turn_id, native_id=native_id, text=text
         )
+
+    def bind_originals(
+        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str
+    ) -> bool:
+        """Bind the complete captured original atomically; no partial batch grant."""
+        bound = False
+
+        def change(document: InputDocument) -> InputDocument:
+            nonlocal bound
+            if not keys or len(set(keys)) != len(keys):
+                return document
+            successors = tuple(document.lookup(key).bind(
+                admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            ) for key in keys)
+            if any(row is None for row in successors):
+                return document
+            bound = True
+            return replace(document, rows={**document.rows, **dict(zip(keys, successors, strict=True))})
+
+        self.update(change)
+        return bound
 
     def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
         return self._transition(
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
 
-    def settle_unbound(self, keys: tuple[str, ...]) -> bool:
-        """Terminal caller holds wire; settle one complete batch atomically."""
-        changed = False
-
-        def settle(document: InputDocument) -> InputDocument:
-            nonlocal changed
-            rows = dict(document.rows)
-            for key in keys:
-                next_row = document.lookup(key).finish_unbound()
-                if next_row is not None:
-                    changed = True
-                    rows[key] = next_row
-            return replace(document, rows=rows) if changed else document
-
-        self.update(settle)
-        return changed
+    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+        """Publish one complete retirement and return that exact document cut."""
+        return self.update(lambda document: document.settle_unbound(keys))
 
     def review_for_goal(
         self,

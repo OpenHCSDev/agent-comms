@@ -1,0 +1,25 @@
+{
+  "complete": false,
+  "public_inputs": 0,
+  "input_replays": 0,
+  "installed_UI": false,
+  "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "source_bytes": 42924939,
+  "original_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+  "fork_bytes": 42924903,
+  "error": {
+    "type": "SelectedChildUnknown",
+    "detail": "Selected summary failed: Summary provider exceeded the native plan output token budget (retained 5534, reasoning 0, total 5534, budget 4096) (outcome uncertain; input not retried)"
+  },
+  "elapsed_seconds": 226.7651876520249,
+  "original_source_unchanged": true,
+  "native_children_closed": true,
+  "source_head": "42c8749c",
+  "peer_published_during_summary": true,
+  "native_commit_operations": 0,
+  "attempt_operation_id": "5cbb208ef97b4fcaa081cbd0a6f31d75",
+  "attempt_state": "unknown",
+  "distinct_input_issued": false
+}

@@ -1,0 +1,457 @@
+{
+  "complete": true,
+  "public_inputs": 0,
+  "replays": 0,
+  "scope": "Configured SDK-fork/native/stdio ACP/channel/peer handling; no physical UI or controlled speed comparison",
+  "source": "8cafad04",
+  "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "native_manifest": "915c78ab702bd8ea66500e64ee64d1d623e3e6ee0702831166e6b6be3788391b",
+  "sdk": "0.12.1",
+  "owners": [
+    {
+      "original": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper",
+            "created_at": 1790708584.4423254
+          },
+          "generation": 2597
+        },
+        "process": {
+          "pid": 3031150,
+          "start_time": 48918685
+        },
+        "admission_generation": 2561
+      },
+      "name": "openhcs-helper",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "off",
+      "cwd": "/home/ts/code/projects/openhcs",
+      "source": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl",
+      "source_bytes": 43202698,
+      "fork": {
+        "kind": "native_fork_creation",
+        "sessionId": "01a100ed-1eb2-73f9-90e9-330a453c2b61",
+        "sessionFile": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-42-321Z_01a100ed-1eb2-73f9-90e9-330a453c2b61.jsonl",
+        "source": {
+          "sessionId": "01a0ee8c-8c10-77cc-a306-2f47d15ba7d0",
+          "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl"
+        },
+        "sourceRevision": "2084:7887398:43202698:1791005249643474858:1791005249643474858",
+        "revision": "2084:6335216:43202698:1791016902930659212:1791016902930659212",
+        "prefixDigest": {
+          "value": "aea748f2cee3a9f09295db167be3041ddeae8215aee68f33421b7ab199a7a88c"
+        },
+        "entryCount": 9872
+      },
+      "configuration": {
+        "HOME": "/home/ts",
+        "PATH": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/bin:/home/ts/.codex/packages/standalone/releases/0.160.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0y8TENx:/home/ts/.codex/tmp/arg0/codex-arg0pAOacb:/home/ts/.codex/packages/standalone/releases/0.159.3-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0eJeJBJ:/home/ts/.codex/packages/standalone/releases/0.159.2-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0niXI4c:/home/ts/.codex/packages/standalone/releases/0.159.1-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg004m4pr:/home/ts/.codex/packages/standalone/releases/0.159.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0ChXg03:/home/ts/.codex/packages/standalone/releases/0.158.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0a3jKy1:/home/ts/.codex/packages/standalone/releases/0.157.1-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0fLf3ul:/usr/lib/openai-codex/codex-path:/home/ts/.pyenv/bin:/home/ts/bin:/usr/local/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/home/ts/.pyenv/bin:/home/ts/bin:/usr/local/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/build-tools/30.0.3:/opt/cuda/bin:/home/ts/.local/share/flatpak/exports/bin:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/.dotfiles/revsl.sh:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/.dotfiles/revsl.sh:/opt/android-sdk/emulator:/opt/android-ndk",
+        "VIRTUAL_ENV": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002",
+        "XDG_CONFIG_HOME": "/home/ts/.config",
+        "AGENT_COMMS_ROOT": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": "e206f3766e60451a989ca34df0e2a94b",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea/node_modules/@earendil-works/pi-coding-agent",
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": "/home/ts/.pi/agent",
+        "PI_CODING_AGENT_DIR": "/home/ts/.pi/agent"
+      },
+      "private_process": {
+        "pid": 3253540,
+        "start_time": 49256130
+      }
+    },
+    {
+      "original": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper2",
+            "created_at": 1790713653.7134795
+          },
+          "generation": 2598
+        },
+        "process": {
+          "pid": 3031151,
+          "start_time": 48918829
+        },
+        "admission_generation": 2562
+      },
+      "name": "openhcs-helper2",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "cwd": "/home/ts/code/projects/openhcs",
+      "source": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl",
+      "source_bytes": 43192604,
+      "fork": {
+        "kind": "native_fork_creation",
+        "sessionId": "01a100ed-3b50-712c-b1c2-d2067b47d22c",
+        "sessionFile": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-49-647Z_01a100ed-3b50-712c-b1c2-d2067b47d22c.jsonl",
+        "source": {
+          "sessionId": "01a0eed9-e545-72c7-a2fa-d3870585abee",
+          "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl"
+        },
+        "sourceRevision": "2084:7888084:43192604:1790991939572883559:1790991939572883559",
+        "revision": "2084:6335220:43192604:1791016910292801414:1791016910292801414",
+        "prefixDigest": {
+          "value": "6108dca7f1b5e14a52146ee47212b1a296380f96cbaf2dd6f621a87810d58241"
+        },
+        "entryCount": 9861
+      },
+      "configuration": {
+        "HOME": "/home/ts",
+        "PATH": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/bin:/home/ts/.codex/packages/standalone/releases/0.160.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0y8TENx:/home/ts/.codex/tmp/arg0/codex-arg0pAOacb:/home/ts/.codex/packages/standalone/releases/0.159.3-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0eJeJBJ:/home/ts/.codex/packages/standalone/releases/0.159.2-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0niXI4c:/home/ts/.codex/packages/standalone/releases/0.159.1-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg004m4pr:/home/ts/.codex/packages/standalone/releases/0.159.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0ChXg03:/home/ts/.codex/packages/standalone/releases/0.158.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0a3jKy1:/home/ts/.codex/packages/standalone/releases/0.157.1-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0fLf3ul:/usr/lib/openai-codex/codex-path:/home/ts/.pyenv/bin:/home/ts/bin:/usr/local/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/home/ts/.pyenv/bin:/home/ts/bin:/usr/local/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/build-tools/30.0.3:/opt/cuda/bin:/home/ts/.local/share/flatpak/exports/bin:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/.dotfiles/revsl.sh:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/.dotfiles/revsl.sh:/opt/android-sdk/emulator:/opt/android-ndk",
+        "VIRTUAL_ENV": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002",
+        "XDG_CONFIG_HOME": "/home/ts/.config",
+        "AGENT_COMMS_ROOT": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": "e206f3766e60451a989ca34df0e2a94b",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea/node_modules/@earendil-works/pi-coding-agent",
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": "/home/ts/.pi/agent",
+        "PI_CODING_AGENT_DIR": "/home/ts/.pi/agent"
+      },
+      "private_process": {
+        "pid": 3253541,
+        "start_time": 49256203
+      }
+    },
+    {
+      "original": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-pr159-viewer-bind-owner",
+            "created_at": 1790657026.7285714
+          },
+          "generation": 2595
+        },
+        "process": {
+          "pid": 3031109,
+          "start_time": 48918386
+        },
+        "admission_generation": 2559
+      },
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "cwd": "/home/ts/.agent-comms",
+      "source": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl",
+      "source_bytes": 42656950,
+      "fork": {
+        "kind": "native_fork_creation",
+        "sessionId": "01a100ed-5819-7658-9907-9299877e9a41",
+        "sessionFile": "/home/ts/.cache/agent-scratch/private-unix-address576-configured-channel-20261003/source-owner-admission-at-a-valid-persistent-directory-without-kernel-path-length-assumptions/forks/2026-10-03T08-41-57-017Z_01a100ed-5819-7658-9907-9299877e9a41.jsonl",
+        "source": {
+          "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+          "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl"
+        },
+        "sourceRevision": "2084:7911772:42656950:1790991924612589759:1790991924612589759",
+        "revision": "2084:6335221:42656924:1791016917692944353:1791016917692944353",
+        "prefixDigest": {
+          "value": "387f0c1e58ab74eb9e89aa617be758ee25cd6ab02f7cce401b32d0df94767494"
+        },
+        "entryCount": 9778
+      },
+      "configuration": {
+        "HOME": "/home/ts",
+        "PATH": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/bin:/home/ts/.codex/packages/standalone/releases/0.160.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0y8TENx:/home/ts/.codex/tmp/arg0/codex-arg0pAOacb:/home/ts/.codex/packages/standalone/releases/0.159.3-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0eJeJBJ:/home/ts/.codex/packages/standalone/releases/0.159.2-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0niXI4c:/home/ts/.codex/packages/standalone/releases/0.159.1-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg004m4pr:/home/ts/.codex/packages/standalone/releases/0.159.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0ChXg03:/home/ts/.codex/packages/standalone/releases/0.158.0-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0a3jKy1:/home/ts/.codex/packages/standalone/releases/0.157.1-x86_64-unknown-linux-musl/codex-path:/home/ts/.codex/tmp/arg0/codex-arg0fLf3ul:/usr/lib/openai-codex/codex-path:/home/ts/.pyenv/bin:/home/ts/bin:/usr/local/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/home/ts/.pyenv/bin:/home/ts/bin:/usr/local/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/home/ts/.elan/bin:/home/ts/programs/Brayns/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/build-tools/30.0.3:/opt/cuda/bin:/home/ts/.local/share/flatpak/exports/bin:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/.dotfiles/revsl.sh:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/code/scripts/bar:/home/ts/.local/bin:/root/.local/bin:/home/ts/bin:/usr/local/bin:/home/ts/.dotfiles/revsl.sh:/opt/android-sdk/emulator:/opt/android-ndk",
+        "VIRTUAL_ENV": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002",
+        "XDG_CONFIG_HOME": "/home/ts/.config",
+        "AGENT_COMMS_ROOT": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": "e206f3766e60451a989ca34df0e2a94b",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea/node_modules/@earendil-works/pi-coding-agent",
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": "/home/ts/.pi/agent",
+        "PI_CODING_AGENT_DIR": "/home/ts/.pi/agent"
+      },
+      "private_process": {
+        "pid": 3253559,
+        "start_time": 49256281
+      }
+    }
+  ],
+  "cleanup": [
+    {
+      "identity": {
+        "pid": 3253540,
+        "start_time": 49256130
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3253541,
+        "start_time": 49256203
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3253559,
+        "start_time": 49256281
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3254434,
+        "start_time": 49259211
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3254346,
+        "start_time": 49258724
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3253853,
+        "start_time": 49256814
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3254442,
+        "start_time": 49259250
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3254708,
+        "start_time": 49259645
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3254122,
+        "start_time": 49257936
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3254090,
+        "start_time": 49257684
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3253861,
+        "start_time": 49256826
+      },
+      "alive": false,
+      "group": []
+    },
+    {
+      "identity": {
+        "pid": 3253560,
+        "start_time": 49256283
+      },
+      "alive": false,
+      "group": []
+    }
+  ],
+  "driver": {
+    "pid": 3253154,
+    "start_time": 49253655
+  },
+  "acp_process": {
+    "pid": 3253560,
+    "start_time": 49256283
+  },
+  "message": {
+    "seq": 1,
+    "id": "c8b364a4d67a",
+    "from": "openhcs-helper",
+    "to": "#openhcs",
+    "ts": 1791016925.6054962,
+    "type": "info",
+    "text": "Fresh changed-address private acceptance: please reply once and tersely if you receive this. No tools or edits.",
+    "sender_role": "agent"
+  },
+  "claims": [
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:f93d93ad95d5710a2ff076ff570972741a856e340e9196f985cd8c0823f2d892",
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "recipient_lookup": "713f9fa26ca22c68bd1c4b7c8ccb25a5",
+      "wire_seq": 1,
+      "message_id": "c8b364a4d67a",
+      "audience": "collective",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev1321d7facbca32526698efb6b850ef45fb4edcabbb74676fb38e46c26bb6af04f",
+          "exact_target": "#openhcs"
+        }
+      },
+      "accepted_at_ms": 1791016926511,
+      "updated_at_ms": 1791016949697,
+      "revision": 4,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    },
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:2c8d03f787145e22b37a2d87060266b0a01e0ade42b2747eac052e0d5f1b296f",
+      "recipient": "openhcs-helper2",
+      "recipient_lookup": "d4c7f7a9af3df719781c7d72b70c0223",
+      "wire_seq": 1,
+      "message_id": "c8b364a4d67a",
+      "audience": "collective",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev14f965693fdc8abe34b9d86ee0b222ecc6efcc8acd038566b1d7b3869d1e14427",
+          "exact_target": "#openhcs"
+        }
+      },
+      "accepted_at_ms": 1791016926511,
+      "updated_at_ms": 1791016944853,
+      "revision": 4,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    },
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:0205ba8d6619e176553e471aab1adbedda1b9a2bb942eb8bc53997eea6dd6495",
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "recipient_lookup": "713f9fa26ca22c68bd1c4b7c8ccb25a5",
+      "wire_seq": 2,
+      "message_id": "6842a44e5ff0",
+      "audience": "collective",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "accepted_at_ms": 1791016945639,
+      "updated_at_ms": 1791016962710,
+      "revision": 4,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    },
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:ad20b43de89e73e970ed4ff3923fc4ca98015ba988fefa5a0d8896ec68e95402",
+      "recipient": "openhcs-helper",
+      "recipient_lookup": "731573d1ca89a0dbdfc99519aa4363b1",
+      "wire_seq": 2,
+      "message_id": "6842a44e5ff0",
+      "audience": "collective",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "accepted_at_ms": 1791016945639,
+      "updated_at_ms": 1791016953542,
+      "revision": 4,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    },
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:cca5ab6e1c416a45d6404c9978ac551a992c62741db287600b7e0a45597f5029",
+      "recipient": "openhcs-helper",
+      "recipient_lookup": "731573d1ca89a0dbdfc99519aa4363b1",
+      "wire_seq": 3,
+      "message_id": "5fa6bfe52716",
+      "audience": "collective",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "accepted_at_ms": 1791016950505,
+      "updated_at_ms": 1791016965303,
+      "revision": 4,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    },
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:f1ca123743e0987e0a20c2714d694d1a862f9f729a7dcbaa94a9b2ef1ce72535",
+      "recipient": "openhcs-helper2",
+      "recipient_lookup": "d4c7f7a9af3df719781c7d72b70c0223",
+      "wire_seq": 3,
+      "message_id": "5fa6bfe52716",
+      "audience": "collective",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "accepted_at_ms": 1791016950505,
+      "updated_at_ms": 1791016959832,
+      "revision": 4,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    }
+  ],
+  "history": [
+    {
+      "seq": 1,
+      "id": "c8b364a4d67a",
+      "from": "openhcs-helper",
+      "to": "#openhcs",
+      "ts": 1791016925.6054962,
+      "type": "info",
+      "text": "Fresh changed-address private acceptance: please reply once and tersely if you receive this. No tools or edits.",
+      "sender_role": "agent"
+    },
+    {
+      "seq": 2,
+      "id": "6842a44e5ff0",
+      "from": "openhcs-helper2",
+      "to": "#openhcs",
+      "ts": 1791016944.7770822,
+      "type": "info",
+      "text": "Received the changed-address acceptance check.",
+      "sender_role": "agent"
+    },
+    {
+      "seq": 3,
+      "id": "5fa6bfe52716",
+      "from": "openhcs-pr159-viewer-bind-owner",
+      "to": "#openhcs",
+      "ts": 1791016949.6126797,
+      "type": "info",
+      "text": "Received the changed-address test.",
+      "sender_role": "agent"
+    }
+  ],
+  "reply_delays_seconds": {
+    "openhcs-helper2": 19.17158603668213,
+    "openhcs-pr159-viewer-bind-owner": 24.00718355178833
+  },
+  "acp_updates": 7,
+  "protected": {
+    "before": {
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl": "a5018a200dc8b1e3109e65a986d0955275605cc54caa9e77237cfbeecb70adce",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl.input-proof": "9476497d3935393940dbb01d48f8e8d67e0d5eff0fabbdb2f41d757d52d32e36",
+      "/home/ts/.pi/agent/settings.json": "3ed1351864b5628126d34624e95a031e69cbdda8c546d04cf059c933e8de91c9",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl": "b630ce4c73cd864c6dac5c8f6dd204d5eb23b5af74a6826d2a7c2f686e4ec0de",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl.input-proof": "e6d8f40fc9da2c084b8235958bc342ed58cc4b7c4533117fd3e4b37ab0287240",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl": "24ba1ef2a0ca58712e1405a255683097db72be922e73146c6d4324618d413b62",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl.input-proof": "d2cd9c1d2b349a1b9527543b85ebec22f23e5adf095d84951f8338ff3338d707"
+    },
+    "after": {
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl": "a5018a200dc8b1e3109e65a986d0955275605cc54caa9e77237cfbeecb70adce",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl.input-proof": "9476497d3935393940dbb01d48f8e8d67e0d5eff0fabbdb2f41d757d52d32e36",
+      "/home/ts/.pi/agent/settings.json": "3ed1351864b5628126d34624e95a031e69cbdda8c546d04cf059c933e8de91c9",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl": "b630ce4c73cd864c6dac5c8f6dd204d5eb23b5af74a6826d2a7c2f686e4ec0de",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl.input-proof": "e6d8f40fc9da2c084b8235958bc342ed58cc4b7c4533117fd3e4b37ab0287240",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl": "24ba1ef2a0ca58712e1405a255683097db72be922e73146c6d4324618d413b62",
+      "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl.input-proof": "d2cd9c1d2b349a1b9527543b85ebec22f23e5adf095d84951f8338ff3338d707"
+    }
+  },
+  "original_goals_unchanged": true,
+  "protected_unchanged": true
+}

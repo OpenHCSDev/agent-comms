@@ -1,0 +1,86 @@
+{
+  "revision": "5cf5d0d880678bbcc7fc9591e6bd24397683ab91",
+  "tool": "audit.findings.Package",
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/child_process.py",
+      "name": "ChildCommand",
+      "line": 1420,
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "members": [
+        "argv",
+        "main",
+        "run"
+      ]
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "name": "ControllingTerminalCommand",
+      "line": 1440,
+      "bases": [
+        "ChildCommand"
+      ],
+      "members": [
+        "run"
+      ]
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "name": "NamespaceInitCommand",
+      "line": 1454,
+      "bases": [
+        "ChildCommand"
+      ],
+      "members": [
+        "run"
+      ]
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "name": "WatchDeadlineCommand",
+      "line": 1479,
+      "bases": [
+        "ChildCommand"
+      ],
+      "members": [
+        "run"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1440,
+      "name": "ChildCommand"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1454,
+      "name": "ChildCommand"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1479,
+      "name": "ChildCommand"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 140,
+      "name": "NamespaceInitCommand"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1070,
+      "name": "WatchDeadlineCommand"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1360,
+      "name": "WatchDeadlineCommand"
+    }
+  ],
+  "scope": "Lexical AST references; dynamic report readers and MRO resolution require semantic review"
+}

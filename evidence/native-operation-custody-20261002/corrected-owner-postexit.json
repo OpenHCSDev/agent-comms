@@ -1,0 +1,11 @@
+{
+  "owner_exited": true,
+  "native_exited": true,
+  "source_hashes": {
+    "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl": "c1137f89f1a79704c834bad0f84369cd0fb38d100ee3e6e6924ad2b817f09bae",
+    "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl.input-proof": "b19f73c9f8fcb434e3ba318ba6ce7c3ddc762f9fcf15ac99e9864b192d4eb9b5"
+  },
+  "owner_exit_code": 0,
+  "teardown": "local stdin released after sole physical client cleanup",
+  "source_hashes_unchanged": true
+}

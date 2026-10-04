@@ -1,0 +1,92 @@
+{
+  "source_head": "3fa44f1a",
+  "source_controls": {
+    "passed": 23,
+    "elapsed_seconds": 1.894
+  },
+  "installed_package": ".artifacts/s4-construction-installed-site/agent_comms",
+  "wheel_sha256": "3320880d00cd808b1d40984a1cbb3ffc10e3aaf3eb94eb54c4329a25c903a84c",
+  "installed_source_files_matching": 339,
+  "source_mismatches": [],
+  "original_capture_hash_matches": {
+    "continuation-2-receipt.json": true,
+    "continued-run.private.json": true,
+    "original-measurements.private.json": true,
+    "cut-3-checkpoint.private.json": true,
+    "cut-3-registry.private.json": true,
+    "cut-3-manifest.private.json": true,
+    "cut-3-inputs.private.json": true
+  },
+  "prior_started_input_rows_match": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "completion_metadata": {
+    "cut-1": {
+      "steps": 1,
+      "native_selected_models": [
+        [
+          "openai-codex",
+          "gpt-6.1-sol",
+          "openai-codex-responses"
+        ]
+      ],
+      "returned_model_available": 0,
+      "provider_effort_available": 0
+    },
+    "cut-2": {
+      "steps": 2,
+      "native_selected_models": [
+        [
+          "openai-codex",
+          "gpt-6.1-sol",
+          "openai-codex-responses"
+        ]
+      ],
+      "returned_model_available": 0,
+      "provider_effort_available": 0
+    },
+    "cut-3": {
+      "steps": 2,
+      "native_selected_models": [
+        [
+          "openai-codex",
+          "gpt-6.1-sol",
+          "openai-codex-responses"
+        ]
+      ],
+      "returned_model_available": 0,
+      "provider_effort_available": 0
+    }
+  },
+  "full_scorer": {
+    "source_head": "3fa44f1a",
+    "command": "PYTHONPATH=.artifacts/s4-construction-installed-site:tests <borrowed runtime563>/bin/python tests/compaction_retention_fixture.py --scenario-file .artifacts/s4-three-cuts-configured01/frozen-oracle.private.json --recorded-run .artifacts/s4-three-cuts-configured01/continued-run.private.json --condition task-memory",
+    "exit_code": 1,
+    "exception": "TypeError",
+    "detail": "NativeSessionIdentity.read() missing 1 required positional argument: 'session_file'",
+    "stack": [
+      "RecordedNativeProbe.construction",
+      "CompactionJournal.observe_readonly",
+      "NativeForkCreation.one",
+      "TypedTable.select",
+      "cls.read(cursor)",
+      "NativeSessionIdentity.read(package, session_file)"
+    ],
+    "runtime_input_writes": 0,
+    "provider_calls": 0,
+    "native_launches": 0,
+    "stdout_report_empty": true
+  },
+  "scope": "Installed original completion decoder qualified; whole recorded construction scorer blocked by known startup/SQL inherited method collision, Mendel569 owns correction",
+  "provider_calls": 0,
+  "native_launches": 0,
+  "public_mutations": 0,
+  "new_environment": false,
+  "unqualified": [
+    "condition-specific intervention/construction",
+    "complete full-context eligibility/capacity",
+    "HTTP dispatch/model/effort receipts",
+    "matched study"
+  ]
+}

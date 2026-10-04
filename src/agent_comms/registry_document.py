@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
+from .registration_change import InitialRegistration, NativeSourcePublication, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
 from .restart_refusals import (
     OwnerBusyRefusal,
@@ -26,12 +27,43 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .registry_provenance import RegistryProvenance
-from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence
+from .registry_provenance import RegistryNames, RegistryProvenance
+from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_phase import TurnPhase
+
+if TYPE_CHECKING:
+    from .native_input_owner import RegistryOwner
+
+
+class RegistryPresence(RegistryNames[Thread]):
+    """Presence reads shared by the acquired document and its detached cut."""
+
+    __slots__ = ()
+
+    statuses: Mapping[str, ThreadStatus]
+    last_seen: Mapping[str, float]
+
+    def status(self, name: str) -> ThreadStatus:
+        canonical = self.canonical_name(name)
+        try:
+            return self.statuses[canonical]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+
+    def require_active(self, name: str) -> Thread:
+        try:
+            thread = self.require(name)
+            self.status(thread.name).require_active()
+        except UnregisteredThreadError as error:
+            raise RelationViolationError("live owner is stopped or unavailable") from error
+        return thread
+
+    def seen_at(self, name: str) -> float:
+        return self.last_seen[self.require(name).name]
 
 
 @dataclass(slots=True)
-class RegistryDocument:
+class RegistryDocument(RegistryPresence):
     threads: dict[str, Thread] = field(default_factory=dict)
     statuses: dict[str, ThreadStatus] = field(default_factory=dict)
     last_seen: dict[str, float] = field(default_factory=dict)
@@ -93,7 +125,7 @@ class RegistryDocument:
         return name
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
-        canonical = self.aliases.get(thread.name, thread.name)
+        canonical = self.canonical_name(thread.name)
         requested = thread.for_registration(canonical, self.threads.get(canonical))
         change = self.prepare_registration(requested, status, new_owner=False)
         return change.declared(requested)
@@ -163,7 +195,7 @@ class RegistryDocument:
         for thread in additions:
             self.threads[thread.name] = thread
             self.statuses[thread.name] = source.statuses[thread.name].restored()
-            self.last_seen[thread.name] = source.last_seen.get(thread.name, 0.0)
+            self.last_seen[thread.name] = source.seen_at(thread.name)
             self.admissions.advance(thread.name)
             self.owners.advance(thread.name)
         if additions or aliases:
@@ -172,7 +204,7 @@ class RegistryDocument:
 
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
         """Rename one running thread while retaining old names as aliases."""
-        canonical = self.aliases.get(name, name)
+        canonical = self.canonical_name(name)
         if canonical not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if new_name == canonical:
@@ -225,7 +257,7 @@ class RegistryDocument:
         return self.admissions.generations[expected.name]
 
     def unregister(self, name: str) -> None:
-        name = self.aliases.get(name, name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
@@ -235,7 +267,7 @@ class RegistryDocument:
         self.admissions.advance(name)
 
     def archive(self, name: str) -> None:
-        name = self.aliases.get(name, name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
@@ -243,8 +275,26 @@ class RegistryDocument:
         self.statuses[name] = ArchivedThreadStatus()
         self.admissions.advance(name)
 
+    def require_originals(self, originals: Sequence[Thread]) -> None:
+        for original in originals:
+            if not original.incarnation.current(self):
+                raise RelationViolationError("Tagged thread incarnation changed before removal.")
+
+    def archive_originals(self, originals: Sequence[Thread]) -> None:
+        self.require_originals(originals)
+        for original in originals:
+            self.status(original.name).require_stopped()
+            self.archive(original.name)
+
+    def delete_originals(self, originals: Sequence[Thread]) -> None:
+        self.require_originals(originals)
+        for original in originals:
+            self.begin_delete(original.name)
+        for original in originals:
+            self.remove(original.name)
+
     def begin_delete(self, name: str) -> None:
-        name = self.aliases.get(name, name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         self.statuses[name] = self.statuses[name].for_deletion()
@@ -252,7 +302,7 @@ class RegistryDocument:
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        name = self.aliases.get(name, name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         detached = tuple(
@@ -270,7 +320,7 @@ class RegistryDocument:
         return detached
 
     def heartbeat(self, name: str) -> None:
-        name = self.aliases.get(name, name)
+        name = self.canonical_name(name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         previous = self.statuses[name]
@@ -306,7 +356,7 @@ class RegistryDocument:
 
     def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
         """Release only this exact lease; a revoked admission cannot attest completion."""
-        name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
+        name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None:
             return False, None
@@ -330,18 +380,39 @@ class RegistryDocument:
             admission_generation=lease.admission_generation,
         )
 
-    def transition_turn(self, lease: TurnLeaseFence, phase) -> bool:
-        """Only the existing exact lease can publish its observed phase."""
-        name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
+    def _turn_effects(
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
+    ) -> tuple[TurnState, ...]:
+        """Capture publication effects from the exact fenced document mutation."""
+        name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None or current.turn_lease != lease.renamed(name):
-            return False
-        self.threads[name] = replace(current, active_turn=replace(current.active_turn, phase=phase))
-        return True
+            return ()
+        effects = tuple(observe(current.turn_state))
+        for state in effects:
+            self.threads[name] = replace(current, active_turn=state.active)
+        return effects
+
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        return self._turn_effects(lease, lambda state: state.phase_effects(phase))
+
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
+
+    def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
+        """Publish only the source fact of an already admitted original owner."""
+        snapshot = self.snapshot()
+        original.require_snapshot(snapshot, "Native source owner changed before publication")
+        current = snapshot.require_active(original.thread.name)
+        return NativeSourcePublication(
+            thread=replace(current, session_file=session_file),
+            status=snapshot.statuses[current.name],
+            previous=current, previous_status=snapshot.statuses[current.name],
+        )
 
 
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(RegistryProvenance):
+class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
     last_seen: Mapping[str, float]
@@ -362,30 +433,21 @@ class RegistrySnapshot(RegistryProvenance):
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
 
-    def require_active(self, name: str) -> Thread:
-        canonical = self.aliases.get(name, name)
-        try:
-            thread = self.threads[canonical]
-            self.statuses[canonical].require_active()
-        except KeyError as error:
-            raise RelationViolationError("live owner is stopped or unavailable") from error
-        return thread
-
     def require_unambiguous_ownership(self) -> None:
         """Archived identities remain readable; publication requires unique owners."""
         if len({thread.created_at for thread in self.threads.values()}) != len(self.threads):
             raise RelationViolationError("Registry creation identities collide.")
 
     def owner_identity(self, name: str) -> OwnerIdentity:
-        canonical = self.aliases.get(name, name)
+        canonical = self.canonical_name(name)
         return OwnerIdentity(self.threads[canonical].incarnation, self.owner_generations[canonical])
 
     def admission_identity(self, name: str) -> AdmissionIdentity:
-        canonical = self.aliases.get(name, name)
+        canonical = self.canonical_name(name)
         return AdmissionIdentity(self.threads[canonical].incarnation, self.admission_generations[canonical])
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
-        canonical = self.aliases.get(name, name)
+        canonical = self.canonical_name(name)
         thread = self.threads[canonical]
         return thread.execution.owner_binding(self, thread)
 

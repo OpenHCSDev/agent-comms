@@ -1,0 +1,628 @@
+{
+  "parsed_modules": 663,
+  "roots": [
+    "src/agent_comms",
+    "stack",
+    "tools/cutover",
+    "experiments/pi-context-proof"
+  ],
+  "parser": "Existing refactor-audit Package.load/ParsedModule AST",
+  "sites": [
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 177,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 320,
+      "kind": "Call",
+      "source": "os.unlink(temporary, dir_fd=directory)"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 341,
+      "kind": "Call",
+      "source": "os.unlink(temporary, dir_fd=directory)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 306,
+      "kind": "Compare",
+      "source": "actual.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 324,
+      "kind": "Compare",
+      "source": "held_file.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 246,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 253,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 129,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 153,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 55,
+      "kind": "Compare",
+      "source": "initial.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 60,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication_lease.py",
+      "line": 31,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 83,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 8,
+      "kind": "import",
+      "source": "from .native_package import verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "line": 34,
+      "kind": "Call",
+      "source": "verify_native_package(self.package)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 108,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/coordination_database.py",
+      "line": 111,
+      "kind": "Call",
+      "source": "os.unlink(staging)"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 79,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 444,
+      "kind": "Call",
+      "source": "temporary_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 109,
+      "kind": "Compare",
+      "source": "check.observed.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 515,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 151,
+      "kind": "Call",
+      "source": "backup.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 170,
+      "kind": "Call",
+      "source": "staged.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 172,
+      "kind": "Call",
+      "source": "backup.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 163,
+      "kind": "Call",
+      "source": "self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 134,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 18,
+      "kind": "import",
+      "source": "from .native_package import COMPACTION_HELPER, verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 49,
+      "kind": "Call",
+      "source": "verify_native_package(self.package_dir)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 25,
+      "kind": "declaration",
+      "source": "class NativePackageError(ValueError):"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 44,
+      "kind": "declaration",
+      "source": "def package_tree_digest(root: Path) -> str:"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 116,
+      "kind": "declaration",
+      "source": "def verify_native_package(root: Path) -> None:"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 36,
+      "kind": "Call",
+      "source": "NativePackageError('Installed native package resources are unavailable')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 125,
+      "kind": "Compare",
+      "source": "package_tree_digest(root) != pins[0]"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 47,
+      "kind": "Call",
+      "source": "NativePackageError('Native package filesystem verification requires POSIX')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 124,
+      "kind": "Call",
+      "source": "NativePackageError('Pinned native package tree commitment unavailable')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 125,
+      "kind": "Call",
+      "source": "package_tree_digest(root)"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 126,
+      "kind": "Call",
+      "source": "NativePackageError('Native package tree differs from pinned artifact')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 131,
+      "kind": "Call",
+      "source": "print(package_tree_digest(Path(sys.argv[2])))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 66,
+      "kind": "Call",
+      "source": "NativePackageError('Native package inventory limit exceeded')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 69,
+      "kind": "Call",
+      "source": "NativePackageError('Native package is not owner-controlled')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 107,
+      "kind": "Call",
+      "source": "NativePackageError('Native package changed during verification')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 112,
+      "kind": "Call",
+      "source": "NativePackageError('Native package could not be verified')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 120,
+      "kind": "Call",
+      "source": "MANIFEST.read_text().splitlines()"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 131,
+      "kind": "Call",
+      "source": "package_tree_digest(Path(sys.argv[2]))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 133,
+      "kind": "Call",
+      "source": "verify_native_package(Path(sys.argv[1]))"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 82,
+      "kind": "Compare",
+      "source": "before.st_nlink == 1"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 105,
+      "kind": "Call",
+      "source": "NativePackageError('Native package contains links or special files')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 85,
+      "kind": "Call",
+      "source": "NativePackageError('Native package byte limit exceeded')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 120,
+      "kind": "Call",
+      "source": "MANIFEST.read_text()"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 78,
+      "kind": "Call",
+      "source": "NativePackageError('Native package inventory limit exceeded')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 90,
+      "kind": "Call",
+      "source": "NativePackageError('Native package changed while opening')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 99,
+      "kind": "Call",
+      "source": "NativePackageError('Native package changed while hashing')"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 95,
+      "kind": "Call",
+      "source": "NativePackageError('Native package truncated while hashing')"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 24,
+      "kind": "import",
+      "source": "from .native_package import OWNER_INSTRUCTIONS"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 760,
+      "kind": "import",
+      "source": "from .native_package import NativePackageError, verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 444,
+      "kind": "import",
+      "source": "from .native_package import MANIFEST"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 763,
+      "kind": "Call",
+      "source": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 244,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Call",
+      "source": "hashlib.sha256(MANIFEST.read_bytes()).hexdigest()"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Call",
+      "source": "hashlib.sha256(MANIFEST.read_bytes())"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 455,
+      "kind": "Call",
+      "source": "MANIFEST.read_bytes()"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 11,
+      "kind": "import",
+      "source": "from .native_package import verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 54,
+      "kind": "Call",
+      "source": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 82,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 21,
+      "kind": "import",
+      "source": "from .native_package import verify_native_package"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 168,
+      "kind": "Call",
+      "source": "verify_native_package(package)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 175,
+      "kind": "Compare",
+      "source": "before.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 50,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 144,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 49,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 304,
+      "kind": "Call",
+      "source": "os.unlink(intent, dir_fd=directory.fd)"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 250,
+      "kind": "Call",
+      "source": "self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 419,
+      "kind": "Call",
+      "source": "self.path.unlink()"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 150,
+      "kind": "Call",
+      "source": "temporary.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "line": 273,
+      "kind": "Call",
+      "source": "self.path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 464,
+      "kind": "Call",
+      "source": "self.path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 161,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 187,
+      "kind": "Call",
+      "source": "temporary_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 423,
+      "kind": "Call",
+      "source": "intent.unlink()"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 158,
+      "kind": "Call",
+      "source": "session_path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 152,
+      "kind": "Call",
+      "source": "self._index_path.with_name(self._index_path.name + suffix).unlink(missing_ok=True)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 628,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "stack/test-native-import-rpc.py",
+      "line": 79,
+      "kind": "Call",
+      "source": "marker.unlink()"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 89,
+      "kind": "Call",
+      "source": "(root / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 91,
+      "kind": "Call",
+      "source": "path.unlink()"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 157,
+      "kind": "Call",
+      "source": "path.unlink()"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 27,
+      "kind": "import",
+      "source": "from agent_comms.native_package import verify_native_package"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 86,
+      "kind": "Call",
+      "source": "verify_native_package(NATIVE)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 25,
+      "kind": "import",
+      "source": "from agent_comms.native_package import verify_native_package"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 226,
+      "kind": "Call",
+      "source": "verify_native_package(self.native)"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 16,
+      "kind": "import",
+      "source": "from agent_comms.native_package import verify_native_package"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 45,
+      "kind": "Call",
+      "source": "verify_native_package(self.native_package)"
+    },
+    {
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "(service.root / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 38,
+      "kind": "Call",
+      "source": "(service.root / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 39,
+      "kind": "Compare",
+      "source": "named.st_nlink != 1"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 39,
+      "kind": "Compare",
+      "source": "opened.st_nlink != 1"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 77,
+      "kind": "Call",
+      "source": "path.unlink(missing_ok=True)"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 135,
+      "kind": "Call",
+      "source": "original.path.unlink()"
+    },
+    {
+      "path": "tools/cutover/routing_carry.py",
+      "line": 36,
+      "kind": "Compare",
+      "source": "info.st_nlink != 1"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 64,
+      "kind": "Call",
+      "source": "(copied / 'private_bus_checkpoint.sqlite3').unlink()"
+    },
+    {
+      "path": "Toad:src/toad/acp/maintenance_ingress.py",
+      "line": 153,
+      "kind": "Call",
+      "source": "str(route.native_package)"
+    }
+  ],
+  "dynamic_resolution": "Imported aliases/directcalls are sourceleads; CLI/runpy and JS boundaries read separately, not proven dynamically",
+  "non_python_roots": "Shell and JS are not parsed by this Python parser; explicit boundary source read retained separately",
+  "parsed_root_counts": {
+    "src/agent_comms": 311,
+    "stack": 13,
+    "tools/cutover": 51,
+    "experiments/pi-context-proof": 0,
+    "Toad src/toad": 288
+  },
+  "python_parse_omissions": []
+}

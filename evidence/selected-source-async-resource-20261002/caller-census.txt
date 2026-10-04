@@ -1,0 +1,30 @@
+tools/cutover/seed_thread_retirement_fixture.py:70:        with SelectedParticipant.select(service, store, root_id, owner.name, 0) as participant:
+tools/cutover/native_schema_carry_controls.py:39:        with SelectedParticipant.select(comms,store,root_id,'alpha',0) as participant:
+tools/cutover/native_schema_carry_controls.py:50:        with SelectedParticipant.select(comms,store,root_id,'other001',0) as participant:
+tests/test_acp_private_nk_delivery.py:23:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_acp_private_nk_delivery.py:186:            await _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
+tests/test_acp_private_nk_delivery.py:256:        await _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
+tests/test_cutover_admission.py:7:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_cutover_admission.py:45:                await _accept_visible_deliveries(
+tests/test_cutover_admission.py:64:            await _accept_visible_deliveries(
+tests/test_private_idle_drain.py:23:    accept, cursor = acp._accept_visible_deliveries, acp.NativeSourceCursor.advance
+tests/test_private_idle_drain.py:36:    monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
+tests/test_private_idle_drain.py:171:            await cohort_foreground._accept_visible_deliveries(
+tests/test_private_idle_drain.py:179:        await cohort_foreground._accept_visible_deliveries(
+tests/test_private_idle_drain.py:184:        await cohort_foreground._accept_visible_deliveries(
+tests/test_acp_selected_write_plan.py:27:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_acp_selected_write_plan.py:129:                await _accept_visible_deliveries(
+tests/test_acp_selected_write_plan.py:134:            await _accept_visible_deliveries(
+tests/test_acp_selected_write_plan.py:354:                await _accept_visible_deliveries(
+tests/test_keyed_response_delivery.py:9:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_keyed_response_delivery.py:43:        cursor = await _accept_visible_deliveries(
+tests/test_keyed_response_delivery.py:70:        await _accept_visible_deliveries(
+tests/test_channel_participant_registration.py:6:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_channel_participant_registration.py:33:        cursor = await _accept_visible_deliveries(
+tests/test_channel_participant_registration.py:43:        assert await _accept_visible_deliveries(
+tests/test_selected_source_batch.py:51:        async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
+src/agent_comms/cohort_foreground.py:72:async def _accept_visible_deliveries(
+src/agent_comms/cohort_foreground.py:188:                cursor = await _accept_visible_deliveries(
+src/agent_comms/coordinated_runtime.py:89:            async with SelectedParticipant.select(
+src/agent_comms/acp.py:59:from .cohort_foreground import _accept_visible_deliveries
+src/agent_comms/acp.py:399:            await _accept_visible_deliveries(

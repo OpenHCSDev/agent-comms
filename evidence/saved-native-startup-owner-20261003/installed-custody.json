@@ -1,0 +1,28 @@
+{
+  "head": "fdd4927f276c71dde2d968ee224261165d20fc12",
+  "process_exits": [
+    {
+      "role": "process",
+      "identity": {
+        "pid": 2279262,
+        "start_time": 47871978
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "role": "native_process",
+      "identity": {
+        "pid": 2279445,
+        "start_time": 47872344
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ],
+  "new_inputs": 0,
+  "prompt_dispatched": false,
+  "actual_scope": "Installed native startup + context runtime RPC; no physical UI or provider input. Reused original547 driver raw scope text is historical, not UI acceptance.",
+  "source_bytes": 42116826,
+  "source_and_proof_unchanged": true
+}

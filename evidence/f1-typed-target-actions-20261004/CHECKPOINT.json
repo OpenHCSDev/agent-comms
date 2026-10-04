@@ -1,0 +1,198 @@
+{
+  "state": "published working source; not Ready pending one changed whole-shutdown installed case",
+  "determining_source": {
+    "core": "99fa19ef56156c7f79f66495f32a5fdcd43103e3",
+    "toad": "70c6e5bda385c3e632f307c7ff1103336d7f181d",
+    "textual": "c1c1ebe5c40499f75dc370c26a7818588114e71d"
+  },
+  "original_qualified_pair": {
+    "core": "62dca2914fbfbcc500714953ce981dda818cfd63",
+    "toad": "89eeada3268de541f47f6eb8f03bb64658090d5e",
+    "textual": "a818dcfd4a4a874af085f705559e134a00b7d189",
+    "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+    "archive_artifacts": [
+      {
+        "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/f1-start-owner-final-wheels/agent_comms-0.1.0-py3-none-any.whl",
+        "sha256": "832293118588d95a7641d42465defe58e23ec936dfdb5a45466bdbcbbf40fccc"
+      },
+      {
+        "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-final-wheels/batrachian_toad-0.6.20-py3-none-any.whl",
+        "sha256": "ab0ecac9ae6b2c85e7fff1dacd11f029d939a26cc4e17d21d30f5ab00c44b9dc"
+      },
+      {
+        "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/text53-filewheel-a818dcfd-20261004/textual-8.2.8-py3-none-any.whl",
+        "sha256": "dfbd8fcbd37221f3c7934a8e7d7cd141bb592b1f0e35e9f034bffafe8e7f2a5a"
+      }
+    ]
+  },
+  "start07": "PASS actual SDK/ACP actor A untouched; no B source0/DM bound B1/sidebar bound B1; later composite protocol-marker fixture refusal preserved",
+  "channel08": "PASS49.304136152s actual headless App native widgets/same-root CLI14checks; deleted catalog UnregisteredThreadError retained; no physical movie or whole native ACP claim",
+  "native_delete09": "callback PASS actual hidden native/current History resource removal/A unchanged; WHOLE App teardown FAILED Window NoMatches; exact owned process retirement required and recorded terminal143",
+  "style22": "original422 floor all927 tracked assets/69 versions/origins/activation/proof restored; WHOLE Sch handback; no future current borrow",
+  "remaining": "one existing native-delete case on normal merged422 lifetime owner INCLUDING entire App shutdown after explicit sequential full-holder return; no repeated Start/channel/mounted-layer/provider/film gate",
+  "normal_F2": "merged actual35b9 source into Core99; independently accepted compaction scope historical, not installed in original F1 controls",
+  "normal_422": "merged actual346331 into Toad70; per-view native release/readmission source closure; raw09 does not prove recorded interleaving causality",
+  "native": "original086 immutable; no new build/copy/public action",
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_packages_changed": false,
+  "ast": [
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "root": "src/agent_comms",
+      "revision": "99fa19ef56156c7f79f66495f32a5fdcd43103e3",
+      "modules": 311,
+      "parse_omissions": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "root": "src/toad",
+      "revision": "70c6e5bda385c3e632f307c7ff1103336d7f181d",
+      "modules": 288,
+      "parse_omissions": []
+    },
+    {
+      "repository": "/home/ts/wt/textual-native-subtree-strips-20261002",
+      "root": "src/textual",
+      "revision": "c1c1ebe5c40499f75dc370c26a7818588114e71d",
+      "modules": 249,
+      "parse_omissions": []
+    }
+  ],
+  "future_file_wheels": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/f1-normal-f2-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "0c74e6a960718ca5c6754f468a8bf425ecbcbdc66c7b89af35d55fde0b886b40",
+      "bytes": 876285,
+      "source_head": "99fa19ef56156c7f79f66495f32a5fdcd43103e3",
+      "tracked_assets": 339,
+      "all_tracked_assets_equal": true,
+      "installed": false
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-normal-422-wheels/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "fe58db08ce638ca18ce4ec6d33c62bfd865d6d3f629103d9f509f66f4dc95af5",
+      "bytes": 2242485,
+      "source_head": "70c6e5bda385c3e632f307c7ff1103336d7f181d",
+      "tracked_assets": 319,
+      "all_tracked_assets_equal": true,
+      "installed": false
+    }
+  ],
+  "originals": [
+    {
+      "path": "installed-source-proof.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/source-proof.json",
+      "sha256": "de6318a55d648bb278d88335ed4a2b27b3758849ee53bc74db4981004f3fce31",
+      "bytes": 8180
+    },
+    {
+      "path": "installed-ownership.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/ownership.json",
+      "sha256": "1499846335f240dae08497ffb9bf353bb08bda363406460ae4fcfb45811842e3",
+      "bytes": 1061
+    },
+    {
+      "path": "installed-source-verify.log",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/verify.log",
+      "sha256": "d7dfffe815a84f0c4b909709a519829ad411b840aaffc0e5ddb4120c9b5a5b39",
+      "bytes": 791
+    },
+    {
+      "path": "start07-receipt.json",
+      "source": "/home/ts/.cache/agent-scratch/f1-channel-actions-installed07/start-connections/receipt.json",
+      "sha256": "cb04a18074b2e5aa0b8f28aba635f792c4202ddfb00e774c0d5e33c97ddb136f",
+      "bytes": 301
+    },
+    {
+      "path": "start07-whole-composite-negative.log",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/journey07.log",
+      "sha256": "b769761a57c8514637798374acbecfc077bbb0137e13d44046e5a959bd56e297",
+      "bytes": 2561
+    },
+    {
+      "path": "channel08-receipt.json",
+      "source": "/home/ts/.cache/agent-scratch/f1-channel-actions-installed08/receipt.json",
+      "sha256": "b6dcd1f7ec9cc3ce41b18e656834a775af93bd6db18c7c12c5b115301199e24f",
+      "bytes": 9962
+    },
+    {
+      "path": "channel08-original.log",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/journey08.log",
+      "sha256": "b7e8818d542bea776cdf1ae11cd00dd966eea750eb1d2065b814b8f96f283afa",
+      "bytes": 9520
+    },
+    {
+      "path": "native-delete09-assertion-receipt.json",
+      "source": "/home/ts/.cache/agent-scratch/f1-native-delete-installed09/native-view-delete/receipt.json",
+      "sha256": "2f13be168b943657da7405a4afeee2acdca0d406d4556411cff670d90e1566df",
+      "bytes": 202
+    },
+    {
+      "path": "native-delete09-whole-shutdown-negative.log",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/journey09.log",
+      "sha256": "6d05daec6e93bed1dec6824efd5c49d9e15780cf66c28d91bf1222554bfdcc85",
+      "bytes": 4909
+    },
+    {
+      "path": "native-delete09-owned-process-retirement.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/failed09-owned-process-retirement.json",
+      "sha256": "2010346bc64acbe70d896d9ca4f00954166406bdf402da5b1537e169ac8d5695",
+      "bytes": 904
+    },
+    {
+      "path": "style22-original-floor-handback.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/style22-original-floor-handback.json",
+      "sha256": "c6f275df600fcab6650476fe331ee63c5f4c978b4015d6d0e1b31cb56de6a9ad",
+      "bytes": 2027
+    },
+    {
+      "path": "accepted07-08-original-cleanup.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-installed03/cleanup.json",
+      "sha256": "382c95212abd69ab0be635c0b1e8b9daaa78b45af9d9af1247e75ec7467dfb82",
+      "bytes": 1384
+    },
+    {
+      "path": "core-source-controls.log",
+      "source": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/f1-channel-source-controls-serial.log",
+      "sha256": "a563efd7bbbd1a4a3619f11600bbc8e51d599ab02db5c009cf4afc7fd1742974",
+      "bytes": 98
+    },
+    {
+      "path": "before-owner-consumers.json",
+      "source": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/f1-owner-consumers.json",
+      "sha256": "2de350815627edb995ff55c80f31a1a9c0c0ded696bfbada8ebac7d621697405",
+      "bytes": 27781
+    },
+    {
+      "path": "before-core-overlay.json",
+      "source": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/f1-before-core.json",
+      "sha256": "1867f5a54c7aaad1ed0200436cc79adec3e8b95f67459714d0930aab0900447e",
+      "bytes": 15372
+    },
+    {
+      "path": "before-toad-overlay.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-before-toad.json",
+      "sha256": "0def1a8f7bb0bb2e696f5900d23a4b3d8d033fe747cb8936eceb53c62703102f",
+      "bytes": 8575
+    },
+    {
+      "path": "qualified-reconnect-toad-overlay.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-start-owner-after-toad.json",
+      "sha256": "447612a9cb045553ebdfc198a9ce08b480dfa0bd35eb8fb1f516edb668cbcc87",
+      "bytes": 7823
+    },
+    {
+      "path": "normal422-after-toad-overlay.json",
+      "source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/f1-normal-422-after-toad.json",
+      "sha256": "66558b86030060ac3502c1e91a9ce9e5b0b13eadac9d20aa01cf2eaa0e0ebf9a",
+      "bytes": 7823
+    },
+    {
+      "path": "normalF2-after-core-overlay.json",
+      "source": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/f1-normal-f2-after-core.json",
+      "sha256": "bc5f4658b7b6a88e94b2d5cb81cb480a46223da4ade54a32a3d56fb552d4fa43",
+      "bytes": 14665
+    }
+  ]
+}

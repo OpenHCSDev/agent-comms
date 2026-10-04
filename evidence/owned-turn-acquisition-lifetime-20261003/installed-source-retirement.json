@@ -1,0 +1,8 @@
+{
+  "source_head": "1b09822cb7f6bac41150217f0ed552d585f697dc",
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "installed": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+  "source_file_count": 311,
+  "files_byte_equal": true,
+  "wheel_sha256": "b6522f006837cacb96abf377e738e4e1e9b23d6f72fde7dc7471e72dd4a30dc5"
+}

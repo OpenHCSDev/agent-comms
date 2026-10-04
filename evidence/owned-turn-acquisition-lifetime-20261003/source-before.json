@@ -1,0 +1,6043 @@
+{
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 464,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 363,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 298,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/activity_checkpoint.py",
+      "line": 48,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 231,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 17,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 35,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 235,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/bus_projection.py",
+      "line": 26,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/bus_source_page.py",
+      "line": 26,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 102,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 181,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 182,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 19,
+      "node": "ClassDef",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 35,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 57,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 64,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 41,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 91,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/checkpoint_seals.py",
+      "line": 116,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 51,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 139,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 373,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 776,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 561,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 152,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 170,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 170,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 69,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 100,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_identity.py",
+      "line": 102,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 26,
+      "node": "FunctionDef",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 186,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 179,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 45,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 59,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 552,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 25,
+      "node": "AsyncFunctionDef",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 47,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 725,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 220,
+      "node": "FunctionDef",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 237,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 210,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 68,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 80,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 92,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 104,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 93,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 385,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 402,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 362,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 288,
+      "node": "FunctionDef",
+      "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 309,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 515,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 28,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 43,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 56,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 73,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 93,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 113,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 128,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 154,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 175,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 216,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 226,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 239,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 258,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 294,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/import_records.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 295,
+      "node": "FunctionDef",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 54,
+      "node": "alias",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 431,
+      "node": "FunctionDef",
+      "name": "bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 543,
+      "node": "AsyncFunctionDef",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 83,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 395,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 396,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 555,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 585,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 87,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 26,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 264,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 274,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 282,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 337,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 316,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 373,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 313,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 66,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 225,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 226,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 35,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 92,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 49,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 108,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 205,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 28,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 111,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 178,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 412,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 620,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 676,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 28,
+      "node": "alias",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 53,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 51,
+      "node": "ClassDef",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 18,
+      "node": "alias",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 44,
+      "node": "alias",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 102,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 148,
+      "node": "FunctionDef",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 192,
+      "node": "FunctionDef",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 244,
+      "node": "FunctionDef",
+      "name": "open_stream"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 324,
+      "node": "FunctionDef",
+      "name": "finish_goals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 327,
+      "node": "AsyncFunctionDef",
+      "name": "close_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 333,
+      "node": "FunctionDef",
+      "name": "continue_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 341,
+      "node": "AsyncFunctionDef",
+      "name": "prepare_native"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 184,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 245,
+      "node": "Attribute",
+      "name": "bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 249,
+      "node": "Attribute",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 273,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 298,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 320,
+      "node": "Attribute",
+      "name": "finish_goals"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 321,
+      "node": "Attribute",
+      "name": "close_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 322,
+      "node": "Attribute",
+      "name": "continue_changed_project"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 132,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 184,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 447,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 448,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 449,
+      "node": "Attribute",
+      "name": "open_stream"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 459,
+      "node": "Attribute",
+      "name": "prepare_native"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 445,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 468,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 476,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 47,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 79,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 191,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 171,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 198,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 198,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 204,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 307,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 53,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 138,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 150,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 146,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 42,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 375,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 386,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 441,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 249,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 176,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 473,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 228,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 200,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 212,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 506,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 291,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 325,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 297,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 470,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 694,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 774,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 783,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 624,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 690,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 779,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 892,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 900,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 896,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 616,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 91,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 106,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 230,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 71,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 119,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 41,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 88,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 179,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 192,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 328,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 370,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 340,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 81,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 108,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 24,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 26,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 559,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "src/agent_comms/response_conversation.py",
+      "line": 22,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 87,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 171,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 172,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 173,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 274,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 23,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 216,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 114,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 117,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 205,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 186,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 22,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 25,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/selected_result.py",
+      "line": 30,
+      "node": "AsyncFunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 92,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 257,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 316,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 176,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 88,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 138,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 376,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 534,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 425,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 81,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 155,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 101,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 124,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 299,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 230,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 269,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 280,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 490,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/thread_provenance.py",
+      "line": 33,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 414,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 235,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 62,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 70,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 416,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 461,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 17,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 259,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 263,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcript_updates.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 297,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 438,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 484,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 260,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 296,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 343,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 484,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 103,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 115,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 116,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 104,
+      "node": "ClassDef",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 9,
+      "node": "alias",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 130,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 164,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 182,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 186,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 109,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 132,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 52,
+      "node": "ClassDef",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 34,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 63,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 180,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 255,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 341,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 408,
+      "node": "FunctionDef",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 437,
+      "node": "AsyncFunctionDef",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 528,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 421,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 432,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 452,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 228,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 507,
+      "node": "Attribute",
+      "name": "finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 530,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 255,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 260,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 115,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 392,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 487,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "line": 38,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 204,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 424,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 74,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 118,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 95,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/maintenance_control_fixture.py",
+      "line": 43,
+      "node": "FunctionDef",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 57,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 52,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 65,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 75,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 59,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 52,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 71,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 77,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 69,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 46,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 93,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 146,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 232,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 250,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 715,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 216,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 253,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 95,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 85,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 26,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 81,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 169,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1143,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1187,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1234,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1286,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1985,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 25,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 253,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 242,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 616,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 261,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 84,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 313,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 31,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 17,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_active_turn.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 227,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 225,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 268,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 306,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 299,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 299,
+      "node": "Attribute",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 14,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 25,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 28,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 34,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "open_stream"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 23,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 53,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_candidate_maintenance.py",
+      "line": 37,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 78,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 143,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 89,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 103,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 106,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 107,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 108,
+      "node": "Attribute",
+      "name": "open_stream"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "prepare_native"
+    },
+    {
+      "path": "tests/test_channel_coding_tools.py",
+      "line": 85,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 7,
+      "node": "alias",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 42,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 43,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 30,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 42,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 39,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 407,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 488,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_child_process.py",
+      "line": 283,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_child_process.py",
+      "line": 295,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 300,
+      "node": "AsyncFunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 304,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 370,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 479,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 811,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_command_families.py",
+      "line": 153,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 174,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 194,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 227,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 249,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 286,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 314,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 335,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 351,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 81,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 100,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 156,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 341,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 49,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 69,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 96,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 150,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 113,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 46,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 400,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 79,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 82,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 140,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 168,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 258,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 317,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 322,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 377,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 382,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 187,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 256,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 325,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 385,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1917,
+      "node": "AsyncFunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1012,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1012,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1921,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 519,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 657,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1042,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1018,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 116,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 122,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 130,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 443,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1477,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1485,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 431,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 434,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 206,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 80,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_delivery.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 29,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 64,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 103,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 121,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 146,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 153,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 196,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 54,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 170,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 175,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 199,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 245,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 90,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 23,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 254,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 614,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 237,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 261,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 266,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 280,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 330,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 354,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 369,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 379,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 401,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 526,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 553,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 608,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 309,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 432,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack.py",
+      "line": 21,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 167,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 367,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 400,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 341,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 350,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 363,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 372,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 383,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 402,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 442,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempt_lifecycle.py",
+      "line": 25,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 145,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 173,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 315,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 350,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 373,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 382,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 386,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 398,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 412,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 435,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 537,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 545,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 154,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 242,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 285,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 305,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 310,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 326,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 342,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 345,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 357,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 393,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 405,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 444,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 455,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 500,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 518,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 525,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 531,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 579,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 581,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 294,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 509,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 532,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 561,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts.py",
+      "line": 589,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts_windows.py",
+      "line": 21,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts_windows.py",
+      "line": 31,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts_windows.py",
+      "line": 28,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_attempts_windows.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 169,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 155,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 52,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_failure_observation.py",
+      "line": 45,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 144,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 31,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 131,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 88,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 187,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 86,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 119,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 224,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 277,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 322,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 21,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_headless_diagnostics.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 161,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 154,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 167,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_historical_page_scope.py",
+      "line": 119,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_historical_views.py",
+      "line": 287,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 11,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 15,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_history_view_declaration.py",
+      "line": 16,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 96,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 313,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 252,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 275,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 86,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 149,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 103,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 113,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 126,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 198,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 223,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 40,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 227,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 241,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 235,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 83,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 157,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_keyed_response_delivery.py",
+      "line": 121,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 38,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 90,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 122,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 236,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 261,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 281,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 327,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 231,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 84,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 257,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 83,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 22,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 68,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 78,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 128,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 139,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 52,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 61,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 131,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 142,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 72,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 82,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 57,
+      "node": "Name",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 49,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 69,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 45,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 69,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_admission_epoch_installed.py",
+      "line": 149,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 64,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 104,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 326,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 427,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 91,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 100,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 522,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 463,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 523,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 583,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 135,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 151,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 157,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 41,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 224,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 20,
+      "node": "alias",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 77,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 89,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 21,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 369,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 48,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 58,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 52,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 113,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 153,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_tool_lifecycle.py",
+      "line": 220,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 132,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 227,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 261,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 217,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 328,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 348,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 356,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 366,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 399,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 45,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 136,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 162,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 186,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_authority.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 808,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 74,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 100,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 103,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 106,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 112,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 125,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 38,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 326,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 124,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 596,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 634,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 678,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 828,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 522,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 306,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 377,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 456,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 478,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_owner_release_restart.py",
+      "line": 91,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 135,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 139,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 42,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 56,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 17,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 78,
+      "node": "Name",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 78,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 119,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 86,
+      "node": "Name",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 122,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 123,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 124,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 125,
+      "node": "Attribute",
+      "name": "open_stream"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 170,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 344,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_publication_snapshot_identity.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_read_ledger.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_read_ledger.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 43,
+      "node": "alias",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 80,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 87,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 369,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 403,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 98,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 96,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_authority.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 23,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 40,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 65,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 86,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 60,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_relationships.py",
+      "line": 321,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 194,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 159,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 188,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 202,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 164,
+      "node": "alias",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 170,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 175,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 144,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 150,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 525,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "line": 41,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 72,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 215,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_runtime_subscription_handshake.py",
+      "line": 37,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 18,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 130,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 301,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 219,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 251,
+      "node": "Attribute",
+      "name": "settle_turn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 135,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 136,
+      "node": "Attribute",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "open_stream"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 151,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 382,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 477,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 52,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 750,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 762,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 443,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1030,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 204,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "prepare_native"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 218,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 262,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 78,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 31,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 190,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 485,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 490,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 94,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 162,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 299,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 447,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 473,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 266,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 266,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 271,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 68,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 580,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 308,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 311,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 312,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 312,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 313,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 316,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 315,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 317,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 318,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 165,
+      "node": "FunctionDef",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 82,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 138,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 206,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 211,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 224,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 232,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 244,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 255,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 312,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 321,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 324,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 400,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 407,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 420,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 429,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 457,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 476,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 539,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 551,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 612,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 92,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 94,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 129,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 174,
+      "node": "Name",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 200,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 210,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 221,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 241,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 291,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 299,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 304,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 306,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 343,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 349,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 444,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 467,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 478,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 525,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 527,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 557,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 566,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 606,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 168,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 423,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 131,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 198,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 461,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 472,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 398,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 153,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 546,
+      "node": "FunctionDef",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 551,
+      "node": "Name",
+      "name": "prepare_prompt"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 146,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 186,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 75,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 103,
+      "node": "Attribute",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 140,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 189,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 40,
+      "node": "FunctionDef",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 159,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 160,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 218,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 219,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 282,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 321,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 338,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 346,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 366,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 411,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 534,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 438,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 467,
+      "node": "Name",
+      "name": "admit"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 500,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 160,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 22,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 94,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 34,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 76,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 99,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 184,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 228,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 88,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 55,
+      "node": "alias",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 56,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 72,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 84,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 324,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 16,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 18,
+      "node": "alias",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 87,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 96,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 97,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 17,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 39,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_lease_release.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 13,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_viewer_snapshot_index.py",
+      "line": 109,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_visibility_views.py",
+      "line": 38,
+      "node": "Attribute",
+      "name": "thread_views"
+    },
+    {
+      "path": "tests/test_wake_candidate_index.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 47,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wake_candidate_index_incremental.py",
+      "line": 57,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wake_lifetime.py",
+      "line": 22,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 179,
+      "node": "FunctionDef",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 184,
+      "node": "Name",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "line": 119,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 253,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 388,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 54,
+      "node": "Attribute",
+      "name": "run_worker"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 176,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 10,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 13,
+      "node": "alias",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 20,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 25,
+      "node": "Name",
+      "name": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 9,
+      "node": "alias",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 10,
+      "node": "alias",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 12,
+      "node": "alias",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 18,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 24,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "InputBatch"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "node": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 53,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 368,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 103,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 200,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 365,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 384,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 356,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 381,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/read_original_owner.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/seed_original_owner_capture.py",
+      "line": 19,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/seed_original_task_carry.py",
+      "line": 21,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/seed_retained_index_fixture.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 43,
+      "node": "Attribute",
+      "name": "capture"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 73,
+      "node": "Attribute",
+      "name": "reserve"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "begin"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "capture"
+    }
+  ],
+  "scope": "src/tests/tools; original NRA parser. Dynamic partial callbacks/MRO and asyncio/contextlib lifetimes require semantic reading; AST does not establish dynamic dispatch."
+}

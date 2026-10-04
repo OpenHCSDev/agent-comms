@@ -1,0 +1,89 @@
+{
+  "classification": "authentic-original-producer-check-not-target-carry-acceptance",
+  "original_release": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "old_attempt_columns": [
+    "operation_id",
+    "session_file",
+    "source_json",
+    "state"
+  ],
+  "source_package": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "original_decoder_core_commit": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+  "requests_extracted": 4,
+  "projected_sources": [
+    {
+      "operation_id_sha256": "8e9af26656a13c820e4c56776567b8eb6cbe28e561fbbd2f362ce567f00c43d9",
+      "original_source_json_sha256": "de1ee0557fac7888360928658edd5ad47dd0c55ed3b5c80c79ef08af6779992e",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "input_digest",
+        "kind",
+        "originals",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "original_reference_count": 1
+    },
+    {
+      "operation_id_sha256": "44d7b3f43765090abf3be808970c3b5e3b56a23e16a3bb5e0f9a342be7f13c77",
+      "original_source_json_sha256": "e62f161689056663e6dd21560d8eb552ad3274a813083f30f9a411b81e797925",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "input_digest",
+        "kind",
+        "originals",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "original_reference_count": 1
+    },
+    {
+      "operation_id_sha256": "f4359770b92fff38fd5656b70d8a601e927bbf75c9580cf8f73b48fc5b0ff1bb",
+      "original_source_json_sha256": "9016e62b46db2d6e282dc4f5bfc63636083ff6734e533043228c03ff4c69a6f9",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "input_digest",
+        "kind",
+        "originals",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "original_reference_count": 1
+    },
+    {
+      "operation_id_sha256": "804ca81300b2c24faad978a86ba2943735a379bd6b23f9ec97b6d9180d2950e5",
+      "original_source_json_sha256": "842498cd819287b62de80c2cbb7142b222e11b6dacbfa629755d2aa85b6e12d9",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "input_digest",
+        "kind",
+        "originals",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "original_reference_count": 1
+    }
+  ],
+  "target_source_dependency": "Core506 62719ea96dc646d6dff0d717ae747d9bc6ceacb3 normally integrated in final Core489",
+  "installed_target_prefix": "not yet built; Arendt confirmed dependency",
+  "provider_calls": 0,
+  "public_writes": 0,
+  "stopped_custody_qualified": false
+}

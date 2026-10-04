@@ -1,0 +1,208 @@
+{
+  "source_head": "c0135047625945ad1c2115a86a3181a8d16c3ab3",
+  "parsed_modules": 50,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 74,
+      "call": "plan.require_sources"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 20,
+      "declaration": "prepare"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 58,
+      "call": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 429,
+      "declaration": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 443,
+      "declaration": "carry_compaction"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 641,
+      "declaration": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 110,
+      "declaration": "synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 592,
+      "declaration": "install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 601,
+      "declaration": "publish_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 145,
+      "call": "NativeSchemaCarryPlan.install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 553,
+      "call": "carry_compaction"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 505,
+      "call": "staging.replace_original"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 588,
+      "call": "self.install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 597,
+      "call": "NativeSchemaCarryPlan.publish_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 658,
+      "call": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 485,
+      "call": "SelectedCommitReference.from_intent(intent).require_source"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 704,
+      "call": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 624,
+      "call": "originals[root / item.name].prepare_replacement"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 75,
+      "call": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 120,
+      "call": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 81,
+      "call": "carry_compaction"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 210,
+      "call": "installation.synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 222,
+      "call": "installation.synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 204,
+      "call": "PreserveRuntimeInstallation(goal_schema={}).synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 226,
+      "call": "self.require_sources"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 280,
+      "call": "self.require_sources"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 270,
+      "call": "self.runtime_installation.unchanged_protected(paths).difference"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 278,
+      "call": "self.runtime_installation.synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 270,
+      "call": "self.runtime_installation.unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 27,
+      "call": "prepare_original"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 45,
+      "call": "plan.require_sources"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 51,
+      "declaration": "prepare_replacement"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 83,
+      "declaration": "replace_original"
+    },
+    {
+      "path": "tools/cutover/routing_carry.py",
+      "line": 111,
+      "call": "self.require_sources"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 18,
+      "declaration": "synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 21,
+      "declaration": "unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 61,
+      "declaration": "unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 19,
+      "call": "NativeSchemaDeclaration.observe().synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 63,
+      "call": "super().unchanged_protected(paths).difference"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 63,
+      "call": "super().unchanged_protected"
+    }
+  ],
+  "limits": "Source spelling evidence, not dynamic dispatch proof. No production change during this qualification; earlier before/after outputs remain."
+}

@@ -13,6 +13,7 @@ from agent_comms.compaction_result import (
     RefusedCompactionResult,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_compaction_settings import PiSettingsEvidenceError
 
 
 @pytest.mark.parametrize(
@@ -43,15 +44,15 @@ def test_new_member_owns_wire_and_behavior_without_dispatch_edits(monkeypatch):
     monkeypatch.setattr(CompactionResult, "__registry__", dict(CompactionResult.__registry__))
 
     @dataclass(frozen=True)
-    class ObservedCompactionResult(CompactionResult):
-        detail: str
-
-        def terminal_event(self):
-            return ManualCompactionEnd(aborted=True, summary=self.detail)
-
-        def prompt_response(self):
-            raise RequestError(-32603, self.detail, {"reason": self.detail})
+    class ObservedCompactionResult(RefusedCompactionResult):
+        pass
 
     outcome = ObservedCompactionResult("observation")
     assert FieldCodec.decode(CompactionResult, FieldCodec.encode(outcome)) == outcome
     assert outcome.terminal_event().summary == "observation"
+    assert not outcome.adaptive_result()
+    with pytest.raises(PiSettingsEvidenceError, match="observation"):
+        outcome.require_prepared()
+    with pytest.raises(RequestError) as error:
+        outcome.prompt_response()
+    assert error.value.data == {"reason": outcome.error}

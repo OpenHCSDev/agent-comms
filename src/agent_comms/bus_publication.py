@@ -239,10 +239,15 @@ class CommittedDelivery(MessageWireRecord):
 
         if self.receipt is not None:
             yield ResponseKeys(self.receipt.publication_key)
-        yield DeliverySources(self.message.seq, self.message.message_id, offset, length,
-                              self.audience.sender_lookup)
+        yield DeliverySources(self.message.seq, self.message.message_id,
+                              self.audience.sender_lookup, offset=offset, length=length)
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
+
+    def delivery_messages(self):
+        from .routing import DeliveryMessage
+
+        return (DeliveryMessage(self.message, self.audience.sender_lookup),)
 
 
 def initial_sideband(

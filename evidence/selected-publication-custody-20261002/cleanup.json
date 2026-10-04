@@ -1,0 +1,20 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/mendel530/native-w9s5m9u4/wire/native-sessions",
+      "allocated_bytes": 43900928,
+      "reason": "duplicate frozen source/proof fixture; zero native inputs/children/provider posts; original donor and failed receipt/private bus retained"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/mendel530/native-sxx9o0tl/wire/native-sessions",
+      "allocated_bytes": 43900928,
+      "reason": "duplicate frozen source/proof fixture; zero native inputs/children/provider posts; original donor and failed receipt/private bus retained"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/mendel530/native-9p_r5gmd/wire/native-sessions",
+      "allocated_bytes": 43900928,
+      "reason": "duplicate frozen source/proof fixture; zero native inputs/children/provider posts; original donor and failed receipt/private bus retained"
+    }
+  ],
+  "allocated_bytes": 131702784
+}

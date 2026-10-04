@@ -1,0 +1,90 @@
+F
+=================================== FAILURES ===================================
+___________ test_actual_native_replacement_callback_once_and_cancel ____________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7febfb197620>
+
+    async def test_actual_native_replacement_callback_once_and_cancel(native_backend):
+        """Actual SDK RPC replacement, extension hooks and retirement; no prompt."""
+        from uuid import uuid4
+    
+        from agent_comms.native_entries import NativeEvidenceRead
+        from agent_comms.pi_commands import GetState, UnknownCommand
+    
+        native = native_backend
+        events = native.project / "replacement-events.jsonl"
+        cancelled_target = native.project / "cancelled.jsonl"
+        extension = native.project / "replacement-observer.mjs"
+        extension.write_text(
+            "import {appendFileSync} from 'node:fs';\n"
+            "export default function(pi) {\n"
+            "  pi.on('session_start', (event,ctx) => appendFileSync("
+            + json.dumps(str(events))
+            + ",JSON.stringify({event:'session_start',reason:event.reason,"
+            "sessionId:ctx.sessionManager.getSessionId()})+'\\n'));\n"
+            "  pi.on('session_before_switch', (event) => {\n"
+            "    if (event.targetSessionFile === "
+            + json.dumps(str(cancelled_target))
+            + ") return {cancel:true};\n"
+            "  });\n"
+            "}\n"
+        )
+>       launch = NativePiRpcLaunch.managed(
+            "pi", ("--model", "response-local/fixture", "--thinking", "off",
+                   "--offline", "--no-extensions", "--extension", str(extension),
+                   "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+            worktree=native.project, session_file=str(native.session),
+        )
+
+tests/test_native_catalog_discovery.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/native_pi.py:507: in managed
+    identity=SessionIdentityHelper.locate(package, str(saved)))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-scoped-input534/lib/python3.14/site-packages/agent_comms/native_session_reopen.py:87: in locate
+    identity = asyncio.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+main = <coroutine object PiHelper.run at 0x7febfb183740>, debug = None
+loop_factory = None
+
+    def run(main, *, debug=None, loop_factory=None):
+        """Execute the coroutine and return the result.
+    
+        This function runs the passed coroutine, taking care of
+        managing the asyncio event loop, finalizing asynchronous
+        generators and closing the default executor.
+    
+        This function cannot be called when another asyncio event loop is
+        running in the same thread.
+    
+        If debug is True, the event loop will be run in debug mode.
+        If loop_factory is passed, it is used for new event loop creation.
+    
+        This function always creates a new event loop and closes it at the end.
+        It should be used as a main entry point for asyncio programs, and should
+        ideally only be called once.
+    
+        The executor is given a timeout duration of 5 minutes to shutdown.
+        If the executor hasn't finished within that duration, a warning is
+        emitted and the executor is closed.
+    
+        Example:
+    
+            async def main():
+                await asyncio.sleep(1)
+                print('hello')
+    
+            asyncio.run(main())
+        """
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+>           raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop")
+E           RuntimeError: asyncio.run() cannot be called from a running event loop
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:200: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/test_native_catalog_discovery.py::test_actual_native_replacement_callback_once_and_cancel
+1 failed in 4.15s
+<sys>:0: RuntimeWarning: coroutine 'PiHelper.run' was never awaited

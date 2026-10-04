@@ -1,0 +1,25 @@
+# Exact turn and source owner closure
+
+The actual79cb failure paired an idle pre-begin Thread with a separately returned new TurnLeaseFence. AgentInfo constructed RegistryOwner from that idle Thread, so the exact RegistryTurnRule correctly refused.
+
+Existing owner relation: registry lease transaction installs Thread.active_turn and returns that original declaration. AgentActivity.begin_turn now returns existing RegistryOwner for that same leased declaration. Its turn_lease derives from the original Thread; admission comes from the installed turn, not the distinct owner-generation integer.
+
+OwnedTurn holds one registry_owner, captured locally for admission and replaced by the atomically returned owner at begin. Thread and lease derive from it. Native attachment updates that owner once through existing Registration.attach_native_session. TurnProgress borrows the existing OwnedTurn and derives thread/lease/routing/original/checkpoint; five independent semantic fields and its reconstruction of RegistryOwner are deleted. No snapshot re-fetch/refresh or weakened check.
+
+All three production begin consumers migrated: ordinary OwnedTurn, explicit manual compaction (uses returned thread for preparation), relay/wait turn (settles the returned lease).23 assigned helper/test consumers migrated by AST source-span edits to derive the returned lease; the sole direct TurnProgress fixture now uses real OwnedTurn. Ignored begin return values remain ignored. SelectedParticipant uses its already atomic registry lease result and is unchanged. RegistryTurnRule, native source publication and all incarnation/process/model/goal/session/admission guards remain unchanged.
+
+TurnGoalAccount retains its original goal/permit observation for that turn; its goal-settlement snapshot is a distinct fact, not source attachment authority. RegistryOwner and Thread lease declarations remain the original classes; no wrapper/store/cache/fallback/API alias is added. Native external bytes and durable schemas do not change.
+
+Before AST: src311/tests357/tools53 modules, zero parse omissions. Imported/inherited/decision/member and call leads were read; dynamic MRO resolution is not claimed by lexical AST. Changed all lexical assigned begin results in tests/tools, plus sole production constructor and three begin consumers. Existing NativeSourcePublication preserves the leased registry turn under its locked original transaction.
+
+Implementation checkpoint precedes final batched sanity and ONE configured saved SDK-fork native/ACP journey owned with Mendel and Sch. No new worktree, environment or native build; original79cb UNKNOWN and540 original receipts protected.
+
+Normal integration includes main356068c7 and original540 qualifier receipt fd3812a6; no repeated540 controls. Current-main production delta is six files,61 added/30 deleted lines, distinct from fixture and evidence lines. The original RegistryTurnRule file is byte unchanged against main.
+
+After AST parses src311/tests358/tools53 with zero omissions. There are68 lexical begin calls: six retain the owner (three production, one recording fixture, two stale-owner refusal fixtures),22 immediately derive the lease,39 ignore the result and one asserts the returned owner's truthiness. The three production retained owners feed ordinary admission/events, manual preparation and relay settlement respectively. RegistryOwner, OwnedTurn, TurnProgress and RegistryTurnRule each have exactly one production declaration. Dynamic resolution remains outside the lexical claim.
+
+One final sanity batch:17 passed/3 failed in2.50s. The real local Comms/OwnedTurn sequence admits an idle thread, begins, opens callback resources, changes progress detail and attaches the native source through AgentInfo; thread/lease derive from the same owner. Reused turn ID and replaced admission refuse stale attachment without writing registry bytes. This is source-only validation, without a native provider.
+
+Three pre-existing stale fixtures are preserved in sanity.log: the queue-context fixture passes the old constructor argument count; two selected-admission fixtures access singular assignment after the original plural owner changed to assignments. These failures do not establish installed readiness and are not suppressed or repaired as unrelated production changes. Mendel owns the sole installed configured saved-fork acceptance; it is pending in source-closure-receipt.json.
+
+Installed acceptance is now complete:51.9857s actual configured Sol/OFF saved SDK fork through real headless Toad/editor, ACP and native. Native source attachment retains original turn/admission/generation through answer and canonical idle. Original41MB history/settings,79cb bound_unknown and418 not_sent are unchanged; exact owned harness/native processes are absent and no private-root borrowers were found. Raw receipt and all nine referenced files are hash-verified byte copies from Mendel authored0cee2ee under installed/. No physical st/public activation/latency claim or second provider run.

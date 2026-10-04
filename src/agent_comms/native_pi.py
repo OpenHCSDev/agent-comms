@@ -13,34 +13,30 @@ import re
 import shutil
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
-from uuid import uuid4
 
 from . import pi_events as pi
 from .native_arguments import NativeArguments
+from .native_package import OWNER_INSTRUCTIONS
+from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
-from .pi_vocabulary import ThinkingLevel
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .selected_tool_broker import NativeToolMode
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
+    from .selected_session import SelectedSession
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-# Every tracked launch must remove Pi session retry, provider transport retry,
-# and overflow compaction-retry before an input can reach any provider.
-_NATIVE_SETTINGS = (
-    b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
-    b'"compaction":{"enabled":false}}\n'
-)
 
 
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
@@ -102,37 +98,11 @@ def main() -> int:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
     environment = dict(os.environ)
-    # Global extensions invoke this installation's console tools. Services
-    # need not inherit an activated virtualenv or an interactive shell PATH.
-    environment["PATH"] = os.pathsep.join(
-        (str(Path(sys.executable).parent), environment.get("PATH", os.defpath))
+    argv, environment = NativePiRpcLaunch.bootstrap(
+        cli, tuple(sys.argv[1:]), Path.cwd(), environment,
+        RestartEnvironment.inherit(environment),
     )
-    environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-        Path(
-            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-            or environment.get("PI_CODING_AGENT_DIR")
-            or "~/.pi/agent"
-        )
-        .expanduser()
-        .resolve()
-    )
-    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-        environment.pop(name, None)
-    environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-    os.execvpe(
-        "node",
-        [
-            "node",
-            "--no-global-search-paths",
-            "--import",
-            str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import",
-            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli),
-            *sys.argv[1:],
-        ],
-        environment,
-    )
+    os.execvpe(argv[0], list(argv), environment)
     return 0
 
 
@@ -327,14 +297,14 @@ class NativeContextProof(NativeContextRecord):
     session_file: Path
 
     def corroborates_input(
-        self, input_id: str, session_dir: Path, *, evidence: NativeEvidenceRead | None = None
+        self, input_id: str, *, evidence: NativeEvidenceRead | None = None
     ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
 
         This grants neither replay nor recovery authority. History IO occurs
         before the coordinator read transaction, as on the native return path.
         """
-        if self.input_id != input_id or self.session_file.parent != session_dir:
+        if self.input_id != input_id:
             return False
         return self.read_evidence(self.session_file, input_id, evidence=evidence) == self
 
@@ -346,14 +316,9 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        if evidence is None:
-            with NativeEntry.open_evidence(session_file) as acquired:
-                return cls.read_evidence(
-                    session_file, input_id, request_generation=request_generation,
-                    evidence=acquired,
-                )
-        try:
-            evidence.require_path(session_file)
+        from .native_entries import NativeInputEvidenceRead
+
+        with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             header, entries = evidence.observe()
             tracked = NativeEntry.tracked_users(entries)
             if input_id not in tracked:
@@ -363,13 +328,11 @@ class NativeContextProof(NativeContextRecord):
                 if row is None:
                     raise NativePiUnavailable("The input has no assembled-context proof")
                 return row.corroborate(session_file, header, tracked)
-        except NativePiUnavailable:
-            evidence.close()
-            raise
 
     @classmethod
     def read_history_evidence(
-        cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...]
+        cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...],
+        *, recorded: tuple[NativeContextProof, ...] = (),
     ) -> dict[str, NativeContextProof]:
         """Corroborate retained inputs using indexed, latest context inclusion.
 
@@ -383,6 +346,12 @@ class NativeContextProof(NativeContextRecord):
                 row = NativeContextJournal.for_input(db, input_id)
                 if row is not None:
                     result[input_id] = row.corroborate(session_file, header, tracked)
+            for proof in recorded:
+                if proof.session_file != session_file:
+                    raise NativePiUnavailable("Live-recorded context belongs to another session file")
+                row = NativeContextJournal.for_input(db, proof.input_id, proof.request_generation)
+                if row is None or row.corroborate(session_file, header, tracked) != proof:
+                    raise NativePiUnavailable("Live-recorded context differs from native journal")
         return result
 
 
@@ -429,13 +398,43 @@ class NativePiRpcLaunch:
     argv: tuple[str, ...]
     cwd: Path
     env: dict[str, str]
-    session_dir: Path
-    session_file: Path | None
+    session: SelectedSession
     package: Path
 
+    configuration: RestartEnvironment = field(kw_only=True)
+
     @classmethod
-    def package_for_command(cls, command: str) -> Path:
-        """Resolve an explicitly supported launcher to the reviewed package.
+    def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):
+        """Encode the held launch configuration at the native process boundary."""
+        try:
+            instructions = OWNER_INSTRUCTIONS.resolve(strict=True)
+        except OSError as error:
+            raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
+        env = dict(environment)
+        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            env.pop(name, None)
+        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        env["PI_WORKTREE"] = str(cwd)
+        env["PATH"] = os.pathsep.join(
+            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
+        )
+        env.update(configuration.encode_native())
+        argv = (
+            "node", "--no-global-search-paths",
+            "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli), *arguments, "--append-system-prompt", str(instructions),
+        )
+        return argv, env
+
+    @classmethod
+    def _build(cls, cli, arguments, cwd, environment, session, package, configuration):
+        argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration)
+        return cls(argv, cwd, env, session, package, configuration=configuration)
+
+    @classmethod
+    def _command_selection(cls, command: str):
+        """Decode the original launcher selection without acquiring its package.
 
         Executable names never establish capability. Configured commands must
         name this installation's entrypoint, its pinned CLI, or the source stack
@@ -453,7 +452,6 @@ class NativePiRpcLaunch:
         route = PrivateNkLaunch.current()
         if route is not None:
             package = route.native_package
-            route.validate()
         elif executable is not None and executable == stack_launcher.resolve():
             build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
             package = (
@@ -461,7 +459,6 @@ class NativePiRpcLaunch:
                 / f".pi-native-{build}"
                 / "node_modules/@earendil-works/pi-coding-agent"
             )
-            _trusted_package(package)
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
@@ -471,6 +468,16 @@ class NativePiRpcLaunch:
         )
         if executable is not None and executable not in allowed:
             raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+        return package, route
+
+    @classmethod
+    def package_for_command(cls, command: str) -> Path:
+        """Acquire the original reviewed artifact before any new native execution."""
+        package, route = cls._command_selection(command)
+        if route is not None:
+            route.validate()
+        else:
+            _trusted_package(package)
         return package
 
     @classmethod
@@ -482,7 +489,6 @@ class NativePiRpcLaunch:
         worktree: Path,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
-        fork_session: bool = False,
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution; native receipts remain separate."""
         try:
@@ -490,64 +496,88 @@ class NativePiRpcLaunch:
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         package = cls.package_for_command(command)
-        cli = package / "dist" / "cli.js"
         cwd = worktree.resolve(strict=True)
+        if not cwd.is_dir():
+            raise NativePiUnavailable("Native Pi worktree is unavailable")
+        from .selected_session import SelectedSession, SavedSelectedSession
+        from .native_session_reopen import SessionIdentityHelper
+
+        saved = Path(session_file).absolute() if session_file is not None else None
+        directory = saved.parent if saved is not None else cwd
+        session = (SavedSelectedSession(directory,
+            identity=SessionIdentityHelper.locate(package, str(saved)))
+            if saved is not None else SelectedSession(directory))
+        return cls._managed(package, arguments, cwd, environment, session)
+
+    @classmethod
+    def _managed(cls, package, arguments, cwd, environment, session):
+        """Assemble the entire key from one acquired package and selected source."""
+        cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            env.pop(name, None)
-        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        env["PI_WORKTREE"] = str(cwd)
-        env["PATH"] = os.pathsep.join(
-            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
-        )
-        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-            Path(
-                env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                or env.get("PI_CODING_AGENT_DIR")
-                or "~/.pi/agent"
-            )
-            .expanduser()
-            .resolve()
-        )
-        saved = Path(session_file).absolute() if session_file else None
-        if saved is not None:
-            arguments += ("--fork" if fork_session else "--session", str(saved))
-        argv = (
-            "node",
-            "--no-global-search-paths",
-            "--import",
-            str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import",
-            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli),
-            *arguments,
-        )
-        return cls(argv, cwd, env, saved.parent if saved else cwd, saved, package)
+        if session.path is not None:
+            arguments += ("--session", str(session.path))
+        cli = package / "dist" / "cli.js"
+        return cls._build(cli, arguments, cwd, env, session, package, RestartEnvironment.inherit(env))
+
+    def retained_managed(
+        self, command: str, arguments: tuple[str, ...], *, worktree: Path,
+        environment: dict[str, str] | None, session_file: str | None,
+    ) -> NativePiRpcLaunch | None:
+        """Derive a candidate from this acquired immutable launch, not a path cache.
+
+        Only original child custody may consume it after comparing the complete
+        launch/auth key and checking its actual saved-source revision/liveness.
+        A different package or selected file needs its own fresh acquisition.
+        """
+        package, _ = self._command_selection(command)
+        saved = Path(session_file).absolute() if session_file is not None else None
+        if package != self.package or saved != self.session.path:
+            return None
+        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
+            worktree, environment, self.session)
 
     @classmethod
-    def tracked(
+    def acquire_tracked(cls, package: Path) -> Callable[..., NativePiRpcLaunch]:
+        """Acquire one immutable artifact's executable construction behavior.
+
+        The returned factory retains the original verified CLI for its owner's
+        lifetime. Every call still constructs a new complete source/auth launch;
+        it grants no child readiness, input admission or prior context proof.
+        """
+        package = Path(package).absolute()
+        cli = _trusted_package(package)
+        return partial(cls._tracked, package, cli)
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+        return cls.acquire_tracked(package)(**options)
+
+    @classmethod
+    def _tracked(
         cls,
         package: Path,
+        cli: Path,
         *,
         worktree: Path,
-        session_dir: Path,
-        session_file: Path | None = None,
+        session: SelectedSession,
         provider: str = "openrouter",
         model: str = "z-ai/glm-5.3-flash",
         thinking_level: str | None = None,
-        selected_thinking_level: str | None = None,
+        environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
     ) -> NativePiRpcLaunch:
-        """Verify compiled Pi bytes and commit private no-retry policy before spawning.
+        """Construct a complete launch through its acquired immutable artifact.
 
         A backend must explicitly consume this launch, not guess Pi from a basename
         or trust an RPC capability response from an arbitrary executable. This
-        only establishes the executable and its settings; native input, context,
+        only establishes the executable and its resources; native input, context,
         and model-delivery proofs remain separate per-attempt observations.
         """
+        session_dir, session_file = session.directory, session.path
         try:
             for value in (provider, model):
                 FieldCodec.decode(str, value)
@@ -555,45 +585,29 @@ class NativePiRpcLaunch:
                     raise ValueError("Provider/model must be single non-option tokens")
         except (TypeError, ValueError) as error:
             raise NativePiUnavailable("Native Pi requires an explicit provider and model") from error
-        if selected_thinking_level is not None and (
-            type(selected_thinking_level) is not str
-            or not ThinkingLevel.supports_selected(selected_thinking_level)
-            or session_file is None
-        ):
-            raise NativePiUnavailable(
-                "Selected launch requires a saved session and supported level"
-            )
         if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
             raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
-        if selected_thinking_level is not None and selected_tool_mode is not None:
-            raise NativePiUnavailable("Selected fresh source cannot launch a file tool")
-        cli = _trusted_package(package)
+        session.require_launch_tools(selected_tool_mode)
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
         _durable_private_session_dir(session_dir)
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        if session_file is not None:
-            session_file = _session_location(session_dir, str(session_file))
-            from .fresh_private_session import FreshPrivateSession
-
-            FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
-        agent_dir = _private_agent_dir(session_dir)
+        session.require_launch_header()
+        # Native SettingsManager and AgentSession own tracked retry/compaction
+        # policy. This directory isolates writable resources, not policy copies.
+        agent_dir = session_dir / ".native-pi-agent"
+        _durable_private_session_dir(agent_dir)
         tool_arguments = (
             selected_tool_mode.launch_arguments(package)
             if selected_tool_mode is not None
             else ("--no-tools",)
         )
-        argv = [
-            "node",
-            str(cli),
+        arguments = [
             "--mode",
             "rpc",
             "--no-approve",
             *tool_arguments,
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
             "--session-dir",
             str(session_dir),
             "--provider",
@@ -601,67 +615,11 @@ class NativePiRpcLaunch:
             "--model",
             model,
         ]
-        if selected_thinking_level is not None:
-            argv.extend(
-                ("--thinking", selected_thinking_level, "--no-prompt-templates", "--no-themes")
-            )
+        arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:
-            argv.extend(("--session", str(session_file)))
-        if thinking_level is not None and selected_thinking_level is None:
-            argv.extend(("--thinking", thinking_level))
-        env = cls.private_environment(agent_dir, session_dir, selected_thinking_level)
-        return cls(tuple(argv), worktree, env, session_dir, session_file, package)
-
-    @staticmethod
-    def private_environment(
-        agent_dir: Path, session_dir: Path, selected_thinking_level: str | None
-    ) -> dict[str, str]:
-        if selected_thinking_level is not None:
-            # This selected-only candidate is still hard-denied before real spawn.
-            # Do not hand a credential, proxy, hooks, or ambient provider settings
-            # to even a future reviewed source CLI. The copied c1 gate needs its
-            # explicit marker; PR94 must separately review this exact env contract.
-            if os.name != "posix":
-                raise NativePiUnavailable("Selected source requires reviewed POSIX isolation")
-            import pwd
-
-            username = pwd.getpwuid(os.geteuid()).pw_name
-            env = {
-                "HOME": str(agent_dir),
-                "USER": username,
-                "LOGNAME": username,
-                "PATH": os.defpath,
-                "LANG": "C.UTF-8",
-                "TMPDIR": str(session_dir),
-                "PI_OFFLINE": "1",
-                "PI_CODING_AGENT_DIR": str(agent_dir),
-                "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
-            }
-        else:
-            env = os.environ.copy()
-            for name in (
-                "PI_AGENT_ID",
-                "PI_PARENT_ID",
-                "PI_AGENT_TAGS",
-                "AGENT_COMMS_THREAD",
-                "AGENT_COMMS_TAGS",
-                "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-                "AGENT_COMMS_SELECTED_TOOL_TOKEN",
-            ):
-                env.pop(name, None)
-            env["PI_OFFLINE"] = "1"
-            # Canonical credentials/catalog remain separate from retry isolation.
-            env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-                Path(
-                    env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                    or env.get("PI_CODING_AGENT_DIR")
-                    or "~/.pi/agent"
-                )
-                .expanduser()
-                .resolve()
-            )
-            env["PI_CODING_AGENT_DIR"] = str(agent_dir)
-        return env
+            arguments.extend(("--session", str(session_file)))
+        env, configuration = session.launch_environment(agent_dir, environment)
+        return cls._build(cli, tuple(arguments), worktree, env, session, package, configuration)
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -874,36 +832,6 @@ def _durable_private_session_dir(directory: Path) -> None:
         raise NativePiUnavailable("Native Pi session directory could not be committed") from error
 
 
-def _private_agent_dir(session_dir: Path) -> Path:
-    """Durably isolate Pi settings from user/global and project retry policy.
-
-    Refresh and fsync the exact policy for *every* attempt; a previously visible
-    settings file or directory is not evidence that an earlier fsync succeeded.
-    No credentials are copied into this directory (provider auth uses the env).
-    """
-    agent_dir = session_dir / ".native-pi-agent"
-    try:
-        agent_dir.mkdir(mode=0o700, exist_ok=True)
-        _private_session_dir(agent_dir)
-        _fsync_directory(session_dir)
-        temporary = agent_dir / f".settings-{uuid4().hex}.tmp"
-        try:
-            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as output:
-                output.write(_NATIVE_SETTINGS)
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(temporary, agent_dir / "settings.json")
-            _fsync_directory(agent_dir)
-        finally:
-            temporary.unlink(missing_ok=True)
-    except OSError as error:
-        raise NativePiUnavailable(
-            "Native Pi private retry policy could not be committed"
-        ) from error
-    return agent_dir
-
-
 def _session_location(directory: Path, candidate: str) -> Path:
     if not isinstance(candidate, str) or not candidate:
         raise NativePiUnavailable("Native Pi omitted its session file")
@@ -919,15 +847,14 @@ def read_tracked_input_digest(
     """Corroborating digest only; this cannot authorize recovery or input replay."""
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
-    if evidence is None:
-        with NativeEntry.open_evidence(session_file) as acquired:
-            return read_tracked_input_digest(session_file, input_id, evidence=acquired)
-    evidence.require_path(session_file)
-    _header, entries = evidence.observe()
-    users = NativeEntry.tracked_users(entries)
-    if input_id not in users:
-        raise NativePiUnavailable("The specified input was never durably committed")
-    return users[input_id].message.input_digest
+    from .native_entries import NativeInputEvidenceRead
+
+    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
+        _header, entries = evidence.observe()
+        users = NativeEntry.tracked_users(entries)
+        if input_id not in users:
+            raise NativePiUnavailable("The specified input was never durably committed")
+        return users[input_id].message.input_digest
 
 
 def _verify_context(
@@ -942,12 +869,11 @@ def _verify_context(
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
     except (TypeError, ValueError) as error:
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
-    proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
-    if proof != emitted:
-        if evidence is not None:
-            evidence.close()
-        raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
-    return proof
+    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+        proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
+        if proof != emitted:
+            raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
+        return proof
 
 
 def _require_reviewed_selected_source_cli() -> None:

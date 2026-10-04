@@ -1,0 +1,29 @@
+{
+  "scope": "Changed source codec reading actual canonical live SQLite through original query-only observing and typed row owners; not installed runtime/UI readiness",
+  "tables": [
+    {
+      "owner": "ExecutionRecord",
+      "rows": 50,
+      "distinct_current_projections": 50
+    },
+    {
+      "owner": "AttemptRecord",
+      "rows": 50,
+      "distinct_current_projections": 50
+    },
+    {
+      "owner": "WakeAssignment",
+      "rows": 50,
+      "distinct_current_projections": 50
+    }
+  ],
+  "projection_declaration_cache": {
+    "hits": 447,
+    "misses": 15,
+    "maxsize": 256,
+    "currsize": 15
+  },
+  "public_writes": 0,
+  "provider_calls": 0,
+  "semantic_values_cached": false
+}

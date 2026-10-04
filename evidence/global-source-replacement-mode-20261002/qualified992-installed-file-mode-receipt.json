@@ -1,0 +1,29 @@
+{
+  "state": "installed-file-mode-and-bytes-batch-passed",
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+  "installed_writer": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/store_files.py",
+  "installed_writer_sha256": "333471bddf5e0a7353739993a07b4db59bb693eac1c19eb31e6402d2e4f7b7a6",
+  "global_source_owner": "existing parent-tracked GlobalSourceInstall/ReplaceGlobalSource; no new installer/atomic writer",
+  "global_source_owner_sha256": "9daf13cc66b0190e61d0334631bd19b8fc2d850d33acf245d85af272411f595e",
+  "cases": [
+    {
+      "member": "executable",
+      "mode": "0o755",
+      "new_bytes_equal": true,
+      "preimage_preserved": true
+    },
+    {
+      "member": "ordinary",
+      "mode": "0o644",
+      "new_bytes_equal": true,
+      "preimage_preserved": true
+    }
+  ],
+  "private_default_mode": "0o600",
+  "new_global_source_mode": "0o600",
+  "changed_original_refused": true,
+  "temporary_files_remaining": false,
+  "public_changes": 0,
+  "provider_calls": 0,
+  "scope": "Installed actual filesystem primitive and existing reviewed source behavior; no public deployment, provider or repeated UI/lifetime journey"
+}

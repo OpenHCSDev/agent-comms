@@ -1,0 +1,488 @@
+{
+  "base": "0d893cb5",
+  "original_full_census": "source-before.json:726 parsed,0 omissions",
+  "parsed": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/worker.py",
+      "function": "run",
+      "line": 22,
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "function": "run_startup_input",
+      "line": 56,
+      "call": "agent._comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "function": "run_startup_input",
+      "line": 58,
+      "call": "agent.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "function": "run_foreground_once",
+      "line": 175,
+      "call": "comms.registry.name_reserved"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "function": "run_foreground_once",
+      "line": 178,
+      "call": "comms.registry.register"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "function": "run_foreground_once",
+      "line": 228,
+      "call": "comms.registry.live_owner_with_admission"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "function": "run_foreground_once",
+      "line": 182,
+      "call": "comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "function": "run_foreground_once",
+      "line": 233,
+      "call": "comms.registry.unregister"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "set_goal",
+      "line": 158,
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "edit_goal",
+      "line": 173,
+      "call": "self.comms.registry.require(name).require_goal_checkpoint"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "edit_goal",
+      "line": 178,
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "edit_goal",
+      "line": 173,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "update_goal",
+      "line": 202,
+      "call": "self.comms.registry.require(name).require_goal_checkpoint"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "update_goal",
+      "line": 206,
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "update_goal",
+      "line": 202,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "retry_goal",
+      "line": 229,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "function": "retry_goal",
+      "line": 233,
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "function": "prepare_context",
+      "line": 226,
+      "call": "participant.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "observe",
+      "line": 236,
+      "call": "self.comms.registry.snapshot().owner_identity"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "observe",
+      "line": 245,
+      "call": "self.effects.turns.goals.schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "observe",
+      "line": 236,
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "observe",
+      "line": 270,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "accept_followup",
+      "line": 409,
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "input_started",
+      "line": 508,
+      "call": "self.dispositions.read().lookup"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "input_started",
+      "line": 505,
+      "call": "self.dispositions.read().rows.get"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "input_started",
+      "line": 510,
+      "call": "self.dispositions.read().lookup"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "input_started",
+      "line": 508,
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "input_started",
+      "line": 510,
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "input_started",
+      "line": 505,
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "run_owned_input",
+      "line": 610,
+      "call": "self.dispositions.read().lookup"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "function": "run_owned_input",
+      "line": 610,
+      "call": "self.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "function": "options",
+      "line": 215,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "function": "session_options",
+      "line": 230,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "function": "set_option",
+      "line": 276,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "function": "sync_thread",
+      "line": 304,
+      "call": "self.effects.turns.goals.sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "function": "publish_configuration",
+      "line": 308,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "function": "observe_compaction",
+      "line": 168,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "function": "prepare_selected_session",
+      "line": 183,
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "function": "prompt_owned",
+      "line": 213,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "function": "cancel",
+      "line": 331,
+      "call": "self.comms.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "function": "cancel",
+      "line": 330,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "function": "cancel",
+      "line": 338,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "function": "_drain_private_nk",
+      "line": 380,
+      "call": "self._comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "function": "_drain_private_nk",
+      "line": 371,
+      "call": "self._comms.registry.status"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "function": "dispatch",
+      "line": 152,
+      "call": "inputs.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "function": "dispatch",
+      "line": 157,
+      "call": "inputs.dispositions.read().lookup"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "function": "dispatch",
+      "line": 157,
+      "call": "inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "function": "publish_pending_local",
+      "line": 44,
+      "call": "agent._comms.registry.live_owner_with_generation"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "function": "publish_pending_local",
+      "line": 69,
+      "call": "agent._comms.registry.live_owner_with_generation"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "function": "publish_pending_local",
+      "line": 117,
+      "call": "agent._comms.registry.live_owner_with_generation"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "function": "on_error",
+      "line": 190,
+      "call": "self.agent.inputs.dispositions.read().shared_state"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "function": "on_error",
+      "line": 196,
+      "call": "self.agent.inputs.dispositions.read().all_started"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "function": "on_error",
+      "line": 190,
+      "call": "self.agent.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "function": "on_error",
+      "line": 196,
+      "call": "self.agent.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "function": "load_session",
+      "line": 199,
+      "call": "self.comms.registry.status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "function": "attach_owner",
+      "line": 218,
+      "call": "self.comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "function": "release_owned",
+      "line": 335,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "function": "release_owned",
+      "line": 338,
+      "call": "self.comms.registry.status"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "function": "release_owned",
+      "line": 337,
+      "call": "self.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 117,
+      "call": "ctx.server.agent._comms.registry.snapshot"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 228,
+      "call": "ctx.server.agent._comms.goals.input_delivery"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 238,
+      "call": "ctx.server.agent._comms.goals.dismiss_historical_inputs"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 250,
+      "call": "ctx.server.agent._comms.goals.goal_history"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 261,
+      "call": "ctx.server.agent._comms.goals.goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "change",
+      "line": 295,
+      "call": "ctx.server.agent.turns.goals.edit_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "change",
+      "line": 305,
+      "call": "ctx.server.agent.turns.goals.update_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 313,
+      "call": "ctx.server.agent.turns.goals.retry_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 322,
+      "call": "ctx.server.agent.turns.goals.set_goal"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "function": "result",
+      "line": 330,
+      "call": "agent._comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "function": "provider_usage",
+      "line": 160,
+      "call": "self.goals.provider_usage"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "function": "done",
+      "line": 211,
+      "call": "self.goals.done"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "function": "done",
+      "line": 195,
+      "call": "self.inputs.dispositions.read().all_started"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "function": "done",
+      "line": 195,
+      "call": "self.inputs.dispositions.read"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "function": "tool_ended",
+      "line": 240,
+      "call": "self.goals.tool_ended"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "function": "run",
+      "line": 52,
+      "call": "inputs.comms.registry.require"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "function": "run",
+      "line": 54,
+      "call": "inputs.comms.registry.status(owner.name).require_running"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "function": "run",
+      "line": 86,
+      "call": "inputs.comms.goals.block_goal_after_failed_turn"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "function": "run",
+      "line": 54,
+      "call": "inputs.comms.registry.status"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "function": "run",
+      "line": 95,
+      "call": "inputs.effects.turns.goals.sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "function": "compact_manual_owner",
+      "line": 52,
+      "call": "runner.comms.registry.snapshot"
+    }
+  ]
+}

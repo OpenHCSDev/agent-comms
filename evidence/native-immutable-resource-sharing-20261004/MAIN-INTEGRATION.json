@@ -1,0 +1,36 @@
+{
+  "state": "Normal latestmain join; original608 implementation unchanged, compiled sharing gate still open",
+  "main": "e1c399d7a1a93411e8eba14b62c1b7ebce17dcf0",
+  "normal_merge_head": "43361b99d54453fded456beb854e2ea9ca60c001",
+  "previous_source_checkpoint": "9144af7228e7b44db046d279883b57fb5a4a7685",
+  "reviewed_production_members": [
+    "src/agent_comms/native_package.py",
+    "stack/bin/prepare-pi-native",
+    "stack/native-import-fence.mjs"
+  ],
+  "production_delta_to_prior608": false,
+  "new_main_owners": [
+    "603 recorded context",
+    "605 registration",
+    "607 declared actions",
+    "609 acquired tracked factory/joined evidence",
+    "610 ordered capture projection"
+  ],
+  "acquisition_relation": "SelectedExecution.validate calls NativePiRpcLaunch.acquire_tracked once before claim. Its original factory retains the verified CLI for first and later stages; standalone tracked freshly acquires. Existing _trusted_package delegates verify_native_package. No package-trust cache, alternate ledger or verified flag.",
+  "remaining_actual_gate": [
+    "ONE matching new-fence sealed compiled deployment through existing producer",
+    "Resource borrow only from a new same-fence fully content/shape verified sealed donor; never infer89/f3/d5/2ea compatibility",
+    "Whole tree and actual SDK/import closure read from shared readonly resources",
+    "Changed/writable shared resource refusal and content/inode retention in that same affected batch"
+  ],
+  "original_source_checks": "Original26 package controls and16 Node fence controls retained; two unrelated ACP-import errors in system Python remain original negatives. No repeat after source-equal normal merge.",
+  "source_ast_scope": "Original before/after663Python+47JS/Bash parsing had0omissions; those original source snapshots remain historical, not relabeled as newmain coverage. New609/610 source evidence is normalmerge owner evidence, not dynamic resolution proof.",
+  "handed_artifacts_untouched": [
+    "89",
+    "f3",
+    "d5",
+    "2ea"
+  ],
+  "package_build_install_native_or_public_writes": 0,
+  "functional_receiving416_417": "Independent; active334 imports/frozenbaseline unchanged"
+}

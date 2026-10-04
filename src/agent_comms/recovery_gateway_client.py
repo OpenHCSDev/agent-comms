@@ -107,9 +107,10 @@ async def read_gateway_projection(path: Path, thread: str) -> dict[str, object]:
         def remaining() -> float:
             return max(0.001, deadline - loop.time())
 
-        reader, connected = await asyncio.wait_for(
-            asyncio.open_unix_connection(str(path), limit=_MAX_REPLY + 1), remaining()
-        )
+        with PrivateSocketRole.address(path) as address:
+            reader, connected = await asyncio.wait_for(
+                asyncio.open_unix_connection(str(address), limit=_MAX_REPLY + 1), remaining()
+            )
         writer = connected
         if not _same_uid(connected):
             return dict(_UNAVAILABLE)

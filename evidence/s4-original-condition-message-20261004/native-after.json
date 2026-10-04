@@ -1,0 +1,32 @@
+{
+  "revision": "HEAD",
+  "modules": 49,
+  "parse_omissions": [],
+  "owners_and_consumers": {
+    "stack/native-session-context.mjs": [
+      "41:MemberExpression:convertToLlm"
+    ],
+    "stack/native-turn-context.mjs": [
+      "213:MemberExpression:convertToLlm",
+      "237:MemberExpression:convertToLlm"
+    ],
+    "tests/native_turn_context_contract.mjs": [
+      "69:MemberExpression:convertToLlm"
+    ],
+    "tests/retained_native_conditions.mjs": [
+      "34:FunctionDeclaration:boundedMessages",
+      "79:FunctionDeclaration:transformBoundedNativeCondition",
+      "90:FunctionDeclaration:armBoundedNativeCondition"
+    ],
+    "agent.js": [
+      "121:MemberExpression:convertToLlm",
+      "121:MemberExpression:convertToLlm",
+      "320:MemberExpression:convertToLlm"
+    ],
+    "agent-loop.js": [
+      "195:MemberExpression:convertToLlm"
+    ]
+  },
+  "dependency": "Original immutable2ea pi-agent-core agent.js/agent-loop.js",
+  "limits": "Lexical callback source; captures reference original post-conversion frame, not new execution evidence."
+}

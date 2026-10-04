@@ -5,6 +5,7 @@ import os
 from dataclasses import replace
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.input_attempt import ReservedInput
 from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_compaction_settings import PiCompactionSettings
@@ -63,7 +64,7 @@ def manual_summary_record(
 
 def summary_source(
     source, *, selected=SelectedModel("fixture", "model", 1000),
-    settings=PiCompactionSettings(100, 100), retained=RetainedTaskFacts(()),
+    settings=PiCompactionSettings(100, 100), retained,
 ):
     return FieldCodec.encode(SelectedSummarySource(
         source=source, selected=selected, settings=settings, retained=retained,
@@ -79,11 +80,13 @@ def admission_identity(
             incarnation=incarnation or ThreadIncarnation(owner, 1.0),
             owner=ProcessIdentity.capture(os.getpid()),
             turn=TurnId(turn),
-            ingress_key=key,
+            originals=(ReservedInput(
+                key=key, sequence=None, owner=owner, admission=admission,
+                target=owner, source_text=text if original_text is None else original_text,
+            ).context_provenance(),),
             admission_generation=admission,
             correction_witness=f"{admission}:{digest.value}",
             input_digest=digest,
-            original_digest=TextDigest.of(text if original_text is None else original_text),
             reserved_revision=SessionRevision.observe(str(session)).require_available(),
         ),
         session_revision=SessionRevision.observe(str(session)).require_available(),
@@ -109,7 +112,6 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     from pathlib import Path
     from agent_comms.compaction_source import CompactionSource
     from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
-    from agent_comms.native_revision_text import NativeRevisionText
     from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
     from agent_comms.owner_compaction_prepare import NativeWitness
     from agent_comms.private_path import FileRevision
@@ -117,7 +119,7 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     session = Path(session).resolve(strict=True)
     witness = NativeWitness(
         "fixture-session", str(session), "fixture-leaf", "fixture-kept",
-        NativeRevisionText.encode(FileRevision.from_stat(session.stat())),
+        FileRevision.from_stat(session.stat()),
     )
     payload = NativeSummaryPayload(summary="private journal fixture summary", tokens_before=0)
     intent = NativeIntent(witness, payload.payload_digest(witness), payload.metadata_digest())
@@ -126,6 +128,6 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     )
     source = CompactionSource(
         witness, str(session.parent), owner, 1, "turn", None, None,
-        "fixture-bus-revision", "fixture-input-revision", retained,
+        "fixture-input-revision", retained, (),
     )
     return intent, attestation, source, selected

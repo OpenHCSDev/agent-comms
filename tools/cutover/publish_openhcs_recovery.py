@@ -26,6 +26,7 @@ from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import FileRevision, PrivateFileRole
@@ -181,11 +182,16 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     candidate: tuple[HistorySource, ...]
     carry_proof: dict
 
+    def failed(self, failure):
+        # This historical one-use member changes archived sources and has no
+        # certified original-unchanged recovery. Leave its committed effects and
+        # uncertainty intact; explicitly dispose before the one-shot exits.
+        self.leave_stopped(failure)
+
     def complete(self, stopped):
         # FencedOwnerBatch retains the ORIGINAL wire custody through this
         # method. Readback belongs here, before resumed owners may progress.
-        self.after_stopped(stopped.lifecycle)
-        results = stopped.launch()
+        results = super().complete(stopped)
         after = stopped.lifecycle.registry.snapshot()
         for previous, result in zip(self.originals, results, strict=True):
             current = after.threads[result.thread]
@@ -195,6 +201,9 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         self.note('retained-batch-launched-configurations-verified-public-ui-pending',
                   finished=time.time(), results=FieldCodec.encode(results))
         return results
+
+    def bind_target_launch(self, lifecycle):
+        lifecycle.pin_private_nk_launch(ROOT, ROOT_ID, NATIVE)
 
     @property
     def manifest(self):
@@ -350,8 +359,7 @@ def main():
         raise RuntimeError('Archive source names another root')
     service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
-    owners = tuple(thread for thread in snapshot.threads.values()
-                   if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive)
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
         raise RuntimeError('Empty original owner audience requires review')
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)
@@ -387,7 +395,6 @@ def main():
                        'owners_before':FieldCodec.encode(audience)}, opened,indent=2)
             opened.flush()
             os.fsync(opened.fileno())
-        service.owners.pin_private_nk_launch(ROOT, ROOT_ID, NATIVE)
         runtime = RestartEnvironment(path=str(TARGET / 'bin')+':'+os.environ['PATH'], virtual_env=str(TARGET))
         results = service.owners.restart_owners(runtime=runtime,
             source_interpreter=str(args.source_interpreter), cutover=operation)

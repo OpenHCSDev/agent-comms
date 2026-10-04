@@ -1,0 +1,19 @@
+{
+  "provider_calls": 0,
+  "prompt_writes": 0,
+  "decisions": [
+    {
+      "reason": "unneeded",
+      "boundary_count": 0,
+      "task_aware": true
+    },
+    {
+      "reason": "task_boundary",
+      "boundary_count": 1,
+      "task_aware": true
+    }
+  ],
+  "input_rows_unchanged": true,
+  "worker_retired": true,
+  "source_unchanged": true
+}

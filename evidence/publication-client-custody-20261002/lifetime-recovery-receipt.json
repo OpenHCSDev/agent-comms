@@ -1,0 +1,30 @@
+{
+  "state": "installed-affected-client-and-early-recovery-batch-passed",
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+  "core": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+  "toad": "2b55f0b5509ced222186a6d962f6386f3c24ef7f",
+  "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+  "source_proof_sha256": "662f2c0215ef5367129ae25df3d17dbc17c1ed0490a8ae10b34611190caa37e4",
+  "recorded_at": "2026-10-02T21:40:55.657045+00:00",
+  "checks": [
+    "canonical launcher drops stale environment; route-directory publisher EX refuses launch before runtime invocation",
+    "original default-write and CLI mutation resource orders publication after operation",
+    "explicit published-root client SH acquired in worker and retired on caller thread; published-root entry refused under EX; independent private root remains admissible",
+    "actual AgentProcess startup cancelled during held original preflight: no runner/child and route EX available",
+    "actual process-group cancellation/stop/EOF join child and session resources before route lease release",
+    "actual two-owner native idle batch retained distinct original settings/environment, exact birth/fence and original saved bytes across owned RAM/OFD handoff",
+    "actual PublishRetainedSummary early after_stopped failure recovers original batch before caller unwind while late .originals directory is absent, reports original cause",
+    "changed protected original refuses source restoration; target changed bytes remain and original failed disposition reports both errors"
+  ],
+  "sanity_count": 5,
+  "sanity_duration_seconds": 40.9,
+  "sanity_warning": "pytest cache under /dev refused; all five checks passed; no production warning suppressed",
+  "sanity_log": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/client-custody548-context547309-20261002/focused-sanity.log",
+  "sanity_sha256": "ee11f7020c04e0f571f424be829a4e9eb6078992e9d6ba66f9bb9b76e2ba1923",
+  "process_log": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/client-custody548-lifetime-owned-session.log",
+  "process_sha256": "f95fcc4ac155aa440725e20bbec6fd7fce2d4248a5c77dc85efe4e851019d179",
+  "providers": 0,
+  "public_writes": 0,
+  "failed337_repeated": false,
+  "qualification_limit": "Affected installed route/resource/recovery lifetime. Sole actual configured saved-history native/context/physical Tree journey remains owned by Mendel/Lovelace; not public activation or new provider acceptance."
+}

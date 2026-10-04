@@ -1,0 +1,1891 @@
+{
+  "owner": "context-explorer309",
+  "purpose": "installed TUI physical interaction video review",
+  "output": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture",
+  "command": [
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "--session",
+    "context547",
+    "--project-dir",
+    "/home/ts/.agent-comms"
+  ],
+  "terminal_command": [
+    "st",
+    "-e",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "--session",
+    "context547",
+    "--project-dir",
+    "/home/ts/.agent-comms"
+  ],
+  "fps": 60,
+  "screen": [
+    1440,
+    1000
+  ],
+  "profiling_requested": false,
+  "state_capture_requested": true,
+  "ui_config": {
+    "source": "/home/ts/.config/toad/toad.json",
+    "home": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/ui-config",
+    "initial_sha256": "dc7757bf1a59dc9df0b20a575d6453def6b0283742bced0aa3d910edec2b79a2"
+  },
+  "private_root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+  "capture_target": "private",
+  "physical_journey": "context_inspection",
+  "original_owner_before": {
+    "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+    "mode": "private"
+  },
+  "recorder_argv": [
+    "/home/ts/wt/toad-command-discovery-handoff/tests/tools/record_installed_tui.py",
+    "--output",
+    "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture",
+    "--owner",
+    "context-explorer309",
+    "--private-root",
+    "/home/ts/.cache/agent-scratch/m547ctx/w",
+    "--capture-target",
+    "private",
+    "--journey",
+    "context_inspection",
+    "--capture-state",
+    "--review-timing",
+    "deferred",
+    "--fps",
+    "60",
+    "--width",
+    "1440",
+    "--height",
+    "1000",
+    "--fit-window",
+    "--startup-wait",
+    "10",
+    "--max-duration",
+    "80",
+    "--tail-seconds",
+    "1",
+    "--",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "--session",
+    "context547",
+    "--project-dir",
+    "/home/ts/.agent-comms"
+  ],
+  "recorder_source_sha256": "aadeeb53089acd50942f8400eb37e67e7f3875aeffacb373784f6ad679c95a94",
+  "started_utc": "2026-10-02T21:45:54.524638+00:00",
+  "assessment": "unreviewed",
+  "capture_completed": true,
+  "completed": true,
+  "review_timing": "deferred",
+  "review": {
+    "start_seconds": 0,
+    "seconds": 3,
+    "fps": 8,
+    "frames_limit": 24,
+    "slowdown": 8,
+    "timestamp_basis": "source video seconds"
+  },
+  "runtime_before": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin",
+    "launcher": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "launcher_sha256": "be353f791fa3117b4c77be638f445b870217d7545adffcd76b1d4b42685c5c66",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "resolved_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "sha256": "be353f791fa3117b4c77be638f445b870217d7545adffcd76b1d4b42685c5c66"
+      },
+      "acp": {
+        "selected_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "sha256": "363e5c9e0707629f09fbd787d28e2d23a469e459b07a272c768ea65602e7c07c"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "sha256": "be353f791fa3117b4c77be638f445b870217d7545adffcd76b1d4b42685c5c66"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "sha256": "363e5c9e0707629f09fbd787d28e2d23a469e459b07a272c768ea65602e7c07c"
+      }
+    },
+    "activation_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/activation.json",
+    "activation_sha256": "08391516b0a348ca43d9e1782b6760e8e9dca40dde0d0c7e07e3c99c698d698b",
+    "activation": {
+      "stage": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+      "pins": {
+        "agent_comms": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+        "toad": "2b55f0b5509ced222186a6d962f6386f3c24ef7f",
+        "textual": "8015662a86de0c4e1a6fba858039043a690ea8da"
+      },
+      "sdk": "0.12.1",
+      "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent",
+      "state": "Normal69 matching installed joined client custody548/343 and original native/context547/309; final actual paired context journey pending",
+      "staging_receipt": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/client-custody548-context547309-20261002/source-proof.json",
+      "bins": {
+        "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+        "toad": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "agent-comms": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms",
+        "agent-comms-acp": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "agent-comms-agent": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-agent",
+        "pi-comms-native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/pi-comms-native"
+      },
+      "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+      "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+      "native_tree": "01de56aa9550de0fe8bf93b5df8815429cba26c64b676704a9653ebf831e0e9d",
+      "native_configuration_note": "Released old520 holder reused without new environment/native; actual547 prepared native configuration and original saved source; no provider/public changes; current334/333/frozen337 protected."
+    },
+    "observed": {
+      "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+      "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "cceddfed1e07a4ac547334cb79f5b698ddee0debb86ed4146e121b5fba89108d",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "2b55f0b5509ced222186a6d962f6386f3c24ef7f",
+              "requested_revision": "2b55f0b5509ced222186a6d962f6386f3c24ef7f"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "b222c75a577153058e8c6da089e29cb6e40ceba65c35e3d6068590016b5957cc",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "8015662a86de0c4e1a6fba858039043a690ea8da",
+              "requested_revision": "8015662a86de0c4e1a6fba858039043a690ea8da"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "46199c1eac259fcc11ae4c8666973bfa9dd1a117e6e701bc68eafe4176b9e236",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+              "requested_revision": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+        "wire_root_id": "8f2a9345a8fd44fabd652b1903ebca01",
+        "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent"
+      },
+      "native_launch": {
+        "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+        "wire_root_id": "8f2a9345a8fd44fabd652b1903ebca01",
+        "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "display": ":2296",
+  "ui_identity": {
+    "pid": 818756,
+    "start_ticks": 45319580
+  },
+  "window": "2097158",
+  "capture_launch_monotonic": 453196.252782578,
+  "interaction_deadline_monotonic": 453260.252782578,
+  "finish_deadline_monotonic": 453276.252782578,
+  "finalize_seconds": 16,
+  "terminal_pid": 818754,
+  "state_captures": {
+    "before": {
+      "started_seconds": 10.283012695028447,
+      "manifest": {
+        "pid": 818756,
+        "created": 1790977555.8,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 158261248,
+        "started_ns": 1790977567423911251,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/before-state": "complete",
+          "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/before-screen": "complete"
+        },
+        "finished_ns": 1790977567556358016
+      },
+      "finished_seconds": 10.61730105301831
+    },
+    "observers": {
+      "started_seconds": 10.617436830012593,
+      "manifest": {
+        "pid": 818756,
+        "created": 1790977555.8,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 159354880,
+        "started_ns": 1790977567784096571,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/observers-state": "complete"
+        },
+        "finished_ns": 1790977567848796233
+      },
+      "finished_seconds": 10.883683477004524
+    },
+    "after": {
+      "started_seconds": 39.850321976991836,
+      "manifest": {
+        "pid": 818756,
+        "created": 1790977555.8,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 166510592,
+        "started_ns": 1790977596992214158,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/after-state": "complete",
+          "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/after-screen": "complete"
+        },
+        "finished_ns": 1790977597124816216
+      },
+      "finished_seconds": 40.1651090530213
+    }
+  },
+  "terminal_processes": {
+    "818754": {
+      "start_ticks": 45319573,
+      "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+    },
+    "818756": {
+      "start_ticks": 45319580,
+      "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+    },
+    "818766": {
+      "start_ticks": 45319665,
+      "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+    },
+    "818788": {
+      "start_ticks": 45319859,
+      "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+    },
+    "818800": {
+      "start_ticks": 45319902,
+      "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+    },
+    "818803": {
+      "start_ticks": 45319926,
+      "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+    }
+  },
+  "driver_started_seconds": 10.922238747996744,
+  "live_reviews": [
+    {
+      "label": "live-0-0",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-2-1",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-3-2",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-6-3",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-7-4",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-13-5",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-14-6",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-18-7",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-23-8",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-24-9",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-26-10",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-27-11",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-29-12",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    },
+    {
+      "label": "live-30-13",
+      "assessment": "Clip encoding deferred; native frame tracing remains active. Inspect consecutive original video frames during or after the run."
+    }
+  ],
+  "live_frame_delivery": {
+    "available": true,
+    "trace": "live-30-13-state-frames.json",
+    "artifacts": [
+      "frame-delivery.json",
+      "frame-delivery.svg"
+    ],
+    "intervals": {
+      "count": 127,
+      "median_ms": 51.78,
+      "p95_ms": 999.04,
+      "p99_ms": 1001.05,
+      "max_ms": 1001.74
+    },
+    "scope": "Native writer completion; not changed pixels or terminal presentation FPS. Zero stationary motion is legitimate, not a stall classification."
+  },
+  "driver_finished_seconds": 38.51855582202552,
+  "duration_seconds": 40.165113441005815,
+  "capture_returncode": 255,
+  "runtime_after": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin",
+    "launcher": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "launcher_sha256": "be353f791fa3117b4c77be638f445b870217d7545adffcd76b1d4b42685c5c66",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "resolved_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "sha256": "be353f791fa3117b4c77be638f445b870217d7545adffcd76b1d4b42685c5c66"
+      },
+      "acp": {
+        "selected_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "sha256": "363e5c9e0707629f09fbd787d28e2d23a469e459b07a272c768ea65602e7c07c"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "sha256": "be353f791fa3117b4c77be638f445b870217d7545adffcd76b1d4b42685c5c66"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "sha256": "363e5c9e0707629f09fbd787d28e2d23a469e459b07a272c768ea65602e7c07c"
+      }
+    },
+    "activation_path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/activation.json",
+    "activation_sha256": "08391516b0a348ca43d9e1782b6760e8e9dca40dde0d0c7e07e3c99c698d698b",
+    "activation": {
+      "stage": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+      "pins": {
+        "agent_comms": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+        "toad": "2b55f0b5509ced222186a6d962f6386f3c24ef7f",
+        "textual": "8015662a86de0c4e1a6fba858039043a690ea8da"
+      },
+      "sdk": "0.12.1",
+      "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent",
+      "state": "Normal69 matching installed joined client custody548/343 and original native/context547/309; final actual paired context journey pending",
+      "staging_receipt": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/client-custody548-context547309-20261002/source-proof.json",
+      "bins": {
+        "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+        "toad": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+        "agent-comms": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms",
+        "agent-comms-acp": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+        "agent-comms-agent": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-agent",
+        "pi-comms-native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/pi-comms-native"
+      },
+      "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+      "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+      "native_tree": "01de56aa9550de0fe8bf93b5df8815429cba26c64b676704a9653ebf831e0e9d",
+      "native_configuration_note": "Released old520 holder reused without new environment/native; actual547 prepared native configuration and original saved source; no provider/public changes; current334/333/frozen337 protected."
+    },
+    "observed": {
+      "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+      "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "cceddfed1e07a4ac547334cb79f5b698ddee0debb86ed4146e121b5fba89108d",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "2b55f0b5509ced222186a6d962f6386f3c24ef7f",
+              "requested_revision": "2b55f0b5509ced222186a6d962f6386f3c24ef7f"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "b222c75a577153058e8c6da089e29cb6e40ceba65c35e3d6068590016b5957cc",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "8015662a86de0c4e1a6fba858039043a690ea8da",
+              "requested_revision": "8015662a86de0c4e1a6fba858039043a690ea8da"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "46199c1eac259fcc11ae4c8666973bfa9dd1a117e6e701bc68eafe4176b9e236",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+              "requested_revision": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+        "wire_root_id": "8f2a9345a8fd44fabd652b1903ebca01",
+        "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent"
+      },
+      "native_launch": {
+        "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+        "wire_root_id": "8f2a9345a8fd44fabd652b1903ebca01",
+        "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "runtime_unchanged": true,
+  "terminal_exit": {
+    "pid": 818754,
+    "start_ticks": 45319573,
+    "returncode": 0
+  },
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "Constrained Baseline",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.42c02a",
+        "width": 1440,
+        "height": 1000,
+        "coded_width": 1440,
+        "coded_height": 1000,
+        "has_b_frames": 0,
+        "pix_fmt": "yuv420p",
+        "level": 42,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "60/1",
+        "avg_frame_rate": "60/1",
+        "time_base": "1/15360",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 622848,
+        "duration": "40.550000",
+        "bit_rate": "326545",
+        "bits_per_raw_sample": "8",
+        "extradata_size": 38,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.102 libx264"
+        }
+      }
+    ],
+    "format": {
+      "filename": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/terminal.mp4",
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "40.550000",
+      "size": "1671081",
+      "bit_rate": "329683",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "iso5",
+        "minor_version": "512",
+        "compatible_brands": "iso5iso6mp41",
+        "encoder": "Lavf63.1.102"
+      }
+    }
+  },
+  "events": [
+    {
+      "label": "startup",
+      "utc": "2026-10-02T21:46:08.635256+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 11.55954067199491,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.09,
+          "minor_faults": 5093,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 5.23,
+          "minor_faults": 45465,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.73,
+          "minor_faults": 16060,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-startup.png",
+      "state_capture": {
+        "started_seconds": 11.847659095015842,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 159363072,
+          "started_ns": 1790977568989921759,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-startup-state": "complete"
+          },
+          "finished_ns": 1790977569122281128
+        },
+        "finished_seconds": 12.182139447017107
+      }
+    },
+    {
+      "label": "sidebar-open",
+      "utc": "2026-10-02T21:46:12.834939+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 15.759225298999809,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.1,
+          "minor_faults": 5093,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 5.92,
+          "minor_faults": 48716,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.73,
+          "minor_faults": 16060,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-sidebar-open.png",
+      "state_capture": {
+        "started_seconds": 16.069883375021163,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 161476608,
+          "started_ns": 1790977573212689910,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-sidebar-open-state": "complete"
+          },
+          "finished_ns": 1790977573377416092
+        },
+        "finished_seconds": 16.457572111976333
+      }
+    },
+    {
+      "label": "context-panel",
+      "utc": "2026-10-02T21:46:17.106592+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 20.030873843003064,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.11,
+          "minor_faults": 5099,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 6.5,
+          "minor_faults": 50611,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.73,
+          "minor_faults": 16060,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-context-panel.png",
+      "state_capture": {
+        "started_seconds": 20.305367933004163,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 161939456,
+          "started_ns": 1790977577441603925,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-context-panel-state": "complete"
+          },
+          "finished_ns": 1790977577574081217
+        },
+        "finished_seconds": 20.629251694015693
+      }
+    },
+    {
+      "label": "system-detail",
+      "utc": "2026-10-02T21:46:21.493267+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 24.41755266202381,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.11,
+          "minor_faults": 5099,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 7.08,
+          "minor_faults": 52006,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.73,
+          "minor_faults": 16060,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-system-detail.png",
+      "state_capture": {
+        "started_seconds": 24.712348438974004,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 162037760,
+          "started_ns": 1790977581851310643,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-system-detail-state": "complete"
+          },
+          "finished_ns": 1790977581984058689
+        },
+        "finished_seconds": 25.046168658009265
+      }
+    },
+    {
+      "label": "reference-detail",
+      "utc": "2026-10-02T21:46:24.041027+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 26.965306992002297,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.11,
+          "minor_faults": 5099,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 7.39,
+          "minor_faults": 53270,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.73,
+          "minor_faults": 16060,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-reference-detail.png",
+      "state_capture": {
+        "started_seconds": 27.299103004974313,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 162721792,
+          "started_ns": 1790977584449863538,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-reference-detail-state": "complete"
+          },
+          "finished_ns": 1790977584582875614
+        },
+        "finished_seconds": 27.612335763988085
+      }
+    },
+    {
+      "label": "refreshed",
+      "utc": "2026-10-02T21:46:28.346325+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 31.270603347977158,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.11,
+          "minor_faults": 5099,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 8.0,
+          "minor_faults": 54738,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.73,
+          "minor_faults": 16060,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-refreshed.png",
+      "state_capture": {
+        "started_seconds": 31.59286674601026,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 163119104,
+          "started_ns": 1790977588733133894,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-refreshed-state": "complete"
+          },
+          "finished_ns": 1790977588865881900
+        },
+        "finished_seconds": 31.90238007903099
+      }
+    },
+    {
+      "label": "irc",
+      "utc": "2026-10-02T21:46:31.408110+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 34.33239900600165,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.12,
+          "minor_faults": 5099,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 8.97,
+          "minor_faults": 56679,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17642,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-irc.png",
+      "state_capture": {
+        "started_seconds": 34.63068082497921,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 165142528,
+          "started_ns": 1790977591769850582,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-irc-state": "complete"
+          },
+          "finished_ns": 1790977591902357720
+        },
+        "finished_seconds": 34.937000509991776
+      }
+    },
+    {
+      "label": "returned",
+      "utc": "2026-10-02T21:46:34.564709+00:00",
+      "image_only": false,
+      "seconds_since_capture_launch": 37.48898792400723,
+      "cpu": {
+        "818754": {
+          "start_ticks": 45319573,
+          "cpu_seconds": 0.13,
+          "minor_faults": 5099,
+          "major_faults": 0,
+          "command": "st -e /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad acp /home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp --session context547 --project-dir /home/ts/.agent-comms "
+        },
+        "818756": {
+          "start_ticks": 45319580,
+          "cpu_seconds": 9.85,
+          "minor_faults": 59427,
+          "major_faults": 0,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "
+        },
+        "818788": {
+          "start_ticks": 45319859,
+          "cpu_seconds": 0.8,
+          "minor_faults": 16252,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "818766": {
+          "start_ticks": 45319665,
+          "cpu_seconds": 0.02,
+          "minor_faults": 1830,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "818800": {
+          "start_ticks": 45319902,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17743,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=22) --multiprocessing-fork "
+        },
+        "818803": {
+          "start_ticks": 45319926,
+          "cpu_seconds": 0.79,
+          "minor_faults": 17642,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        },
+        "818809": {
+          "start_ticks": 45320016,
+          "cpu_seconds": 1.97,
+          "minor_faults": 18861,
+          "major_faults": 0,
+          "command": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp "
+        }
+      },
+      "screenshot": "phase-returned.png",
+      "state_capture": {
+        "started_seconds": 37.771935587981716,
+        "manifest": {
+          "pid": 818756,
+          "created": 1790977555.8,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 166203392,
+          "started_ns": 1790977594912084572,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-corrected-20261002/capture/phase-returned-state": "complete"
+          },
+          "finished_ns": 1790977595044622769
+        },
+        "finished_seconds": 38.08560670702718
+      }
+    }
+  ],
+  "frame_review": {
+    "available": true,
+    "trace": "after-state-frames.json",
+    "artifacts": [
+      "frame-delivery.json",
+      "frame-delivery.svg"
+    ],
+    "intervals": {
+      "count": 131,
+      "median_ms": 51.88,
+      "p95_ms": 999.04,
+      "p99_ms": 1001.05,
+      "max_ms": 1001.74
+    },
+    "scope": "Native writer completion; not changed pixels or terminal presentation FPS. Zero stationary motion is legitimate, not a stall classification."
+  },
+  "journey_review": null,
+  "review_intervals": [
+    {
+      "label": "main",
+      "start": 0,
+      "seconds": 3
+    }
+  ],
+  "artifacts": {
+    "terminal.mp4": {
+      "bytes": 1671081,
+      "sha256": "37fd9d91225863831675d7fe7c7788e885ddbfafd4eed04845bed05b7db2f046"
+    },
+    "before.png": {
+      "bytes": 35691,
+      "sha256": "9a9d07a21422089a69f49c1891c3814af7b1e2836b84163eb8c4e9aac4f263f6"
+    },
+    "after.png": {
+      "bytes": 54542,
+      "sha256": "dafb0f7c119e0d3372e466fd1fce7481ea0731384a323bad8183f0360b39f991"
+    },
+    "before-state.json": {
+      "bytes": 254639,
+      "sha256": "d4f1a90b54d5b3c3a8d5565d0a209e98bf629056981e3584a301fb079b508369"
+    },
+    "before-state.pickle": {
+      "bytes": 40101,
+      "sha256": "d9fb962ca8aecc7c6002dc7f1e6e879377287d53287d8ee5802bf79fb99be075"
+    },
+    "before-screen.svg": {
+      "bytes": 43947,
+      "sha256": "315cb884170b206e5b6b6eb597e8b05bae10562d39f38ea121f849459493c8ab"
+    },
+    "before-remote.py": {
+      "bytes": 1378,
+      "sha256": "89c4681ec876f26f4d6017fd29bf03f7629ee548ac8aef26174b87ee7a0e6a38"
+    },
+    "before-state-metadata.json": {
+      "bytes": 254613,
+      "sha256": "d8717df0bed85b7b82cde424cc573ae9373f7c6bf5483e6c917dd5bcf52d17dd"
+    },
+    "before-state-frames.json": {
+      "bytes": 117,
+      "sha256": "9a03bdc0e085416b66b7d0897b90cad4940f38845e947472539cf86ed9376e6d"
+    },
+    "before-manifest.json": {
+      "bytes": 573,
+      "sha256": "0309794266582bc08ef9aacb778be271e984731b2acd9451eadb48de2748ebbc"
+    },
+    "before-screen.json": {
+      "bytes": 177,
+      "sha256": "29e8eed1e434bef4c90f30f7e81d2cad4caef8aae7bf82dbd5dc53cd6032af9e"
+    },
+    "before-capture.log": {
+      "bytes": 110,
+      "sha256": "7049fd797c45b78bdd690a548f4969ac679d5597bb80b51e0e85e4dbdcac722e"
+    },
+    "after-screen.svg": {
+      "bytes": 57353,
+      "sha256": "2e41864561366172970754ab12216db2eaaaebfb3c18583ed4136f4c64c638b4"
+    },
+    "after-state-metadata.json": {
+      "bytes": 467767,
+      "sha256": "8d46be1037bbf7b0f09055fc0618f0065308215d3aae06203401560aeedf15e1"
+    },
+    "after-remote.py": {
+      "bytes": 1376,
+      "sha256": "7ea78b5fb5d017111e156e6c49263c1d333840c5726cc253b8771214324fde1f"
+    },
+    "after-manifest.json": {
+      "bytes": 571,
+      "sha256": "2bfd04424ec8270290fa593095ec921c0cf4d77f4503405ac088731fc22d2aaf"
+    },
+    "after-state-frames.json": {
+      "bytes": 31409,
+      "sha256": "f4a86de2ec4c90dc84da1cb27df5f201a5be1e94cd14bc9325e0bcc8a2bd764b"
+    },
+    "after-capture.log": {
+      "bytes": 109,
+      "sha256": "049a32e298d73db6e37ef7a3af03cb7511c57adca0758b458874bb9599fdfb68"
+    },
+    "after-state.json": {
+      "bytes": 467793,
+      "sha256": "a0cf477ed19de437fbf84142a6a2d1756ae2ab96c8e82e057bb15a4de2b7c408"
+    },
+    "after-state.pickle": {
+      "bytes": 63986,
+      "sha256": "b7d5e717b374aef7f5a2688e6d3c718271b044d0d9ae81c4b132a7f6c03043d1"
+    },
+    "after-screen.json": {
+      "bytes": 176,
+      "sha256": "2bcff90473df021ae10f412e89ae08fd80b0372f0cf1ba8587421451085cdc0a"
+    },
+    "phase-system-detail-state.pickle": {
+      "bytes": 55474,
+      "sha256": "25db6bab0df9c95506505beda2718a0a7764ceee041dea3a65b65478ec59e3f9"
+    },
+    "phase-reference-detail-capture.log": {
+      "bytes": 126,
+      "sha256": "96bc23bc81529fe26b8578ed73971b29ba736da0c01100679816274a3ca0c390"
+    },
+    "phase-returned.png": {
+      "bytes": 54542,
+      "sha256": "dafb0f7c119e0d3372e466fd1fce7481ea0731384a323bad8183f0360b39f991"
+    },
+    "phase-returned-state-metadata.json": {
+      "bytes": 403552,
+      "sha256": "5cb9b1993c683c5250727f964708d5825721d48977b9a24cb9ea89e423769d4e"
+    },
+    "phase-reference-detail-state.json": {
+      "bytes": 392473,
+      "sha256": "2af9ca0442f263f8bba7ee6402a3ffc883dfc4fb8c4612c771a13c5aca6bb626"
+    },
+    "phase-system-detail-remote.py": {
+      "bytes": 1002,
+      "sha256": "b68d3e68b93f97c602f520cf2de5647cb58787775afa0730cfb917b4cf862acd"
+    },
+    "phase-irc-state-frames.json": {
+      "bytes": 23890,
+      "sha256": "2ae7a1da87b26b20762002b7f2842947d83d4662381b045df9061d27210aa5ac"
+    },
+    "phase-system-detail-capture.log": {
+      "bytes": 123,
+      "sha256": "d5db38cc88d6c6a79da3cb73292605036c8fd3d9a4c0cd6514bbe3b016208907"
+    },
+    "phase-sidebar-open-state-metadata.json": {
+      "bytes": 392600,
+      "sha256": "54012fb3d02c34a1befab4f672bcb2c01b68e2b3e8d0c969d5687a8f80b96d5f"
+    },
+    "phase-irc-capture.log": {
+      "bytes": 113,
+      "sha256": "a0b2874c9de0758f0874e04c97558e1ccaebc2282ae97aa8a8640c8b1dfedf5b"
+    },
+    "phase-returned-state.json": {
+      "bytes": 403578,
+      "sha256": "da8120ba0e5b9edecac31c27fa6e29b64ec83a1e4f01db570b212d0ef0dae521"
+    },
+    "phase-irc.png": {
+      "bytes": 24837,
+      "sha256": "66df33911edb8df71cc51d1140315ab3f731a06ba3c8bf2a2c47f44f8f9bcdf1"
+    },
+    "phase-startup.png": {
+      "bytes": 32948,
+      "sha256": "a9870bc81b7da2ecff4781ae110b8d77cca8fd3b3b19620fb8e3804923fb6b79"
+    },
+    "phase-sidebar-open-remote.py": {
+      "bytes": 1001,
+      "sha256": "4c5e2d684485deb6ee99a0f53720e263a629630460bcc4d6210f9837e70201da"
+    },
+    "phase-startup-state-frames.json": {
+      "bytes": 1090,
+      "sha256": "8aa72f70c9eac8237104f93eff945e1ce20327e3828332c5680ca66be5e61e75"
+    },
+    "phase-startup-capture.log": {
+      "bytes": 117,
+      "sha256": "200befa8e89cbcf8be18b6d26c96a555cc57cb3c7163de0be47db9c611d02a9f"
+    },
+    "phase-sidebar-open-state-frames.json": {
+      "bytes": 6153,
+      "sha256": "ceff46cdd62933c1ecef58444a0ad4d583b2cf206421ca8b3d3e7ca8fe28e0f8"
+    },
+    "phase-context-panel-state.json": {
+      "bytes": 392473,
+      "sha256": "4100fe85cd28e40dfb40d20bea162b317251811c461dabdcaef149b91b680f78"
+    },
+    "phase-startup-state.json": {
+      "bytes": 253285,
+      "sha256": "e0b2f9ea68f14a330ef0fb01d51678530e0770de7ac1dfc99c15368c9cda6a74"
+    },
+    "phase-context-panel.png": {
+      "bytes": 54108,
+      "sha256": "a6941eb2b966f6146d0274e17ec1d263332174f50fc8cb7fcde61778793bb86a"
+    },
+    "phase-irc-state-metadata.json": {
+      "bytes": 178241,
+      "sha256": "d009edc940cea40d85d1660c4c9884c6fa0ad93583c99bf9d792a2af264988c6"
+    },
+    "phase-irc-manifest.json": {
+      "bytes": 454,
+      "sha256": "440f607318435fc0e262d30b1d14ea7173bcb39092ecd019ed5766bf2b7c9275"
+    },
+    "phase-sidebar-open.png": {
+      "bytes": 54030,
+      "sha256": "6038b2c183ded7f68e2cf180992f07a4263d91c2bd7a5ddb4f73390fdd9beef7"
+    },
+    "phase-context-panel-state-frames.json": {
+      "bytes": 8433,
+      "sha256": "10b803082333581a51936cdc83b29939570748a83818bf540a7907b66611fd5e"
+    },
+    "phase-context-panel-capture.log": {
+      "bytes": 123,
+      "sha256": "491cb2dcf3a5f9e80f6d1904f08acbef1e6ce703a7893e85976b3bf2b13c4a62"
+    },
+    "phase-refreshed-state-frames.json": {
+      "bytes": 12363,
+      "sha256": "2b11614999fd0780bcdc9045ca24ffd8eded3dfc7ac52d3eb664b15c445a0873"
+    },
+    "phase-irc-remote.py": {
+      "bytes": 992,
+      "sha256": "da610c109fa3cfb3996353aac1c7a14a10de068ffcc2bfe9a526939b76e1cbd7"
+    },
+    "phase-irc-state.pickle": {
+      "bytes": 32028,
+      "sha256": "69509352c650584d5d5700cbbbe9555f098513f35087c90a3e2db65e3ac751a2"
+    },
+    "phase-reference-detail-state-metadata.json": {
+      "bytes": 392447,
+      "sha256": "6e51cb085e4c7b2fbeceb5b29c328598f781554e402ba43d7a4b6c95926d96a2"
+    },
+    "phase-irc-state.json": {
+      "bytes": 178267,
+      "sha256": "5203d6602927d3df27836690b15b5ddaf7423b9333e9484a854d88c8fcff4469"
+    },
+    "phase-system-detail.png": {
+      "bytes": 54126,
+      "sha256": "b6c730414368199d37ff9b55bdfdb9ca4343ce85b855c76b183ccbc5d2f6c666"
+    },
+    "phase-returned-remote.py": {
+      "bytes": 997,
+      "sha256": "a7e2224f1304d6c244895d7a1ecb41d51c920a5f6824a9e9801402b9d290cb51"
+    },
+    "phase-refreshed-state.pickle": {
+      "bytes": 55474,
+      "sha256": "f8fd588bcb5c27705bc66d5ec3b8f1d70da8873550f0da0b66fa9cb3bb9bd413"
+    },
+    "phase-system-detail-manifest.json": {
+      "bytes": 464,
+      "sha256": "4a0ead3bad80407e6a3c108810cce35bd82238c1105fa79b2551e446def03be6"
+    },
+    "phase-sidebar-open-state.json": {
+      "bytes": 392626,
+      "sha256": "379c44a5f6fd020d3f147b4ecb927c067ed45ea2ffbf63e28f97f105783fbf33"
+    },
+    "phase-context-panel-remote.py": {
+      "bytes": 1002,
+      "sha256": "d9bbb1b58d88428451e577dc6668a3b37733a570611dbcd3adb2f36a4801b27e"
+    },
+    "phase-refreshed.png": {
+      "bytes": 54108,
+      "sha256": "a6941eb2b966f6146d0274e17ec1d263332174f50fc8cb7fcde61778793bb86a"
+    },
+    "phase-reference-detail-state-frames.json": {
+      "bytes": 10943,
+      "sha256": "0c3c1ddc1eb5fd48619665e0690d4386a63b655a512c3d4430e51e012f13fd73"
+    },
+    "phase-system-detail-state.json": {
+      "bytes": 392473,
+      "sha256": "25eb13f4a6294b94daba7c2e9815b9a12c7d72f1b62b556bb897fe78468bb39f"
+    },
+    "phase-reference-detail-remote.py": {
+      "bytes": 1005,
+      "sha256": "beaebef488d54532d9dcc564d2d35d34654e7866ac42fd5618fa0d821e2163be"
+    },
+    "phase-reference-detail.png": {
+      "bytes": 54108,
+      "sha256": "a6941eb2b966f6146d0274e17ec1d263332174f50fc8cb7fcde61778793bb86a"
+    },
+    "phase-refreshed-capture.log": {
+      "bytes": 119,
+      "sha256": "b5d0e7ad96ac1d02f16ea1b8a172e027a973963562e90da294d7ad7c9b11743f"
+    },
+    "phase-sidebar-open-state.pickle": {
+      "bytes": 55496,
+      "sha256": "a43ab7fd60b34df009170a1d07ae3b51e6d2951c0171cdc671ed52cc14b1303b"
+    },
+    "phase-refreshed-state-metadata.json": {
+      "bytes": 392447,
+      "sha256": "12056504626fae857e99fede46bd590ddcfad714b96f8d777213dd512e14b01b"
+    },
+    "phase-sidebar-open-capture.log": {
+      "bytes": 122,
+      "sha256": "f1193898682a5d03bbf1175bead5eb8863588f970154ced9b93749e4efcf5935"
+    },
+    "phase-refreshed-state.json": {
+      "bytes": 392473,
+      "sha256": "8ab2be7c2355abb83259ad534d6d40dfd00d5d4ea4aadf42adf7a2de968d9719"
+    },
+    "phase-returned-capture.log": {
+      "bytes": 118,
+      "sha256": "a7e5b4f262f5bee4fd45b5a3c3c9f8eee15beeb2a12e6bcf9ef3ee304840c9d2"
+    },
+    "phase-context-panel-manifest.json": {
+      "bytes": 464,
+      "sha256": "222e7a6a1458958835fd5f1cb6606fba96ca502badc86c9de94cab6b398371de"
+    },
+    "phase-system-detail-state-metadata.json": {
+      "bytes": 392447,
+      "sha256": "c357a2c9959572e918a5af23dea5f514aabe039e8f3145ab451f067facda6970"
+    },
+    "phase-startup-state-metadata.json": {
+      "bytes": 253259,
+      "sha256": "e4cb8841601cff1b812fd1f61931fff2929d38bc2a3c87fd8d57fff94d57ccbe"
+    },
+    "phase-refreshed-manifest.json": {
+      "bytes": 460,
+      "sha256": "4c08001e641eabbaccad91b6f739916527e51d765e2b6e060bf175fb9e7bd986"
+    },
+    "phase-startup-manifest.json": {
+      "bytes": 458,
+      "sha256": "490fdd3884d712632210d946bfd9cede060cd967713bd02eda38b02fcdfb62c9"
+    },
+    "phase-refreshed-remote.py": {
+      "bytes": 998,
+      "sha256": "27e8d742da24ab2eea7efc82da5ea0b97ec9b3aa3138971b049a8795ba96c2c5"
+    },
+    "phase-sidebar-open-manifest.json": {
+      "bytes": 463,
+      "sha256": "4cbad8e5d4f0ec5816d1749d6e5045daef309c61895bdf4b1a69f0fb7b703daf"
+    },
+    "phase-returned-state.pickle": {
+      "bytes": 57466,
+      "sha256": "49e5f09296daa14b5b436d5d71805b1afef28426872a804eff940ed875b33efd"
+    },
+    "phase-startup-remote.py": {
+      "bytes": 996,
+      "sha256": "f6d96d0a477ae651d36387840f1391d5aa0b0e50f6f45f5fa34d53babf4d630b"
+    },
+    "phase-context-panel-state.pickle": {
+      "bytes": 55474,
+      "sha256": "c4b150f7e90129b216c21174a8ab1054ee54503ddef1349a90f2f048c44b8f9d"
+    },
+    "phase-returned-manifest.json": {
+      "bytes": 459,
+      "sha256": "aec8cd224ce0549c6ca8dc68f5e1b0135e59ceb4ad6944079bb53860d464e606"
+    },
+    "phase-context-panel-state-metadata.json": {
+      "bytes": 392447,
+      "sha256": "65b90376a70af15edb97c34bc4813a99c403d74b91f111104a4479efc72c2515"
+    },
+    "phase-reference-detail-state.pickle": {
+      "bytes": 55474,
+      "sha256": "f9a3c704daf20ab09e557a54c0bfab8bc2f0c1478b494e399aa3f94e09446f74"
+    },
+    "phase-startup-state.pickle": {
+      "bytes": 39854,
+      "sha256": "ba258eae46cf006b0afb42901f3332720371d06df53fe210c26e9cb312ae8870"
+    },
+    "phase-system-detail-state-frames.json": {
+      "bytes": 9853,
+      "sha256": "af24c5b5b16b510067cdf44789abc55f62921093bdd6dd05d3e2a30fe7f65622"
+    },
+    "phase-reference-detail-manifest.json": {
+      "bytes": 467,
+      "sha256": "ad3a0e5d61693e8133e1b614ecb34510396acb62f73de8e25fd31960afb477b0"
+    },
+    "phase-returned-state-frames.json": {
+      "bytes": 29877,
+      "sha256": "a7c0f7b8bc63cc827738eea1cb353d6df90e7bd92dafc4b0a76566caa149e3c0"
+    },
+    "widget-click-target.json": {
+      "bytes": 490,
+      "sha256": "c2b9e550a59ce76a13728e972feedef6348fb188db3cee2dbead37ddb269d4ca"
+    },
+    "frame-delivery.json": {
+      "bytes": 28508,
+      "sha256": "34d6fcfabae71b3a6f2b0084de03acb89038e7be42ff7ef00f6d0c56315ee930"
+    },
+    "frame-delivery.svg": {
+      "bytes": 3335,
+      "sha256": "e913b52db3bf68ce20fcb2df86a224e6985be9c36db01b1652e2be289302471f"
+    }
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 818721,
+        "start_ticks": 45319371,
+        "returncode": 0
+      },
+      {
+        "pid": 818752,
+        "start_ticks": 45319565,
+        "returncode": 0
+      },
+      {
+        "pid": 818754,
+        "start_ticks": 45319573,
+        "returncode": 0
+      },
+      {
+        "pid": 818756,
+        "start_ticks": 45319580,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 818757,
+        "start_ticks": 45319585,
+        "returncode": 0
+      },
+      {
+        "pid": 818758,
+        "start_ticks": 45319600,
+        "returncode": 0
+      },
+      {
+        "pid": 818759,
+        "start_ticks": 45319611,
+        "returncode": 0
+      },
+      {
+        "pid": 818760,
+        "start_ticks": 45319623,
+        "returncode": 255
+      },
+      {
+        "pid": 819135,
+        "start_ticks": 45320625,
+        "returncode": 0
+      },
+      {
+        "pid": 819141,
+        "start_ticks": 45320653,
+        "returncode": 0
+      },
+      {
+        "pid": 819148,
+        "start_ticks": 45320687,
+        "returncode": 0
+      },
+      {
+        "pid": 819153,
+        "start_ticks": 45320717,
+        "returncode": 0
+      },
+      {
+        "pid": 819177,
+        "start_ticks": 45320820,
+        "returncode": 0
+      },
+      {
+        "pid": 819183,
+        "start_ticks": 45320883,
+        "returncode": 0
+      },
+      {
+        "pid": 819199,
+        "start_ticks": 45320990,
+        "returncode": 0
+      },
+      {
+        "pid": 819201,
+        "start_ticks": 45321092,
+        "returncode": 0
+      },
+      {
+        "pid": 819258,
+        "start_ticks": 45321137,
+        "returncode": 0
+      },
+      {
+        "pid": 819405,
+        "start_ticks": 45321239,
+        "returncode": 0
+      },
+      {
+        "pid": 819449,
+        "start_ticks": 45321315,
+        "returncode": 0
+      },
+      {
+        "pid": 819462,
+        "start_ticks": 45321423,
+        "returncode": 0
+      },
+      {
+        "pid": 819463,
+        "start_ticks": 45321437,
+        "returncode": 0
+      },
+      {
+        "pid": 819473,
+        "start_ticks": 45321538,
+        "returncode": 0
+      },
+      {
+        "pid": 819491,
+        "start_ticks": 45321573,
+        "returncode": 0
+      },
+      {
+        "pid": 819529,
+        "start_ticks": 45321676,
+        "returncode": 0
+      },
+      {
+        "pid": 819534,
+        "start_ticks": 45321728,
+        "returncode": 0
+      },
+      {
+        "pid": 819550,
+        "start_ticks": 45321828,
+        "returncode": 0
+      },
+      {
+        "pid": 819552,
+        "start_ticks": 45321840,
+        "returncode": 0
+      },
+      {
+        "pid": 819553,
+        "start_ticks": 45321851,
+        "returncode": 0
+      },
+      {
+        "pid": 819554,
+        "start_ticks": 45321863,
+        "returncode": 0
+      },
+      {
+        "pid": 819555,
+        "start_ticks": 45321874,
+        "returncode": 0
+      },
+      {
+        "pid": 819567,
+        "start_ticks": 45321975,
+        "returncode": 0
+      },
+      {
+        "pid": 819571,
+        "start_ticks": 45322012,
+        "returncode": 0
+      },
+      {
+        "pid": 819586,
+        "start_ticks": 45322114,
+        "returncode": 0
+      },
+      {
+        "pid": 819728,
+        "start_ticks": 45322174,
+        "returncode": 0
+      },
+      {
+        "pid": 819730,
+        "start_ticks": 45322189,
+        "returncode": 0
+      },
+      {
+        "pid": 819738,
+        "start_ticks": 45322202,
+        "returncode": 0
+      },
+      {
+        "pid": 819740,
+        "start_ticks": 45322266,
+        "returncode": 0
+      },
+      {
+        "pid": 819788,
+        "start_ticks": 45322368,
+        "returncode": 0
+      },
+      {
+        "pid": 819793,
+        "start_ticks": 45322430,
+        "returncode": 0
+      },
+      {
+        "pid": 819795,
+        "start_ticks": 45322444,
+        "returncode": 0
+      },
+      {
+        "pid": 819796,
+        "start_ticks": 45322459,
+        "returncode": 0
+      },
+      {
+        "pid": 819797,
+        "start_ticks": 45322470,
+        "returncode": 0
+      },
+      {
+        "pid": 819798,
+        "start_ticks": 45322482,
+        "returncode": 0
+      },
+      {
+        "pid": 819808,
+        "start_ticks": 45322584,
+        "returncode": 0
+      },
+      {
+        "pid": 819814,
+        "start_ticks": 45322697,
+        "returncode": 0
+      },
+      {
+        "pid": 819828,
+        "start_ticks": 45322799,
+        "returncode": 0
+      },
+      {
+        "pid": 819844,
+        "start_ticks": 45322855,
+        "returncode": 0
+      },
+      {
+        "pid": 819845,
+        "start_ticks": 45322869,
+        "returncode": 0
+      },
+      {
+        "pid": 819874,
+        "start_ticks": 45322971,
+        "returncode": 0
+      },
+      {
+        "pid": 819878,
+        "start_ticks": 45323001,
+        "returncode": 0
+      },
+      {
+        "pid": 819901,
+        "start_ticks": 45323103,
+        "returncode": 0
+      },
+      {
+        "pid": 820042,
+        "start_ticks": 45323169,
+        "returncode": 0
+      },
+      {
+        "pid": 820043,
+        "start_ticks": 45323183,
+        "returncode": 0
+      },
+      {
+        "pid": 820045,
+        "start_ticks": 45323284,
+        "returncode": 0
+      },
+      {
+        "pid": 820060,
+        "start_ticks": 45323320,
+        "returncode": 0
+      },
+      {
+        "pid": 820098,
+        "start_ticks": 45323422,
+        "returncode": 0
+      },
+      {
+        "pid": 820126,
+        "start_ticks": 45323577,
+        "returncode": 0
+      },
+      {
+        "pid": 820133,
+        "start_ticks": 45323610,
+        "returncode": 0
+      },
+      {
+        "pid": 820140,
+        "start_ticks": 45323700,
+        "returncode": 0
+      },
+      {
+        "pid": 820155,
+        "start_ticks": 45323884,
+        "returncode": 0
+      },
+      {
+        "pid": 820167,
+        "start_ticks": 45324066,
+        "returncode": 0
+      }
+    ]
+  },
+  "original_owner_after": {
+    "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+    "mode": "private"
+  }
+}

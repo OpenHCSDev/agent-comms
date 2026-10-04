@@ -1,5 +1,7 @@
 """Normal prepared bundle: selected RPC -> native commit -> one original bind."""
 
+from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.selected_session import SavedSelectedSession
 import asyncio
 import hashlib
 import json
@@ -48,7 +50,8 @@ def record_fixture_history(inputs, owner, admission):
 
 @asynccontextmanager
 async def owner_fixture(
-    tmp_path, monkeypatch, *, goal=True, response_gate: asyncio.Event | None = None
+    tmp_path, monkeypatch, *, goal=True, response_gate: asyncio.Event | None = None,
+    completion_tokens: int = 5,
 ):
     package = Path(PACKAGE).resolve()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
@@ -86,7 +89,8 @@ async def owner_fixture(
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 9500, "completion_tokens": 5, "total_tokens": 9505},
+                "usage": {"prompt_tokens": 9500, "completion_tokens": completion_tokens,
+                          "total_tokens": 9500 + completion_tokens},
             }
             body = b"data: " + json.dumps(chunk).encode() + b"\n\ndata: [DONE]\n\n"
             writer.write(
@@ -161,7 +165,7 @@ async def owner_fixture(
         file = fixture["sessionFile"]
         persistent = retained_native_host(
             child,
-            NativePiRpcLaunch(("node",), tmp_path, {}, Path(file).parent, Path(file), package),
+            NativePiRpcLaunch(("node",), tmp_path, {}, SavedSelectedSession(Path(file).parent, identity=NativeSessionIdentity(fixture["sessionId"], file)), package, configuration=RestartEnvironment.inherit({})),
             NativeSessionIdentity(fixture["sessionId"], file),
         )
         registry = Registration(tmp_path / "registry.json")
@@ -210,10 +214,11 @@ async def owner_fixture(
         assert child.returncode is not None and not child.identity.alive()
 
 
+@pytest.mark.parametrize("completion_tokens", [5, 5534])
 async def test_selected_native_summary_commits_and_admits_original_exactly_once(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, completion_tokens
 ):
-    async with owner_fixture(tmp_path, monkeypatch) as (
+    async with owner_fixture(tmp_path, monkeypatch, completion_tokens=completion_tokens) as (
         persistent,
         registry,
         inputs,
@@ -221,7 +226,6 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         launcher,
         info,
     ):
-        from agent_comms.compaction_records import SelectedSummarySource
         from agent_comms.field_codec import FieldCodec
         from agent_comms.retained_task_facts import CurrentDecisionTaskFact, UserSourceTaskFact
         from agent_comms.tools import invoke_tool
@@ -248,11 +252,10 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert (
             await maybe_compact_owner_turn(
                 registry,
-                launcher,
                 "owner",
                 "turn",
                 info,
-                "acp:original",
+                ("acp:original",),
                 persistent,
                 input_text="Continue",
                 on_admission=admitted.append,
@@ -268,7 +271,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         rows = journal.summaries.blocking(file)
         assert len(rows) == 1 and rows[0].state.declared_name == "linked"
-        captured = FieldCodec.decode(SelectedSummarySource, json.loads(rows[0].source_json))
+        captured = rows[0].request
         assert tuple(fact.source for fact in captured.retained.facts
                      if isinstance(fact, UserSourceTaskFact)) == (user,)
         assert tuple(fact.source for fact in captured.retained.facts
@@ -286,7 +289,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         committed = next(row for row in entries if row["type"] == "compaction")
         captured.retained.require_summary(committed["summary"])
         assert len(journal.publications.pending(file)) == 1
-        assert not persistent.available and persistent.custody.session_file == file
+        assert not persistent.available and persistent.custody.identity.session_file == file
         assert not native_input_admitted(tmp_path, file)
         token = admitted[0]
         assert inputs.read().lookup("acp:original").accepts_reservation
@@ -366,7 +369,6 @@ async def acp_selected_summary_journey(
     )
     from agent_comms.comms import wire
     from agent_comms.compaction_identity import SelectedCommitReference
-    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.errors import RelationViolationError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.goal_attempts import GoalAttemptStore
@@ -411,12 +413,12 @@ async def acp_selected_summary_journey(
                             json.loads(operation.intent_json)
                         )
                         attempt = journal.summaries.get(reference.operation_id)
-                        source = FieldCodec.decode(
-                            SelectedSummarySource, json.loads(attempt.source_json)
-                        ).source
-                        assert source.pending_input_key is not None
-                        original = dispositions.read().lookup(source.pending_input_key)
-                        assert original.exists and not original.has_native_binding
+                        source = attempt.request.source
+                        assert source.pending_input_keys
+                        inputs = dispositions.read()
+                        for key in source.pending_input_keys:
+                            original = inputs.lookup(key)
+                            assert original.exists and not original.has_native_binding
                         publications.append(event.publication.commit_id)
 
         agent = CommsAgent(
@@ -764,11 +766,10 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
         with pytest.raises(RelationViolationError, match="Unsettled"):
             await maybe_compact_owner_turn(
                 registry,
-                launcher,
                 "owner",
                 "turn",
                 info,
-                "acp:original",
+                ("acp:original",),
                 persistent,
                 input_text="Continue",
                 on_admission=admissions.append,
@@ -797,11 +798,10 @@ async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
         before = Path(file).read_bytes()
         assert not await maybe_compact_owner_turn(
             registry,
-            launcher,
             "owner",
             "turn",
             info,
-            "acp:original",
+            ("acp:original",),
             persistent,
             input_text="Continue",
             on_admission=lambda _: pytest.fail("Disabled admission"),
@@ -831,11 +831,10 @@ async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_p
         assert info.model.display_name == "custom-local/custom-model"
         assert await maybe_compact_owner_turn(
             registry,
-            launcher,
             "owner",
             "turn",
             info,
-            "acp:original",
+            ("acp:original",),
             persistent,
             input_text="Continue",
             on_admission=admitted.append,
@@ -863,11 +862,10 @@ async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, m
         admitted = []
         assert await maybe_compact_owner_turn(
             registry,
-            launcher,
             "owner",
             "turn",
             info,
-            "acp:original",
+            ("acp:original",),
             persistent,
             input_text="Continue",
             on_admission=admitted.append,

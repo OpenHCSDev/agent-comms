@@ -1,0 +1,49 @@
+{
+  "source_head": "1ff0d987e44d65d1f49c710de2969d37b2a42669",
+  "scope": "Original construction owner migration in recorded fixture/scorer; existing installed Core573 decoder",
+  "sanity": {
+    "controls": 2,
+    "passed": 2,
+    "seconds": 0.011,
+    "risk": "Refuse different original SDK source/revision and preserve typed manifest reference coverage and paired denominators"
+  },
+  "recorded_export_completed": true,
+  "single_run_report_byte_identical_to_577": true,
+  "report_sha256": "8f5d05bff67e368aa7be53dc5608487a322b065268ff97cac740ae06eade7dcf",
+  "questions": 9,
+  "correct": 9,
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 3,
+      "correct": 3,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 6,
+      "correct": 6,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    }
+  },
+  "model_steps": {
+    "cut-1": 1,
+    "cut-2": 2,
+    "cut-3": 2
+  },
+  "prior_input_rows_unchanged": {
+    "acp:4b3cfd4525e04ba2a2ade1d45fc086f2": true,
+    "acp:fc5e8578176d46ec8b41e044de3ac974": true
+  },
+  "provider_inputs": 0,
+  "input_replays": 0,
+  "runtime_native_changes": 0,
+  "manifest_difference_positive_path": "Composed original-owner control, not matched provider study",
+  "limits": "No intervention, untransformed full-history capacity, final HTTP bytes, returned model/effort or comparative-study qualification. SDK difference includes provenance."
+}

@@ -30,6 +30,7 @@ from agent_comms.native_pi import (
     _trusted_package,
 )
 from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.selected_session import SelectedSession
 
 INPUT_ID = "a" * 32
 DIGEST = "b" * 64
@@ -207,78 +208,10 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
         )
 
 
-async def test_tracked_launch_pins_private_no_retry_settings_before_subprocess(
-    tmp_path: Path, monkeypatch
-) -> None:
-    import agent_comms.native_pi as native
-
-    project = tmp_path / "project"
-    project.mkdir()
-    project_settings = project / ".pi"
-    project_settings.mkdir()
-    (project_settings / "settings.json").write_text(
-        json.dumps(
-            {
-                "retry": {"enabled": True, "provider": {"maxRetries": 9}},
-                "compaction": {"enabled": True},
-            }
-        )
-    )
-    sessions = tmp_path / "sessions"
-    inherited = tmp_path / "inherited"
-    inherited.mkdir()
-    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
-    monkeypatch.setenv("OPENROUTER_API_KEY", "a-token-not-to-persist")
-    original = AttachedChild.start
-    launches = []
-    processes = []
-    fake_stub = """import json, sys
-request = json.loads(sys.stdin.readline())
-print(json.dumps({"type": "response", "id": request["id"],
-                  "command": "get_state", "success": False}), flush=True)
-"""
-
-    async def launch(argv, **kwargs):
-        launches.append(argv)
-        assert "--no-approve" in argv
-        assert all(option in argv for option in ("--no-tools", "--no-extensions", "--no-skills"))
-        assert kwargs["env"]["PI_OFFLINE"] == "1"
-        assert kwargs["env"]["OPENROUTER_API_KEY"] == "a-token-not-to-persist"
-        agent_dir = Path(kwargs["env"]["PI_CODING_AGENT_DIR"])
-        assert agent_dir == sessions / ".native-pi-agent"
-        assert stat.S_IMODE(agent_dir.stat().st_mode) == 0o700
-        policy = agent_dir / "settings.json"
-        assert stat.S_ISREG(policy.lstat().st_mode)
-        assert stat.S_IMODE(policy.stat().st_mode) == 0o600
-        assert policy.read_bytes() == native._NATIVE_SETTINGS
-        assert json.loads(policy.read_text()) == {
-            "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
-            "compaction": {"enabled": False},
-        }
-        assert b"a-token-not-to-persist" not in policy.read_bytes()
-        assert not (agent_dir / "auth.json").exists()
-        assert not list(agent_dir.glob(".settings-*.tmp"))
-        process = await original((sys.executable, "-u", "-c", fake_stub), **kwargs)
-        processes.append(process)
-        return process
-
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(AttachedChild, "start", launch)
-    with pytest.raises(NativePiUnavailable, match="capability is unavailable"):
-        await TrackedTurnSession.execute(
-            tmp_path,
-            input_id=INPUT_ID,
-            prompt="no provider",
-            worktree=project,
-            session_dir=sessions,
-        )
-    assert len(launches) == 1
-    assert processes[0].returncode is not None
-    assert not list(inherited.iterdir())
 
 
 @pytest.mark.parametrize("failed_fsync", [1, 2, 3])
-async def test_any_prelaunch_fsync_failure_denies_subprocess(
+def test_any_prelaunch_fsync_failure_denies_launch(
     tmp_path: Path, monkeypatch, failed_fsync: int
 ) -> None:
     import agent_comms.native_pi as native
@@ -290,73 +223,22 @@ async def test_any_prelaunch_fsync_failure_denies_subprocess(
         nonlocal calls
         calls += 1
         if calls == failed_fsync:
-            raise OSError(errno.EIO, "injected policy fsync failure")
+            raise OSError(errno.EIO, "injected directory fsync failure")
         return actual_fsync(descriptor)
-
-    async def forbidden(*_argv, **_kwargs):
-        raise AssertionError("No model subprocess may launch without durable retry policy")
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_selected_fsync)
-    monkeypatch.setattr(AttachedChild, "start", forbidden)
     sessions = tmp_path / "sessions"
     with pytest.raises(NativePiUnavailable, match="could not be committed"):
-        await TrackedTurnSession.execute(
+        NativePiRpcLaunch.tracked(
             tmp_path,
-            input_id=INPUT_ID,
-            prompt="no provider",
             worktree=tmp_path,
-            session_dir=sessions,
+            session=SelectedSession(sessions),
         )
     assert calls == failed_fsync
     assert not list((sessions / ".native-pi-agent").glob(".settings-*.tmp"))
 
 
-async def test_visible_policy_after_failed_parent_fsync_is_resynced_before_launch(
-    tmp_path: Path, monkeypatch
-) -> None:
-    import agent_comms.native_pi as native
-
-    original_fsync = native.os.fsync
-    settings_syncs = 0
-    launches = 0
-    sessions = tmp_path / "sessions"
-    agent_dir = sessions / ".native-pi-agent"
-
-    def fail_once(descriptor):
-        nonlocal settings_syncs
-        info = os.fstat(descriptor)
-        if agent_dir.exists() and (info.st_dev, info.st_ino) == (
-            agent_dir.stat().st_dev,
-            agent_dir.stat().st_ino,
-        ):
-            settings_syncs += 1
-            if settings_syncs == 1:
-                raise OSError(errno.EIO, "first settings directory fsync failed")
-        return original_fsync(descriptor)
-
-    async def record_launch(*_argv, **_kwargs):
-        nonlocal launches
-        launches += 1
-        raise RuntimeError("test reached spawn only after the second complete policy sync")
-
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.os, "fsync", fail_once)
-    monkeypatch.setattr(AttachedChild, "start", record_launch)
-    request = {
-        "input_id": INPUT_ID,
-        "prompt": "no provider",
-        "worktree": tmp_path,
-        "session_dir": sessions,
-    }
-    with pytest.raises(NativePiUnavailable, match="retry policy could not be committed"):
-        await TrackedTurnSession.execute(tmp_path, **request)
-    assert launches == 0
-    assert (sessions / ".native-pi-agent" / "settings.json").is_file()
-    with pytest.raises(RuntimeError, match="second complete policy sync"):
-        await TrackedTurnSession.execute(tmp_path, **request)
-    assert settings_syncs == 2
-    assert launches == 1
 
 
 def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
@@ -383,14 +265,13 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", record_fsync)
-    launch = NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions)
-    assert launch.session_dir == sessions
+    launch = NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions))
+    assert launch.session.directory == sessions
     assert stat.S_IMODE(nested.stat().st_mode) == 0o700
     assert stat.S_IMODE(sessions.stat().st_mode) == 0o700
     assert observed.index(root) < observed.index(nested) < observed.index(sessions)
-    assert observed.index(sessions) < observed.index(sessions / ".native-pi-agent")
     first_count = len(observed)
-    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions)
+    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions))
     assert root in observed[first_count:] and nested in observed[first_count:]
     assert observed[first_count:].index(nested) < observed[first_count:].index(sessions)
 
@@ -906,7 +787,7 @@ sys.stdin.read()
     assert isinstance(preflight, GetState) and preflight.id
 
 
-def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
+def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     tmp_path: Path, monkeypatch
 ) -> None:
     selected = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
@@ -917,22 +798,18 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
     sessions = tmp_path / "sessions"
     monkeypatch.setenv("PI_AGENT_ID", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
-    launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session_dir=sessions)
-    assert launch.argv[:4] == ("node", str(_trusted_package(Path(selected))), "--mode", "rpc")
+    launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session=SelectedSession(sessions))
+    assert str(_trusted_package(Path(selected))) in launch.argv
+    assert launch.argv[launch.argv.index("--mode") + 1] == "rpc"
     assert "--no-approve" in launch.argv
     assert launch.cwd == worktree
-    assert launch.session_dir == sessions
-    assert launch.session_file is None
+    assert launch.session.directory == sessions
+    assert launch.session.path is None
     assert "PI_AGENT_ID" not in launch.env
     assert launch.env["PI_OFFLINE"] == "1"
     assert launch.env["PI_CODING_AGENT_DIR"] == str(sessions / ".native-pi-agent")
-    settings = json.loads((sessions / ".native-pi-agent" / "settings.json").read_text())
-    assert settings["retry"] == {
-        "enabled": False,
-        "maxRetries": 0,
-        "provider": {"maxRetries": 0},
-    }
-    assert settings["compaction"]["enabled"] is False
+    assert stat.S_IMODE((sessions / ".native-pi-agent").stat().st_mode) == 0o700
+    assert not (sessions / ".native-pi-agent" / "settings.json").exists()
 
 
 @pytest.mark.parametrize("provider,model", [("", "model"), ("provider", ""), ("--bad", "model")])
@@ -1353,7 +1230,7 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     from agent_comms import native_pi, private_nk_entrypoint
 
     launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
-    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: launch)
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
     verified = []
     cli = launch.native_package / "dist" / "cli.js"
 
@@ -1361,7 +1238,7 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         verified.append(package)
         return cli
 
-    monkeypatch.setattr(native_pi, "_trusted_package", trusted)
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "validate", lambda self: trusted(self.native_package))
     monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
     executed = []
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
@@ -1394,7 +1271,7 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
 def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
     from agent_comms import native_pi, private_nk_entrypoint
 
-    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: None)
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: None))
     with pytest.raises(NativePiUnavailable, match="configured private route"):
         native_pi.main()
 

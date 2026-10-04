@@ -1,0 +1,267 @@
+{
+  "parser": "existing refactor-audit Package",
+  "revision": "97785da562e07803ae025249ff380ffef9242466",
+  "roots": {
+    "src": {
+      "parsed": 311,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 364,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 53,
+      "omissions": []
+    }
+  },
+  "declarations": [
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 41,
+      "owner": "BusPageSource",
+      "method": "covers",
+      "bases": [
+        "PageIndexTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 170,
+      "owner": "CompactionOperation",
+      "method": "covered_prefix",
+      "bases": [
+        "UnresolvedJournalHistory",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 378,
+      "owner": "NativeForkCreation",
+      "method": "covered_prefix",
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 382,
+      "owner": "NativeForkCreation",
+      "method": "require_original_prefix",
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 393,
+      "owner": "NativeForkCreation",
+      "method": "recorded_prefix",
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 345,
+      "owner": "NativeCommitPosition",
+      "method": "require_entry",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 102,
+      "owner": "NativeIntent",
+      "method": "require_committed_payload",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 57,
+      "owner": "NativeEntry",
+      "method": "covered_prefix",
+      "bases": [
+        "NativeEntryCoordinates",
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 326,
+      "owner": "NativeEvidenceRead",
+      "method": "recorded_source_prefix",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 350,
+      "owner": "NativeEvidenceRead",
+      "method": "covered_prefix",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 556,
+      "owner": "ManagedCompactionEntry",
+      "method": "covered_prefix",
+      "bases": [
+        "CompactionEntry",
+        "NativeSummaryPayload"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 54,
+      "owner": "NativeSessionIdentity",
+      "method": "covers",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 56,
+      "owner": "NativeWitness",
+      "method": "require_committed_cut",
+      "bases": [
+        "NativeSessionIdentity"
+      ]
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 47,
+      "owner": "AssignedSourceCursor",
+      "method": "covers",
+      "bases": []
+    }
+  ],
+  "calls": [
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 64,
+      "expression": "created.covered_prefix(evidence, entries)"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 181,
+      "expression": "witness.require_committed_cut(entry, evidence, outcome)"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 182,
+      "expression": "intent.require_committed_payload(self, entry, outcome)"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 379,
+      "expression": "self.require_original_prefix(evidence, entries)"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 384,
+      "expression": "self.covers(evidence, self.revision)"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 394,
+      "expression": "creation.covered_prefix(evidence, entries)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 45,
+      "expression": "evidence.covered_prefix(entries, journal_db)"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 70,
+      "expression": "evidence.recorded_source_prefix(entries, recorded.values())"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 247,
+      "expression": "saved.covers(stream, source)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 353,
+      "expression": "NativeForkCreation.recorded_prefix(db, self, entries)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 563,
+      "expression": "operation.covered_prefix(self, evidence, branch)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 287,
+      "expression": "witness.covers(self, witness.revision)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 357,
+      "expression": "entry.covered_prefix(self, branch, db)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 562,
+      "expression": "super().covered_prefix(evidence, branch, db)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 63,
+      "expression": "position.require_entry(entry)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 61,
+      "expression": "self.covers(evidence, self.revision, position.revision)"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 104,
+      "expression": "self.receipts.covers(sequence)"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 262,
+      "expression": "creation.covered_prefix(child, entries)"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 170,
+      "expression": "operation.covered_prefix(entry, evidence, branch)"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 753,
+      "expression": "fork.covered_prefix(evidence, evidence.entries)"
+    }
+  ],
+  "coverage_comparisons": [
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "owner": "CompactionOperation",
+      "line": 186,
+      "expression": "kept >= cut"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "owner": "NativeEvidenceRead",
+      "line": 356,
+      "expression": "entry.require_entry_id() not in inherited"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "owner": "ManagedCompactionEntry",
+      "line": 560,
+      "expression": "operation is None"
+    }
+  ],
+  "limits": "Lexical imports/calls and MRO declarations; dynamic dispatch resolved by source review, not AST alone. Native SDK helper external shapes unchanged; no native implementation edited."
+}

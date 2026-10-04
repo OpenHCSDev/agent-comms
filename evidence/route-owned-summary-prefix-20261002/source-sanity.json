@@ -1,0 +1,33 @@
+{
+  "scope": "Final source-only composition/syntax after the coherent family change; no product/package execution, env/build/provider or input writes",
+  "patch_files": 12,
+  "zero_fuzz": true,
+  "exact_after_hashes": true,
+  "node_syntax": [
+    "stack/native-compaction-source.mjs",
+    "stack/native-session-context.mjs",
+    "stack/native-compaction-selected-summary.mjs"
+  ],
+  "bash_recipe_syntax": true,
+  "python_patcher_compile": true,
+  "native_ast_before": {
+    "files": 544,
+    "declarations": 33,
+    "consumers": 720,
+    "omissions": []
+  },
+  "native_ast_after": {
+    "files": 544,
+    "declarations": 38,
+    "consumers": 751,
+    "omissions": []
+  },
+  "failure_detected_by_checks": [
+    "Truncated unified diff or wrong source preimages",
+    "Unparseable producer/source/capability code",
+    "Malformed canonical recipe or RPC patcher syntax"
+  ],
+  "remaining": "No matching installed artifact has been built in this lane; ordinary installed affected path remains for one future shared candidate, not an unchanged old-prefix inspection. Paid comparison/cost/recall unavailable.",
+  "projection": "Only exact final patch manifest paths plus changed source/SessionContext/RPC helper; discarded intermediate analysis projections do not supply authority.",
+  "typed_boundary": "Acorn does not parse .d.ts. Changed declaration contracts read semantically; no TypeScript compiler proof claimed."
+}

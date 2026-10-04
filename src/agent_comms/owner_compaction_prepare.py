@@ -15,17 +15,20 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from .declared_family import DeclaredFamily
 from .native_package import verify_native_package
+from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_helper import PiHelper, SessionHelperRequest
 from .native_revision_text import NativeRevisionText
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
+    from .compaction_states import NativeCommitPosition
     from .compaction_result import CompactionResult, RefusedCompactionResult
+    from .native_entries import NativeEvidenceRead
 
 
 class NativePreparationError(ValueError):
@@ -33,43 +36,53 @@ class NativePreparationError(ValueError):
 
 
 @dataclass(frozen=True)
-class NativeWitness:
+class NativeWitness(NativeSessionIdentity):
     """One decoded native cutpoint; later owner/disk CAS remains independent."""
 
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
     leaf_id: str = field(metadata={"wire_name": "leafId"})
     first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
-    revision: str
+    revision: Annotated[FileRevision, NativeRevisionText]
 
     def __post_init__(self):
-        if any(not getattr(self, item.name) for item in fields(self)):
+        super().__post_init__()
+        if not self.leaf_id or not self.first_kept_entry_id:
             raise NativePreparationError("Exact native witness required")
-        if not self.session_file.startswith("/"):
-            raise NativePreparationError("Canonical native path and revision required")
-        NativeRevisionText.decode(self.revision)
-
-    def require_session(self, canonical: str) -> None:
-        if self.session_file != canonical:
-            raise ValueError("Native witness does not identify owner's canonical session")
 
     def require_current_file(self, file: Path) -> None:
         self.require_session(str(file))
-        if NativeRevisionText.decode(self.revision) != FileRevision.from_stat(file.stat()):
+        if self.revision != FileRevision.from_stat(file.stat()):
             raise ValueError("Native retained source changed since preparation")
 
-    def retained_task_facts(self):
-        from .native_entries import NativeEntry
+    def require_committed_cut(self, entry, evidence: NativeEvidenceRead,
+                              position: NativeCommitPosition) -> None:
+        """Corroborate the prepared branch at its original returned commit."""
+        from .compaction_errors import CompactionJournalError
 
-        with NativeEntry.open_evidence(Path(self.session_file)) as evidence:
+        if not self.covers(evidence, self.revision, position.revision):
+            raise CompactionJournalError("Original committed source cut differs")
+        position.require_entry(entry)
+        if entry.parent_id != self.leaf_id or entry.first_kept_entry_id != self.first_kept_entry_id:
+            raise CompactionJournalError("Original committed source cut differs")
+
+    def retained_task_facts(self, reader: NativeEvidenceRead | None = None):
+        from .native_entries import NativeEvidenceRead
+
+        with NativeEvidenceRead.borrow(Path(self.session_file), reader) as evidence:
             return evidence.retained_task_facts(self)
 
 
 class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
     family_discriminator = "status"
 
+    def at_complete_boundary(self) -> NativePreparationResult:
+        return self
+
     @abstractmethod
-    def checked(self, file: Path, revision: str) -> Self:
+    def require_source(self, identity: NativeSessionIdentity) -> None:
+        """The cut or skip belongs to the originally acquired saved session."""
+
+    @abstractmethod
+    def checked(self, file: Path, revision: FileRevision) -> Self:
         """Bind an observed cutpoint to the already captured native revision."""
 
     @abstractmethod
@@ -87,7 +100,11 @@ class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
 class SkipPreparationResult(NativePreparationResult):
     session_id: str = field(metadata={"wire_name": "sessionId"})
 
-    def checked(self, file: Path, revision: str) -> Self:
+    def require_source(self, identity: NativeSessionIdentity) -> None:
+        if self.session_id != identity.session_id:
+            raise NativePreparationError("Skipped preparation source changed")
+
+    def checked(self, file: Path, revision: FileRevision) -> Self:
         if not self.session_id:
             raise NativePreparationError("Native session identity missing")
         return self
@@ -111,12 +128,20 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
         if not 0 <= self.tokens_before <= 2**53 - 1:
             raise NativePreparationError("Invalid native preparation token count")
 
-    def checked(self, file: Path, revision: str) -> NativePreparation:
+    def require_source(self, identity: NativeSessionIdentity) -> None:
+        self.witness.require_same_session(identity)
+
+    def checked(self, file: Path, revision: FileRevision) -> NativePreparation:
         if self.witness.session_file != str(file) or self.witness.revision != revision:
             raise NativePreparationError("Invalid native witness")
         return self
 
     def require_ready(self) -> NativePreparation:
+        return self
+
+    def at_complete_boundary(self) -> NativePreparationResult:
+        if self.is_split_turn:
+            return SkipPreparationResult(self.witness.session_id)
         return self
 
     async def compact_owner(self, perform):
@@ -181,7 +206,7 @@ def prepare_native_source(
         revision = FileRevision.from_stat(before)
         if revision != FileRevision.from_stat(after):
             raise NativePreparationError("Native preparation failed or changed")
-        return result.checked(file, NativeRevisionText.encode(revision))
+        return result.checked(file, revision)
     except (OSError, ValueError, TypeError) as error:
         if isinstance(error, NativePreparationError):
             raise

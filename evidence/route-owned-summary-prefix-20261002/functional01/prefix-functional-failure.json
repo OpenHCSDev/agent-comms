@@ -1,0 +1,7 @@
+{
+  "complete": false,
+  "type": "RequestError",
+  "reason": "Internal error",
+  "original_preserved": true,
+  "retry_or_replay": false
+}

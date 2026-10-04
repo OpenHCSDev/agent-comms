@@ -27,7 +27,7 @@ keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
 dependencies = [
     "metaclass-registry>=0.1.0",
-    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@d392c5e4cd189ce1203127a746337ad498a0330d#subdirectory=skills/refactor-audit",
+    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10#subdirectory=skills/refactor-audit",
 ]
 
 [project.optional-dependencies]
@@ -68,12 +68,14 @@ packages = ["src/agent_comms"]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.force-include]
+".pi/APPEND_SYSTEM.md" = "agent_comms/_native/APPEND_SYSTEM.md"
 "stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"
 "stack/native-compaction-commit-child.mjs" = "agent_comms/_native/native-compaction-commit-child.mjs"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src", "tests", "extensions", "README.md", "LICENSE",
+    ".pi/APPEND_SYSTEM.md", "stack/APPEND_SYSTEM.md",
     "stack/pi-native.sha256", "stack/native-compaction-commit-child.mjs",
 ]
 

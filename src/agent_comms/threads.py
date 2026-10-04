@@ -81,6 +81,21 @@ class Thread(ThreadProvenance):
     def turn_state(self) -> TurnState:
         return TurnState(self.active_turn, self.last_finished_turn_id)
 
+    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
+        """Project this captured owner through the original native binding."""
+        from .runtime_requests import ProjectRuntimeRequest
+
+        project = ProjectRuntimeRequest.for_native(snapshot, self)
+        return {
+            "AGENT_COMMS_THREAD": self.name,
+            "PI_AGENT_ID": self.name,
+            "AGENT_COMMS_ROOT": str(root),
+            "PI_PARENT_ID": self.parent or "",
+            "AGENT_COMMS_MANAGED": "1",
+            "PI_WORKTREE": worktree,
+            **project.environment(root),
+        }
+
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
         object.__setattr__(self, "_generated_created_at", generated)
@@ -335,6 +350,21 @@ class Thread(ThreadProvenance):
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         lease = self.turn_lease
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
+
+    def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        """Bind a certified authored row to this preparation's original turn cut.
+
+        Beginning a lease clears last_finished_turn_id. The preceding allocation
+        is still derived from the original monotonic turn owner, not copied into
+        a timing register. Its row supplied the original admitted ID/generation.
+        Neither allocation nor finishing supplies subtask completion.
+        """
+        if identity.incarnation != self.incarnation:
+            return False
+        lease = self.turn_lease
+        if lease is not None:
+            return self.has_authored_turn(identity, turn) or identity.generation == lease.identity.generation - 1
+        return identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
 
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""

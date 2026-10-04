@@ -20,8 +20,9 @@ class RetainedSegment(ContextSegment):
     boundary: WireExportBoundary
 
     @classmethod
-    def capture(cls, retained: RetainedTaskFacts, source: OwnerProvenance,
-                owner, registry, boundary: WireExportBoundary) -> "RetainedSegment":
+    def capture(cls, retained: RetainedTaskFacts, owner, registry,
+                boundary: WireExportBoundary) -> "RetainedSegment":
+        source = OwnerProvenance(owner.incarnation, retained.source_digest.value)
         sources = {message.reference: message for fact in retained.facts
                    for message in fact.wire_sources()}
         wording_sources = tuple(message.task.original_wording_context_source(
@@ -37,6 +38,15 @@ class RetainedSegment(ContextSegment):
 
     def original_text_source(self, declaration: Message) -> Message | StoredInput:
         return self.retained.original_text_source(declaration)
+
+    def inspection(self) -> dict[str, object]:
+        """Authored constraints retain their exact source and narrower export scope."""
+        return dict(kind=type(self), text=self.text(),
+                    provenance=self.provenance, input_supplied=False,
+                    authored=dict(scope="authored declarations and their original pinned inputs only",
+                                  sources=self.scope.sources,
+                                  facts=self.retained),
+                    export_scope="current authored declarations only; never goal, unpinned input, native artifact or failure state")
 
     def export(self, destination: Path | str, *, overwrite: bool = False):
         """Publish this immutable read's selection through the original writer."""

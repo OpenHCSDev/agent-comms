@@ -1,6 +1,7 @@
 /** Generation intent, capability admission, and pre-stream rejection recovery. */
 import { normalizeProviderError } from "../utils/error-body.js";
 import { estimateContextTokens, estimateSerializedRequestTokens } from "../utils/estimate.js";
+import { observeRequest } from "../utils/agent-comms-request-observation.js";
 
 export class BudgetAdmissionError extends Error {
     constructor(message) {
@@ -18,10 +19,21 @@ export class ContextBudget {
             : estimateSerializedRequestTokens(context, serializedInput);
     }
 
-    allowance(desired, minimum = 1) {
-        const available = this.model.contextWindow > 0
+    get available() {
+        return this.model.contextWindow > 0
             ? this.model.contextWindow - this.input : Infinity;
-        if (available < minimum) {
+    }
+
+    fits(minimum) {
+        return this.available >= minimum;
+    }
+
+    compactionRequired(settings) {
+        return !this.fits(settings.reserveTokens);
+    }
+
+    allowance(desired, minimum = 1) {
+        if (!this.fits(minimum)) {
             throw new BudgetAdmissionError("Estimated input leaves no admissible generation budget");
         }
         // Optional API parameters stay absent. Capability is not generation intent.
@@ -32,16 +44,30 @@ export class ContextBudget {
         if (!Number.isSafeInteger(this.model.maxTokens) || this.model.maxTokens < minimum) {
             throw new BudgetAdmissionError("Model has no admissible declared output capability");
         }
-        const fitted = Math.min(desired, this.model.maxTokens, available);
+        const fitted = Math.min(desired, this.model.maxTokens, this.available);
         if (fitted < minimum) {
             throw new BudgetAdmissionError("Estimated input and model capability cannot admit the API output minimum");
         }
         return fitted;
     }
 
-    admit(parameters, field, minimum = 1) {
-        const fitted = this.allowance(parameters[field], minimum);
+    admit(parameters, field, minimum = 1, options) {
+        const requested = parameters[field];
+        const fitted = this.allowance(requested, minimum);
         if (fitted !== undefined) parameters[field] = fitted;
+        this.observeAdmission(parameters, field, requested, minimum, options);
+    }
+
+    observeAdmission(parameters, field, requested, minimum, options) {
+        // This original calculation supplies the observation. Readers neither
+        // recalculate admission nor treat it as proof of an HTTP dispatch.
+        observeRequest(options, { stage: "budget_admission", detail: "Model request budget admitted",
+            model: {provider:this.model.provider, id:this.model.id, name:this.model.name,
+                contextWindow:this.model.contextWindow, maxTokens:this.model.maxTokens},
+            estimatedInputTokens:this.input,
+            availableTokens:Number.isFinite(this.available) ? this.available : undefined,
+            outputTokenField:field, requestedOutputTokens:requested,
+            admittedOutputTokens:parameters[field], minimumOutputTokens:minimum });
     }
 }
 
@@ -92,10 +118,10 @@ export class ContextBudgetRejection extends ProviderRejection {
     revisedAllowance(request) {
         // An explicit allowance must identify this rejected request's count.
         if (request.allowance !== undefined && request.allowance !== this.completion) return undefined;
-        const ceiling = request.allowance ?? Math.min(this.completion, request.model.maxTokens);
-        const limit = Math.min(this.limit, request.model.contextWindow);
+        const ceiling = request.allowance ?? Math.min(this.completion, request.budget.model.maxTokens);
+        const limit = Math.min(this.limit, request.budget.model.contextWindow);
         const uncertainty = Math.abs(this.input - request.budget.input);
-        const available = Math.min(request.model.maxTokens, limit - this.input - uncertainty);
+        const available = Math.min(request.budget.model.maxTokens, limit - this.input - uncertainty);
         if (available <= 0 || available >= ceiling) return undefined;
         return available;
     }
@@ -121,30 +147,31 @@ export class TextToolOutputRejection extends ContextBudgetRejection {
 }
 
 export class ContextBudgetRequest {
-    constructor(model, context, params, budgetField, send, serializedInput, signal) {
-        this.model = model;
+    constructor(model, context, params, budgetField, send, serializedInput, options) {
         this.params = params;
         this.budgetField = budgetField;
         this.sendRequest = send;
-        this.signal = signal;
+        this.options = options;
         this.budget = new ContextBudget(model, context, serializedInput);
-        this.budget.admit(this.params, this.budgetField);
+        this.budget.admit(this.params, this.budgetField, 1, options);
     }
 
     get allowance() { return this.params[this.budgetField]; }
 
     async send(attempt) {
         for (;;) {
-            this.signal?.throwIfAborted();
+            this.options?.signal?.throwIfAborted();
             try {
                 return await this.sendRequest(this.params, attempt);
             } catch (error) {
-                this.signal?.throwIfAborted();
+                this.options?.signal?.throwIfAborted();
                 const revised = ProviderRejection.decode(error).revisedAllowance(this);
                 if (revised === undefined) throw error;
                 // Strictly decreasing positive allowances terminate negotiation.
                 // An accepted stream is consumed outside this retry boundary.
+                const requested = this.allowance;
                 this.params = { ...this.params, [this.budgetField]: revised };
+                this.budget.observeAdmission(this.params, this.budgetField, requested, 1, this.options);
             }
         }
     }

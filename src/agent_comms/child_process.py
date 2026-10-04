@@ -157,9 +157,24 @@ class NamespaceContainment:
 
 
 class Platform(DeclaredFamily, affix="Platform"):
+    store_lock_interval = 0.025
+
     @classmethod
     def current(cls) -> Platform:
         return cls.decode(sys.platform)()
+
+    @abstractmethod
+    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+        """One nonblocking native attempt; busy is BlockingIOError."""
+
+    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+        """Use the common physical wait driver when the platform needs polling."""
+        from .store_files import StoreLockContention
+
+        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, shared=shared)
+
+    def release_store_lock(self, descriptor: int) -> None:
+        """POSIX custody ends at last close, including inherited descriptors."""
 
     @abstractmethod
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
@@ -198,6 +213,18 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(ProcessGroups, Platform):
+    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+        import fcntl
+
+        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(descriptor, mode | (0 if blocking else fcntl.LOCK_NB))
+
+    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+        import fcntl
+
+        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(descriptor, mode | fcntl.LOCK_NB)
+
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
         return PosixLaunch(command, pass_fds)
 
@@ -352,6 +379,26 @@ class DarwinPlatform(PosixPlatform):
 
 class Win32Platform(ProcessGroups, Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
+
+    store_lock_interval = 0.01
+
+    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+        import errno
+        import msvcrt
+
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(descriptor, msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK, 1)
+        except OSError as error:
+            if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                raise
+            raise BlockingIOError(error.errno, error.strerror) from error
+
+    def release_store_lock(self, descriptor: int) -> None:
+        import msvcrt
+
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
 
     class ThreadEntry(ctypes.Structure):
         _fields_ = [
@@ -764,15 +811,22 @@ async def _exec_error(fd: int, command: str) -> None:
         loop.remove_reader(fd)
 
 
-async def join_retirement(task: asyncio.Task):
+async def join_retirement(task: asyncio.Future):
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
-    while not task.done():
-        try:
-            await asyncio.shield(task)
-        except asyncio.CancelledError as error:
-            interrupted = error
-    result = task.result()
+    try:
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError as error:
+                interrupted = error
+        result = task.result()
+    except BaseException as error:
+        # A failed joined operation still retires its custody. Its error must
+        # not consume the caller's cancellation and restart an observer loop.
+        if interrupted is not None:
+            raise interrupted from error
+        raise
     if interrupted is not None:
         raise interrupted
     return result
@@ -823,15 +877,21 @@ class ChildProcess(Sealed, ABC):
             yield 0.02
         return stage
 
-    async def _stop(self) -> ChildOutcome:
-        plan = self._stop_plan(nullcontext)
+    def _retire_group(self, guard):
+        """Run the same guarded physical plan for synchronous and async custody."""
+        plan = self._stop_plan(guard)
         while True:
             try:
                 delay = next(plan)
             except StopIteration as done:
-                stage = done.value
-                break
-            await asyncio.sleep(delay)
+                return done.value
+            time.sleep(delay)
+
+    async def _stop(self) -> ChildOutcome:
+        pending = asyncio.get_running_loop().run_in_executor(
+            None, self._retire_group, nullcontext
+        )
+        stage = await join_retirement(pending)
         self._release_retired_io()
         async with asyncio.timeout(STOP_GRACE_SECONDS):
             return stage(await self.wait())
@@ -1171,14 +1231,7 @@ class SynchronousProcess(ChildProcess):
 
     def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
         self.require_stop_authority()
-        plan = self._stop_plan(guard)
-        while True:
-            try:
-                delay = next(plan)
-            except StopIteration as done:
-                stage = done.value
-                break
-            time.sleep(delay)
+        stage = self._retire_group(guard)
         return stage(self.reap())
 
 
@@ -1377,13 +1430,31 @@ class ChildCommand(DeclaredFamily, affix="Command"):
     def argv(self) -> tuple[str, ...]:
         return (
             sys.executable,
-            "-m",
-            "agent_comms.child_process",
+            "-c",
+            "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),
         )
 
+    @classmethod
+    def main(cls) -> None:
+        FieldCodec.decode(cls, json.loads(sys.argv[1])).run()
+
     @abstractmethod
     def run(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class ControllingTerminalCommand(ChildCommand):
+    """Acquire stdin's PTY after exec, inside the acquired child's new session."""
+
+    command: tuple[str, ...]
+
+    def run(self) -> None:
+        import fcntl
+        import termios
+
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        os.execvpe(self.command[0], self.command, os.environ)
 
 
 @dataclass(frozen=True)
@@ -1423,7 +1494,3 @@ class WatchDeadlineCommand(ChildCommand):
         os.fstat(self.descriptor)
         print("armed", flush=True)
         platform.watch_deadline(self.descriptor, self.deadline)
-
-
-if __name__ == "__main__":
-    FieldCodec.decode(ChildCommand, json.loads(sys.argv[1])).run()

@@ -1,0 +1,50 @@
+{
+  "source": "73cc4bc365dfbf4bb07cc9289aceae73ced4d884",
+  "native_source": "92d246c11973e00134b3fc85a98c03043e2b9ea0",
+  "manifest": "7074a4574b12ccfeeae9b698e89593009113da394e99f634d91b14c63e75ad2c",
+  "tree": "0928d3bce4f5446d6f60b617854a0f6607a469c95c793505ba272dd05e14a079",
+  "changed_members": [
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "900c83eb422ebc89a2a015bae30f0ec4b8c5f7a3f0292053248bb8d8fc1956b2",
+      "new_sha256": "136a8ada8ef2a17d1bc25f278432573a3966dc59960b304a225cc74f78459c87"
+    },
+    {
+      "path": "dist/core/compaction/agent-comms-policy.js",
+      "original_sha256": "e55258e54cc195989af049abd72281b59f735bcf8c55fe98de1eb9ee351fbef8",
+      "new_sha256": "e3251ab83782ad79107419f8bbbb4d6269b3f65107b12fdceee0696b612f8e87"
+    },
+    {
+      "path": "dist/core/session-context.js",
+      "original_sha256": "311e85beb52afe7e0bdb85a32fd5ab4f32483a311d85dab1628c1664f1a4d154",
+      "new_sha256": "e8c9e8d966aae854634bac96c4b3be3734486fdf6c6eebe9775d89cd678610cb"
+    }
+  ],
+  "source_copy_bindings": [
+    [
+      "stack/native-compaction-policy.mjs",
+      "dist/core/compaction/agent-comms-policy.js"
+    ],
+    [
+      "stack/native-session-context.mjs",
+      "dist/core/session-context.js"
+    ],
+    [
+      "stack/native-context-budget.mjs",
+      "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js"
+    ]
+  ],
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7074a4574b12ccfe/node_modules/@earendil-works/pi-coding-agent",
+  "capture": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/task-timing-enable-native-20261002/final02/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "qualification": "Canonical source artifact verification passed; matching installed wheel and real S1 native journey remain Einstein.",
+  "provider_calls": 0,
+  "public_changes": false,
+  "canonical_prepare": "PASS pristine stack/bin/prepare-pi-native",
+  "regular_files": 19190,
+  "package_bytes": 138399977,
+  "native_inputs": 0,
+  "source_overlay": false,
+  "existing_packages_edited": false,
+  "disposed_unpublished_duplicate_bytes": 138399977,
+  "duplicate_borrowers": []
+}

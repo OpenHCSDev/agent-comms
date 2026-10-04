@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from unittest.mock import AsyncMock
+
 import asyncio
 import json
 import os
@@ -11,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 from agent_comms.goal_attempts import ProviderUsageTotal
+from agent_comms.goal_actions import ActiveGoalAction, PausedGoalAction
 from pathlib import Path
 
 import pytest
@@ -166,14 +169,14 @@ class TestHandlers:
             "proj", model="test/model", context_used=38723, context_size=272000
         )
         reopened = canonical_agent(wire(agent._comms.root))
-        assert facts(reopened.sessions.metadata("proj"), CoordinationChangedUpdate)[
+        assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.set_agent_info(
             "proj", model="test/model", context_used=None, context_size=272000
         )
         assert (
-            facts(reopened.sessions.metadata("proj"), CoordinationChangedUpdate)[0].context_usage
+            facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
             is None
         )
 
@@ -560,53 +563,6 @@ class TestAgentTurn:
         assert message not in goal.progress
         assert not wired.registry.require("proj").executing
 
-    @pytest.mark.parametrize(
-        ("event", "expected_state"),
-        [
-            (ae.Error("Pi preflight ended before attestation"), "reserved"),
-            (ae.Done("Pi preflight ended before attestation", False), "not_sent"),
-        ],
-    )
-    async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
-        self, wired, tmp_path, event, expected_state
-    ):
-        agent = self._agent_with_events(tmp_path, wired)
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-
-        key = "acp:preflight"
-        agent.inputs.dispositions.record(
-            key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
-        )
-        from input_source_cases import owner_original
-
-        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
-        await agent._emit_event("proj", event, FakeClient())
-        update = sent[-1]
-        (failed,) = facts(update.field_meta, InputFailedUpdate)
-        assert failed.text == "lost prompt"
-        assert failed.failure.description == "Pi preflight ended before attestation"
-        first = agent.inputs.dispositions.read().rows[key]
-        assert first.declared_name == expected_state
-        # A later explicit input is a new reservation, never a replay of NotSent.
-        key = "acp:new-explicit-input"
-        agent.inputs.dispositions.record(
-            key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
-        )
-        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
-        agent.inputs.dispositions.bind(
-            key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
-        )
-        agent.inputs.dispositions.started(
-            key, turn_id="turn", native_id="a" * 32, text="lost prompt"
-        )
-        await agent._emit_event("proj", ae.Error(text="later steering failure"), FakeClient())
-        assert not facts(sent[-1].field_meta, InputFailedUpdate)
-        assert agent.inputs.dispositions.read().rows[first.key] == first
-
     @pytest.mark.parametrize("completed_in_turn", [False, True])
     async def test_missing_terminal_blocks_only_still_active_goal(
         self, wired, tmp_path, monkeypatch, completed_in_turn
@@ -645,7 +601,7 @@ class TestAgentTurn:
             )
         assert secret not in result.progress
         assert "proj" not in agent.turns.emitted_errors
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
 
     async def test_error_dedup_is_scoped_to_one_turn_and_cancel_clears_it(
@@ -711,7 +667,7 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         agent.turns.agent_bin = "pi"
-        monkeypatch.setattr(agent.turns.goals, "schedule_goal", lambda _session: None)
+        monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         goal = await agent.turns.goals.set_goal("proj", "Ship the release")
         await agent.turns.run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
@@ -754,7 +710,7 @@ class TestAgentTurn:
         assert goal.state.declared_name == "blocked"
         assert "without assistant output or tool activity" in goal.progress
         assert "paused to avoid a continuation loop" not in goal.progress
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
 
     @pytest.mark.parametrize("outcome", ["failed", "missing_done"])
@@ -815,7 +771,7 @@ class TestAgentTurn:
         else:
             assert goal.state.declared_name == "blocked"
             assert goal.progress.startswith("independently verified newer progress\n\n")
-            agent.turns.goals.schedule_goal("proj")
+            await agent.turns.goals.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
 
     @pytest.mark.parametrize("transition", [PausedGoalAction, CompletedGoalAction, SetGoalAction])
@@ -910,7 +866,7 @@ class TestAgentTurn:
         assert goal.state.declared_name == "blocked"
         assert goal.progress.startswith("independently verified newer progress\n\n")
         assert "inspect local diagnostics" in goal.progress
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
 
     async def test_successful_goal_update_during_turn_is_not_auto_paused(
@@ -987,7 +943,7 @@ class TestAgentTurn:
             yield ae.Done(ok=True, text="done")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         assert wired.registry.require("proj").goal.state.declared_name == "completed"
         assert GoalAttemptStore(private).snapshot(goal.id).lifecycle == CompletedGeneration()
@@ -1037,7 +993,7 @@ class TestAgentTurn:
         if owner_paused:
             assert goal.state.declared_name == "paused"
             assert wired.registry.require("proj").goal.state.pause_source.declared_name == "owner"
-            agent.turns.goals.schedule_goal("proj")
+            await agent.turns.goals.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")
         assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
@@ -1081,7 +1037,7 @@ class TestAgentTurn:
             yield ae.Done(ok=False, text="failed")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         try:
             assert wired.registry.require("proj").goal.state.declared_name == "blocked"
@@ -1118,7 +1074,7 @@ class TestAgentTurn:
         assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
         with pytest.raises(UnresolvedAttemptError):
             store.ready_grant(goal.id, 1)
-        agent.turns.goals.schedule_goal("proj")
+        await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
         await agent.shutdown()
 
@@ -1218,7 +1174,7 @@ class TestAgentTurn:
     ):
         agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.turns.goals, "schedule_goal", lambda _session: None)
+        monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         updates = []
 
         class Client:
@@ -1234,12 +1190,12 @@ class TestAgentTurn:
             reservation = store.reserve(goal.id, 1)
             store.claim_launch(reservation)
             reservation.fail(store, "Interrupted by owner")
-        paused = await agent.turns.goals.update_goal("proj", "paused", goal.id, goal.revision)
+        paused = await agent.turns.goals.update_goal("proj", PausedGoalAction, goal.id, goal.revision)
         updates.clear()
         try:
             if failed:
                 with pytest.raises(ValueError, match="use Retry"):
-                    await agent.turns.goals.update_goal("proj", "active", goal.id, paused.revision)
+                    await agent.turns.goals.update_goal("proj", ActiveGoalAction, goal.id, paused.revision)
                 blocked = wired.registry.require("proj").goal
                 assert blocked.state.declared_name == "blocked"
                 assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
@@ -1255,7 +1211,7 @@ class TestAgentTurn:
                 await agent.turns.goals.retry_goal("proj", goal.id, blocked.revision)
                 assert store.snapshot(goal.id).number == 2
             else:
-                await agent.turns.goals.update_goal("proj", "active", goal.id, paused.revision)
+                await agent.turns.goals.update_goal("proj", ActiveGoalAction, goal.id, paused.revision)
                 assert store.snapshot(goal.id).number == 1
             assert wired.registry.require("proj").goal.state.declared_name == "active"
             assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
@@ -1292,7 +1248,7 @@ class TestAgentTurn:
                 yield
 
             monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_backend)
-            agent.turns.goals.schedule_goal(name)
+            await agent.turns.goals.schedule_goal(name)
             assert not agent.inputs.pending_turns.get(name)
             await agent.turns.run_agent_turn(name, name, "continue", autonomous_goal=True)
             assert GoalAttemptStore(private).snapshot(goal.id).attempt_id == reservation.attempt_id

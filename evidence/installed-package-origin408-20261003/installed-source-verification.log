@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "3e5c97f9a38d10e65c3a5d06919d85d8e38b98ab",
+      "files": 339,
+      "byte_equal": true
+    },
+    {
+      "module": "toad",
+      "head": "d70643053f13f4a5b73296839ac07f469acede3d",
+      "files": 320,
+      "byte_equal": true
+    },
+    {
+      "module": "textual",
+      "head": "688d06b12dc893b290422fa5d6924529e7689ac9",
+      "files": 266,
+      "byte_equal": true
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "files": 3,
+      "byte_equal": true
+    }
+  ],
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "package_count": 69,
+  "prefix": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001"
+}

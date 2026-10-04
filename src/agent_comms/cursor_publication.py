@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 
 from acp.schema import SessionInfoUpdate
 
@@ -22,10 +24,11 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordination_errors import CoordinationError
 from .coordinator import Coordination
+from .coordination_errors import CoordinationError
 from .message_bus import MessageBus
 from .native_source_cursor import NativeSourceCursor
+from .native_runtime_input import CurrentNativeCursor
 from .runtime import RuntimeServer
 from .thread_identity import AdmissionIdentity
 
@@ -79,35 +82,34 @@ class CursorPublication:
             owner.pid,
         )
 
-    def observe(
-        self, thread_name: str, session_id: str, *, defer_busy: bool = False
+    async def observe(
+        self, thread_name: str, session_id: str, *, defer_busy: bool = False,
+        read_cursor: Callable[..., Awaitable[CurrentNativeCursor | None]] = NativeSourceCursor.read_async,
     ) -> CursorEnvelope:
         if self.root_id is None:
             raise ValueError("Native cursor requires the configured root")
         revision = self.delivery(session_id).next_revision()
-        scope = self.scope(thread_name, session_id)
+        scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if scope is None:
             return unavailable
         try:
-            with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
-                bus = MessageBus(
-                    self.comms.root / "bus.jsonl",
-                    self.comms.registry,
-                    private_response_writes=True,
-                )
-                cursor = NativeSourceCursor(bus, store, wire_root_id=self.root_id).read(
-                    owner_name=thread_name
-                )
+            bus = MessageBus(
+                self.comms.root / "bus.jsonl", self.comms.registry,
+                private_response_writes=True,
+            )
+            cursor = await read_cursor(
+                bus, wire_root_id=self.root_id, owner_name=thread_name
+            )
         except BlockingIOError:
-            current = self.scope(thread_name, session_id)
+            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        except (OSError, ValueError, sqlite3.Error, CoordinationError):
-            current = self.scope(thread_name, session_id)
+        except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
+            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        current = self.scope(thread_name, session_id)
+        current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         if current != scope:
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         return CursorEnvelope(
@@ -116,19 +118,22 @@ class CursorPublication:
             EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
         )
 
-    def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:
+    async def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:
         if self.root_id is None:
             return ()
-        observed = self.observe(thread_name, session_id)
+        observed = await self.observe(thread_name, session_id)
         self.delivery(session_id).trusted_read(observed)
         return (CursorAdvancedUpdate(observed),)
 
     async def publish(
-        self, session_id: str, thread_name: str, *, selected_status: str | None = None
+        self, session_id: str, thread_name: str, *, selected_status: str | None = None,
+        read_cursor: Callable[..., Awaitable[CurrentNativeCursor | None]] = NativeSourceCursor.read_async,
     ) -> None:
         delivery = self.delivery(session_id)
         try:
-            observed = self.observe(thread_name, session_id, defer_busy=True)
+            observed = await self.observe(
+                thread_name, session_id, defer_busy=True, read_cursor=read_cursor
+            )
         except BlockingIOError:
             # Busy observation is not a new fact. A settled native operation
             # requires another read when the lock clears, without input replay.
@@ -152,4 +157,8 @@ class CursorPublication:
 
     async def refresh(self, session_id: str, thread_name: str) -> None:
         if self.delivery(session_id).needs_refresh:
-            await self.publish(session_id, thread_name)
+            # Resume only the cursor projection. The immutable native receipt
+            # supplies its original admission; no claim or input is resumed.
+            await self.publish(
+                session_id, thread_name, read_cursor=NativeSourceCursor.refresh_async
+            )

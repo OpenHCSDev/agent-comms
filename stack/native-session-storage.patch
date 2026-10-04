@@ -717,10 +717,25 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              provider,
-@@ -913,12 +775,157 @@
+@@ -913,12 +775,172 @@
          };
          this._appendEntry(entry);
          return entry.id;
++        });
++    }
++    /** Reopen this known committed cut; reconcile owns marker and durability checks. */
++    reloadCompactionCommit(request, expected) {
++        return this.#acMutation(() => {
++            if (request.witness.sessionId !== this.sessionId ||
++                request.witness.sessionFile !== this.sessionFile)
++                throw new Error("Known compaction session identity differs");
++            this.setSessionFile(request.witness.sessionFile);
++            const observed = this.reconcileCompactionCommit(request.commit, request.witness);
++            if (observed.status !== "committed" || !expected ||
++                Object.keys(observed).length !== Object.keys(expected).length ||
++                Object.entries(observed).some(([key, value]) => expected[key] !== value))
++                throw new Error("Known compaction receipt differs; never replay");
++            return observed;
 +        });
 +    }
 +    /** File evidence only. Caller must retain registry authority and never replay. */
@@ -876,7 +891,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              summary,
-@@ -930,45 +937,44 @@
+@@ -930,45 +952,44 @@
          };
          this._appendEntry(entry);
          return entry.id;
@@ -933,7 +948,7 @@
      }
      /**
       * Append a custom message entry (for extensions) that participates in LLM context.
-@@ -979,18 +985,20 @@
+@@ -979,18 +1000,20 @@
       * @returns Entry id
       */
      appendCustomMessageEntry(customType, content, display, details) {
@@ -955,7 +970,7 @@
      }
      // =========================================================================
      // Tree Traversal
-@@ -999,28 +1007,26 @@
+@@ -999,28 +1022,26 @@
          return this.leafId;
      }
      getLeafEntry() {
@@ -992,7 +1007,7 @@
      }
      /**
       * Set or clear a label on an entry.
-@@ -1028,90 +1034,68 @@
+@@ -1028,90 +1049,68 @@
       * Pass undefined or empty string to clear the label.
       */
      appendLabelChange(targetId, label) {
@@ -1101,7 +1116,7 @@
              const node = nodeMap.get(entry.id);
              if (entry.parentId === null || entry.parentId === entry.id) {
                  roots.push(node);
-@@ -1147,10 +1131,12 @@
+@@ -1147,10 +1146,12 @@
       * are not modified or deleted.
       */
      branch(branchFromId) {
@@ -1115,7 +1130,7 @@
      }
      /**
       * Reset the leaf pointer to null (before any entries).
-@@ -1158,7 +1144,9 @@
+@@ -1158,7 +1159,9 @@
       * Use this when navigating to re-edit the first user message.
       */
      resetLeaf() {
@@ -1125,7 +1140,7 @@
      }
      /**
       * Start a new branch with a summary of the abandoned path.
-@@ -1166,14 +1154,15 @@
+@@ -1166,14 +1169,15 @@
       * context from the abandoned conversation path.
       */
      branchWithSummary(branchFromId, summary, details, fromHook, usage) {
@@ -1143,7 +1158,7 @@
              parentId: branchFromId,
              timestamp: new Date().toISOString(),
              fromId,
-@@ -1184,6 +1173,7 @@
+@@ -1184,6 +1188,7 @@
          };
          this._appendEntry(entry);
          return entry.id;
@@ -1151,7 +1166,7 @@
      }
      /**
       * Create a new session file containing only the path from root to the specified leaf.
-@@ -1191,112 +1181,43 @@
+@@ -1191,112 +1196,43 @@
       * Returns the new session file path, or undefined if not persisting.
       */
      createBranchedSession(leafId) {
@@ -1300,7 +1315,7 @@
      }
      /**
       * Create a new session.
-@@ -1315,26 +1236,10 @@
+@@ -1315,26 +1251,10 @@
       */
      static open(path, sessionDir, cwdOverride) {
          const resolvedPath = resolvePath(path);
@@ -1331,7 +1346,7 @@
      }
      /**
       * Continue the most recent session, or create new if none.
-@@ -1351,8 +1256,8 @@
+@@ -1351,8 +1271,8 @@
          return new SessionManager(cwd, dir, undefined, true);
      }
      /** Create an in-memory session (no file persistence), optionally from entries held outside the filesystem. */
@@ -1342,7 +1357,7 @@
      }
      /**
       * Fork a session from another project directory into the current project.
-@@ -1362,45 +1267,31 @@
+@@ -1362,45 +1282,47 @@
       * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
       */
      static forkFrom(sourcePath, targetCwd, sessionDir, options) {
@@ -1399,10 +1414,26 @@
 +            pr48WriterLock(file, () => {
 +                const fd = openSync(file, 'wx', 0o600);
 +                try {
-+                    writeFileSync(fd, JSON.stringify(header) + '\n');
-+                    for (const entry of source.entries()) writeFileSync(fd, JSON.stringify(entry) + '\n');
++                    const digest = createHash('sha256');
++                    let entryCount = 0;
++                    const writeEntry = entry => {
++                        const bytes = JSON.stringify(entry) + '\n';
++                        writeFileSync(fd, bytes);
++                        digest.update(bytes, 'utf8');
++                        entryCount++;
++                    };
++                    writeEntry(header);
++                    for (const entry of source.entries()) writeEntry(entry);
++                    source.assertCurrent();
 +                    fsyncSync(fd);
 +                    acSyncParents(dirname(file));
++                    const observed = fstatSync(fd, {bigint: true});
++                    // Publish only within the original source/child writer lifetime.
++                    options?.onForkCreated?.({sessionId: id, sessionFile: realpathSync(file),
++                        source: {sessionId: source.header.id, sessionFile: realpathSync(sourcePath)},
++                        sourceRevision: source.revision,
++                        revision: `${observed.dev}:${observed.ino}:${observed.size}:${observed.mtimeNs}:${observed.ctimeNs}`,
++                        prefixDigest: {value: digest.digest('hex')}, entryCount});
 +                } catch (cause) { throw new Error("Native fork outcome unknown; no replay", {cause}); }
 +                finally { closeSync(fd); }
 +            });
@@ -1463,6 +1494,13 @@
  // ============================================================================
  // Message Extraction
  // ============================================================================
+@@ -61,4 +40,4 @@
+-        ...(first.reasoning !== undefined || second.reasoning !== undefined
++        ...(first.reasoning !== undefined && second.reasoning !== undefined
+-            ? { reasoning: (first.reasoning ?? 0) + (second.reasoning ?? 0) }
++            ? { reasoning: first.reasoning + second.reasoning }
+             : {}),
+         totalTokens: first.totalTokens + second.totalTokens,
 @@ -116,43 +95,20 @@
      }
      return undefined;
@@ -1603,7 +1641,7 @@
  // ============================================================================
  // Summarization
  // ============================================================================
-@@ -459,10 +352,20 @@
+@@ -459,10 +352,19 @@
          cacheRetention: "none",
          sessionId: options.sessionId ?? uuidv7(),
      };
@@ -1621,14 +1659,13 @@
 +        return stream.result();
 +    };
 +    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
-+    if (response.stopReason === 'stop') CompactionPolicy.fromEnvironment().requireSummaryOutput(response.usage, requestOptions.maxTokens);
 +    callbacks?.onSummaryResponse?.(response.usage, response.stopReason === 'stop' && contentText(response.content).trim() ? callbacks?.sourceProgress : undefined);
 +    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
 +    return response;
  }
  /**
   * Generate a summary of the conversation using the LLM.
-@@ -485,8 +388,80 @@
+@@ -485,8 +388,81 @@
      };
  }
  /** Generate or update a conversation summary and return its provider usage. */
@@ -1708,6 +1745,7 @@
 +    }
 +    if(!boundedChunk)callbacks=sourceCallbacks(callbacks);
 +    const maxTokens = policy.summaryTokens(model, inputTokens, reserveTokens);
++    customInstructions = policy.summaryInstructions(customInstructions, maxTokens);
      // Use update prompt if we have a previous summary, otherwise initial prompt
      let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
      if (customInstructions) {
@@ -1870,7 +1908,7 @@
  }
  // ============================================================================
  // Main compaction function
-@@ -608,31 +569,57 @@
+@@ -608,31 +569,53 @@
   */
  export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
 -    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
@@ -1902,12 +1940,8 @@
 +    const annotations = formatFileOperations(readFiles, modifiedFiles);
 +    contextPolicy.packSummary(retainedText, "", annotations, tokensBefore, preparation.retainedMessages,
 +        model, settings.reserveTokens, createCompactionSummaryMessage);
-+    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
-+    const summaryTokens=contextPolicy.inputTokens(model,settings.reserveTokens)-
-+        contextPolicy.contextTokens([required,...preparation.retainedMessages],model);
-+    const pieces=isSplitTurn ? 2 : 1;
 +    customInstructions=[customInstructions,
-+        `Keep the generated summary within ${Math.floor(summaryTokens/pieces)} tokens. File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.`]
++        'File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.']
 +        .filter(Boolean).join('\n\n');
 +    const history = new HistorySummarySource(messagesToSummarize, previousSummary);
 +    const prefix = new TurnPrefixSummarySource(turnPrefixMessages);
@@ -2049,7 +2083,41 @@
          const expandPromptTemplates = options?.expandPromptTemplates ?? true;
          const preflightResult = options?.preflightResult;
          let messages;
-@@ -1884,12 +1888,12 @@
+@@ -1856,3 +1860,33 @@
+     }
++    get isIdleForCompaction() {
++        return this.isIdle && !this.isRetrying && !this._retryAttempt &&
++            !this._nativeInterruptIds && !this.pendingMessageCount &&
++            !this.agent.steeringQueue.messages.length && !this.agent.followUpQueue.messages.length &&
++            !this._pendingNextTurnMessages.length && !this._pendingCustomMessages.length &&
++            !this._pendingBashMessages.length;
++    }
++    async _restoreCompactionContext(fromExtension, reason, willRetry) {
++        SessionContext.restore(this);
++        const estimatedTokensAfter = estimateMessagesTokens(this.agent.state.messages);
++        const saved = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
++        if (this._extensionRunner && saved) {
++            await this._extensionRunner.emit({
++                type: "session_compact", compactionEntry: saved, fromExtension, reason, willRetry,
++            });
++        }
++        return estimatedTokensAfter;
++    }
++    async restoreCompaction(request, expected, reason) {
++        if (!this.isIdleForCompaction)
++            throw new Error("Known compaction restoration requires an idle owner");
++        this._compactionAbortController = new AbortController();
++        try {
++            this.sessionManager.reloadCompactionCommit(request, expected);
++            await this._restoreCompactionContext(false, reason, false);
++            if (this._compactionAbortController.signal.aborted)
++                throw new Error("Known compaction restoration cancelled; never replay");
++        }
++        finally { this._clearManualCompactionState(); }
++    }
+     /**
+      * Manually compact the session context.
+@@ -1884,12 +1918,12 @@
                  throw new Error(formatNoModelSelectedMessage());
              }
              const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
@@ -2065,23 +2133,28 @@
                  if (lastEntry?.type === "compaction") {
                      throw new Error("Already compacted");
                  }
-@@ -1940,12 +1944,11 @@
-                 throw new Error("Compaction cancelled");
-             }
+@@ -1940,19 +1974,5 @@
              this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
 -            const newEntries = this.sessionManager.getEntries();
 -            const sessionContext = this.sessionManager.buildSessionContext();
 -            this.agent.state.messages = sessionContext.messages;
-+                        SessionContext.restore(this);
-+            const sessionContext = { messages: this.agent.state.messages };
-             const estimatedTokensAfter = estimateMessagesTokens(sessionContext.messages);
-             // Get the saved compaction entry for the extension event
+-            const estimatedTokensAfter = estimateMessagesTokens(sessionContext.messages);
+-            // Get the saved compaction entry for the extension event
 -            const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary);
-+            const savedCompactionEntry = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
-             if (this._extensionRunner && savedCompactionEntry) {
-                 await this._extensionRunner.emit({
-                     type: "session_compact",
-@@ -2053,7 +2056,7 @@
+-            if (this._extensionRunner && savedCompactionEntry) {
+-                await this._extensionRunner.emit({
+-                    type: "session_compact",
+-                    compactionEntry: savedCompactionEntry,
+-                    fromExtension,
+-                    reason: "manual",
+-                    willRetry: false,
+-                });
+-            }
++            const estimatedTokensAfter = await this._restoreCompactionContext(fromExtension, "manual", false);
+             const compactionResult = {
+                 summary,
+                 firstKeptEntryId,
+@@ -2053,7 +2073,7 @@
          // Skip compaction checks if this assistant message is older than the latest
          // compaction boundary. This prevents a stale pre-compaction usage/error
          // from retriggering compaction on the first prompt after compaction.
@@ -2090,7 +2163,7 @@
          const assistantIsFromBeforeCompaction = compactionEntry !== null && assistantMessage.timestamp <= new Date(compactionEntry.timestamp).getTime();
          if (assistantIsFromBeforeCompaction) {
              return false;
-@@ -2151,8 +2154,8 @@
+@@ -2151,8 +2171,8 @@
                  return false;
              }
              const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
@@ -2101,23 +2174,28 @@
              if (!preparation) {
                  return false;
              }
-@@ -2230,12 +2233,11 @@
-                 return false;
-             }
+@@ -2230,19 +2250,5 @@
              this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
 -            const newEntries = this.sessionManager.getEntries();
 -            const sessionContext = this.sessionManager.buildSessionContext();
 -            this.agent.state.messages = sessionContext.messages;
-+                        SessionContext.restore(this);
-+            const sessionContext = { messages: this.agent.state.messages };
-             const estimatedTokensAfter = estimateMessagesTokens(sessionContext.messages);
-             // Get the saved compaction entry for the extension event
+-            const estimatedTokensAfter = estimateMessagesTokens(sessionContext.messages);
+-            // Get the saved compaction entry for the extension event
 -            const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary);
-+            const savedCompactionEntry = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
-             if (this._extensionRunner && savedCompactionEntry) {
-                 await this._extensionRunner.emit({
-                     type: "session_compact",
-@@ -2941,7 +2943,7 @@
+-            if (this._extensionRunner && savedCompactionEntry) {
+-                await this._extensionRunner.emit({
+-                    type: "session_compact",
+-                    compactionEntry: savedCompactionEntry,
+-                    fromExtension,
+-                    reason,
+-                    willRetry,
+-                });
+-            }
++            const estimatedTokensAfter = await this._restoreCompactionContext(fromExtension, reason, willRetry);
+             const result = {
+                 summary,
+                 firstKeptEntryId,
+@@ -2941,7 +2947,7 @@
              let summaryText;
              let summaryDetails;
              let summaryUsage;
@@ -2126,7 +2204,7 @@
                  const model = this.model;
                  const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(model);
                  const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
-@@ -3018,8 +3020,8 @@
+@@ -3018,8 +3024,8 @@
                  this.sessionManager.appendLabelChange(targetId, label);
              }
              // Update agent state
@@ -2137,7 +2215,7 @@
              // Emit session_tree event
              await this._extensionRunner.emit({
                  type: "session_tree",
-@@ -3040,7 +3042,7 @@
+@@ -3040,7 +3046,7 @@
       * Get all user messages from session for fork selector.
       */
      getUserMessagesForForking() {
@@ -2146,7 +2224,7 @@
          const result = [];
          for (const entry of entries) {
              if (entry.type !== "message")
-@@ -3066,7 +3068,7 @@
+@@ -3066,7 +3072,7 @@
          let totalMessages = 0;
          let toolCalls = 0;
          const usageTotals = createUsageTotals();
@@ -2155,7 +2233,7 @@
              if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
                  addUsageToTotals(usageTotals, entry.usage);
              }
-@@ -3121,30 +3123,20 @@
+@@ -3121,30 +3127,20 @@
          // After compaction, the last assistant usage reflects pre-compaction context size.
          // We can only trust usage from an assistant that responded after the latest compaction.
          // If no such assistant exists, context token count is unknown until the next LLM response.
@@ -2996,10 +3074,7 @@
              info += `${theme.fg("dim", "Name:")} ${sessionName}\n`;
 --- a/dist/modes/rpc/rpc-mode.js
 +++ b/dist/modes/rpc/rpc-mode.js
-@@ -13,7 +13,7 @@
- import * as crypto from "node:crypto";
- import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";
- import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";
+@@ -17,4 +17,4 @@
 -import { flushRawStdout, takeOverStdout, waitForRawStdoutBackpressure, writeRawStdout, } from "../../core/output-guard.js";
 +import { flushRawStdout, takeOverStdout, waitForRawStdoutBackpressure, writeRawStdout, writeRawStdoutRecord, } from "../../core/output-guard.js";
  import { killTrackedDetachedChildren } from "../../utils/shell.js";
@@ -3024,16 +3099,53 @@
      };
      const success = (id, command, data) => {
          if (data === undefined) {
-@@ -777,7 +789,7 @@
+@@ -759,9 +771,6 @@
+             case "new_session": {
+                 const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
+                 const result = await runtimeHost.newSession(options);
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "new_session", result);
+             }
+             // =================================================================
+@@ -777,7 +786,7 @@
                      sessionId: session.sessionId,
                      sessionName: session.sessionName,
                      autoCompactionEnabled: session.autoCompactionEnabled,
 -                    messageCount: session.messages.length,
-+                    messageCount: session.storedContext.messages(session.agent).reduce(count => count + 1, 0),
++                    messageCount: session.storedContext.messageCount(session.agent),
                      pendingMessageCount: session.pendingMessageCount,
                      nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
                  };
-@@ -926,15 +938,15 @@
+@@ -898,16 +907,10 @@
+             }
+             case "switch_session": {
+                 const result = await runtimeHost.switchSession(command.sessionPath);
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "switch_session", result);
+             }
+             case "fork": {
+                 const result = await runtimeHost.fork(command.entryId);
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
+             }
+             case "clone": {
+@@ -916,9 +919,6 @@
+                     return error(id, "clone", "Cannot clone session: no current entry selected");
+                 }
+                 const result = await runtimeHost.fork(leafId, { position: "at" });
+-                if (!result.cancelled) {
+-                    await rebindSession();
+-                }
+                 return success(id, "clone", { cancelled: result.cancelled });
+             }
+             case "get_fork_messages": {
+@@ -926,15 +926,15 @@
              }
              case "get_entries": {
                  const sessionManager = session.sessionManager;
@@ -3055,7 +3167,7 @@
              }
              case "get_tree": {
                  const sessionManager = session.sessionManager;
-@@ -956,7 +968,7 @@
+@@ -956,7 +956,7 @@
              // Messages
              // =================================================================
              case "get_messages": {

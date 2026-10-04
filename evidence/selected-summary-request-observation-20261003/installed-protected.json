@@ -1,0 +1,13 @@
+{
+  "before": {
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "ddc949ca74deb3dd897e277ba389af1e3d938fddbfdde2ccbf76a17215eefa21",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "739e95c253b589a40722c460a26ab8439920c0419c35d2b49293b4d4f9ef8ef3",
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/79cb9232873a4501a118cc25da9fca67.json": "a997603d0a073c1e9c9266fcc373be029cc3f6f1f52dea24646c9b99553cec0d"
+  },
+  "after": {
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "ddc949ca74deb3dd897e277ba389af1e3d938fddbfdde2ccbf76a17215eefa21",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "739e95c253b589a40722c460a26ab8439920c0419c35d2b49293b4d4f9ef8ef3",
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/79cb9232873a4501a118cc25da9fca67.json": "a997603d0a073c1e9c9266fcc373be029cc3f6f1f52dea24646c9b99553cec0d"
+  },
+  "equal": true
+}

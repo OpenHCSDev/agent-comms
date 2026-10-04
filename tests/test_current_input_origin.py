@@ -1,5 +1,7 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
+from contextlib import ExitStack
+
 import asyncio
 from dataclasses import replace
 
@@ -87,11 +89,11 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
         # Existing terminal settlement never rewrites a started original as
         # unsent or grants a replay; the canonical native completion owns that.
-        assert not inputs.settle_unbound((key,))
+        assert inputs.settle_unbound((key,)).lookup(key).has_started
         terminal = InputDispositions(inputs.path).read().lookup(key)
         assert terminal.origin == origin
         assert terminal.has_started and terminal.source_text == command.user_text
-        facts = inputs.read().compaction_material(comms.registry.require("beta"), None, None)[1]
+        facts = inputs.read().compaction_material(comms.registry.require("beta"), (), None)[1]
         assert facts[0].for_owner(comms.registry.require("beta"), comms.registry.snapshot()) == CurrentHumanInputTaskFact(terminal)
     finally:
         await agent.shutdown()
@@ -107,11 +109,15 @@ def test_foreign_or_changed_origin_refused_before_any_reservation(tmp_path):
                WireInputOrigin(origin.root_id, MessageReference(1, "forged-reference")))
     for witness in invalid:
         with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
-            QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=Client(), origin=witness)
+            with ExitStack() as custody:
+                QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+                                    echo=True, images=(), controller=Client(), origin=witness, custody=custody)
+                custody.pop_all()
     with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="controller"):
-        QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                            echo=True, images=(), controller=None, origin=origin)
+        with ExitStack() as custody:
+            QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+                                echo=True, images=(), controller=None, origin=origin, custody=custody)
+            custody.pop_all()
     assert agent.inputs.dispositions.read().rows == {}
 
 
@@ -167,13 +173,17 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
         FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
 
     with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="scope"):
-        QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                            echo=True, images=(), controller=Client(), origin=absent)
+        with ExitStack() as custody:
+            QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+                                echo=True, images=(), controller=Client(), origin=absent, custody=custody)
+            custody.pop_all()
     assert agent.inputs.dispositions.read().rows == {}
 
     with _store_lock(comms._wire_lock_path):
-        queued, _ = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                        echo=True, images=(), controller=Client(), origin=restored)
+        with ExitStack() as custody:
+            queued, _ = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+                                            echo=True, images=(), controller=Client(), origin=restored, custody=custody)
+            custody.pop_all()
     assert agent.inputs.dispositions.read().lookup(queued.key).origin == restored
     assert restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     current = comms.registry.require("beta")
@@ -196,8 +206,10 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     with _store_lock(comms._wire_lock_path):
-        queued, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                        echo=True, images=(), controller=Client(), origin=origin)
+        with ExitStack() as custody:
+            queued, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
+                                            echo=True, images=(), controller=Client(), origin=origin, custody=custody)
+            custody.pop_all()
     inputs = agent.inputs.dispositions
     row = inputs.read().lookup(queued.key)
     original_inputs = inputs.path.read_bytes()
@@ -209,8 +221,8 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
 
     def captured(name):
         owner = comms.registry.require(name)
-        with comms.bus.log.locked():
-            _, wire_facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        with comms.bus.log.certified_read() as source:
+            wire_facts = tuple(source.retained_task_facts(owner.incarnation))
         input_facts = tuple(r.origin.retained_fact(r) for r in inputs.read().rows.values())
         return RetainedTaskFacts(wire_facts + input_facts).for_owner(owner, comms.registry.snapshot())
 
@@ -219,8 +231,8 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     assert retained.current_authored_sources(snapshot.require('beta'), snapshot) == (pin,)
     assert retained.original_text_source(pin) == row
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
-    with comms.bus.log.locked():
-        _, wire_only = comms.bus.log.compaction_messages_unlocked(snapshot.require('beta').incarnation)
+    with comms.bus.log.certified_read() as source:
+        wire_only = tuple(source.retained_task_facts(snapshot.require('beta').incarnation))
     with pytest.raises(RelationViolationError, match='original captured wording'):
         RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
@@ -242,8 +254,10 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
 
     # Same text, separately reserved original inputs never acquire one identity.
     with _store_lock(comms._wire_lock_path):
-        second, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                        echo=True, images=(), controller=Client(), origin=origin)
+        with ExitStack() as custody:
+            second, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
+                                            echo=True, images=(), controller=Client(), origin=origin, custody=custody)
+            custody.pop_all()
     second_subject = inputs.read().lookup(second.key).context_provenance()
     second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
     assert second_subject != subject

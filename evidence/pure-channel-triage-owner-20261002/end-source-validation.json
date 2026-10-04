@@ -1,0 +1,28 @@
+{
+  "production": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+  "order": "semantic owners and coherent implementation first; source validation at end",
+  "source_tests": {
+    "passed": 54,
+    "failed": 50,
+    "seconds": 69.71,
+    "log": ".artifacts/purechannel502-validation/source-validation.log",
+    "modules": [
+      "test_coordinated_runtime.py",
+      "test_selected_source_batch.py",
+      "test_coordination_response.py",
+      "test_optional_awareness_projection.py",
+      "test_claim_admission_verifier.py"
+    ]
+  },
+  "source_reasoned_failure_contracts": [
+    "existing native fixture plaintext reply instead of Core490 Message array",
+    "removed singular assignment_id outcome field",
+    "old frame contract excludes original body",
+    "raw dict where retained fact owns journal_json",
+    "old captured registry_session fence"
+  ],
+  "baseline_rerun": false,
+  "acceptance": "not passing; actual installed configured manyowner purechannel gate next; no narrow local acceptance claim",
+  "public_mutations": 0,
+  "original_seq326_replays": 0
+}

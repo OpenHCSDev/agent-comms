@@ -12,6 +12,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass, field
 
+from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
@@ -32,6 +33,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
+from agent_comms.typed_table import sql_literal
 from agent_comms.wake import NoWakeDecision, WakeDecision
 
 _LOG = logging.getLogger(__name__)
@@ -353,17 +355,18 @@ def pending_sealed_assignments(
         while True:
             selected = sealed_cohort_assignments(
                 store, recipient_lookup, after_seq=cursor, limit=100,
+                state_capability=PendingNotification,
             )
             pending.extend(assignment for assignment in selected
-                           if assignment.recipient == owner_name
-                           and (assignment.lifecycle.triage_pending or assignment.lifecycle.full_pending))
+                           if assignment.recipient == owner_name)
             if len(selected) < 100:
                 return tuple(pending)
             cursor = selected[-1].wire_seq
 
 
 def sealed_cohort_assignments(
-    store: Coordination, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100
+    store: Coordination, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100,
+    state_capability: type = AssignmentState,
 ) -> tuple[WakeAssignment, ...]:
     """Bounded receipt-backed projection. Never pages unbound singleton claims."""
     if (
@@ -376,6 +379,10 @@ def sealed_cohort_assignments(
     with store.session.read():
         db = store.session._connection
         assert_cohort_schema(db)
+        states = ",".join(
+            sql_literal(member)
+            for member in AssignmentState.members_with(state_capability)
+        )
         return tuple(
             WakeAssignment.read(
                 db.execute(
@@ -386,6 +393,7 @@ def sealed_cohort_assignments(
                     "JOIN cohort_delivery_receipts d ON d.wire_root_id=m.wire_root_id "
                     "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id AND d.kind='selected' "
                     "WHERE c.recipient_lookup=? AND c.wire_seq>? "
+                    f"AND c.disposition IN ({states}) "
                     "ORDER BY c.wire_seq,c.assignment_id LIMIT ?",
                     (recipient_lookup, after_seq, limit),
                 )

@@ -1,0 +1,409 @@
+{
+  "tool": "Node built-in Acorn parser/walker",
+  "omissions": [],
+  "rows": [
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "revision": "0258a165",
+      "declarations": [
+        {
+          "name": "constructNativeConditions",
+          "line": 6
+        }
+      ],
+      "consumers": [
+        {
+          "name": "allowance",
+          "line": 18
+        },
+        {
+          "name": "fullSource",
+          "line": 37
+        },
+        {
+          "name": "recentSource",
+          "line": 38
+        },
+        {
+          "name": "next",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "revision": "HEAD",
+      "declarations": [
+        {
+          "name": "constructNativeConditions",
+          "line": 7
+        }
+      ],
+      "consumers": [
+        {
+          "name": "allowance",
+          "line": 19
+        },
+        {
+          "name": "assertCurrent",
+          "line": 43
+        },
+        {
+          "name": "latestMetadata",
+          "line": 47
+        },
+        {
+          "name": "sessionEntryToContextMessages",
+          "line": 56
+        },
+        {
+          "name": "keptMetadata",
+          "line": 60
+        },
+        {
+          "name": "entryMessages",
+          "line": 62
+        },
+        {
+          "name": "prefixContext",
+          "line": 61
+        },
+        {
+          "name": "capture",
+          "line": 63
+        },
+        {
+          "name": "assertCurrent",
+          "line": 64
+        },
+        {
+          "name": "fullSource",
+          "line": 71
+        },
+        {
+          "name": "recentSource",
+          "line": 72
+        },
+        {
+          "name": "next",
+          "line": 73
+        }
+      ]
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "revision": "0258a165",
+      "declarations": [],
+      "consumers": [
+        {
+          "name": "capture",
+          "line": 45
+        },
+        {
+          "name": "capture",
+          "line": 55
+        },
+        {
+          "name": "capture",
+          "line": 64
+        },
+        {
+          "name": "next",
+          "line": 79
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 81
+        }
+      ]
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "revision": "HEAD",
+      "declarations": [],
+      "consumers": [
+        {
+          "name": "capture",
+          "line": 45
+        },
+        {
+          "name": "capture",
+          "line": 55
+        },
+        {
+          "name": "capture",
+          "line": 64
+        },
+        {
+          "name": "next",
+          "line": 79
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 81
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 104
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 115
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 118
+        },
+        {
+          "name": "constructNativeConditions",
+          "line": 120
+        }
+      ]
+    },
+    {
+      "path": "dist/core/session-manager.js",
+      "revision": "native89",
+      "declarations": [
+        {
+          "name": "sessionEntryToContextMessages",
+          "line": 38
+        }
+      ],
+      "consumers": [
+        {
+          "name": "assertCurrent",
+          "line": 805
+        },
+        {
+          "name": "assertCurrent",
+          "line": 891
+        },
+        {
+          "name": "next",
+          "line": 910
+        },
+        {
+          "name": "assertCurrent",
+          "line": 1310
+        }
+      ]
+    },
+    {
+      "path": "dist/core/session-context.js",
+      "revision": "native89",
+      "declarations": [
+        {
+          "name": "entryMessages",
+          "line": 25
+        },
+        {
+          "name": "prefixContext",
+          "line": 38
+        }
+      ],
+      "consumers": [
+        {
+          "name": "entryMessages",
+          "line": 23
+        },
+        {
+          "name": "entryMessages",
+          "line": 44
+        },
+        {
+          "name": "prefixContext",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "revision": "native89",
+      "declarations": [
+        {
+          "name": "capture",
+          "line": 18
+        },
+        {
+          "name": "capture",
+          "line": 36
+        },
+        {
+          "name": "capture",
+          "line": 55
+        },
+        {
+          "name": "capture",
+          "line": 76
+        },
+        {
+          "name": "capture",
+          "line": 134
+        },
+        {
+          "name": "next",
+          "line": 184
+        },
+        {
+          "name": "fullSource",
+          "line": 201
+        },
+        {
+          "name": "recentSource",
+          "line": 205
+        }
+      ],
+      "consumers": [
+        {
+          "name": "capture",
+          "line": 56
+        },
+        {
+          "name": "capture",
+          "line": 59
+        },
+        {
+          "name": "capture",
+          "line": 78
+        },
+        {
+          "name": "sessionEntryToContextMessages",
+          "line": 160
+        },
+        {
+          "name": "capture",
+          "line": 185
+        },
+        {
+          "name": "assertCurrent",
+          "line": 194
+        },
+        {
+          "name": "capture",
+          "line": 197
+        },
+        {
+          "name": "assertCurrent",
+          "line": 198
+        },
+        {
+          "name": "keptMetadata",
+          "line": 207
+        }
+      ]
+    },
+    {
+      "path": "dist/core/session-entry-store.js",
+      "revision": "native89",
+      "declarations": [
+        {
+          "name": "assertCurrent",
+          "line": 70
+        },
+        {
+          "name": "latestMetadata",
+          "line": 113
+        },
+        {
+          "name": "keptMetadata",
+          "line": 139
+        },
+        {
+          "name": "assertCurrent",
+          "line": 232
+        },
+        {
+          "name": "assertCurrent",
+          "line": 338
+        }
+      ],
+      "consumers": [
+        {
+          "name": "sessionEntryToContextMessages",
+          "line": 27
+        },
+        {
+          "name": "latestMetadata",
+          "line": 118
+        },
+        {
+          "name": "assertCurrent",
+          "line": 131
+        },
+        {
+          "name": "latestMetadata",
+          "line": 133
+        },
+        {
+          "name": "keptMetadata",
+          "line": 136
+        },
+        {
+          "name": "assertCurrent",
+          "line": 137
+        },
+        {
+          "name": "latestMetadata",
+          "line": 139
+        },
+        {
+          "name": "assertCurrent",
+          "line": 150
+        },
+        {
+          "name": "assertCurrent",
+          "line": 156
+        },
+        {
+          "name": "assertCurrent",
+          "line": 312
+        },
+        {
+          "name": "assertCurrent",
+          "line": 315
+        },
+        {
+          "name": "assertCurrent",
+          "line": 318
+        },
+        {
+          "name": "assertCurrent",
+          "line": 320
+        },
+        {
+          "name": "assertCurrent",
+          "line": 354
+        },
+        {
+          "name": "assertCurrent",
+          "line": 365
+        },
+        {
+          "name": "assertCurrent",
+          "line": 432
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+      "revision": "native89",
+      "declarations": [
+        {
+          "name": "allowance",
+          "line": 35
+        },
+        {
+          "name": "allowance",
+          "line": 159
+        }
+      ],
+      "consumers": [
+        {
+          "name": "allowance",
+          "line": 56
+        }
+      ]
+    }
+  ],
+  "scope": "Lexical method references in changed private JS and imported native owners; dynamic callback/SDK resolution read semantically, not established by AST"
+}

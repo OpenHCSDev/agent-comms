@@ -1,34 +1,55 @@
 """Captured selected sources share one input; they do not create another inbox."""
 
+import hashlib
 import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .bus_publication import CommittedDelivery
-from .channel_input_batch import InputBatch
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .field_codec import FieldCodec
 from .messages import Message, MessageType
 from .native_pi import NativePiUnavailable
 from .wake import derive_exact_reply_target
+from .turn_context import InstructionFile, ReplyRouteSegment, WireProvenance
+
+if TYPE_CHECKING:
+    from .assignment_store import AssignmentStore
 
 
 @dataclass(frozen=True)
 class SelectedSource:
-    assignment: WakeAssignment
+    """An original delivery and its relation to the owning mutable claim store.
+
+    Membership is captured once; lifecycle belongs to AssignmentStore. Native
+    send stages separately capture exact rows for their reservation fences.
+    """
+
+    assignment_id: str
+    store: AssignmentStore
     delivery: CommittedDelivery
+
+    @property
+    def assignment(self) -> WakeAssignment:
+        with self.store.session.read():
+            current = self.store.get(self.assignment_id)
+            current.require_committed_source(self.delivery)
+            return current
 
     def require(self, owner) -> None:
         self.assignment.require_selected_source(self.delivery, owner)
 
 
 @dataclass(frozen=True)
-class SelectedSourceBatch(InputBatch):
+class SelectedSourceBatch:
     sources: tuple[SelectedSource, ...]
 
     def __post_init__(self):
         if not self.sources:
             raise IdentityConflict("Selected input needs original sources")
+        if any(source.store is not self.sources[0].store for source in self.sources):
+            raise IdentityConflict("Selected batch crosses assignment store ownership")
         assignments = self.assignments
         if len(set(self.assignment_ids)) != len(assignments):
             raise IdentityConflict("Selected batch repeats an original source")
@@ -40,16 +61,19 @@ class SelectedSourceBatch(InputBatch):
             raise IdentityConflict("Selected source lacks an original reply route")
 
     @property
-    def admits_multiple(self) -> bool:
-        return len(self.sources) > 1
-
-    @property
     def assignments(self) -> tuple[WakeAssignment, ...]:
-        return tuple(source.assignment for source in self.sources)
+        with self.sources[0].store.session.read():
+            return tuple(source.assignment for source in self.sources)
 
     @property
     def assignment_ids(self) -> tuple[str, ...]:
-        return tuple(row.assignment_id for row in self.assignments)
+        return tuple(source.assignment_id for source in self.sources)
+
+    @property
+    def execution_id(self) -> str:
+        return "wirev1" + hashlib.sha256(
+            json.dumps(self.assignment_ids, separators=(",", ":")).encode()
+        ).hexdigest()
 
     @property
     def requires_triage(self) -> bool:
@@ -64,18 +88,19 @@ class SelectedSourceBatch(InputBatch):
             derive_exact_reply_target(source.delivery.message) for source in self.sources
         ))
 
-    def response_instruction(self, sender: str) -> str:
-        examples = tuple(
-            Message(sender, target, "Combined answer for originals on this reply route only",
-                    MessageType.INFO, timestamp=0)
-            for target in self.targets
-        )
-        return (
-            "Return ONLY a JSON array of Message records, one combined answer per listed reply route. "
-            "Use the shown sender, target and info type; replace each text with its answer. "
-            "Do not disclose another route's private request or answer in this route's text. "
-            "No markdown fences, extra records or additional metadata. Publication owns actual timing. "
-            "Declared Message examples: " + json.dumps(FieldCodec.encode(examples)) + "\n"
+    def response_segment(self, sender: str):
+        instruction = InstructionFile.read("selected-response.md")
+        example = InstructionFile.read("selected-response-example.md")
+        return SelectedResponseSegment(
+            provenance=(
+                instruction.source,
+                example.source,
+                *(WireProvenance(source.delivery.message.reference) for source in self.sources),
+            ),
+            instruction=instruction,
+            targets=self.targets,
+            sender=sender,
+            example=example,
         )
 
     def response_messages(self, text: str, sender: str) -> tuple[Message, ...]:
@@ -99,3 +124,18 @@ class SelectedSourceBatch(InputBatch):
             return tuple(by_target[target] for target in self.targets)
         except (TypeError, ValueError) as error:
             raise NativePiUnavailable("Native batch answer does not match its original reply routes") from error
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedResponseSegment(ReplyRouteSegment):
+    """Selected response proposals use the existing route owner and grammar."""
+
+    sender: str
+    example: InstructionFile
+
+    def values(self):
+        examples = tuple(
+            Message(self.sender, target, self.example.content, MessageType.INFO, timestamp=0)
+            for target in self.targets
+        )
+        return dict(examples=json.dumps(FieldCodec.encode(examples)))

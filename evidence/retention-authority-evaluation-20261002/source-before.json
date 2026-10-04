@@ -1,0 +1,792 @@
+{
+  "scope": "original reader/scorer/proof/fact declarations and lexical test/production consumers",
+  "parse_omissions": [],
+  "owners": [
+    {
+      "file": "tests/retained_native_fixture.py",
+      "classes": [
+        {
+          "name": "RecordedNativeCheckpoint",
+          "bases": [],
+          "members": [
+            "observe"
+          ]
+        },
+        {
+          "name": "RecordedNativeProbe",
+          "bases": [],
+          "members": [
+            "observe"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "classes": [
+        {
+          "name": "RecordedNativeProbes",
+          "bases": [],
+          "members": []
+        },
+        {
+          "name": "RecallScenario",
+          "bases": [],
+          "members": [
+            "__post_init__",
+            "read",
+            "public",
+            "score",
+            "score_native"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_records.py",
+      "classes": [
+        {
+          "name": "CompactionOperation",
+          "bases": [
+            "UnresolvedJournalHistory",
+            "TypedTable"
+          ],
+          "members": [
+            "inspection",
+            "require_summary_link",
+            "committed_outcome",
+            "covered_prefix",
+            "represents_summary",
+            "publication"
+          ]
+        },
+        {
+          "name": "SelectedSummaryAttempt",
+          "bases": [
+            "UnresolvedJournalHistory",
+            "TypedTable"
+          ],
+          "members": [
+            "identity",
+            "require_session",
+            "require_transition",
+            "blocking_in",
+            "transition",
+            "original_has_started"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "classes": [
+        {
+          "name": "NativeEvidenceRead",
+          "bases": [],
+          "members": [
+            "__init__",
+            "require_path",
+            "open",
+            "borrow",
+            "close",
+            "observe",
+            "decode_rows",
+            "retained_task_facts",
+            "branch",
+            "covered_prefix"
+          ]
+        },
+        {
+          "name": "ManagedCompactionEntry",
+          "bases": [
+            "CompactionEntry",
+            "NativeSummaryPayload"
+          ],
+          "members": [
+            "to_wire",
+            "covered_prefix"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "classes": [
+        {
+          "name": "RetainedTaskFacts",
+          "bases": [],
+          "members": [
+            "source_digest",
+            "original_input_facts",
+            "changed_from",
+            "original_inputs",
+            "canonical_journal_bytes",
+            "frame_journal",
+            "original_text_source",
+            "current_authored_lineages",
+            "current_authored_sources",
+            "optional_boundary",
+            "contains_source",
+            "for_owner",
+            "text",
+            "require_summary"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_compaction_request.py",
+      "classes": []
+    }
+  ],
+  "consumers": [
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 22,
+      "import": "retained_native_fixture",
+      "names": [
+        "RecordedNativeProbe"
+      ]
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 212,
+      "call": "probe.observe"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 10,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 45,
+      "call": "operation.require_summary_link"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 52,
+      "call": "attempt.request.retained.require_summary"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 87,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 94,
+      "call": "self.checkpoint.observe"
+    },
+    {
+      "file": "tests/selected_summary_cases.py",
+      "line": 13,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 15,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 28,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_compaction_boundaries.py",
+      "line": 36,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 15,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "tests/test_compaction_outcome_transcript.py",
+      "line": 12,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_compaction_outcome_transcript.py",
+      "line": 16,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 16,
+      "import": "retained_native_fixture",
+      "names": [
+        "RecordedNativeProbe"
+      ]
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 19,
+      "import": "compaction_retention_fixture",
+      "names": [
+        "RecordedNativeProbes",
+        "RecallScenario"
+      ]
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 22,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 225,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 288,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 38,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/test_current_input_origin.py",
+      "line": 190,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_goal_failure_native.py",
+      "line": 23,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/test_input_documents.py",
+      "line": 21,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 17,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_owner_compaction_runtime.py",
+      "line": 137,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 22,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_retained_context_operations.py",
+      "line": 14,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/test_retained_context_operations.py",
+      "line": 19,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_retained_journal_framing.py",
+      "line": 9,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_retained_manual_compaction.py",
+      "line": 25,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_retained_native_tool_latency.py",
+      "line": 21,
+      "import": "agent_comms.native_entries",
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "file": "tests/test_selected_summary_admission.py",
+      "line": 20,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/test_selected_summary_admission.py",
+      "line": 28,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_selected_summary_exchange.py",
+      "line": 18,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 18,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_selected_summary_journal.py",
+      "line": 14,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 13,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 128,
+      "import": "agent_comms.compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 131,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 53,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 142,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 155,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 236,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 282,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 366,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 463,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "tests/test_task_decisions.py",
+      "line": 534,
+      "import": "agent_comms.retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 736,
+      "import": "compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_boundary.py",
+      "line": 19,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_identity.py",
+      "line": 17,
+      "import": "compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_identity.py",
+      "line": 49,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_journal.py",
+      "line": 17,
+      "import": "compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_operations.py",
+      "line": 13,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_outcomes.py",
+      "line": 11,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_private_inputs.py",
+      "line": 20,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_publications.py",
+      "line": 9,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_records.py",
+      "line": 33,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_records.py",
+      "line": 410,
+      "call": "creation.covered_prefix"
+    },
+    {
+      "file": "src/agent_comms/compaction_source.py",
+      "line": 12,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_states.py",
+      "line": 24,
+      "import": "compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_states.py",
+      "line": 25,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_states.py",
+      "line": 372,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_summaries.py",
+      "line": 18,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_compaction_request.py",
+      "line": 14,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_compaction_request.py",
+      "line": 107,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_compaction_request.py",
+      "line": 123,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_compaction_writer.py",
+      "line": 13,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 529,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 287,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 535,
+      "call": "operation.covered_prefix"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 114,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 329,
+      "call": "entry.covered_prefix"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 534,
+      "call": "super().covered_prefix"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 29,
+      "import": "native_entries",
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "import": "native_entries",
+      "names": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 21,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_manual.py",
+      "line": 14,
+      "import": "compaction_records",
+      "names": [
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_provider.py",
+      "line": 15,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation"
+      ]
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 15,
+      "import": "compaction_records",
+      "names": [
+        "CompactionOperation",
+        "SelectedSummaryAttempt"
+      ]
+    },
+    {
+      "file": "src/agent_comms/reservation_rules.py",
+      "line": 12,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/retained_context.py",
+      "line": 11,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_source.py",
+      "line": 20,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 174,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 197,
+      "import": "retained_task_facts",
+      "names": [
+        "RetainedTaskFacts"
+      ]
+    }
+  ]
+}

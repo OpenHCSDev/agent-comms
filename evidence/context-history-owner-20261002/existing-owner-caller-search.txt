@@ -1,0 +1,32 @@
+existing owners
+rg -n class ContextTurn|class RecordedContextTurn|class ContextManifest|class ThreadIncarnation|class RegistryProvenance|class WireLog|class ContextCliCommand src tests
+src/agent_comms/turn_context.py:370:class ContextTurn(DeclaredFamily, affix="ContextTurn"):
+src/agent_comms/turn_context.py:391:class RecordedContextTurn(ContextTurn):
+src/agent_comms/turn_context.py:415:class ContextManifest:
+src/agent_comms/registry_provenance.py:12:class RegistryProvenance:
+src/agent_comms/wire_log.py:49:class WireLog:
+src/agent_comms/cli_commands.py:745:class ContextCliCommand(CliCommand):
+src/agent_comms/thread_identity.py:23:class ThreadIncarnation:
+src/agent_comms/wire_record.py:98:class ContextManifestWireObservation(WireObservation):
+
+all consumers
+rg -n context_manifests\(|changed_since\(|changed_from_history\(|same_recording\( src tests
+tests/turn_context_installed_journey.py:155:        manifests = service.bus.log.context_manifests(thread.name, service.registry)
+tests/turn_context_installed_journey.py:243:        manifests = service.bus.log.context_manifests(source.name, service.registry)
+tests/test_native_context_inspection.py:58:            assert owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry) == ()
+tests/test_native_context_inspection.py:220:                previous = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
+tests/test_native_context_inspection.py:228:                manifests = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
+src/agent_comms/turn_context.py:377:    def same_recording(self, other: ContextTurn) -> bool:
+src/agent_comms/turn_context.py:421:    def changed_from_history(self, history: tuple[ContextManifest, ...]) -> dict:
+src/agent_comms/turn_context.py:435:                            if not self.turn.same_recording(manifest.turn))
+src/agent_comms/turn_context.py:438:        return self.changed_since(previous)
+src/agent_comms/turn_context.py:440:    def changed_since(self, previous: ContextManifest) -> dict:
+src/agent_comms/wire_log.py:101:    def context_manifests(self, name: str, registry):
+src/agent_comms/wire_log.py:114:                for manifest in record.context_manifests()
+src/agent_comms/wire_record.py:54:    def context_manifests(self):
+src/agent_comms/wire_record.py:94:    def context_manifests(self): ...
+src/agent_comms/wire_record.py:104:    def context_manifests(self):
+src/agent_comms/wire_record.py:112:    def context_manifests(self):
+src/agent_comms/wire_record.py:113:        return self.observation.context_manifests()
+src/agent_comms/cli_commands.py:761:            manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
+src/agent_comms/cli_commands.py:769:                return selected[-1].changed_from_history(manifests)

@@ -1,0 +1,153 @@
+{
+  "declared_files": [
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/goal_scheduler.py",
+    "src/agent_comms/goal_management.py",
+    "src/agent_comms/config_options.py",
+    "src/agent_comms/session_lifecycle.py",
+    "src/agent_comms/turn_progress.py",
+    "src/agent_comms/owned_turn.py"
+  ],
+  "parsed": 7,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 231,
+      "node": "AsyncFunctionDef",
+      "name": "observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 229,
+      "node": "Attribute",
+      "name": "observe"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 241,
+      "node": "Attribute",
+      "name": "recover_closed_goal_wait"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 63,
+      "node": "FunctionDef",
+      "name": "schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 251,
+      "node": "AsyncFunctionDef",
+      "name": "sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 247,
+      "node": "Attribute",
+      "name": "schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 252,
+      "node": "Attribute",
+      "name": "goal_changed"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 221,
+      "node": "Attribute",
+      "name": "schedule_goal"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 248,
+      "node": "Attribute",
+      "name": "sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 79,
+      "node": "Attribute",
+      "name": "goal_wait"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 162,
+      "node": "FunctionDef",
+      "name": "goal_wait"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 166,
+      "node": "FunctionDef",
+      "name": "recover_closed_goal_wait"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 298,
+      "node": "FunctionDef",
+      "name": "goal_changed"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 311,
+      "node": "FunctionDef",
+      "name": "goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 308,
+      "node": "Attribute",
+      "name": "goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 304,
+      "node": "Attribute",
+      "name": "sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 289,
+      "node": "Attribute",
+      "name": "goal_snapshot"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 42,
+      "node": "Name",
+      "name": "sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 47,
+      "node": "Attribute",
+      "name": "sync_goal_execution"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "goal_wait"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 329,
+      "node": "Attribute",
+      "name": "sync_goal_execution"
+    }
+  ]
+}

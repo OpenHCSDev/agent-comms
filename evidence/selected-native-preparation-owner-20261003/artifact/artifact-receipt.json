@@ -1,0 +1,36 @@
+{
+  "source_checkpoint": "9d42ff50ef28ba9b655f807bcc4342148345c206",
+  "builder_source": "9a0292fbd5d35032cbe0d690fb2a538d3e3cba01",
+  "manifest": "915c78ab702bd8ea66500e64ee64d1d623e3e6ee0702831166e6b6be3788391b",
+  "tree": "b678e1f41c4cc2bde46a65fa71c803306b86618103031ca029db44cb9a690339",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "aa094cf8dca78e33e85e8cf35b1e2296726477c420a068f26895b44da9e5ce70",
+      "new_sha256": "e7ec33c5659d9033aa16aba7ae4896900b3736f370dca7a58eb5d8d26529e5b3"
+    }
+  ],
+  "all_other_members_equal_native562_044": true,
+  "import_manifest_and_global_extension_unchanged": true,
+  "regular_files": 19190,
+  "payload_bytes": 138410588,
+  "all_files_single_links": true,
+  "stock_recipe": "Fresh pristine0.85.1; original source SHA fence and reviewed patch order,95lockednpm dependencies offline",
+  "promotion": "Complete independent regular files renamed into manifest-derived target; original prepare-pi-native verifies/reuses it under new matching pins",
+  "provider_calls": 0,
+  "public_changes": false,
+  "qualification": "Immutable native artifact only; changed preparation custody path acceptance remains Mendel-owned, not Ready/live.",
+  "single_successful_stock_assembly": true,
+  "stock_assembly_attempts": 2,
+  "canonical_prepare_exit": 0,
+  "native_full_trust": true,
+  "exact_source_helper_embedded": true,
+  "original044_fulltree_manifest_unchanged": true,
+  "native_schema_unchanged": "Original journal/native proof schema files and all package members except rpc-mode.js are byte-identical. New read-only RPC declaration requires matched updated Python query consumers.",
+  "negative_controls": [
+    "First stock assembly refused the copied read-only admission-prefix anchor before publishing; source patch now extends original pinned get_state tail without repeating selected query prefix.",
+    "First pin derivation retained old relative output directory and refused before pin mutation. Corrected owned path, same assembled artifact reused; prior canonical log verified original044 only, not candidate."
+  ],
+  "artifact_validation": "Build/module/import/fulltree/source identity only; actual selected 42MB dry preparation qualification belongs Mendel."
+}

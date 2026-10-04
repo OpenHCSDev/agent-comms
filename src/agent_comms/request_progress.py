@@ -1,7 +1,7 @@
 """Original native request measurements; no admission, completion or retry authority."""
 from dataclasses import dataclass, field
 
-from .pi_payloads import PiPayload
+from .pi_payloads import PiModel, PiPayload
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,15 @@ class RequestProgress(PiPayload):
     status: int | None = None
     response_id: str | None = field(default=None, metadata={"wire_name": "responseId"})
     callback: str = ""
+    # External request observations are optional at other stages and in original
+    # records. Absence is unavailable evidence, never a registry/catalog lookup.
+    model: PiModel | None = field(default=None, metadata={"wire_omit_default": True})
+    estimated_input_tokens: int | None = field(default=None, metadata={"wire_name": "estimatedInputTokens", "wire_omit_default": True})
+    available_tokens: int | None = field(default=None, metadata={"wire_name": "availableTokens", "wire_omit_default": True})
+    output_token_field: str | None = field(default=None, metadata={"wire_name": "outputTokenField", "wire_omit_default": True})
+    requested_output_tokens: int | None = field(default=None, metadata={"wire_name": "requestedOutputTokens", "wire_omit_default": True})
+    admitted_output_tokens: int | None = field(default=None, metadata={"wire_name": "admittedOutputTokens", "wire_omit_default": True})
+    minimum_output_tokens: int | None = field(default=None, metadata={"wire_name": "minimumOutputTokens", "wire_omit_default": True})
 
     def __post_init__(self):
         if min(self.started_at_ms, self.observed_at_ms, self.elapsed_ms,

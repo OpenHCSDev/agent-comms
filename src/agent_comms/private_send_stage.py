@@ -121,19 +121,19 @@ class NativeSendStage(ABC):
         token_digest: str,
         context: NativeContextProof,
         *,
-        session_dir: Path,
         wire_root_id: str,
         prompt: str,
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
-        with NativeEntry.open_evidence(context.session_file) as evidence:
-            if not context.corroborates_input(input_id, session_dir, evidence=evidence):
+        with NativeEntry.open_input_evidence(context.session_file) as evidence:
+            if not context.corroborates_input(input_id, evidence=evidence):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
             with store.session.read():
-                self.pending_input(store, input_id, owner, token_digest)
+                original = self.pending_input(store, input_id, owner, token_digest)
+                original.require_session_identity().require_context(context)
                 binding = self.require_binding(
                     store,
                     input_id,
@@ -224,7 +224,7 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
-    def reject(self, store, owner, input_id, token_digest, context):
+    def reject(self, store, owner, input_id, token_digest, context) -> tuple[WakeAssignment, ...]:
         """Settle this proved result atomically; never reserve a replacement input."""
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
@@ -242,6 +242,8 @@ class TriageNativeSend(NativeSendStage):
                 )
                 if updated.rowcount != 1:
                     raise StaleFence("rejected triage lost an original batch claim")
+            return tuple(store.assignments.get(captured.assignment_id)
+                         for captured in self.assignments)
 
     @property
     def execution(self) -> TriageNativeExecution:
@@ -282,13 +284,17 @@ class TriageNativeSend(NativeSendStage):
         token_digest: str,
         context: NativeContextProof,
         decision: SelectedTriage,
-    ) -> None:
+    ) -> tuple[WakeAssignment, ...]:
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
             row.commit_context(db, context, verdict=type(decision))
             for captured in self.assignments:
                 decision.settle(store, db, store.assignments.get(captured.assignment_id))
+            # This is the settlement transaction's witness, not a replacement
+            # source cache. Engagement must fence this exact proved transition.
+            return tuple(store.assignments.get(captured.assignment_id)
+                         for captured in self.assignments)
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         if (

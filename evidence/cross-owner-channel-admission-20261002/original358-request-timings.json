@@ -1,0 +1,3200 @@
+{
+  "original_wire_seq": 358,
+  "message_id": "c9ef4ce2dcda",
+  "wire_timestamp": 1790932784.1737354,
+  "source": "Parent canonical source/entry timeline joins the selected turn requests; counts are observed acquisition spans, not inferred provider queue time.",
+  "turns": [
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/c9cfc1279eb142f41925018b346b8827.requests.jsonl",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper2",
+            "created_at": 1790713653.7134795
+          },
+          "generation": 57
+        },
+        "turn_id": "c9cfc1279eb142f41925018b346b8827",
+        "admission_generation": 1681
+      },
+      "request_stages": [
+        {
+          "inputId": "bbe6cf4f1057d32014e5fa83e760709d",
+          "requestId": "fe709577-5e24-4da0-ae11-5910476c420a",
+          "startedAtMs": 1790932898357,
+          "observedAtMs": 1790932898357,
+          "stage": "preparing",
+          "elapsedMs": 0.075544,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "bbe6cf4f1057d32014e5fa83e760709d",
+          "requestId": "fe709577-5e24-4da0-ae11-5910476c420a",
+          "startedAtMs": 1790932898357,
+          "observedAtMs": 1790932898746,
+          "stage": "dispatch",
+          "elapsedMs": 389.525297,
+          "callbackMs": 0.122372
+        },
+        {
+          "inputId": "bbe6cf4f1057d32014e5fa83e760709d",
+          "requestId": "fe709577-5e24-4da0-ae11-5910476c420a",
+          "startedAtMs": 1790932898357,
+          "observedAtMs": 1790932899082,
+          "stage": "first_event",
+          "elapsedMs": 725.359144,
+          "callbackMs": 0.122372
+        },
+        {
+          "inputId": "bbe6cf4f1057d32014e5fa83e760709d",
+          "requestId": "fe709577-5e24-4da0-ae11-5910476c420a",
+          "startedAtMs": 1790932898357,
+          "observedAtMs": 1790932901530,
+          "stage": "finished",
+          "elapsedMs": 3173.594167,
+          "callbackMs": 9.155462
+        },
+        {
+          "inputId": "21311a1e47a01ab918b2c0c70aaf1813",
+          "requestId": "ade6d2d6-95c1-4c21-9330-1a8979e31d5d",
+          "startedAtMs": 1790933023073,
+          "observedAtMs": 1790933023073,
+          "stage": "preparing",
+          "elapsedMs": 0.073529,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "21311a1e47a01ab918b2c0c70aaf1813",
+          "requestId": "ade6d2d6-95c1-4c21-9330-1a8979e31d5d",
+          "startedAtMs": 1790933023073,
+          "observedAtMs": 1790933023529,
+          "stage": "dispatch",
+          "elapsedMs": 456.654105,
+          "callbackMs": 0.109397
+        },
+        {
+          "inputId": "21311a1e47a01ab918b2c0c70aaf1813",
+          "requestId": "ade6d2d6-95c1-4c21-9330-1a8979e31d5d",
+          "startedAtMs": 1790933023073,
+          "observedAtMs": 1790933023780,
+          "stage": "first_event",
+          "elapsedMs": 707.762109,
+          "callbackMs": 0.109397
+        },
+        {
+          "inputId": "21311a1e47a01ab918b2c0c70aaf1813",
+          "requestId": "ade6d2d6-95c1-4c21-9330-1a8979e31d5d",
+          "startedAtMs": 1790933023073,
+          "observedAtMs": 1790933027989,
+          "stage": "finished",
+          "elapsedMs": 4916.26618,
+          "callbackMs": 9.35247
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "bbe6cf4f1057d32014e5fa83e760709d",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 1322,
+              "maximum_ns": 1322,
+              "maximum_started_ns": 408435424159370,
+              "maximum_finished_ns": 408435424160692,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 743516229,
+              "maximum_ns": 743398616,
+              "maximum_started_ns": 408435424165321,
+              "maximum_finished_ns": 408436167563937,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 720519193,
+              "maximum_ns": 720519193,
+              "maximum_started_ns": 408435424199826,
+              "maximum_finished_ns": 408436144719019,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 22773924,
+              "maximum_ns": 22773924,
+              "maximum_started_ns": 408436144776878,
+              "maximum_finished_ns": 408436167550802,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 6678033060,
+              "maximum_ns": 6034976371,
+              "maximum_started_ns": 408438557585919,
+              "maximum_finished_ns": 408444592562290,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 1459713829,
+              "maximum_ns": 1415564804,
+              "maximum_started_ns": 408436810676952,
+              "maximum_finished_ns": 408438226241756,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 1010246347,
+              "maximum_ns": 737179717,
+              "maximum_started_ns": 408444636799833,
+              "maximum_finished_ns": 408445373979550,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 92145761295,
+              "maximum_ns": 92145761295,
+              "maximum_started_ns": 408445373996583,
+              "maximum_finished_ns": 408537519757878,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 92144814541,
+              "maximum_ns": 92144814541,
+              "maximum_started_ns": 408445374501860,
+              "maximum_finished_ns": 408537519316401,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 6550,
+              "total_ns": 25455341992,
+              "maximum_ns": 261597820,
+              "maximum_started_ns": 408512196752417,
+              "maximum_finished_ns": 408512458350237,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 6550,
+              "total_ns": 19404242781,
+              "maximum_ns": 260827080,
+              "maximum_started_ns": 408512196804175,
+              "maximum_finished_ns": 408512457631255,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 6413,
+              "total_ns": 1694661976,
+              "maximum_ns": 46083913,
+              "maximum_started_ns": 408450991850570,
+              "maximum_finished_ns": 408451037934483,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 6413,
+              "total_ns": 1084305660,
+              "maximum_ns": 15474929,
+              "maximum_started_ns": 408460349338548,
+              "maximum_finished_ns": 408460364813477,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 1335,
+              "total_ns": 253287486,
+              "maximum_ns": 7519342,
+              "maximum_started_ns": 408478698719073,
+              "maximum_finished_ns": 408478706238415,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 16,
+              "total_ns": 2026221,
+              "maximum_ns": 257298,
+              "maximum_started_ns": 408537386633280,
+              "maximum_finished_ns": 408537386890578,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 3,
+              "total_ns": 95894737,
+              "maximum_ns": 42950964,
+              "maximum_started_ns": 408450994973299,
+              "maximum_finished_ns": 408451037924263,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 3,
+              "total_ns": 250184,
+              "maximum_ns": 113074,
+              "maximum_started_ns": 408537462968917,
+              "maximum_finished_ns": 408537463081991,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 2554381,
+              "maximum_ns": 2554381,
+              "maximum_started_ns": 408537463087261,
+              "maximum_finished_ns": 408537465641642,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 5371,
+              "maximum_ns": 5371,
+              "maximum_started_ns": 408537465646892,
+              "maximum_finished_ns": 408537465652263,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 27575944,
+              "maximum_ns": 27575944,
+              "maximum_started_ns": 408537465654447,
+              "maximum_finished_ns": 408537493230391,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 25409968,
+              "maximum_ns": 25409968,
+              "maximum_started_ns": 408537465701837,
+              "maximum_finished_ns": 408537491111805,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 306391,
+              "maximum_ns": 306391,
+              "maximum_started_ns": 408537491127936,
+              "maximum_finished_ns": 408537491434327,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 1785224,
+              "maximum_ns": 1785224,
+              "maximum_started_ns": 408537491438975,
+              "maximum_finished_ns": 408537493224199,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 2443120,
+              "maximum_ns": 2443120,
+              "maximum_started_ns": 408537493238296,
+              "maximum_finished_ns": 408537495681416,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 11796267,
+              "maximum_ns": 11796267,
+              "maximum_started_ns": 408537495686275,
+              "maximum_finished_ns": 408537507482542,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 232310,
+              "maximum_ns": 232310,
+              "maximum_started_ns": 408537507494445,
+              "maximum_finished_ns": 408537507726755,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 12794,
+              "maximum_ns": 12794,
+              "maximum_started_ns": 408537519333193,
+              "maximum_finished_ns": 408537519345987,
+              "operations": {}
+            }
+          }
+        },
+        {
+          "input_id": "21311a1e47a01ab918b2c0c70aaf1813",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 296101,
+              "maximum_ns": 296101,
+              "maximum_started_ns": 408586070392812,
+              "maximum_finished_ns": 408586070688913,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 166281978,
+              "maximum_ns": 166176268,
+              "maximum_started_ns": 408586070695836,
+              "maximum_finished_ns": 408586236872104,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 37061,
+              "maximum_ns": 37061,
+              "maximum_started_ns": 408586070731724,
+              "maximum_finished_ns": 408586070768785,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 166070297,
+              "maximum_ns": 166070297,
+              "maximum_started_ns": 408586070787560,
+              "maximum_finished_ns": 408586236857857,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 1506186663,
+              "maximum_ns": 1505532272,
+              "maximum_started_ns": 408588742156052,
+              "maximum_finished_ns": 408590247688324,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 2274071569,
+              "maximum_ns": 2230029287,
+              "maximum_started_ns": 408586237588552,
+              "maximum_finished_ns": 408588467617839,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 494393748,
+              "maximum_ns": 283919984,
+              "maximum_started_ns": 408590291806590,
+              "maximum_finished_ns": 408590575726574,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 71656025739,
+              "maximum_ns": 71656025739,
+              "maximum_started_ns": 408590575753254,
+              "maximum_finished_ns": 408662231778993,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 71654712279,
+              "maximum_ns": 71654712279,
+              "maximum_started_ns": 408590576701732,
+              "maximum_finished_ns": 408662231414011,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 5073,
+              "total_ns": 19885957700,
+              "maximum_ns": 302662934,
+              "maximum_started_ns": 408648132050075,
+              "maximum_finished_ns": 408648434713009,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 5073,
+              "total_ns": 15022313289,
+              "maximum_ns": 300651512,
+              "maximum_started_ns": 408648132085422,
+              "maximum_finished_ns": 408648432736934,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 4946,
+              "total_ns": 1412388822,
+              "maximum_ns": 46133856,
+              "maximum_started_ns": 408591189510356,
+              "maximum_finished_ns": 408591235644212,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 4946,
+              "total_ns": 882870650,
+              "maximum_ns": 22416375,
+              "maximum_started_ns": 408615713036601,
+              "maximum_finished_ns": 408615735452976,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 895,
+              "total_ns": 181839431,
+              "maximum_ns": 9393723,
+              "maximum_started_ns": 408644108266555,
+              "maximum_finished_ns": 408644117660278,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 12,
+              "total_ns": 1506747,
+              "maximum_ns": 238342,
+              "maximum_started_ns": 408646111994032,
+              "maximum_finished_ns": 408646112232374,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 5,
+              "total_ns": 156282497,
+              "maximum_ns": 43122028,
+              "maximum_started_ns": 408591192508218,
+              "maximum_finished_ns": 408591235630246,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 5,
+              "total_ns": 588815,
+              "maximum_ns": 143281,
+              "maximum_started_ns": 408644148965981,
+              "maximum_finished_ns": 408644149109262,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 2510347,
+              "maximum_ns": 2510347,
+              "maximum_started_ns": 408662177864752,
+              "maximum_finished_ns": 408662180375099,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 4829,
+              "maximum_ns": 4829,
+              "maximum_started_ns": 408662180381231,
+              "maximum_finished_ns": 408662180386060,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 27685221,
+              "maximum_ns": 27685221,
+              "maximum_started_ns": 408662180388314,
+              "maximum_finished_ns": 408662208073535,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 25671304,
+              "maximum_ns": 25671304,
+              "maximum_started_ns": 408662180435053,
+              "maximum_finished_ns": 408662206106357,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 313785,
+              "maximum_ns": 313785,
+              "maximum_started_ns": 408662206119952,
+              "maximum_finished_ns": 408662206433737,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 1628046,
+              "maximum_ns": 1628046,
+              "maximum_started_ns": 408662206438546,
+              "maximum_finished_ns": 408662208066592,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 3559326,
+              "maximum_ns": 3559326,
+              "maximum_started_ns": 408662208082672,
+              "maximum_finished_ns": 408662211641998,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 7712046,
+              "maximum_ns": 7712046,
+              "maximum_started_ns": 408662211646266,
+              "maximum_finished_ns": 408662219358312,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 227922,
+              "maximum_ns": 227922,
+              "maximum_started_ns": 408662219363893,
+              "maximum_finished_ns": 408662219591815,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 10259,
+              "maximum_ns": 10259,
+              "maximum_started_ns": 408662231426575,
+              "maximum_finished_ns": 408662231436834,
+              "operations": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/e782cb4b5c7f733050547652ecdd06c2.requests.jsonl",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-audit-merged-boundaries",
+            "created_at": 1790873473.1996155
+          },
+          "generation": 41
+        },
+        "turn_id": "e782cb4b5c7f733050547652ecdd06c2",
+        "admission_generation": 1685
+      },
+      "request_stages": [
+        {
+          "inputId": "61d246f257abe291685899454d6520e6",
+          "requestId": "9c4e01dd-e994-43ee-bd5c-006d9a97ce17",
+          "startedAtMs": 1790932921195,
+          "observedAtMs": 1790932921195,
+          "stage": "preparing",
+          "elapsedMs": 0.07393,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "61d246f257abe291685899454d6520e6",
+          "requestId": "9c4e01dd-e994-43ee-bd5c-006d9a97ce17",
+          "startedAtMs": 1790932921195,
+          "observedAtMs": 1790932921749,
+          "stage": "dispatch",
+          "elapsedMs": 554.417871,
+          "callbackMs": 0.124276
+        },
+        {
+          "inputId": "61d246f257abe291685899454d6520e6",
+          "requestId": "9c4e01dd-e994-43ee-bd5c-006d9a97ce17",
+          "startedAtMs": 1790932921195,
+          "observedAtMs": 1790932922089,
+          "stage": "first_event",
+          "elapsedMs": 893.943985,
+          "callbackMs": 0.124276
+        },
+        {
+          "inputId": "61d246f257abe291685899454d6520e6",
+          "requestId": "9c4e01dd-e994-43ee-bd5c-006d9a97ce17",
+          "startedAtMs": 1790932921195,
+          "observedAtMs": 1790932926338,
+          "stage": "finished",
+          "elapsedMs": 5142.49406,
+          "callbackMs": 3.911712
+        },
+        {
+          "inputId": "5472cfe4df3ac0bb501ad6f54be0045c",
+          "requestId": "8cee5516-9f9e-4102-8bf9-70fc49fa287a",
+          "startedAtMs": 1790932978116,
+          "observedAtMs": 1790932978116,
+          "stage": "preparing",
+          "elapsedMs": 0.070063,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "5472cfe4df3ac0bb501ad6f54be0045c",
+          "requestId": "8cee5516-9f9e-4102-8bf9-70fc49fa287a",
+          "startedAtMs": 1790932978116,
+          "observedAtMs": 1790932978653,
+          "stage": "dispatch",
+          "elapsedMs": 537.376799,
+          "callbackMs": 0.088879
+        },
+        {
+          "inputId": "5472cfe4df3ac0bb501ad6f54be0045c",
+          "requestId": "8cee5516-9f9e-4102-8bf9-70fc49fa287a",
+          "startedAtMs": 1790932978116,
+          "observedAtMs": 1790932979030,
+          "stage": "first_event",
+          "elapsedMs": 913.867718,
+          "callbackMs": 0.088879
+        },
+        {
+          "inputId": "5472cfe4df3ac0bb501ad6f54be0045c",
+          "requestId": "8cee5516-9f9e-4102-8bf9-70fc49fa287a",
+          "startedAtMs": 1790932978116,
+          "observedAtMs": 1790932983686,
+          "stage": "finished",
+          "elapsedMs": 5570.009878,
+          "callbackMs": 9.692774
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "61d246f257abe291685899454d6520e6",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 2445,
+              "maximum_ns": 2445,
+              "maximum_started_ns": 408434306970413,
+              "maximum_finished_ns": 408434306972858,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 327690378,
+              "maximum_ns": 327565491,
+              "maximum_started_ns": 408434306979310,
+              "maximum_finished_ns": 408434634544801,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 306268327,
+              "maximum_ns": 306268327,
+              "maximum_started_ns": 408434307043973,
+              "maximum_finished_ns": 408434613312300,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 21169212,
+              "maximum_ns": 21169212,
+              "maximum_started_ns": 408434613358507,
+              "maximum_finished_ns": 408434634527719,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 282108757,
+              "maximum_ns": 228924708,
+              "maximum_started_ns": 408437402199398,
+              "maximum_finished_ns": 408437631124106,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 2316966101,
+              "maximum_ns": 2268049500,
+              "maximum_started_ns": 408434687806919,
+              "maximum_finished_ns": 408436955856419,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 419849075,
+              "maximum_ns": 374907127,
+              "maximum_started_ns": 408436955942492,
+              "maximum_finished_ns": 408437330849619,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 122633626250,
+              "maximum_ns": 122633626250,
+              "maximum_started_ns": 408437725087314,
+              "maximum_finished_ns": 408560358713564,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 122632650761,
+              "maximum_ns": 122632650761,
+              "maximum_started_ns": 408437725837626,
+              "maximum_finished_ns": 408560358488387,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 8901,
+              "total_ns": 32625122617,
+              "maximum_ns": 77810071,
+              "maximum_started_ns": 408560280669709,
+              "maximum_finished_ns": 408560358479780,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 8901,
+              "total_ns": 24308172460,
+              "maximum_ns": 12744715,
+              "maximum_started_ns": 408463077908536,
+              "maximum_finished_ns": 408463090653251,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 8752,
+              "total_ns": 2407656259,
+              "maximum_ns": 43704783,
+              "maximum_started_ns": 408438007963706,
+              "maximum_finished_ns": 408438051668489,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 8752,
+              "total_ns": 1576633058,
+              "maximum_ns": 4428704,
+              "maximum_started_ns": 408462870887883,
+              "maximum_finished_ns": 408462875316587,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 1423,
+              "total_ns": 334917118,
+              "maximum_ns": 7248347,
+              "maximum_started_ns": 408450818470816,
+              "maximum_finished_ns": 408450825719163,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 33,
+              "total_ns": 6793736,
+              "maximum_ns": 2046228,
+              "maximum_started_ns": 408462904478046,
+              "maximum_finished_ns": 408462906524274,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 6,
+              "total_ns": 164339718,
+              "maximum_ns": 39774143,
+              "maximum_started_ns": 408438011883696,
+              "maximum_finished_ns": 408438051657839,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 6,
+              "total_ns": 437119,
+              "maximum_ns": 133874,
+              "maximum_started_ns": 408438051679430,
+              "maximum_finished_ns": 408438051813304,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 2,
+              "total_ns": 3089044,
+              "maximum_ns": 2755071,
+              "maximum_started_ns": 408560310700817,
+              "maximum_finished_ns": 408560313455888,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 9147,
+              "maximum_ns": 9147,
+              "maximum_started_ns": 408560313466839,
+              "maximum_finished_ns": 408560313475986,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 26387501,
+              "maximum_ns": 26387501,
+              "maximum_started_ns": 408560313478922,
+              "maximum_finished_ns": 408560339866423,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 25971693,
+              "maximum_ns": 25971693,
+              "maximum_started_ns": 408560313541190,
+              "maximum_finished_ns": 408560339512883,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 225297,
+              "maximum_ns": 225297,
+              "maximum_started_ns": 408560339524856,
+              "maximum_finished_ns": 408560339750153,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 107724,
+              "maximum_ns": 107724,
+              "maximum_started_ns": 408560339754341,
+              "maximum_finished_ns": 408560339862065,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 2647678,
+              "maximum_ns": 2647678,
+              "maximum_started_ns": 408560339872054,
+              "maximum_finished_ns": 408560342519732,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 5422688,
+              "maximum_ns": 5422688,
+              "maximum_started_ns": 408560342528949,
+              "maximum_finished_ns": 408560347951637,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 372436,
+              "maximum_ns": 372436,
+              "maximum_started_ns": 408560347970232,
+              "maximum_finished_ns": 408560348342668,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 12113,
+              "maximum_ns": 12113,
+              "maximum_started_ns": 408560358503475,
+              "maximum_finished_ns": 408560358515588,
+              "operations": {}
+            }
+          }
+        },
+        {
+          "input_id": "5472cfe4df3ac0bb501ad6f54be0045c",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 307894,
+              "maximum_ns": 307894,
+              "maximum_started_ns": 408586452831805,
+              "maximum_finished_ns": 408586453139699,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 23976101,
+              "maximum_ns": 23843610,
+              "maximum_started_ns": 408586453147353,
+              "maximum_finished_ns": 408586476990963,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 76926,
+              "maximum_ns": 76926,
+              "maximum_started_ns": 408586453195224,
+              "maximum_finished_ns": 408586453272150,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 23679299,
+              "maximum_ns": 23679299,
+              "maximum_started_ns": 408586453299281,
+              "maximum_finished_ns": 408586476978580,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 975762228,
+              "maximum_ns": 974970678,
+              "maximum_started_ns": 408589242618741,
+              "maximum_finished_ns": 408590217589419,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 2152936035,
+              "maximum_ns": 2107435369,
+              "maximum_started_ns": 408586477872654,
+              "maximum_finished_ns": 408588585308023,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 610775962,
+              "maximum_ns": 564008596,
+              "maximum_started_ns": 408588585379278,
+              "maximum_finished_ns": 408589149387874,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 26940071541,
+              "maximum_ns": 26940071541,
+              "maximum_started_ns": 408590309964975,
+              "maximum_finished_ns": 408617250036516,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 26938787447,
+              "maximum_ns": 26938787447,
+              "maximum_started_ns": 408590310817381,
+              "maximum_finished_ns": 408617249604828,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 1967,
+              "total_ns": 7037709367,
+              "maximum_ns": 209435645,
+              "maximum_started_ns": 408617040161419,
+              "maximum_finished_ns": 408617249597064,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 1967,
+              "total_ns": 5108239682,
+              "maximum_ns": 11718871,
+              "maximum_started_ns": 408602422205065,
+              "maximum_finished_ns": 408602433923936,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 1927,
+              "total_ns": 499871919,
+              "maximum_ns": 29404880,
+              "maximum_started_ns": 408617042986753,
+              "maximum_finished_ns": 408617072391633,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 1927,
+              "total_ns": 363847407,
+              "maximum_ns": 2689888,
+              "maximum_started_ns": 408603325475260,
+              "maximum_finished_ns": 408603328165148,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 255,
+              "total_ns": 47250751,
+              "maximum_ns": 3577219,
+              "maximum_started_ns": 408617043151636,
+              "maximum_finished_ns": 408617046728855,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 2,
+              "total_ns": 203145,
+              "maximum_ns": 139815,
+              "maximum_started_ns": 408617028494116,
+              "maximum_finished_ns": 408617028633931,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 1,
+              "total_ns": 25571925,
+              "maximum_ns": 25571925,
+              "maximum_started_ns": 408617046808156,
+              "maximum_finished_ns": 408617072380081,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 1,
+              "total_ns": 109347,
+              "maximum_ns": 109347,
+              "maximum_started_ns": 408617072402484,
+              "maximum_finished_ns": 408617072511831,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 3036755,
+              "maximum_ns": 3036755,
+              "maximum_started_ns": 408617072515829,
+              "maximum_finished_ns": 408617075552584,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 12213,
+              "maximum_ns": 12213,
+              "maximum_started_ns": 408617075563124,
+              "maximum_finished_ns": 408617075575337,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 148351956,
+              "maximum_ns": 148351956,
+              "maximum_started_ns": 408617075578413,
+              "maximum_finished_ns": 408617223930369,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 147870052,
+              "maximum_ns": 147870052,
+              "maximum_started_ns": 408617075637605,
+              "maximum_finished_ns": 408617223507657,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 288557,
+              "maximum_ns": 288557,
+              "maximum_started_ns": 408617223522435,
+              "maximum_finished_ns": 408617223810992,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 110249,
+              "maximum_ns": 110249,
+              "maximum_started_ns": 408617223815070,
+              "maximum_finished_ns": 408617223925319,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 3338387,
+              "maximum_ns": 3338387,
+              "maximum_started_ns": 408617223935548,
+              "maximum_finished_ns": 408617227273935,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 10618004,
+              "maximum_ns": 10618004,
+              "maximum_started_ns": 408617227279406,
+              "maximum_finished_ns": 408617237897410,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 456075,
+              "maximum_ns": 456075,
+              "maximum_started_ns": 408617237911416,
+              "maximum_finished_ns": 408617238367491,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 16832,
+              "maximum_ns": 16832,
+              "maximum_started_ns": 408617249620879,
+              "maximum_finished_ns": 408617249637711,
+              "operations": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/3f9e5dcf8d3fa56d4a4bf542780d3802.requests.jsonl",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-pr159-viewer-bind-owner",
+            "created_at": 1790657026.7285714
+          },
+          "generation": 75
+        },
+        "turn_id": "3f9e5dcf8d3fa56d4a4bf542780d3802",
+        "admission_generation": 1678
+      },
+      "request_stages": [
+        {
+          "inputId": "4831c9415f67050fa53b2bbb79b4ad7e",
+          "requestId": "e1e0091c-84da-4532-af70-5b1f5f921197",
+          "startedAtMs": 1790932811192,
+          "observedAtMs": 1790932811192,
+          "stage": "preparing",
+          "elapsedMs": 0.066546,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "4831c9415f67050fa53b2bbb79b4ad7e",
+          "requestId": "e1e0091c-84da-4532-af70-5b1f5f921197",
+          "startedAtMs": 1790932811192,
+          "observedAtMs": 1790932811724,
+          "stage": "dispatch",
+          "elapsedMs": 531.811275,
+          "callbackMs": 0.124556
+        },
+        {
+          "inputId": "4831c9415f67050fa53b2bbb79b4ad7e",
+          "requestId": "e1e0091c-84da-4532-af70-5b1f5f921197",
+          "startedAtMs": 1790932811192,
+          "observedAtMs": 1790932812080,
+          "stage": "first_event",
+          "elapsedMs": 888.160489,
+          "callbackMs": 0.124556
+        },
+        {
+          "inputId": "4831c9415f67050fa53b2bbb79b4ad7e",
+          "requestId": "e1e0091c-84da-4532-af70-5b1f5f921197",
+          "startedAtMs": 1790932811192,
+          "observedAtMs": 1790932815674,
+          "stage": "finished",
+          "elapsedMs": 4481.619062,
+          "callbackMs": 5.724699
+        },
+        {
+          "inputId": "cd687acd1429126cf000cc9e86507c06",
+          "requestId": "141c050b-4c26-4ee1-a473-9d1efb5217d8",
+          "startedAtMs": 1790932922113,
+          "observedAtMs": 1790932922113,
+          "stage": "preparing",
+          "elapsedMs": 0.065925,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "cd687acd1429126cf000cc9e86507c06",
+          "requestId": "141c050b-4c26-4ee1-a473-9d1efb5217d8",
+          "startedAtMs": 1790932922113,
+          "observedAtMs": 1790932922760,
+          "stage": "dispatch",
+          "elapsedMs": 646.545037,
+          "callbackMs": 0.129726
+        },
+        {
+          "inputId": "cd687acd1429126cf000cc9e86507c06",
+          "requestId": "141c050b-4c26-4ee1-a473-9d1efb5217d8",
+          "startedAtMs": 1790932922113,
+          "observedAtMs": 1790932923049,
+          "stage": "first_event",
+          "elapsedMs": 935.471731,
+          "callbackMs": 0.129726
+        },
+        {
+          "inputId": "cd687acd1429126cf000cc9e86507c06",
+          "requestId": "141c050b-4c26-4ee1-a473-9d1efb5217d8",
+          "startedAtMs": 1790932922113,
+          "observedAtMs": 1790932928933,
+          "stage": "finished",
+          "elapsedMs": 6819.810734,
+          "callbackMs": 9.265948
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "4831c9415f67050fa53b2bbb79b4ad7e",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 3477,
+              "maximum_ns": 3477,
+              "maximum_started_ns": 408433779696045,
+              "maximum_finished_ns": 408433779699522,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 19604936,
+              "maximum_ns": 19495960,
+              "maximum_started_ns": 408433779707197,
+              "maximum_finished_ns": 408433799203157,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 74010,
+              "maximum_ns": 74010,
+              "maximum_started_ns": 408433779757422,
+              "maximum_finished_ns": 408433779831432,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 19331448,
+              "maximum_ns": 19331448,
+              "maximum_started_ns": 408433779859125,
+              "maximum_finished_ns": 408433799190573,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 1071775935,
+              "maximum_ns": 536753954,
+              "maximum_started_ns": 408436276724387,
+              "maximum_finished_ns": 408436813478341,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 1833119482,
+              "maximum_ns": 1792064902,
+              "maximum_started_ns": 408434334283930,
+              "maximum_finished_ns": 408436126348832,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 101251411,
+              "maximum_ns": 56145993,
+              "maximum_started_ns": 408436854598746,
+              "maximum_finished_ns": 408436910744739,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 13444949793,
+              "maximum_ns": 13444949793,
+              "maximum_started_ns": 408436910774836,
+              "maximum_finished_ns": 408450355724629,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 13443872632,
+              "maximum_ns": 13443872632,
+              "maximum_started_ns": 408436911667137,
+              "maximum_finished_ns": 408450355539769,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 990,
+              "total_ns": 3456818052,
+              "maximum_ns": 69354787,
+              "maximum_started_ns": 408450286180894,
+              "maximum_finished_ns": 408450355535681,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 990,
+              "total_ns": 2553404303,
+              "maximum_ns": 5346944,
+              "maximum_started_ns": 408448889581166,
+              "maximum_finished_ns": 408448894928110,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 973,
+              "total_ns": 262644735,
+              "maximum_ns": 30819752,
+              "maximum_started_ns": 408450048277799,
+              "maximum_finished_ns": 408450079097551,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 973,
+              "total_ns": 162844924,
+              "maximum_ns": 1713137,
+              "maximum_started_ns": 408448927813377,
+              "maximum_finished_ns": 408448929526514,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 48,
+              "total_ns": 44669228,
+              "maximum_ns": 9428329,
+              "maximum_started_ns": 408448747368092,
+              "maximum_finished_ns": 408448756796421,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 11,
+              "total_ns": 1299262,
+              "maximum_ns": 179179,
+              "maximum_started_ns": 408450034325055,
+              "maximum_finished_ns": 408450034504234,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 2,
+              "total_ns": 28711427,
+              "maximum_ns": 27687576,
+              "maximum_started_ns": 408450051400297,
+              "maximum_finished_ns": 408450079087873,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 2,
+              "total_ns": 119557,
+              "maximum_ns": 88478,
+              "maximum_started_ns": 408450079108622,
+              "maximum_finished_ns": 408450079197100,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 4020821,
+              "maximum_ns": 4020821,
+              "maximum_started_ns": 408450293079949,
+              "maximum_finished_ns": 408450297100770,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 11963,
+              "maximum_ns": 11963,
+              "maximum_started_ns": 408450297115528,
+              "maximum_finished_ns": 408450297127491,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 37850077,
+              "maximum_ns": 37850077,
+              "maximum_started_ns": 408450297131749,
+              "maximum_finished_ns": 408450334981826,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 37336604,
+              "maximum_ns": 37336604,
+              "maximum_started_ns": 408450297207823,
+              "maximum_finished_ns": 408450334544427,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 272206,
+              "maximum_ns": 272206,
+              "maximum_started_ns": 408450334557361,
+              "maximum_finished_ns": 408450334829567,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 140155,
+              "maximum_ns": 140155,
+              "maximum_started_ns": 408450334835248,
+              "maximum_finished_ns": 408450334975403,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 2851956,
+              "maximum_ns": 2851956,
+              "maximum_started_ns": 408450334988638,
+              "maximum_finished_ns": 408450337840594,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 5573944,
+              "maximum_ns": 5573944,
+              "maximum_started_ns": 408450337848048,
+              "maximum_finished_ns": 408450343421992,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 406921,
+              "maximum_ns": 406921,
+              "maximum_started_ns": 408450343442882,
+              "maximum_finished_ns": 408450343849803,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 9178,
+              "maximum_ns": 9178,
+              "maximum_started_ns": 408450355551160,
+              "maximum_finished_ns": 408450355560338,
+              "operations": {}
+            }
+          }
+        },
+        {
+          "input_id": "cd687acd1429126cf000cc9e86507c06",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 2059934,
+              "maximum_ns": 2059934,
+              "maximum_started_ns": 408467666401416,
+              "maximum_finished_ns": 408467668461350,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 20176509,
+              "maximum_ns": 20025113,
+              "maximum_started_ns": 408467668472211,
+              "maximum_finished_ns": 408467688497324,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 55585,
+              "maximum_ns": 55585,
+              "maximum_started_ns": 408467668527556,
+              "maximum_finished_ns": 408467668583141,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 19873736,
+              "maximum_ns": 19873736,
+              "maximum_started_ns": 408467668612577,
+              "maximum_finished_ns": 408467688486313,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 11076909902,
+              "maximum_ns": 10897114950,
+              "maximum_started_ns": 408467688541027,
+              "maximum_finished_ns": 408478585655977,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 120090485,
+              "maximum_ns": 60614662,
+              "maximum_started_ns": 408478990354565,
+              "maximum_finished_ns": 408479050969227,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 461452884,
+              "maximum_ns": 406053346,
+              "maximum_started_ns": 408479051048116,
+              "maximum_finished_ns": 408479457101462,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 81816930536,
+              "maximum_ns": 81816930536,
+              "maximum_started_ns": 408479457135607,
+              "maximum_finished_ns": 408561274066143,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 81815469578,
+              "maximum_ns": 81815469578,
+              "maximum_started_ns": 408479458204342,
+              "maximum_finished_ns": 408561273673920,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 5937,
+              "total_ns": 21813777533,
+              "maximum_ns": 153712416,
+              "maximum_started_ns": 408560096527701,
+              "maximum_finished_ns": 408560250240117,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 5937,
+              "total_ns": 16065300088,
+              "maximum_ns": 10409028,
+              "maximum_started_ns": 408559034040281,
+              "maximum_finished_ns": 408559044449309,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 5872,
+              "total_ns": 1825198142,
+              "maximum_ns": 149636672,
+              "maximum_started_ns": 408560099572311,
+              "maximum_finished_ns": 408560249208983,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 5872,
+              "total_ns": 1043325585,
+              "maximum_ns": 3011989,
+              "maximum_started_ns": 408559419490723,
+              "maximum_finished_ns": 408559422502712,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 1337,
+              "total_ns": 274691371,
+              "maximum_ns": 8406603,
+              "maximum_started_ns": 408560099747623,
+              "maximum_finished_ns": 408560108154226,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 21,
+              "total_ns": 2487355,
+              "maximum_ns": 234073,
+              "maximum_started_ns": 408558981975504,
+              "maximum_finished_ns": 408558982209577,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 7,
+              "total_ns": 261850397,
+              "maximum_ns": 140963013,
+              "maximum_started_ns": 408560108235170,
+              "maximum_finished_ns": 408560249198183,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 7,
+              "total_ns": 623973,
+              "maximum_ns": 185431,
+              "maximum_started_ns": 408528185169507,
+              "maximum_finished_ns": 408528185354938,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 3811604,
+              "maximum_ns": 3811604,
+              "maximum_started_ns": 408561216953930,
+              "maximum_finished_ns": 408561220765534,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 8125,
+              "maximum_ns": 8125,
+              "maximum_started_ns": 408561220776716,
+              "maximum_finished_ns": 408561220784841,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 26634640,
+              "maximum_ns": 26634640,
+              "maximum_started_ns": 408561220787195,
+              "maximum_finished_ns": 408561247421835,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 25879459,
+              "maximum_ns": 25879459,
+              "maximum_started_ns": 408561220840827,
+              "maximum_finished_ns": 408561246720286,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 430305,
+              "maximum_ns": 430305,
+              "maximum_started_ns": 408561246741536,
+              "maximum_finished_ns": 408561247171841,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 237951,
+              "maximum_ns": 237951,
+              "maximum_started_ns": 408561247176380,
+              "maximum_finished_ns": 408561247414331,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 4543330,
+              "maximum_ns": 4543330,
+              "maximum_started_ns": 408561247429981,
+              "maximum_finished_ns": 408561251973311,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 10685762,
+              "maximum_ns": 10685762,
+              "maximum_started_ns": 408561251981818,
+              "maximum_finished_ns": 408561262667580,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 352688,
+              "maximum_ns": 352688,
+              "maximum_started_ns": 408561262684412,
+              "maximum_finished_ns": 408561263037100,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 10731,
+              "maximum_ns": 10731,
+              "maximum_started_ns": 408561273691032,
+              "maximum_finished_ns": 408561273701763,
+              "operations": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/49d35ac9dc7aec2a2385f11793148f0a.requests.jsonl",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "compaction501-live-architecture-memory",
+            "created_at": 1790900050.675298
+          },
+          "generation": 15
+        },
+        "turn_id": "49d35ac9dc7aec2a2385f11793148f0a",
+        "admission_generation": 1688
+      },
+      "request_stages": [
+        {
+          "inputId": "4901cc29057ac80a77d5ffc9e249210f",
+          "requestId": "741401ac-cbf0-43a1-8541-e934258909e3",
+          "startedAtMs": 1790932809691,
+          "observedAtMs": 1790932809691,
+          "stage": "preparing",
+          "elapsedMs": 0.069131,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "4901cc29057ac80a77d5ffc9e249210f",
+          "requestId": "741401ac-cbf0-43a1-8541-e934258909e3",
+          "startedAtMs": 1790932809691,
+          "observedAtMs": 1790932810110,
+          "stage": "dispatch",
+          "elapsedMs": 419.734557,
+          "callbackMs": 0.127702
+        },
+        {
+          "inputId": "4901cc29057ac80a77d5ffc9e249210f",
+          "requestId": "741401ac-cbf0-43a1-8541-e934258909e3",
+          "startedAtMs": 1790932809691,
+          "observedAtMs": 1790932810378,
+          "stage": "first_event",
+          "elapsedMs": 686.959966,
+          "callbackMs": 0.127702
+        },
+        {
+          "inputId": "4901cc29057ac80a77d5ffc9e249210f",
+          "requestId": "741401ac-cbf0-43a1-8541-e934258909e3",
+          "startedAtMs": 1790932809691,
+          "observedAtMs": 1790932819006,
+          "stage": "finished",
+          "elapsedMs": 9315.631621,
+          "callbackMs": 3.777339
+        },
+        {
+          "inputId": "0111b4d2abae2c17cd277038027fdeec",
+          "requestId": "40fcebec-f499-4f92-84e6-de474fb4bbb8",
+          "startedAtMs": 1790932919802,
+          "observedAtMs": 1790932919802,
+          "stage": "preparing",
+          "elapsedMs": 0.084901,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "0111b4d2abae2c17cd277038027fdeec",
+          "requestId": "40fcebec-f499-4f92-84e6-de474fb4bbb8",
+          "startedAtMs": 1790932919802,
+          "observedAtMs": 1790932920175,
+          "stage": "dispatch",
+          "elapsedMs": 373.112549,
+          "callbackMs": 0.135237
+        },
+        {
+          "inputId": "0111b4d2abae2c17cd277038027fdeec",
+          "requestId": "40fcebec-f499-4f92-84e6-de474fb4bbb8",
+          "startedAtMs": 1790932919802,
+          "observedAtMs": 1790932920389,
+          "stage": "first_event",
+          "elapsedMs": 587.11416,
+          "callbackMs": 0.135237
+        },
+        {
+          "inputId": "0111b4d2abae2c17cd277038027fdeec",
+          "requestId": "40fcebec-f499-4f92-84e6-de474fb4bbb8",
+          "startedAtMs": 1790932919802,
+          "observedAtMs": 1790932924387,
+          "stage": "finished",
+          "elapsedMs": 4584.554225,
+          "callbackMs": 17.238493
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "4901cc29057ac80a77d5ffc9e249210f",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 1764,
+              "maximum_ns": 1764,
+              "maximum_started_ns": 408434130380013,
+              "maximum_finished_ns": 408434130381777,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 32533510,
+              "maximum_ns": 32428681,
+              "maximum_started_ns": 408434130387017,
+              "maximum_finished_ns": 408434162815698,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 89139,
+              "maximum_ns": 89139,
+              "maximum_started_ns": 408434130431371,
+              "maximum_finished_ns": 408434130520510,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 32255633,
+              "maximum_ns": 32255633,
+              "maximum_started_ns": 408434130543203,
+              "maximum_finished_ns": 408434162798836,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 409989940,
+              "maximum_ns": 229662888,
+              "maximum_started_ns": 408436600762473,
+              "maximum_finished_ns": 408436830425361,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 2154827061,
+              "maximum_ns": 2101129228,
+              "maximum_started_ns": 408434343232691,
+              "maximum_finished_ns": 408436444361919,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 373019730,
+              "maximum_ns": 294112388,
+              "maximum_started_ns": 408436884190501,
+              "maximum_finished_ns": 408437178302889,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 11675340745,
+              "maximum_ns": 11675340745,
+              "maximum_started_ns": 408437178327005,
+              "maximum_finished_ns": 408448853667750,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 11674375587,
+              "maximum_ns": 11674375587,
+              "maximum_started_ns": 408437179012263,
+              "maximum_finished_ns": 408448853387850,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 849,
+              "total_ns": 3113127990,
+              "maximum_ns": 131014851,
+              "maximum_started_ns": 408448617116908,
+              "maximum_finished_ns": 408448748131759,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 849,
+              "total_ns": 2227445309,
+              "maximum_ns": 5369416,
+              "maximum_started_ns": 408444827795174,
+              "maximum_finished_ns": 408444833164590,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 845,
+              "total_ns": 319898996,
+              "maximum_ns": 125936236,
+              "maximum_started_ns": 408448620377698,
+              "maximum_finished_ns": 408448746313934,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 845,
+              "total_ns": 136369851,
+              "maximum_ns": 1030172,
+              "maximum_started_ns": 408438920746804,
+              "maximum_finished_ns": 408438921776976,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 33,
+              "total_ns": 16291878,
+              "maximum_ns": 3442905,
+              "maximum_started_ns": 408438069061785,
+              "maximum_finished_ns": 408438072504690,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 4,
+              "total_ns": 342670,
+              "maximum_ns": 150976,
+              "maximum_started_ns": 408437800705442,
+              "maximum_finished_ns": 408437800856418,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 3,
+              "total_ns": 146620557,
+              "maximum_ns": 122659976,
+              "maximum_started_ns": 408448623638609,
+              "maximum_finished_ns": 408448746298585,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 3,
+              "total_ns": 186141,
+              "maximum_ns": 92765,
+              "maximum_started_ns": 408448746328191,
+              "maximum_finished_ns": 408448746420956,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 3505975,
+              "maximum_ns": 3505975,
+              "maximum_started_ns": 408448789932964,
+              "maximum_finished_ns": 408448793438939,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 15259,
+              "maximum_ns": 15259,
+              "maximum_started_ns": 408448793454138,
+              "maximum_finished_ns": 408448793469397,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 41054871,
+              "maximum_ns": 41054871,
+              "maximum_started_ns": 408448793472573,
+              "maximum_finished_ns": 408448834527444,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 39201769,
+              "maximum_ns": 39201769,
+              "maximum_started_ns": 408448793557724,
+              "maximum_finished_ns": 408448832759493,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 346998,
+              "maximum_ns": 346998,
+              "maximum_started_ns": 408448832773980,
+              "maximum_finished_ns": 408448833120978,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 1390385,
+              "maximum_ns": 1390385,
+              "maximum_started_ns": 408448833129444,
+              "maximum_finished_ns": 408448834519829,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 2903342,
+              "maximum_ns": 2903342,
+              "maximum_started_ns": 408448834535439,
+              "maximum_finished_ns": 408448837438781,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 6230709,
+              "maximum_ns": 6230709,
+              "maximum_started_ns": 408448837448029,
+              "maximum_finished_ns": 408448843678738,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 286693,
+              "maximum_ns": 286693,
+              "maximum_started_ns": 408448843688637,
+              "maximum_finished_ns": 408448843975330,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 7434,
+              "maximum_ns": 7434,
+              "maximum_started_ns": 408448853398279,
+              "maximum_finished_ns": 408448853405713,
+              "operations": {}
+            }
+          }
+        },
+        {
+          "input_id": "0111b4d2abae2c17cd277038027fdeec",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 323704,
+              "maximum_ns": 323704,
+              "maximum_started_ns": 408468149698461,
+              "maximum_finished_ns": 408468150022165,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 21175894,
+              "maximum_ns": 21032993,
+              "maximum_started_ns": 408468150030050,
+              "maximum_finished_ns": 408468171063043,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 62078,
+              "maximum_ns": 62078,
+              "maximum_started_ns": 408468150074083,
+              "maximum_finished_ns": 408468150136161,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 20893008,
+              "maximum_ns": 20893008,
+              "maximum_started_ns": 408468150155698,
+              "maximum_finished_ns": 408468171048706,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 10444816767,
+              "maximum_ns": 10418843981,
+              "maximum_started_ns": 408468171130481,
+              "maximum_finished_ns": 408478589974462,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 127935504,
+              "maximum_ns": 68345564,
+              "maximum_started_ns": 408478971644023,
+              "maximum_finished_ns": 408479039989587,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 278505116,
+              "maximum_ns": 210910826,
+              "maximum_started_ns": 408478649664100,
+              "maximum_finished_ns": 408478860574926,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 79856272015,
+              "maximum_ns": 79856272015,
+              "maximum_started_ns": 408479107685921,
+              "maximum_finished_ns": 408558963957936,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 79855324629,
+              "maximum_ns": 79855324629,
+              "maximum_started_ns": 408479108413670,
+              "maximum_finished_ns": 408558963738299,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 5799,
+              "total_ns": 21255059873,
+              "maximum_ns": 88374303,
+              "maximum_started_ns": 408558875359408,
+              "maximum_finished_ns": 408558963733711,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 5799,
+              "total_ns": 15872200548,
+              "maximum_ns": 7536935,
+              "maximum_started_ns": 408488760536541,
+              "maximum_finished_ns": 408488768073476,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 5750,
+              "total_ns": 1525498852,
+              "maximum_ns": 30659268,
+              "maximum_started_ns": 408489460251758,
+              "maximum_finished_ns": 408489490911026,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 5750,
+              "total_ns": 1021515832,
+              "maximum_ns": 3370468,
+              "maximum_started_ns": 408542070382532,
+              "maximum_finished_ns": 408542073753000,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 1280,
+              "total_ns": 222408163,
+              "maximum_ns": 8146981,
+              "maximum_started_ns": 408487847753010,
+              "maximum_finished_ns": 408487855899991,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 11,
+              "total_ns": 1371781,
+              "maximum_ns": 215469,
+              "maximum_started_ns": 408558733624902,
+              "maximum_finished_ns": 408558733840371,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 2,
+              "total_ns": 51415868,
+              "maximum_ns": 27138886,
+              "maximum_started_ns": 408489463759135,
+              "maximum_finished_ns": 408489490898021,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 2,
+              "total_ns": 238763,
+              "maximum_ns": 144013,
+              "maximum_started_ns": 408489490927387,
+              "maximum_finished_ns": 408489491071400,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 3681167,
+              "maximum_ns": 3681167,
+              "maximum_started_ns": 408558904811788,
+              "maximum_finished_ns": 408558908492955,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 13465,
+              "maximum_ns": 13465,
+              "maximum_started_ns": 408558908508214,
+              "maximum_finished_ns": 408558908521679,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 26719550,
+              "maximum_ns": 26719550,
+              "maximum_started_ns": 408558908525146,
+              "maximum_finished_ns": 408558935244696,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 25224797,
+              "maximum_ns": 25224797,
+              "maximum_started_ns": 408558908626959,
+              "maximum_finished_ns": 408558933851756,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 302273,
+              "maximum_ns": 302273,
+              "maximum_started_ns": 408558933867346,
+              "maximum_finished_ns": 408558934169619,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 1064177,
+              "maximum_ns": 1064177,
+              "maximum_started_ns": 408558934173967,
+              "maximum_finished_ns": 408558935238144,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 4835584,
+              "maximum_ns": 4835584,
+              "maximum_started_ns": 408558935251680,
+              "maximum_finished_ns": 408558940087264,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 11058038,
+              "maximum_ns": 11058038,
+              "maximum_started_ns": 408558940096542,
+              "maximum_finished_ns": 408558951154580,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 523583,
+              "maximum_ns": 523583,
+              "maximum_started_ns": 408558951176922,
+              "maximum_finished_ns": 408558951700505,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 10230,
+              "maximum_ns": 10230,
+              "maximum_started_ns": 408558963750813,
+              "maximum_finished_ns": 408558963761043,
+              "operations": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/f2f07359ea7982ce3756f19d02e8a655.requests.jsonl",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper",
+            "created_at": 1790708584.4423254
+          },
+          "generation": 77
+        },
+        "turn_id": "f2f07359ea7982ce3756f19d02e8a655",
+        "admission_generation": 1680
+      },
+      "request_stages": [
+        {
+          "inputId": "19ee3a31f1c4bebb652c6850d38980df",
+          "requestId": "05186a67-7d22-43b2-bb4d-2535428536f9",
+          "startedAtMs": 1790932799020,
+          "observedAtMs": 1790932799020,
+          "stage": "preparing",
+          "elapsedMs": 0.053391,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "19ee3a31f1c4bebb652c6850d38980df",
+          "requestId": "05186a67-7d22-43b2-bb4d-2535428536f9",
+          "startedAtMs": 1790932799020,
+          "observedAtMs": 1790932799396,
+          "stage": "dispatch",
+          "elapsedMs": 376.044903,
+          "callbackMs": 0.100029
+        },
+        {
+          "inputId": "19ee3a31f1c4bebb652c6850d38980df",
+          "requestId": "05186a67-7d22-43b2-bb4d-2535428536f9",
+          "startedAtMs": 1790932799020,
+          "observedAtMs": 1790932799618,
+          "stage": "first_event",
+          "elapsedMs": 598.454834,
+          "callbackMs": 0.100029
+        },
+        {
+          "inputId": "19ee3a31f1c4bebb652c6850d38980df",
+          "requestId": "05186a67-7d22-43b2-bb4d-2535428536f9",
+          "startedAtMs": 1790932799020,
+          "observedAtMs": 1790932805170,
+          "stage": "finished",
+          "elapsedMs": 6150.174905,
+          "callbackMs": 4.106193
+        },
+        {
+          "inputId": "cf0485424f25d6aed7b2eecbcb099025",
+          "requestId": "01efd075-687b-4edf-ba73-0ded5dc48001",
+          "startedAtMs": 1790932824475,
+          "observedAtMs": 1790932824475,
+          "stage": "preparing",
+          "elapsedMs": 0.07922,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "cf0485424f25d6aed7b2eecbcb099025",
+          "requestId": "01efd075-687b-4edf-ba73-0ded5dc48001",
+          "startedAtMs": 1790932824475,
+          "observedAtMs": 1790932824980,
+          "stage": "dispatch",
+          "elapsedMs": 504.873519,
+          "callbackMs": 0.15833
+        },
+        {
+          "inputId": "cf0485424f25d6aed7b2eecbcb099025",
+          "requestId": "01efd075-687b-4edf-ba73-0ded5dc48001",
+          "startedAtMs": 1790932824475,
+          "observedAtMs": 1790932825202,
+          "stage": "first_event",
+          "elapsedMs": 726.686017,
+          "callbackMs": 0.15833
+        },
+        {
+          "inputId": "cf0485424f25d6aed7b2eecbcb099025",
+          "requestId": "01efd075-687b-4edf-ba73-0ded5dc48001",
+          "startedAtMs": 1790932824475,
+          "observedAtMs": 1790932829775,
+          "stage": "finished",
+          "elapsedMs": 5300.202131,
+          "callbackMs": 15.519705
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "19ee3a31f1c4bebb652c6850d38980df",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 2825,
+              "maximum_ns": 2825,
+              "maximum_started_ns": 408433901062741,
+              "maximum_finished_ns": 408433901065566,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 25772066,
+              "maximum_ns": 25656697,
+              "maximum_started_ns": 408433901072429,
+              "maximum_finished_ns": 408433926729126,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 95190,
+              "maximum_ns": 95190,
+              "maximum_started_ns": 408433901126732,
+              "maximum_finished_ns": 408433901221922,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 25465975,
+              "maximum_ns": 25465975,
+              "maximum_started_ns": 408433901250777,
+              "maximum_finished_ns": 408433926716752,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 819151339,
+              "maximum_ns": 409640858,
+              "maximum_started_ns": 408433926786354,
+              "maximum_finished_ns": 408434336427212,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 1890845149,
+              "maximum_ns": 1845310568,
+              "maximum_started_ns": 408434336440758,
+              "maximum_finished_ns": 408436181751326,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 327488484,
+              "maximum_ns": 189846844,
+              "maximum_started_ns": 408436858341450,
+              "maximum_finished_ns": 408437048188294,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 1136700586,
+              "maximum_ns": 1136700586,
+              "maximum_started_ns": 408437048215536,
+              "maximum_finished_ns": 408438184916122,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 1135640968,
+              "maximum_ns": 1135640968,
+              "maximum_started_ns": 408437048978472,
+              "maximum_finished_ns": 408438184619440,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 79,
+              "total_ns": 348668346,
+              "maximum_ns": 71229620,
+              "maximum_started_ns": 408438113382696,
+              "maximum_finished_ns": 408438184612316,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 79,
+              "total_ns": 209413022,
+              "maximum_ns": 5334951,
+              "maximum_started_ns": 408437609223679,
+              "maximum_finished_ns": 408437614558630,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 79,
+              "total_ns": 46304284,
+              "maximum_ns": 25590061,
+              "maximum_started_ns": 408438115105340,
+              "maximum_finished_ns": 408438140695401,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 79,
+              "total_ns": 12396391,
+              "maximum_ns": 306150,
+              "maximum_started_ns": 408437266110059,
+              "maximum_finished_ns": 408437266416209,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 22,
+              "total_ns": 6315973,
+              "maximum_ns": 3496547,
+              "maximum_started_ns": 408438115191414,
+              "maximum_finished_ns": 408438118687961,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 1,
+              "total_ns": 94028,
+              "maximum_ns": 94028,
+              "maximum_started_ns": 408438118697769,
+              "maximum_finished_ns": 408438118791797,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 1,
+              "total_ns": 21891711,
+              "maximum_ns": 21891711,
+              "maximum_started_ns": 408438118795324,
+              "maximum_finished_ns": 408438140687035,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 1,
+              "total_ns": 43803,
+              "maximum_ns": 43803,
+              "maximum_started_ns": 408438140704839,
+              "maximum_finished_ns": 408438140748642,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 2455173,
+              "maximum_ns": 2455173,
+              "maximum_started_ns": 408438140751618,
+              "maximum_finished_ns": 408438143206791,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 5420,
+              "maximum_ns": 5420,
+              "maximum_started_ns": 408438143212171,
+              "maximum_finished_ns": 408438143217591,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 22738926,
+              "maximum_ns": 22738926,
+              "maximum_started_ns": 408438143219866,
+              "maximum_finished_ns": 408438165958792,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 22359017,
+              "maximum_ns": 22359017,
+              "maximum_started_ns": 408438143268177,
+              "maximum_finished_ns": 408438165627194,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 207834,
+              "maximum_ns": 207834,
+              "maximum_started_ns": 408438165638415,
+              "maximum_finished_ns": 408438165846249,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 104308,
+              "maximum_ns": 104308,
+              "maximum_started_ns": 408438165850327,
+              "maximum_finished_ns": 408438165954635,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 2208746,
+              "maximum_ns": 2208746,
+              "maximum_started_ns": 408438165963291,
+              "maximum_finished_ns": 408438168172037,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 6464512,
+              "maximum_ns": 6464512,
+              "maximum_started_ns": 408438168177077,
+              "maximum_finished_ns": 408438174641589,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 185342,
+              "maximum_ns": 185342,
+              "maximum_started_ns": 408438174647079,
+              "maximum_finished_ns": 408438174832421,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 32051,
+              "maximum_ns": 32051,
+              "maximum_started_ns": 408438184636803,
+              "maximum_finished_ns": 408438184668854,
+              "operations": {}
+            }
+          }
+        },
+        {
+          "input_id": "cf0485424f25d6aed7b2eecbcb099025",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 1955597,
+              "maximum_ns": 1955597,
+              "maximum_started_ns": 408454099830523,
+              "maximum_finished_ns": 408454101786120,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 20359979,
+              "maximum_ns": 20239390,
+              "maximum_started_ns": 408454101796529,
+              "maximum_finished_ns": 408454122035919,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 44985,
+              "maximum_ns": 44985,
+              "maximum_started_ns": 408454101843148,
+              "maximum_finished_ns": 408454101888133,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 20109613,
+              "maximum_ns": 20109613,
+              "maximum_started_ns": 408454101910325,
+              "maximum_finished_ns": 408454122019938,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 8227564095,
+              "maximum_ns": 7639477704,
+              "maximum_started_ns": 408454122117964,
+              "maximum_finished_ns": 408461761595668,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 99632933,
+              "maximum_ns": 56525422,
+              "maximum_started_ns": 408461761643208,
+              "maximum_finished_ns": 408461818168630,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 317139690,
+              "maximum_ns": 254027184,
+              "maximum_started_ns": 408461818265133,
+              "maximum_finished_ns": 408462072292317,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 773334119,
+              "maximum_ns": 773334119,
+              "maximum_started_ns": 408462864375450,
+              "maximum_finished_ns": 408463637709569,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 772223433,
+              "maximum_ns": 772223433,
+              "maximum_started_ns": 408462865242684,
+              "maximum_finished_ns": 408463637466117,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 49,
+              "total_ns": 282730591,
+              "maximum_ns": 107687599,
+              "maximum_started_ns": 408463529774090,
+              "maximum_finished_ns": 408463637461689,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 49,
+              "total_ns": 112111909,
+              "maximum_ns": 8824164,
+              "maximum_started_ns": 408463062512807,
+              "maximum_finished_ns": 408463071336971,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 36,
+              "total_ns": 70262794,
+              "maximum_ns": 38896460,
+              "maximum_started_ns": 408463532983082,
+              "maximum_finished_ns": 408463571879542,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 36,
+              "total_ns": 13653751,
+              "maximum_ns": 2741416,
+              "maximum_started_ns": 408463202236693,
+              "maximum_finished_ns": 408463204978109,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 12,
+              "total_ns": 19016330,
+              "maximum_ns": 7322698,
+              "maximum_started_ns": 408462882630018,
+              "maximum_finished_ns": 408462889952716,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 4,
+              "total_ns": 638269,
+              "maximum_ns": 272696,
+              "maximum_started_ns": 408462889964018,
+              "maximum_finished_ns": 408462890236714,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 1,
+              "total_ns": 33720329,
+              "maximum_ns": 33720329,
+              "maximum_started_ns": 408463538149965,
+              "maximum_finished_ns": 408463571870294,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 1,
+              "total_ns": 80052,
+              "maximum_ns": 80052,
+              "maximum_started_ns": 408463571888028,
+              "maximum_finished_ns": 408463571968080,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 3235271,
+              "maximum_ns": 3235271,
+              "maximum_started_ns": 408463571971286,
+              "maximum_finished_ns": 408463575206557,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 13676,
+              "maximum_ns": 13676,
+              "maximum_started_ns": 408463575221806,
+              "maximum_finished_ns": 408463575235482,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 39380578,
+              "maximum_ns": 39380578,
+              "maximum_started_ns": 408463575239079,
+              "maximum_finished_ns": 408463614619657,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 38913402,
+              "maximum_ns": 38913402,
+              "maximum_started_ns": 408463575324351,
+              "maximum_finished_ns": 408463614237753,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 250925,
+              "maximum_ns": 250925,
+              "maximum_started_ns": 408463614250357,
+              "maximum_finished_ns": 408463614501282,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 109898,
+              "maximum_ns": 109898,
+              "maximum_started_ns": 408463614505921,
+              "maximum_finished_ns": 408463614615819,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 4232903,
+              "maximum_ns": 4232903,
+              "maximum_started_ns": 408463614624315,
+              "maximum_finished_ns": 408463618857218,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 6202035,
+              "maximum_ns": 6202035,
+              "maximum_started_ns": 408463618866886,
+              "maximum_finished_ns": 408463625068921,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 333151,
+              "maximum_ns": 333151,
+              "maximum_started_ns": 408463625083609,
+              "maximum_finished_ns": 408463625416760,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 9808,
+              "maximum_ns": 9808,
+              "maximum_started_ns": 408463637476878,
+              "maximum_finished_ns": 408463637486686,
+              "operations": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/8f0dc415b37a24297a37a0d858a8f2ba.requests.jsonl",
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "compaction499-live-architecture-memory",
+            "created_at": 1790895107.1284342
+          },
+          "generation": 26
+        },
+        "turn_id": "8f0dc415b37a24297a37a0d858a8f2ba",
+        "admission_generation": 1687
+      },
+      "request_stages": [
+        {
+          "inputId": "f8f623fb5e655f15cc668d9e3455e1b5",
+          "requestId": "b84f0f62-cc90-4fc1-8f30-1dac5020a23f",
+          "startedAtMs": 1790932796305,
+          "observedAtMs": 1790932796305,
+          "stage": "preparing",
+          "elapsedMs": 0.047159,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "f8f623fb5e655f15cc668d9e3455e1b5",
+          "requestId": "b84f0f62-cc90-4fc1-8f30-1dac5020a23f",
+          "startedAtMs": 1790932796305,
+          "observedAtMs": 1790932796796,
+          "stage": "dispatch",
+          "elapsedMs": 491.738476,
+          "callbackMs": 0.088598
+        },
+        {
+          "inputId": "f8f623fb5e655f15cc668d9e3455e1b5",
+          "requestId": "b84f0f62-cc90-4fc1-8f30-1dac5020a23f",
+          "startedAtMs": 1790932796305,
+          "observedAtMs": 1790932797401,
+          "stage": "first_event",
+          "elapsedMs": 1096.07014,
+          "callbackMs": 0.088598
+        },
+        {
+          "inputId": "f8f623fb5e655f15cc668d9e3455e1b5",
+          "requestId": "b84f0f62-cc90-4fc1-8f30-1dac5020a23f",
+          "startedAtMs": 1790932796305,
+          "observedAtMs": 1790932801032,
+          "stage": "finished",
+          "elapsedMs": 4727.392305,
+          "callbackMs": 4.581964
+        },
+        {
+          "inputId": "7fe3c3b9861a400ccf49fefe937b3296",
+          "requestId": "66ed7285-0d89-4dd6-b420-577bb3d9234e",
+          "startedAtMs": 1790932824368,
+          "observedAtMs": 1790932824368,
+          "stage": "preparing",
+          "elapsedMs": 0.097876,
+          "callbackMs": 0
+        },
+        {
+          "inputId": "7fe3c3b9861a400ccf49fefe937b3296",
+          "requestId": "66ed7285-0d89-4dd6-b420-577bb3d9234e",
+          "startedAtMs": 1790932824368,
+          "observedAtMs": 1790932824842,
+          "stage": "dispatch",
+          "elapsedMs": 474.695303,
+          "callbackMs": 0.125608
+        },
+        {
+          "inputId": "7fe3c3b9861a400ccf49fefe937b3296",
+          "requestId": "66ed7285-0d89-4dd6-b420-577bb3d9234e",
+          "startedAtMs": 1790932824368,
+          "observedAtMs": 1790932825125,
+          "stage": "first_event",
+          "elapsedMs": 757.155245,
+          "callbackMs": 0.125608
+        },
+        {
+          "inputId": "7fe3c3b9861a400ccf49fefe937b3296",
+          "requestId": "66ed7285-0d89-4dd6-b420-577bb3d9234e",
+          "startedAtMs": 1790932824368,
+          "observedAtMs": 1790932829684,
+          "stage": "finished",
+          "elapsedMs": 5316.672988,
+          "callbackMs": 10.515747
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "f8f623fb5e655f15cc668d9e3455e1b5",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 1142,
+              "maximum_ns": 1142,
+              "maximum_started_ns": 408432445667174,
+              "maximum_finished_ns": 408432445668316,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 17764188,
+              "maximum_ns": 17634953,
+              "maximum_started_ns": 408432445672715,
+              "maximum_finished_ns": 408432463307668,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 34065,
+              "maximum_ns": 34065,
+              "maximum_started_ns": 408432445707280,
+              "maximum_finished_ns": 408432445741345,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 17539082,
+              "maximum_ns": 17539082,
+              "maximum_started_ns": 408432445760511,
+              "maximum_finished_ns": 408432463299593,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 1484194178,
+              "maximum_ns": 1483671858,
+              "maximum_started_ns": 408432463338877,
+              "maximum_finished_ns": 408433947010735,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 702089634,
+              "maximum_ns": 658265514,
+              "maximum_started_ns": 408433947022828,
+              "maximum_finished_ns": 408434605288342,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 125274973,
+              "maximum_ns": 65186858,
+              "maximum_started_ns": 408434605371730,
+              "maximum_finished_ns": 408434670558588,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 607647768,
+              "maximum_ns": 607647768,
+              "maximum_started_ns": 408434862366750,
+              "maximum_finished_ns": 408435470014518,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 606691155,
+              "maximum_ns": 606691155,
+              "maximum_started_ns": 408434863095141,
+              "maximum_finished_ns": 408435469786296,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 37,
+              "total_ns": 240148763,
+              "maximum_ns": 77725542,
+              "maximum_started_ns": 408435392053670,
+              "maximum_finished_ns": 408435469779212,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 37,
+              "total_ns": 107161029,
+              "maximum_ns": 7828116,
+              "maximum_started_ns": 408434897035688,
+              "maximum_finished_ns": 408434904863804,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 37,
+              "total_ns": 54033459,
+              "maximum_ns": 27686825,
+              "maximum_started_ns": 408435393934775,
+              "maximum_finished_ns": 408435421621600,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 37,
+              "total_ns": 7904290,
+              "maximum_ns": 1202879,
+              "maximum_started_ns": 408434904903049,
+              "maximum_finished_ns": 408434906105928,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 27,
+              "total_ns": 16645628,
+              "maximum_ns": 4720677,
+              "maximum_started_ns": 408434879747421,
+              "maximum_finished_ns": 408434884468098,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 3,
+              "total_ns": 460352,
+              "maximum_ns": 233552,
+              "maximum_started_ns": 408434884485061,
+              "maximum_finished_ns": 408434884718613,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 1,
+              "total_ns": 25000022,
+              "maximum_ns": 25000022,
+              "maximum_started_ns": 408435396611819,
+              "maximum_finished_ns": 408435421611841,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 1,
+              "total_ns": 40908,
+              "maximum_ns": 40908,
+              "maximum_started_ns": 408435421630226,
+              "maximum_finished_ns": 408435421671134,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 2393787,
+              "maximum_ns": 2393787,
+              "maximum_started_ns": 408435421673919,
+              "maximum_finished_ns": 408435424067706,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 5470,
+              "maximum_ns": 5470,
+              "maximum_started_ns": 408435424073347,
+              "maximum_finished_ns": 408435424078817,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 26221317,
+              "maximum_ns": 26221317,
+              "maximum_started_ns": 408435424081061,
+              "maximum_finished_ns": 408435450302378,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 24917636,
+              "maximum_ns": 24917636,
+              "maximum_started_ns": 408435424124754,
+              "maximum_finished_ns": 408435449042390,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 313334,
+              "maximum_ns": 313334,
+              "maximum_started_ns": 408435449059342,
+              "maximum_finished_ns": 408435449372676,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 919343,
+              "maximum_ns": 919343,
+              "maximum_started_ns": 408435449377515,
+              "maximum_finished_ns": 408435450296858,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 2164772,
+              "maximum_ns": 2164772,
+              "maximum_started_ns": 408435450308360,
+              "maximum_finished_ns": 408435452473132,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 6146409,
+              "maximum_ns": 6146409,
+              "maximum_started_ns": 408435452479605,
+              "maximum_finished_ns": 408435458626014,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 406240,
+              "maximum_ns": 406240,
+              "maximum_started_ns": 408435458648166,
+              "maximum_finished_ns": 408435459054406,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 9859,
+              "maximum_ns": 9859,
+              "maximum_started_ns": 408435469801865,
+              "maximum_finished_ns": 408435469811724,
+              "operations": {}
+            }
+          }
+        },
+        {
+          "input_id": "7fe3c3b9861a400ccf49fefe937b3296",
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 1017238,
+              "maximum_ns": 1017238,
+              "maximum_started_ns": 408451013176890,
+              "maximum_finished_ns": 408451014194128,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 2,
+              "total_ns": 19646556,
+              "maximum_ns": 19497173,
+              "maximum_started_ns": 408451014201672,
+              "maximum_finished_ns": 408451033698845,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 42571,
+              "maximum_ns": 42571,
+              "maximum_started_ns": 408451014253340,
+              "maximum_finished_ns": 408451014295911,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 19368680,
+              "maximum_ns": 19368680,
+              "maximum_started_ns": 408451014315397,
+              "maximum_finished_ns": 408451033684077,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 2,
+              "total_ns": 8190239004,
+              "maximum_ns": 8137652247,
+              "maximum_started_ns": 408453625633975,
+              "maximum_finished_ns": 408461763286222,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 2,
+              "total_ns": 1978056924,
+              "maximum_ns": 1915649925,
+              "maximum_started_ns": 408451086367868,
+              "maximum_finished_ns": 408453002017793,
+              "operations": {}
+            },
+            "attestation_publication": {
+              "count": 2,
+              "total_ns": 1120320036,
+              "maximum_ns": 587812522,
+              "maximum_started_ns": 408461825773964,
+              "maximum_finished_ns": 408462413586486,
+              "operations": {}
+            },
+            "prompt_writer_join": {
+              "count": 1,
+              "total_ns": 1117510121,
+              "maximum_ns": 1117510121,
+              "maximum_started_ns": 408462413612806,
+              "maximum_finished_ns": 408463531122927,
+              "operations": {}
+            },
+            "admission_wait": {
+              "count": 1,
+              "total_ns": 1115333995,
+              "maximum_ns": 1115333995,
+              "maximum_started_ns": 408462414626438,
+              "maximum_finished_ns": 408463529960433,
+              "operations": {}
+            },
+            "admission_probe": {
+              "count": 63,
+              "total_ns": 475657206,
+              "maximum_ns": 176119427,
+              "maximum_started_ns": 408463353831679,
+              "maximum_finished_ns": 408463529951106,
+              "operations": {}
+            },
+            "coordinator_open": {
+              "count": 63,
+              "total_ns": 207270574,
+              "maximum_ns": 14233847,
+              "maximum_started_ns": 408463085133700,
+              "maximum_finished_ns": 408463099367547,
+              "operations": {}
+            },
+            "response_boundary": {
+              "count": 63,
+              "total_ns": 66876347,
+              "maximum_ns": 27493388,
+              "maximum_started_ns": 408463356611387,
+              "maximum_finished_ns": 408463384104775,
+              "operations": {}
+            },
+            "wire_exclusion": {
+              "count": 63,
+              "total_ns": 14500846,
+              "maximum_ns": 1124562,
+              "maximum_started_ns": 408462898910744,
+              "maximum_finished_ns": 408462900035306,
+              "operations": {}
+            },
+            "bus_certified_exclusion": {
+              "count": 17,
+              "total_ns": 22465341,
+              "maximum_ns": 10978697,
+              "maximum_started_ns": 408462867683931,
+              "maximum_finished_ns": 408462878662628,
+              "operations": {}
+            },
+            "registry_exclusion": {
+              "count": 4,
+              "total_ns": 692993,
+              "maximum_ns": 340214,
+              "maximum_started_ns": 408462878678058,
+              "maximum_finished_ns": 408462879018272,
+              "operations": {}
+            },
+            "registry_snapshot": {
+              "count": 1,
+              "total_ns": 24787429,
+              "maximum_ns": 24787429,
+              "maximum_started_ns": 408463359303760,
+              "maximum_finished_ns": 408463384091189,
+              "operations": {}
+            },
+            "coordinator_exclusive": {
+              "count": 1,
+              "total_ns": 94990,
+              "maximum_ns": 94990,
+              "maximum_started_ns": 408463384118231,
+              "maximum_finished_ns": 408463384213221,
+              "operations": {}
+            },
+            "prompt_binding": {
+              "count": 1,
+              "total_ns": 2881040,
+              "maximum_ns": 2881040,
+              "maximum_started_ns": 408463384217048,
+              "maximum_finished_ns": 408463387098088,
+              "operations": {}
+            },
+            "selected_source_admission": {
+              "count": 1,
+              "total_ns": 7064,
+              "maximum_ns": 7064,
+              "maximum_started_ns": 408463387105402,
+              "maximum_finished_ns": 408463387112466,
+              "operations": {}
+            },
+            "raw_journal_admission": {
+              "count": 1,
+              "total_ns": 112604047,
+              "maximum_ns": 112604047,
+              "maximum_started_ns": 408463387115541,
+              "maximum_finished_ns": 408463499719588,
+              "operations": {}
+            },
+            "original_input_document": {
+              "count": 1,
+              "total_ns": 111243118,
+              "maximum_ns": 111243118,
+              "maximum_started_ns": 408463387171878,
+              "maximum_finished_ns": 408463498414996,
+              "operations": {}
+            },
+            "compaction_journal_exclusion": {
+              "count": 1,
+              "total_ns": 345485,
+              "maximum_ns": 345485,
+              "maximum_started_ns": 408463498433681,
+              "maximum_finished_ns": 408463498779166,
+              "operations": {}
+            },
+            "raw_source_clearance": {
+              "count": 1,
+              "total_ns": 930233,
+              "maximum_ns": 930233,
+              "maximum_started_ns": 408463498783935,
+              "maximum_finished_ns": 408463499714168,
+              "operations": {}
+            },
+            "admission_checks": {
+              "count": 1,
+              "total_ns": 3517327,
+              "maximum_ns": 3517327,
+              "maximum_started_ns": 408463499724838,
+              "maximum_finished_ns": 408463503242165,
+              "operations": {}
+            },
+            "raw_unknown_checkpoint": {
+              "count": 1,
+              "total_ns": 11106681,
+              "maximum_ns": 11106681,
+              "maximum_started_ns": 408463503247414,
+              "maximum_finished_ns": 408463514354095,
+              "operations": {}
+            },
+            "native_admission_record": {
+              "count": 1,
+              "total_ns": 333912,
+              "maximum_ns": 333912,
+              "maximum_started_ns": 408463514368232,
+              "maximum_finished_ns": 408463514702144,
+              "operations": {}
+            },
+            "raw_pipe_write": {
+              "count": 1,
+              "total_ns": 28283,
+              "maximum_ns": 28283,
+              "maximum_started_ns": 408463529981654,
+              "maximum_finished_ns": 408463530009937,
+              "operations": {}
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

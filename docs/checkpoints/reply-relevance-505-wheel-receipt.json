@@ -1,0 +1,18 @@
+{
+  "state": "wheel-source-inventory-PASS",
+  "core_commit": "c8894cca9435628aec824e9d6a8e2f11fc43eecb",
+  "wheel": "/home/ts/wt/comms-original-reply-handling-20261002/.artifacts/reply-relevance-505/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "6c3bc7c6cf36a7d7910755acdbc173ac50d4d9850f121be64fc53fb377fcb5d9",
+  "source_files": 330,
+  "original_instruction": {
+    "path": "agent_comms/instructions/reply-relevance.md",
+    "sha256": "3d06679ed0f4c856d05481209a377c0bdb6d1040b8ba2737e6fe119776a4c227"
+  },
+  "native_force_include_exact": true,
+  "focused_sanity": "5 passed in 4.76s",
+  "configured_provider_gate": "NOT_RUN",
+  "public_mutations": 0,
+  "input_replays": 0,
+  "source_inventory_path": "/home/ts/wt/comms-original-reply-handling-20261002/.artifacts/reply-relevance-505/wheel-source-inventory.json",
+  "source_inventory_sha256": "b09345393651bff2a8b896ea77c44daac447e157e1397c75190a18503404bc62"
+}

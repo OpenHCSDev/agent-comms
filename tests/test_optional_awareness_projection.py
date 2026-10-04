@@ -19,6 +19,8 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.assignment_states import EngagedAssignment
+from agent_comms.wake_policy import FullWake
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
@@ -272,7 +274,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
             assignment.recipient_lookup,
             owner.name,
             1,
-            sources=(SelectedSource(assignment, initial),),
+            sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         current = store.assignments.get(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
@@ -281,11 +283,11 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         assert context["selected"] == [
             {
                 "claim_id": assignment.assignment_id,
-                "disposition": "engaged",
+                "disposition": EngagedAssignment,
                 "message_id": initial.message.message_id,
                 "source_seq": initial.message.seq,
                 "target": "member000",
-                "wake_mode": "full",
+                "wake_mode": FullWake,
             }
         ]
         assert context["open_obligations"] == [
@@ -332,7 +334,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
                 assignment.recipient_lookup,
                 owner.name,
                 1,
-                sources=(SelectedSource(assignment, delivery),),
+                sources=(SelectedSource(assignment.assignment_id, store.assignments, delivery),),
             )
         index.maintain(rebuild=True)
         current = store.assignments.get(new_claim.assignment_id)
@@ -395,7 +397,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
             old_claim.recipient_lookup,
             "member000",
             1,
-            sources=(SelectedSource(old_claim, old),),
+            sources=(SelectedSource(old_claim.assignment_id, store.assignments, old),),
         )
         store.participants.advance_generation(
             old_claim.recipient_lookup, "member000", expected_generation=1
@@ -637,7 +639,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             assignment.recipient_lookup,
             owner.name,
             1,
-            sources=(SelectedSource(assignment, initial),),
+            sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         assignment = store.assignments.get(assignment.assignment_id)
         index.maintain(rebuild=True)
@@ -657,7 +659,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         passive_context = next(
             row for row in context["selected"] if row["claim_id"] == passive.assignment_id
         )
-        assert passive_context["wake_mode"] == passive.lifecycle.mode.declared_name
+        assert passive_context["wake_mode"] is type(passive.lifecycle.mode)
         assert len(context["open_obligations"]) == 1
         assert context["open_obligations"][0]["execution_id"] == "wire-awareness-reply"
         assert WakeAssignment.select(store.session._connection) == assignments_before

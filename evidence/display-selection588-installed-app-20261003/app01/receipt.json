@@ -1,0 +1,14 @@
+{
+  "state": "FAIL",
+  "scope": "Installed real App/IRC/DM and canonical private messaging/painted ACK",
+  "publicEffects": 0,
+  "providerCalls": 0,
+  "mockProtocols": 0,
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/display-selection588-private-candidate-20261003/app01/wire",
+  "rootId": "b3f7475b89e24b5f853e016b2317f4da",
+  "startedAt": 1791033125.5466328,
+  "frames": [],
+  "finishedAt": 1791033189.2301712,
+  "error": "BrokenProcessPool('A child process terminated abruptly, the process pool is not usable anymore')",
+  "privateWorkerPids": []
+}

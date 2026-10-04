@@ -1,0 +1,7 @@
+{
+  "table": "native_fork_creation",
+  "ddl": {
+    "native_fork_creation": "CREATE TABLE \"native_fork_creation\" (\"session_id\" TEXT NOT NULL, \"session_file\" TEXT NOT NULL, \"source\" TEXT NOT NULL, \"source_revision\" TEXT NOT NULL, \"revision\" TEXT NOT NULL, \"prefix_digest\" TEXT NOT NULL, \"entry_count\" INTEGER NOT NULL, PRIMARY KEY (\"session_file\")) STRICT"
+  },
+  "request_family_tag": "native_fork_creation"
+}

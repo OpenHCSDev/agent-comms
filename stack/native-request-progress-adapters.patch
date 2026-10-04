@@ -81,7 +81,7 @@
              }
 @@ -157,6 +158,8 @@
              new ContextBudget(model, context, bedrockInput(commandInput))
-                 .admit(commandInput.inferenceConfig ?? {}, "maxTokens");
+                 .admit(commandInput.inferenceConfig ?? {}, "maxTokens", 1, options);
              const command = new ConverseStreamCommand(commandInput);
 +            observeRequest(options, { stage: "dispatch", transport: "http",
 +                detail: "Waiting for provider response" });
@@ -125,7 +125,7 @@
 @@ -47,12 +48,16 @@
              }
              new ContextBudget(model, context, googleInput(params))
-                 .admit(params.config ?? {}, "maxOutputTokens");
+                 .admit(params.config ?? {}, "maxOutputTokens", 1, options);
 -            const googleStream = await retryGoogleRequest(() => client.models.generateContentStream(params), options);
 +            const googleStream = await retryGoogleRequest(attempt => {
 +                observeRequest(options, { stage: "dispatch", transport: "http", attempt,
@@ -185,7 +185,7 @@
 @@ -57,12 +58,16 @@
              }
              new ContextBudget(model, context, googleInput(params))
-                 .admit(params.config ?? {}, "maxOutputTokens");
+                 .admit(params.config ?? {}, "maxOutputTokens", 1, options);
 -            const googleStream = await retryGoogleRequest(() => client.models.generateContentStream(params), options);
 +            const googleStream = await retryGoogleRequest(attempt => {
 +                observeRequest(options, { stage: "dispatch", transport: "http", attempt,
@@ -211,7 +211,7 @@
 @@ -167,12 +168,16 @@
      const wirePayload = toMistralWirePayload(payload);
      new ContextBudget(model, context, chatInput(wirePayload))
-         .admit(wirePayload, "max_tokens");
+         .admit(wirePayload, "max_tokens", 1, options);
 +    observeRequest(options, { stage: "dispatch", transport: "http",
 +        detail: "Waiting for provider response" });
      const response = await (options?.fetch ?? globalThis.fetch)(url, {
@@ -302,13 +302,13 @@
                  throw new BudgetAdmissionError("Request declares two competing output allowances");
              }
              const budgetField = params.max_tokens !== undefined ? "max_tokens" : compat.maxTokensField;
--            const budgetRequest = new ContextBudgetRequest(model, context, params, budgetField, payload => client.chat.completions.create(payload, requestOptions).withResponse(), chatInput(params), options?.signal);
+-            const budgetRequest = new ContextBudgetRequest(model, context, params, budgetField, payload => client.chat.completions.create(payload, requestOptions).withResponse(), chatInput(params), options);
 -            const { data: openaiStream, response } = await retryProviderRequest(() => budgetRequest.send(), {
 +            const budgetRequest = new ContextBudgetRequest(model, context, params, budgetField, (payload, attempt) => {
 +                observeRequest(options, { stage: "dispatch", transport: "http", attempt,
 +                    detail: "Waiting for provider response" });
 +                return client.chat.completions.create(payload, requestOptions).withResponse();
-+            }, chatInput(params), options?.signal);
++            }, chatInput(params), options);
 +            const { data: openaiStream, response } = await retryProviderRequest(attempt => budgetRequest.send(attempt), {
                  maxRetries: options?.maxRetries,
                  maxRetryDelayMs: options?.maxRetryDelayMs,
@@ -370,7 +370,7 @@
 @@ -271,6 +272,8 @@
              }
              new ContextBudget(model, payload.context, payload.context)
-                 .admit(payload.options ?? {}, "maxTokens");
+                 .admit(payload.options ?? {}, "maxTokens", 1, options);
 +            observeRequest(options, { stage: "dispatch", transport: "http",
 +                detail: "Waiting for provider response" });
              const response = await (options?.fetch ?? globalThis.fetch)(url, {

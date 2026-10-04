@@ -1,0 +1,193 @@
+{
+  "parsed": [
+    "tests/fixtures/pi_helpers/new_case.mjs",
+    "tests/native-history-consumers.test.mjs",
+    "tests/native-session-entry-store.test.mjs",
+    "tests/native_context_budget_contract.mjs",
+    "tests/native_event_host.mjs",
+    "tests/native_file_artifact_sdk.mjs",
+    "tests/native_request_progress_contract.mjs",
+    "tests/native_source_budget_contract.mjs",
+    "tests/native_turn_context_contract.mjs",
+    "tests/retained_native_conditions.mjs",
+    "tests/summary_prefix_native_observer.mjs"
+  ],
+  "omitted": [],
+  "sites": [
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 8,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 8,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 8,
+      "reference": "applyBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 8,
+      "reference": "applyBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 156,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 162,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 166,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 232,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 256,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 267,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 270,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 272,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 274,
+      "reference": "applyBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 281,
+      "reference": "applyBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 7,
+      "declaration": "observe"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 7,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 34,
+      "declaration": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 34,
+      "reference": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 62,
+      "declaration": "boundedConstruction"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 62,
+      "reference": "boundedConstruction"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 63,
+      "reference": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 70,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 83,
+      "reference": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 124,
+      "declaration": "applyBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 124,
+      "reference": "applyBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 128,
+      "reference": "boundedConstruction"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 134,
+      "declaration": "constructNativeConditions"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 134,
+      "reference": "constructNativeConditions"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 140,
+      "reference": "boundedConstruction"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 143,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 144,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 145,
+      "reference": "observe"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 117,
+      "reference": "boundedMessages"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 117,
+      "reference": "boundedMessages"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 129,
+      "reference": "boundedMessages"
+    }
+  ]
+}

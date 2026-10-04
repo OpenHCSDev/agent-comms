@@ -17,8 +17,6 @@ from .compaction_identity import (
 from .compaction_journal_role import JournalRole
 from .compaction_records import (
     CompactionOperation,
-    EnrolledPrivateSession,
-    PrivateRawInput,
     SelectedSummaryAttempt,
     SelectedSummarySource,
 )
@@ -32,8 +30,10 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceRead
     from .fresh_private_session import FreshPrivateSession
     from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+    from .reservation_rules import ReservationCheck
 
 
 class _ReturnedTerminalAck:
@@ -65,6 +65,7 @@ class SelectedSummaries(JournalRole):
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
         future_queue: FutureInputQueue | None = None,
+        native_reader: NativeEvidenceRead | None = None,
     ) -> str:
         """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
 
@@ -84,23 +85,6 @@ class SelectedSummaries(JournalRole):
             # lexical path evades the private-root floor. Never reserve on a
             # multiply linked inode, regardless of the supplied path.
             raise CompactionJournalError("Selected saved session must have one private inode link")
-        private_sessions = (self.journal.path.parent / "native-sessions").resolve(strict=False)
-        private = Path(canonical).is_relative_to(private_sessions)
-        if private and fresh_session is not None:
-            # Never infer coverage from a visible file, missing marker, or an
-            # enrolment SQL row alone after an uncertain fsync/restart. The
-            # original O_EXCL creation object must still be in this process.
-            from .fresh_private_session import FreshPrivateSession
-
-            if type(fresh_session) is not FreshPrivateSession:
-                raise CompactionJournalError(
-                    "Private selected reservation requires reviewed raw-history coverage floor"
-                )
-            fresh_session.verify_saved_identity()
-            if fresh_session.path != Path(canonical) or (
-                admission_generation is not None and type(admission_generation) is not int
-            ):
-                raise CompactionJournalError("Fresh private selected identity changed")
         envelope = source
         payload = envelope.journal_json()
         from .selected_source import SessionRevision
@@ -119,7 +103,7 @@ class SelectedSummaries(JournalRole):
                     ).reading() as inputs,
                     self.journal.transaction() as db,
                 ):
-                    envelope.source.reservation_check(
+                    envelope.reservation_check(
                         SessionRevision.observe(canonical), inputs
                     ).require_valid()
                     covered_inputs = (
@@ -127,48 +111,19 @@ class SelectedSummaries(JournalRole):
                         if future_queue is not None
                         else inputs
                     )
-                    if private and fresh_session is not None:
-                        assert fresh_session is not None
-                        coverage = EnrolledPrivateSession.one(db, session_file=canonical)
-                        if coverage is None:
-                            raise CompactionJournalError(
-                                "Fresh private owner coverage differs: not enrolled"
-                            )
-                        self.journal.private_inputs.require_coverage(
-                            coverage, fresh_session, envelope.source, admission_generation
-                        )
-                    raw_ids = frozenset(
-                        row.input_id
-                        for row in PrivateRawInput.select(
-                            db, where="session_file=?", parameters=(canonical,)
-                        )
+                    self.journal.private_inputs.require_source_coverage(
+                        db, Path(canonical), envelope.source, covered_inputs,
+                        fresh=fresh_session, admission_generation=admission_generation,
+                        native_reader=native_reader,
                     )
-                    if private and fresh_session is None:
-                        from .continued_private_session import verify_continued_private_session
-
-                        try:
-                            verify_continued_private_session(
-                                self.journal.path.parent,
-                                Path(canonical),
-                                envelope.source,
-                                raw_ids,
-                                covered_inputs,
-                            )
-                        except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
-                            raise CompactionJournalError(
-                                "Private selected reservation requires reviewed "
-                                "raw-history coverage floor"
-                            ) from error
                     if CompactionOperation.unresolved_in(db, canonical):
                         raise CompactionJournalError(
                             "Unresolved native commit; no selected summary"
                         )
-                    if SelectedSummaryAttempt.blocking_in(db, canonical, inputs) or (
-                        raw_ids and (not private or fresh_session is not None)
-                    ):
+                    if SelectedSummaryAttempt.blocking_in(db, canonical, inputs):
                         raise CompactionJournalError("Blocked selected summary; never replay")
                     SelectedSummaryAttempt(
-                        operation_id, canonical, payload, ReservedSummary()
+                        operation_id, canonical, payload, envelope, ReservedSummary()
                     ).insert(db)
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(
@@ -220,18 +175,20 @@ class SelectedSummaries(JournalRole):
             target = row.state.refuse(reason)
             row.transition(db, target)
 
-    def retire_refused(self, attempt: SelectedSummaryAttempt) -> None:
-        """Explicitly retire a known refusal without admitting its original input."""
-        target = attempt.state.manual_recovery()
-        with self.journal.transaction() as db:
-            row = SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id)
-            if row != attempt:
-                raise CompactionJournalError("Native refusal changed before explicit retirement")
-            attempt.transition(db, target)
+    def retire_unchanged(
+        self, attempt: SelectedSummaryAttempt, check: ReservationCheck
+    ) -> None:
+        """Retire only the original no-write source under the bridge's custody.
 
-    def retire_unchanged(self, attempt: SelectedSummaryAttempt) -> None:
-        """Bridge holds the native writer and exact owner/source/input fences."""
+        The state supplies the disposition. The source supplies the check; no
+        row, manual command or retirement receipt admits/replays its input.
+        """
         target = attempt.state.retire_unchanged_source()
+        if target == attempt.state:
+            return
+        if check.source != attempt.request.source:
+            raise CompactionJournalError("Summary recovery check belongs to another source")
+        check.require_valid()
         with self.journal.transaction() as db:
             if SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id) != attempt:
                 raise CompactionJournalError("Selected summary changed during reconciliation")
@@ -256,6 +213,15 @@ class SelectedSummaries(JournalRole):
                     db, where="session_file=? ORDER BY rowid", parameters=(canonical,)
                 )
             )
+
+    def attempted_boundary(self, session_file: str, boundary) -> bool:
+        """Original reservations own cadence; no separate seen-source ledger.
+
+        Inspect typed requests, never the historical native-proof byte string.
+        A declined or uncertain attempt also consumes this optional boundary.
+        """
+        return any(attempt.request.retained.contains_source(reference)
+                   for attempt in self.history(session_file) for reference in boundary)
 
     def mark_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""

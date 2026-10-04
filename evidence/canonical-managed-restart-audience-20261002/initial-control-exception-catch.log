@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/canonical-managed-restart-audience-20261002/selection_sanity.py", line 50, in <module>
+    try:member.require_selection(snapshot,selected)
+        ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/tools/cutover/retained_index_cutover.py", line 41, in require_selection
+    raise RelationViolationError('Index cutover requires every managed restart owner.')
+agent_comms.errors.RelationViolationError: Index cutover requires every managed restart owner.

@@ -1,0 +1,1146 @@
+{
+  "head": "b02a57ff84a4b512b79c1e571069c5e1c9bdf975",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 510,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 520,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 524,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 510,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 520,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 524,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 163,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 94,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 22,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/compaction_source.py",
+      "line": 53,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 57,
+      "kind": "FunctionDef",
+      "source": "def future_inputs(\n        self, owner: Thread, pending_input_keys: tuple[str, ...]\n    ) -> dict[str, InputAttempt]: ..."
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 112,
+      "kind": "Attribute",
+      "source": "queue.future_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 444,
+      "kind": "FunctionDef",
+      "source": "def bind_native_turn(\n        self, session_id: str, owner: Thread, admission: int, turn_id: str\n    ) -> asyncio.Queue[str | dict[str, Any]]:\n        \"\"\"Transfer existing live inputs to the new lease, never read them from disk.\"\"\"\n        inbox = self.backend"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 455,
+      "kind": "FunctionDef",
+      "source": "def future_inputs(\n        self, owner: Thread, pending_input_keys: tuple[str, ...]\n    ) -> dict[str, InputAttempt]:\n        \"\"\"Live queued receipts only; durable UNKNOWN alone never grants this exception.\n\n        The bridge holds the wire lock while reading"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 561,
+      "kind": "AsyncFunctionDef",
+      "source": "async def finish_turn_inputs(\n        self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]\n    ) -> None:\n        \"\"\"Retire this turn's live capabilities; retain UNKNOWN only as notices.\"\"\"\n        if self.backend_inboxes.get(session_id) is inbox:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 84,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 79,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 80,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 136,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 406,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 43,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 98,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 58,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 74,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 241,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 123,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 53,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 51,
+      "kind": "ClassDef",
+      "source": "class OwnedTurn:\n    \"\"\"One admitted owner turn; stable source facts and native callbacks live here.\"\"\"\n\n    @property\n    def thread(self):\n        return self.registry_owner.thread\n\n    @property\n    def turn_lease(self):\n        return self.registry_owner.t"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 244,
+      "kind": "FunctionDef",
+      "source": "def reserve_input(self):\n        \"\"\"Acquire the original durable input before opening loop capabilities.\"\"\"\n        if self.original_owner_input:\n            permission = OwnerGoalPermission(self.thread.goal)\n        elif active_goal := self.thread.active_goal"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 190,
+      "kind": "Attribute",
+      "source": "self.reserve_input"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 287,
+      "kind": "Attribute",
+      "source": "self.runner.inputs.bind_native_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 291,
+      "kind": "Attribute",
+      "source": "self.runner.inputs.finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 152,
+      "kind": "FunctionDef",
+      "source": "def capture_source(\n        self,\n        owner: Thread,\n        owner_generation: int,\n        witness: NativeWitness,\n        *,\n        pending_input_keys: tuple[str, ...] = (),\n        settings_paths: tuple[str, ...] | None = None,\n    ) -> CompactionSourc"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 156,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 219,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 274,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 193,
+      "kind": "Attribute",
+      "source": "self.capture_source"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 38,
+      "kind": "ClassDef",
+      "source": "class NativeWitness(NativeSessionIdentity):\n    \"\"\"One decoded native cutpoint; later owner/disk CAS remains independent.\"\"\"\n\n    leaf_id: str = field(metadata={\"wire_name\": \"leafId\"})\n    first_kept_entry_id: str = field(metadata={\"wire_name\": \"firstKeptEntry"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 111,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 436,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 254,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 295,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 66,
+      "kind": "ClassDef",
+      "source": "class QueuedInput:\n    text: str\n    echo: bool\n    context: QueuedInputContext\n    input_id: str\n    prompt: str\n    images: tuple[ImageInput, ...] = ()\n    controller: Any = None\n\n    @property\n    def key(self) -> str:\n        return f\"acp:{self.input_id}\"\n"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 216,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 233,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 137,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 140,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 239,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 242,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 209,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 212,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 104,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 243,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 145,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 244,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 80,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 173,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 105,
+      "kind": "ClassDef",
+      "source": "class OriginalTurnInput(TurnInputSource):\n    prompt: str\n    original_display: str | None\n    origins: tuple[Message, ...]\n    dependency: InputDependency\n    batch: InputBatch\n\n    @property\n    def keys(self) -> tuple[str, ...]:\n        return self.batch.ke"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 168,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 186,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 190,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 134,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 63,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 530,
+      "kind": "Attribute",
+      "source": "self.inputs.finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 553,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 85,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 182,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 29,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 20,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 25,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 26,
+      "kind": "ClassDef",
+      "source": "class NativeBackendFixture:\n    def __init__(self, root, project, session, provider, config):\n        self.root, self.project, self.session, self.provider = root, project, session, provider\n        self.config = config\n        self.persistent = backend.Persist"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 173,
+      "kind": "AsyncFunctionDef",
+      "source": "async def native_backend_fixture(tmp_path):\n    pin = os.environ.get(\"PI_COMPACTION_TEST_PACKAGE\")\n    if not pin:\n        raise ValueError(\"Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle\")\n    package = Path(pin).resolve(strict=True)\n    root, "
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 35,
+      "kind": "AsyncFunctionDef",
+      "source": "async def author_history(self):\n        \"\"\"The SDK authors saved rows and their cut; no provider or receipt is invented.\"\"\"\n        package = os.environ[\"PI_COMPACTION_TEST_PACKAGE\"]\n        result = await BoundedRun.run(\n            (\"node\", \"--input-type=mod"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 60,
+      "kind": "AsyncFunctionDef",
+      "source": "async def open_owner(self):\n        \"\"\"Acquire the real saved ACP owner and attested idle native child.\"\"\"\n        agent = canonical_agent(\n            Comms(self.root), auto_wake=False, agent_bin=\"pi\",\n            agent_args=[\"--provider\", \"response-local\", \""
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 82,
+      "kind": "AsyncFunctionDef",
+      "source": "async def original_input(self, agent, session_id, text):\n        \"\"\"Reserve and acquire through the same input/turn owners as ACP dispatch.\"\"\"\n        def capture(custody):\n            with _store_lock(agent._comms._wire_lock_path):\n                return Init"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 234,
+      "kind": "Name",
+      "source": "NativeBackendFixture"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 57,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 95,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 167,
+      "kind": "Name",
+      "source": "native_backend_fixture"
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "line": 120,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 71,
+      "kind": "FunctionDef",
+      "source": "def capture_source():\n        return captured.require_current(), captured.retained"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 76,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 223,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 234,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1593,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 183,
+      "kind": "Attribute",
+      "source": "agent.inputs.future_inputs"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 115,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 585,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 588,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 52,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 179,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 25,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 23,
+      "kind": "Name",
+      "source": "native_backend_fixture"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 104,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 30,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 76,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 284,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 118,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 177,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 184,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 210,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 258,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 35,
+      "kind": "Attribute",
+      "source": "native.author_history"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 37,
+      "kind": "Attribute",
+      "source": "native.open_owner"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 218,
+      "kind": "Attribute",
+      "source": "native.author_history"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 226,
+      "kind": "Attribute",
+      "source": "native.open_owner"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 38,
+      "kind": "Attribute",
+      "source": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 58,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 227,
+      "kind": "Attribute",
+      "source": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 246,
+      "kind": "Attribute",
+      "source": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 45,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 61,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 438,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 448,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 460,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 469,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 152,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 185,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 188,
+      "kind": "Attribute",
+      "source": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 45,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 54,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 52,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 347,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 353,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 83,
+      "kind": "FunctionDef",
+      "source": "def future_inputs(self, owner, pending_input_key):\n            return {}"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 74,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 68,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 85,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 162,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 220,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 261,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 304,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 341,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 480,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 505,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 423,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 457,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 479,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 529,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 545,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 101,
+      "kind": "Attribute",
+      "source": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 42,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 119,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 178,
+      "kind": "Name",
+      "source": "QueuedInput"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 228,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 137,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 252,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 178,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 130,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 297,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 218,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 262,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 476,
+      "kind": "Attribute",
+      "source": "agent.inputs.future_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 431,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 181,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 202,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 430,
+      "kind": "FunctionDef",
+      "source": "def future_inputs(self, owner, pending_input_keys):\n            return {\"acp:future\": document.rows[\"acp:future\"]}"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 490,
+      "kind": "FunctionDef",
+      "source": "def future_inputs(self, owner, pending_input_keys):\n            return {}"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 36,
+      "kind": "Name",
+      "source": "NativeWitness"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 72,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 91,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 151,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 154,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 164,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 100,
+      "kind": "Name",
+      "source": "OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 101,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 102,
+      "kind": "Name",
+      "source": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 104,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 210,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 261,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 296,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 79,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 131,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 75,
+      "kind": "Attribute",
+      "source": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 64,
+      "kind": "FunctionDef",
+      "source": "def capture_source():\n        return captured.require_current(),captured.retained"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 199,
+      "kind": "FunctionDef",
+      "source": "def capture_source():\n        return captured.require_current(), captured.retained"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 306,
+      "kind": "FunctionDef",
+      "source": "def capture_source():\n        return captured.require_current(), captured.retained"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 80,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 120,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 205,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 315,
+      "kind": "Name",
+      "source": "capture_source"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 85,
+      "kind": "Name",
+      "source": "original_input"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 83,
+      "kind": "Name",
+      "source": "original_input"
+    }
+  ],
+  "limits": "Python roots complete. Native SDK SessionManager/NativeQuery semantics read from pinned package; native deps not reparsed as Python. Dynamic monkeypatch/callback identity is resolved by semantic reading, not inferred from AST.",
+  "family": "SDK saved source/witness; InitialInput durable reservation; OwnedTurn acquired registry lease/original source/inbox; OwnerCompactionCommit reader and writer launch; original shutdown custody. No production source change."
+}

@@ -1,0 +1,31 @@
+{
+  "native0064CurrentTreeEqualsRecorded": true,
+  "native776CurrentTree": "f4dc16eb7d85b906f01752432b876100a73cb8201c648f2bb147b3517f211cf0",
+  "native776RecordedFullTree": "abaa5bf07cd1d40b56d23e7201ae58bd0615892b79b728fad5e1e0b25a1c3e1c",
+  "current776KnownCodeChangesExactlyOriginalPin23": [
+    {
+      "path": "dist/core/tools/agent-comms-file-artifact.js",
+      "0064": null,
+      "776": "176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9"
+    },
+    {
+      "path": "dist/core/tools/edit.js",
+      "0064": "ed04b10ad45834276cf09d4a061db4304b923b4a2016ae9a1685cca171742b83",
+      "776": "b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18"
+    },
+    {
+      "path": "dist/core/tools/native-file-artifact-schema.mjs",
+      "0064": null,
+      "776": "233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f"
+    },
+    {
+      "path": "dist/core/tools/write.js",
+      "0064": "86bdd1c8a7cd7d4f381f6e94e79c42f5e5155df8a2b4b23fc0db6e67a802c285",
+      "776": "b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0"
+    }
+  ],
+  "missingDependencyFiles": 13084,
+  "unexpectedCodeChanges": 0,
+  "current776NotOriginalCompletePackage": true,
+  "disposition": "Code release permitted after cleaner actual borrower check and retained authentic original source/compiledfourmods/dist/manifest/proofs/rawhistory. Historical fulltrust remains historical, not current776 fulltrust."
+}

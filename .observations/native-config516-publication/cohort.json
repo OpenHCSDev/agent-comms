@@ -1,0 +1,30 @@
+{
+  "target": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native-configuration516-20261002",
+  "source_interpreter": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/bin/python",
+  "current_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002",
+  "original_route": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+    "version": 1
+  },
+  "native": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "activation": {
+    "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native-configuration516-20261002/activation.json",
+    "sha256": "b7db3544b784b061da2ecd52882487a974e618b2985d00dd3e3c429f8753df3b"
+  },
+  "source_proof": {
+    "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/native-configuration516-receiving-20261002/source-proof.json",
+    "sha256": "2c5128c037fea2d5fbaf100040cf4ae0643b4bee3ba80e531999db79e1871c46"
+  },
+  "actual_gates": [
+    {
+      "path": "/home/ts/wt/c51601/receipt.json",
+      "sha256": "ba90877230baa6f986a52df7cbfb91d756792d5d2af76e8f26a6bc430fda2957"
+    },
+    {
+      "path": "/home/ts/wt/comms-native-compaction-source-carry-20261002/evidence/native-compaction-source-carry-20261002/current9ccc-to-final28401/ready-receipt.json",
+      "sha256": "7c71b5071bf5a656bb26bd54c41fe43cfb22c807ab7d095a4fb68b8f964bd05a"
+    }
+  ]
+}

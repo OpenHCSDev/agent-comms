@@ -1,0 +1,46 @@
+{
+  "parsed_modules": 362,
+  "parse_omissions": [],
+  "canonical_request_consumers": [
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "name": "main",
+      "line": 330,
+      "source": "    owners = tuple(OwnerRestartRequest().threads(snapshot))"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "name": "publish",
+      "line": 362,
+      "source": "    owners = tuple(OwnerRestartRequest().threads(snapshot))"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "name": "require_selection",
+      "line": 243,
+      "source": "def require_selection(self, snapshot, owners):\n    live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}\n    if live != {thread.name for thread in owners} or live != {item.name for item in self.audience}:\n        raise RuntimeError('Complete original owner audience changed; recapture/review required')\n    for selection, original in zip(self.audience, self.originals, strict=True):\n        current = selection.require_current(snapshot)\n        current.require_idle()\n        if current != original:\n            raise RuntimeError('Original owner settings changed')\n    self.cohort.require_original()\n    require_no_clients(self.audience)\n    InputDispositions(ROOT / InputDispositions.filename).read()\n    self.task_carry.require_selection(snapshot, owners)"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "name": "require_selection",
+      "line": 38,
+      "source": "def require_selection(self, snapshot, owners) -> None:\n    audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}\n    if {thread.name for thread in owners} != audience:\n        raise RelationViolationError('Index cutover requires every managed restart owner.')\n    if not self.original_python.is_absolute() or not self.original_python.is_file():\n        raise RelationViolationError('Original installed writer interpreter is required.')\n    WireRootIdText.from_text(self.wire_root_id)\n    verify_native_package(self.native_package)\n    environment = dict(os.environ)\n    environment.pop('PYTHONPATH', None)\n    original_schema = subprocess.run([str(self.original_python), str(Path(__file__).with_name('checkpoint_schema.py'))], env=environment, check=True, capture_output=True, text=True).stdout.strip()\n    if original_schema == declared_schema_digest():\n        raise RelationViolationError('Installed schemas already match; retained reset is unnecessary.')"
+    },
+    {
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "name": "require_selection",
+      "line": 29,
+      "source": "def require_selection(self, snapshot, owners):\n    live = {thread.incarnation for thread in OwnerRestartRequest().threads(snapshot)}\n    if live != {thread.incarnation for thread in owners}:\n        raise RelationViolationError('Task carry requires the whole live owner audience.')\n    if not self.original_python.is_absolute() or not self.original_python.is_file():\n        raise RelationViolationError('Original installed decoder is required.')\n    if not self.receipt.is_absolute() or self.receipt.exists() or self.receipt.is_symlink():\n        raise RelationViolationError('Task carry receipt must be fresh persistent storage.')\n    parent = self.receipt.parent.stat()\n    if self.receipt.parent.is_symlink() or parent.st_uid != os.geteuid() or parent.st_mode & 18:\n        raise RelationViolationError('Task carry receipt parent is not owner-controlled.')\n    originals = self.receipt.with_name(self.receipt.name + '.originals')\n    if originals.exists() or originals.is_symlink():\n        raise RelationViolationError('Existing preimages prohibit another carry attempt.')\n    environment = dict(os.environ)\n    environment.pop('PYTHONPATH', None)\n    subprocess.run([self.original_python, Path(__file__).with_name('read_original_task_preimage.py'), self.wire_root, self.wire_root_id], env=environment, stdout=subprocess.DEVNULL, check=True)"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "name": "require_selection",
+      "line": 45,
+      "source": "def require_selection(self, snapshot, owners):\n    live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}\n    if {thread.name for thread in owners} != live:\n        raise RelationViolationError('Thread retirement requires the complete live batch')\n    if not self.receipt.is_absolute() or self.receipt.exists() or self.receipt.is_symlink():\n        raise RelationViolationError('Thread retirement requires a fresh private receipt')\n    parent = self.receipt.parent.stat()\n    if parent.st_uid != os.geteuid() or parent.st_mode & 63:\n        raise RelationViolationError('Thread retirement receipt directory must be owner-only')\n    if self.originals.exists() or self.originals.is_symlink():\n        raise RelationViolationError('Original recovery custody forbids repeating retirement')"
+    }
+  ],
+  "independent_implicit_audience_predicates": [],
+  "library_delta_against_main": false,
+  "source_owner": "Original OwnerRestartRequest.threads delegates implicit participation to ThreadExecution.restart_candidates. Native declares eligibility once; External inherits empty participation. Routing inherits index validation. Explicit named queue eligibility is a different request boundary and retains its guards.",
+  "limits": "AST does not prove dynamic class resolution; real installed registry/admission controls supplement it. Historical failed frozen operators are retained as evidence and are not executable authority for the next publication."
+}

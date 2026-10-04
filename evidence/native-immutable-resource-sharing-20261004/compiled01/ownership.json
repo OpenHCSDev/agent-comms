@@ -1,0 +1,15 @@
+{
+  "source_head": "4b65a9474401b648d84845630e8ad17ac24b1608",
+  "canonical_recipe": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/bin/prepare-pi-native",
+  "canonical_recipe_sha256": "5fe0b7c3b60ce0bb00b4025aa4aadd40c1157ac96103fe5420692da7eab6d100",
+  "capture_recipe_sha256": "f7579bbd61283ad6f5fe4b59586461819b234e81f72778999c94da979c8e67c4",
+  "capture_phase": "Existing capture-pins-normalverify builder lifetime; canonicalpatch/seal hook preserved. Expected oldpins are not used to pretend newstage alreadyqualified.",
+  "assemblies": 1,
+  "receiver": "Directoryentries+hardlinks from newly sealed samefence donor only; no secondSDKpayload",
+  "old89_f3_d5_2ea_forbidden_donors": true,
+  "original2ea_manifest": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "new_environment": false,
+  "new_worktree": false,
+  "provider_requests": 0,
+  "public_change": false
+}

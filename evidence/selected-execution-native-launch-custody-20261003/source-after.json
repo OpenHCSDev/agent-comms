@@ -1,0 +1,1035 @@
+{
+  "production_head": "7860951d174176cc2a5c3e9072ff96190040e4a5",
+  "scope": "Final production and current committed test projection",
+  "parsed": 726,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 60,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 52,
+      "import": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 90,
+      "declaration": "PersistentPiSession",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 36,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 63,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 20,
+      "import": "from .native_pi import NativePiRpcLaunch, _private_session_dir, _trusted_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 24,
+      "import": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 26,
+      "import": "from .selected_turn import SelectedConsideration"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 31,
+      "declaration": "SelectedExecution",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 58,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 84,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 122,
+      "call": "SelectedSession.prepare"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 35,
+      "call": "db.execute"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 56,
+      "call": "db.execute"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 45,
+      "call": "db.execute"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 21,
+      "import": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 15,
+      "import": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 290,
+      "call": "super().managed_launch"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 284,
+      "call": "original.retained_managed"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 33,
+      "import": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 394,
+      "declaration": "NativePiRpcLaunch",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 35,
+      "import": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 501,
+      "import": "from .selected_session import SelectedSession, SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 479,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 575,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 21,
+      "import": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 30,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 96,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 13,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 16,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 30,
+      "import": "from .native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 12,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 15,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 291,
+      "import": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 501,
+      "call": "self.stop_reason.tracked"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 74,
+      "call": "super().tracked"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 34,
+      "import": "from .tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 50,
+      "declaration": "PrivateSendAdmission",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 38,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 43,
+      "import": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 157,
+      "call": "TrackedTurnSession.execute"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 262,
+      "call": "db.execute"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 108,
+      "call": "cls.prepare"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 10,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 18,
+      "import": "from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 10,
+      "import": "from .private_send_admission import PrivateSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 31,
+      "declaration": "SelectedSession",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 25,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 27,
+      "import": "from .tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 96,
+      "import": "from .selected_turn import SelectedAttempt"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 25,
+      "import": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 142,
+      "declaration": "SelectedAttempt",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 280,
+      "declaration": "SelectedConsideration",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 247,
+      "call": "self.prepare"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 317,
+      "call": "session.continued"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 252,
+      "call": "request.admission.execute"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 308,
+      "call": "request.admission.execute"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 25,
+      "import": "from .native_pi import NativeContextProof, NativePiPromptRejected, NativePiRpcLaunch, NativePiTerminalFailure, NativePiUnavailable, NativeTurnResult, _verify_context"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 45,
+      "import": "from .selected_session import SelectedSession"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 142,
+      "declaration": "TrackedTurnSession",
+      "bases": [
+        "TurnSession",
+        "MroDispatch"
+      ]
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 50,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 51,
+      "import": "from .private_send_admission import PrivateSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 51,
+      "import": "from .coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 4,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 61,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 10,
+      "import": "from agent_comms.private_send_admission import PrivateSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 65,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/native_event_host.py",
+      "line": 10,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 16,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 18,
+      "import": "from agent_comms.selected_turn import SelectedPrompt, SelectedAttempt, SelectedConsideration"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 20,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 21,
+      "import": "from agent_comms.private_send_admission import PrivateSendAdmission"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 22,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 32,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 19,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 21,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 29,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 20,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 12,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 11,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 56,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 810,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 19,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 22,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 36,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 41,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 378,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 4,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 14,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 40,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 41,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 66,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1851,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1870,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 504,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 977,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1096,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1176,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1456,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1459,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1560,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1563,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1609,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1766,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1829,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 514,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 565,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1843,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 376,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 382,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 415,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 618,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 694,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 735,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1036,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1130,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1338,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1406,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1567,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1652,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1656,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1662,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1755,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1761,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1789,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1795,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1834,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1892,
+      "call": "store.session._connection.execute"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 183,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tests/test_fresh_private_session.py",
+      "line": 257,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 23,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 4,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 21,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 13,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 13,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 32,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 503,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 10,
+      "import": "from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 124,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_evidence_boundary.py",
+      "line": 105,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 28,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 13,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 7,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 22,
+      "call": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_owner_launcher_resolution.py",
+      "line": 62,
+      "call": "native_pi._trusted_package"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 4,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 12,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 23,
+      "import": "from agent_comms.native_pi import CAPABILITY, NativeContextProof, NativePiPromptRejected, NativePiRpcLaunch, NativePiTerminalFailure, NativePiUnavailable, _trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 32,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 33,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 268,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 274,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 331,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 801,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 881,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 233,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 532,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 820,
+      "call": "NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1226,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 521,
+      "call": "native._trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 524,
+      "call": "native._trusted_package"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 802,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 28,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 46,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 21,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 24,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 27,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 23,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 21,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 28,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 31,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 27,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 27,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 23,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 5,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 18,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 29,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 19,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 23,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 15,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_input_lifetime_native.py",
+      "line": 19,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 73,
+      "call": "prepare"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 50,
+      "call": "prepare"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 51,
+      "call": "prepare"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 25,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 14,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 221,
+      "call": "prepare"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 262,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 23,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 42,
+      "call": "concurrent.execute"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 197,
+      "call": "db.execute"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 20,
+      "import": "from agent_comms.native_pi import NativePiRpcLaunch"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 47,
+      "call": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 54,
+      "call": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 65,
+      "call": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_selected_tool_broker.py",
+      "line": 69,
+      "call": "native_pi.NativePiRpcLaunch.tracked"
+    },
+    {
+      "path": "tests/test_selected_tool_native_fake.py",
+      "line": 20,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_native_fake.py",
+      "line": 105,
+      "call": "TrackedTurnSession.execute"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 30,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_tracked_native_lifecycle.py",
+      "line": 15,
+      "import": "from agent_comms.coordinated_runtime import SelectedExecution"
+    },
+    {
+      "path": "tests/test_tracked_terminal_measurements.py",
+      "line": 9,
+      "import": "from agent_comms.tracked_turn import TrackedTurnSession"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 43,
+      "call": "_trusted_package"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 30,
+      "import": "from agent_comms.selected_session import SelectedSession"
+    }
+  ],
+  "limits": "Python syntax does not prove dynamic dispatch. Complete original source read, independent/selected actual factory verified. Native immutable2b unchanged; inherited SDK MRO/consumer evidence preserved from583."
+}

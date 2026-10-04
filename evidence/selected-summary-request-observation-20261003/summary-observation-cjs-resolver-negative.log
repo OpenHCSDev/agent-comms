@@ -1,0 +1,19 @@
+node:internal/modules/esm/resolve:282
+  return new ERR_PACKAGE_PATH_NOT_EXPORTED(
+         ^
+
+Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './api/agent-comms-context-budget' is not defined by "exports" in /home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/package.json
+    at exportsNotFound (node:internal/modules/esm/resolve:282:10)
+    at packageExportsResolve (node:internal/modules/esm/resolve:625:13)
+    at resolveExports (node:internal/modules/cjs/loader:765:36)
+    at Module._findPath (node:internal/modules/cjs/loader:832:31)
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1584:27)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1145:27)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1196:12)
+    at require.resolve (node:internal/modules/helpers:336:31)
+    at file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/selected-summary-request-observation-20261003/summary-observation-control.mjs:18:81
+    at [kLink] (node:internal/vm/module:345:28) {
+  code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+}
+
+Node.js v26.10.0

@@ -9,7 +9,6 @@ from pathlib import Path
 
 from .catalog_store import ChannelCatalog
 from .compaction_publication_lease import publication_identity_fence
-from .errors import UnregisteredThreadError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
@@ -22,7 +21,7 @@ from .store_files import _store_lock, file_revision
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
 _RUNNING_STATUS = RunningThreadStatus()
@@ -45,6 +44,20 @@ class Registration:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
+
+    def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
+        """Publish an observed native source under its original executable lease.
+
+        Registry admission checks own the determining facts. A changing progress
+        phase is retained from the locked document, not compared to an old view.
+        Native session identity and context proof remain with their producers.
+        """
+        with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
+            change = edit.document.prepare_native_source(original, session_file)
+            self._commit_registration(edit, change)
+            return RegistryOwner(
+                thread=change.installed_thread, admission_generation=original.admission_generation
+            )
 
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
@@ -153,6 +166,16 @@ class Registration:
             edit.commit()
             return result
 
+    def archive_originals(self, originals: Sequence[Thread]) -> None:
+        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+            edit.document.archive_originals(originals)
+            edit.commit()
+
+    def delete_originals(self, originals: Sequence[Thread]) -> None:
+        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+            edit.document.delete_originals(originals)
+            edit.commit()
+
     def remove(self, name: str) -> tuple[str, ...]:
         with (
             publication_identity_fence(self.store.path.parent, nonblocking=True),
@@ -174,11 +197,18 @@ class Registration:
             edit.commit()
             return result
 
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with self.store.editing() as edit:
-            changed = edit.document.transition_turn(lease, phase)
+            effects = edit.document.transition_turn(lease, phase)
             edit.commit()
-            return changed
+            return effects
+
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        """Interpret the observation against this same locked original turn."""
+        with self.store.editing() as edit:
+            effects = edit.document.observe_native_phase(lease, phase)
+            edit.commit()
+            return effects
 
     def live_owner_with_generation(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -281,11 +311,11 @@ class Registration:
 
     def canonical_name(self, name: str) -> str:
         with self.store.reading() as document:
-            return document.aliases.get(name, name)
+            return document.canonical_name(name)
 
     def aliases_for(self, name: str) -> frozenset[str]:
         with self.store.reading() as document:
-            canonical = document.aliases.get(name, name)
+            canonical = document.canonical_name(name)
             return frozenset(
                 {
                     canonical,
@@ -300,10 +330,7 @@ class Registration:
 
         with self.store.locked():
             document = self.store._read_unlocked()
-            canonical = document.aliases.get(name, name)
-            thread = document.threads.get(canonical)
-            if thread is None:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            thread = document.require(name)
             return GoalHistoryStore(self.store.path).history(
                 thread.created_at, thread.goal, goal_id=goal_id
             )
@@ -315,20 +342,15 @@ class Registration:
 
     def last_seen(self, name: str) -> float:
         with self.store.reading() as document:
-            name = document.aliases.get(name, name)
-            if name not in document.threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return document.last_seen.get(name, 0.0)
+            return document.seen_at(name)
 
     def require(self, name: str) -> Thread:
-        return self.snapshot().require(name)
+        with self.store.reading() as document:
+            return document.require(name)
 
     def status(self, name: str) -> ThreadStatus:
         with self.store.reading() as document:
-            name = document.aliases.get(name, name)
-            if name not in document.statuses:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return document.statuses[name]
+            return document.status(name)
 
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
@@ -347,10 +369,10 @@ class Registration:
 
     def peers(self, exclude: str) -> Sequence[str]:
         with self.store.reading() as document:
-            exclude = document.aliases.get(exclude, exclude)
+            exclude = document.canonical_name(exclude)
             return [name for name in document.threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
         with self.store.reading() as document:
-            name = document.aliases.get(name, name)
+            name = document.canonical_name(name)
             return name in document.threads

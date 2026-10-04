@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "scope": "recorded native consumer plumbing, not model-retention experiment",
+  "core_import": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "provider_posts_completed_original": 2,
+  "additional_provider_posts": 0,
+  "recorded_rounds": 1,
+  "questions": 21,
+  "controlled_correct": 7,
+  "missing": 14,
+  "successful_original_commit_reused": "66794184f1674babbe9845610979960b",
+  "native_source_and_proofs_unchanged": true,
+  "journal_unchanged": true,
+  "wrong_round_refused": true,
+  "nonterminal_answer_refused": true,
+  "missing_journal_refused_without_creation": true,
+  "original_hashes": {
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl": "03d61d24cc9bb8acabd4a53c89bfa849e6e7460183c10a598f9f01770108fed0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl.input-proof": "7be3edda9c7f2e67003af00b7c03490c46bd20fc2098ee48c4b7a39c50d90f87"
+  },
+  "original_checkpoint_hashes": {
+    "/home/ts/wt/s52902/forks/2026-10-02T11-45-21-583Z_01a0fc6e-e6af-72a9-ae8d-4139d4af15aa.jsonl": "f9382d2d971dafd05ab82369ef4a4d6d5aae14e1452fc20007cba004d5853a7e",
+    "/home/ts/wt/s52902/forks/2026-10-02T11-45-21-583Z_01a0fc6e-e6af-72a9-ae8d-4139d4af15aa.jsonl.input-proof": "138f2be2c3a3d76ed2727f22b171bdac7e6a6936dcfc9d3f3611b4398b329f43",
+    "/home/ts/wt/s52902/wire/compaction-commits.sqlite3": "6619555ee66f54f704903429be4ad37418c5d6756073c9a8c0cf37f7e8f26353"
+  },
+  "controls": 11,
+  "raw_initial_failure": "validation.log",
+  "initial_failure": "JSON export of located Path; native two calls already completed; corrected declaration projection read only, no replay",
+  "native_manifest": "00c2c11feaaf6e53b543d1570ae6029f8395e64ebafcdac54c352082cbc460c7",
+  "native_tree": "e0f93fec172aced120c0ce3e90345a27ece91ac2a0436bad3353169922dfecc7",
+  "core": "457b104",
+  "scope_limit": "No new model experiment, current production change, UI or provider prompt-presence claim; original successful selected commit read only.",
+  "initial_pytest_result": "11 passed, one consumer export failed after two completed native calls; failure retained. Final reader verified completed original evidence, no native repeat.",
+  "raw_log_hashes": {
+    "validation.log": "42f9248e433704fbc8ec53fcb25ad42ce76aabce0d90f9446b649b21c652bfff",
+    "read-completed.log": "fb100fde690357a7d85bd4bc9477db9e208dca76a7653ba12b18ef1c91520e3c"
+  },
+  "remaining_fixture_native_pids": []
+}

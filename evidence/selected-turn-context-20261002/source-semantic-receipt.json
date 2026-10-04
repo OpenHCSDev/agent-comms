@@ -1,0 +1,174 @@
+{
+  "owner": "Singer",
+  "scope": "original S5 selected input contributors and per-turn original manifest consumer",
+  "base": "d51100ece6b86a91618fb479fa33ea98960420d3",
+  "existing_owner_search": "existing-owner-and-caller-search.txt",
+  "authority": {
+    "assembly": "TurnContext.render",
+    "segments": "existing ContextSegment/InstructionSegment family; new selected members only",
+    "optional_awareness": "existing CompleteAwareness now inherits ContextSegment; same original SQL read/budget/owner checks",
+    "native_observation": "NativeContextManifestData.record; both originalPiEvent selected dispatch and AgentEvent ordinary projection",
+    "original_prompt": "PrivateSendAdmission holds one RenderedInput; derives binding/verify/exclusion text and original coordinates",
+    "source_admission": "existing native NativeInputClaim, AssignmentStore and reservation/proof owners unchanged",
+    "tokens": "original pinned SDK estimateTokens; no Python estimate or new metadata cap"
+  },
+  "new_member_rationale": {
+    "SelectedWakeSegment": "original sealed batch and owner projection with original WakePolicy instruction resource",
+    "SelectedTriageSegment": "bounded stage instruction and current SelectedTriage declared result grammar",
+    "SelectedWorkSegment": "full stage instruction and original SelectedAction instruction resources",
+    "SelectedResponseSegment": "existing ReplyRouteSegment extension for exact original declared Message-array grammar"
+  },
+  "deleted_replaced": [
+    "free render_selected_wake_frame/render_selected_batch_frame",
+    "SelectedPrompt raw frame+awareness+suffix assembly",
+    "Python selected action/control/response/awareness guidance literals",
+    "TurnProgress local manifest construction",
+    "string-substring model-control stage selection"
+  ],
+  "consumer_closure": [
+    "SelectedConsideration TRIAGE",
+    "SelectedAttempt FULL after proved triage and direct full",
+    "SelectedRequest.reserve",
+    "PrivateSendAdmission.reserve/verify/execute/exclusion",
+    "TrackedTurnSession.execute -> one existing commands.Prompt -> admit_prompt/send_fenced_prompt; no selected coordinates copied to unused TurnSession.prepare_launch field",
+    "SelectedParticipant original PiEvent handler",
+    "TurnProgress ordinary AgentEvent handler",
+    "existing WireLog/context CLI history anddiff unchanged"
+  ],
+  "preservation": [
+    "same prompt bytes",
+    "original assignment and transaction witnesses",
+    "original UNKNOWN and custody",
+    "proof/claim and publication/cursor fences",
+    "original sessions and compaction data",
+    "native package constant",
+    "Two original action instruction files intentionally retain final spaces and no final newline to preserve exact baseline bytes; git diff whitespace warning is recorded, not normalized away."
+  ],
+  "coordination": {
+    "Einstein506": "specific prompt/request/participant handler grant; native_source/native_phase untouched",
+    "Arendt489/509": "RenderedInput transport and original manifest ownership grant; no async/resource owner edits",
+    "Kepler503/512": "selected response grammar and final provider-control grant; sources/select untouched"
+  },
+  "validation": {
+    "final_provider_free": "29 passed in20.08s; source-only sanity, not installed/native receiving",
+    "original_bytes": "five authentic baseline renderer cases; pure-channel/direct-full/mixedroutes NoTools+Coding",
+    "initial_control_failures": "3 stale preexisting shared fake provider failures: global relevance mentions boundedtriage in FULL; now control derives original selected stage and declared Message replygrammar",
+    "installed_native_receiving": "Same selected producer already in qualified merged509; original configured proof is separate from historical511reader. No additional native/model gate.",
+    "source_finalization": "Final handler uses same existing Thread.require_turn_lease already in qualified509; no source/render/schema/manifest identity change, unchanged controls and model gate not repeated.",
+    "installed_reader": "PASS: installed-reader-journey.json; exact47d normalwheel,340source/assets match; actualinstalled openhcs-helper2 original historydiff, original503 FULL proof corroboration,8archivedfile hashes unchanged, noRPC/provider/input/publicmutations. Historicalread is not newselectedproducer observation."
+  },
+  "source_sha256": {
+    "src/agent_comms/native_turn_context.py": "a5c0890ec3e053b1346dfb4d39024d51dddfe5b957db26dfd85e130ee54b4835",
+    "src/agent_comms/optional_awareness_projection.py": "8a73c67129985d1659904ac0ed40a62962219f2eab3c1a09bf25dd57c46316a6",
+    "src/agent_comms/private_send_admission.py": "f9045ab5d1f28d8351c8dc1bf935764eaa531f329edb8889bce2afb9c95ef2f7",
+    "src/agent_comms/selected_actions.py": "10a55a3e9029d576de8fdd99ca094a20f66ffd8bf24916868d9eba4559706d9a",
+    "src/agent_comms/selected_participant.py": "cffbfbd79fa60c0ea156b3ca7f79b5bab635e620b468fc6a8c326194ac54dac8",
+    "src/agent_comms/selected_request.py": "914e5f641c58cc24ecfd49a928ff05c55c5a5572ad67b8afd5c7da9795aa9184",
+    "src/agent_comms/selected_source_batch.py": "7f9d7c89f81cb1e19ac519395a68d1eae215c327e9a2a6b352fadacc70c9d001",
+    "src/agent_comms/selected_triage.py": "b0998a3e705748d54b4c08d35a672054b42cccaee165f35b90b6f7e0ad34f620",
+    "src/agent_comms/selected_turn.py": "669d08ab5b3e66dcd77cb91d4c84d90e665dfc451c8d96ac9bd8ee6c385444a7",
+    "src/agent_comms/tracked_turn.py": "b8093beb3fd9d989a9feb412bc90c0237eeccb160fcc012ac4e571ab42933c72",
+    "src/agent_comms/turn_progress.py": "f2ef22d236055fb50072913271d3fb93d80bf2df7d6913881cc83313395c6378",
+    "src/agent_comms/wake_injection.py": "b53afaf8cc665feb504f6ff8588e19fb1c48a6ee0ef1893d6b6223aa26d36546",
+    "src/agent_comms/instructions/selected-awareness-content.md": "9ed3c5ab6f0879ea6d011ad3faa571c795f22d81b35c0a1b2bc542fbcee072cf",
+    "src/agent_comms/instructions/selected-awareness.md": "c274e6b92ccfbec9fc4591335e802e349ad0b86c273b0014309a2079aa544981",
+    "src/agent_comms/instructions/selected-coding.md": "8b92340769eca0bf76271550161d5127cb04ac4b12143c5633348884e0a664d7",
+    "src/agent_comms/instructions/selected-no-tools.md": "d811ebb096611f65d7974d490a16dda19436869307aa75af3c2dc361f4f92a03",
+    "src/agent_comms/instructions/selected-response-example.md": "8f41199cf5f4e653508ffbd84db2ea7efd00491eb0eefcb3796b96c7061742c5",
+    "src/agent_comms/instructions/selected-response.md": "1cc378ed58ecd109030cdb2f8dfa776729068c30cb5dbeb5c455b4ca24cae873",
+    "src/agent_comms/instructions/selected-triage-output.md": "526ec3f2a7d71283e9d1c8be70275d22e2580b058c689d16a4cacf17539198cc",
+    "src/agent_comms/instructions/selected-triage.md": "b38692e1abee5e1a88545c82d9f3611f79224389a7992e4370037ea6e22c924c",
+    "src/agent_comms/instructions/selected-wake.md": "c54e620c7bcf8e2369a5d5fd0d1a16c5408772b16a09228039f5ca753d27c24a",
+    "src/agent_comms/instructions/selected-work.md": "119dcf22c777bf8bb1f0813800641006639a7fe3b62076998cd94a724fb9689c"
+  },
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_mutations": 0,
+  "original_goal_open": [
+    "S1 task-aware decisions",
+    "S3 measured provider cache",
+    "S4 repeated recall/default disposition",
+    "S5 full current receiving cohort qualification"
+  ],
+  "ast": {
+    "summary": "ast-summary.json",
+    "before": "ast-before.json",
+    "after": "ast-after.json",
+    "coverage": {
+      "before": {
+        "nra_supported": 1014,
+        "nra_parser_omissions": 25,
+        "stdlib_supplement_parsed": 25,
+        "remaining_parse_failures": [],
+        "total_declared_modules": 1039,
+        "candidate_references": 14838
+      },
+      "after": {
+        "nra_supported": 1014,
+        "nra_parser_omissions": 25,
+        "stdlib_supplement_parsed": 25,
+        "remaining_parse_failures": [],
+        "total_declared_modules": 1039,
+        "candidate_references": 14841
+      }
+    },
+    "raw_owned_path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/selected-context511-ast-raw",
+    "method": "Existing NRA3.11 SourceModule/ClassFamilyIndex/SourceIndex/ImportBoundNameProjection + candidate stdlib ast for25 version omissions; no new configured NRA environment",
+    "ambiguity": "Syntactic references are candidates, not dynamic resolution proof. JS/native/compiled/stdlib outside Python census. Unmerged peer sources excluded. Historical launcher subprocesses keep authentic original package APIs.",
+    "retired_remaining": "Six response_instruction references belong to unchanged CoordinationSegment WakePolicy resource, not removed SelectedSourceBatch.response_instruction.",
+    "distinct_nominal_sources": "Two existing SelectedSource classes: original native compaction DeclaredFamily vs original delivery/AssignmentStore relation; no duplicate introduced by511",
+    "analysis_dependency_target": "Created before correction; removed; not used for final evidence",
+    "final_targeted_correction": "final-handler-owner-correction.json supplements original whole-root AST; no repeated full census"
+  },
+  "source_semantic_resolutions": {
+    "manifest_publication": "TrackedTurnSession.apply_native_event dispatches original PiEvent; ordinary TurnSession consumes PiEvent.apply AgentEvent projection. FULL DurableTurn has no context-observed handler. SelectedParticipant handles raw TurnContextObserved once; TurnProgress handles projected ContextObserved. Both call NativeContextManifestData.record with original leased identity.",
+    "transport": "TrackedTurnSession.complete invokes attest/admit_prompt/event loop, not inherited TurnSession.run/prepare_launch. Its immutable commands.Prompt is exact send/ack/input/context identity object. Selected RenderedInput is retained by existing PrivateSendAdmission and derives .text/.contributions at native boundary; added base coordinate copy deleted.",
+    "actions": "Sole production BatchSelectedAction constructor in SelectedAttempt.prepare maps original leaf actions via write_authority.select; native request/foreground action constructors supply CodingSelectedAction, NoSelectedTools or existing planned NoSelectedTools subtype. No recursive batch consumer. InstructionFile dedup preserves original first-source order for these existing leaves; no action behavior changed.",
+    "context_readers": "Existing WireLog.context_manifests/context_manifest_at, ContextManifest.changed_from_history, and context CLI decode original text-free native manifest. No copied formatter/token/source registry or new historical reader.",
+    "native_boundary": "Existing Prompt wire field contextContributions and native input claim/SDK contribution validation preserve original coordinates; pinned SDK estimateTokens supplies token counts. Native TypeScript/JavaScript source not included in Python AST proof.",
+    "leased_identity": "SelectedPrompt.context, SelectedParticipant.transition and SelectedParticipant.observe_context use existing Thread.require_turn_lease. Final handler correction evidence supersedes earlier47d prose: that first edit corrected transition only."
+  },
+  "deleted_lines": {
+    "production": 182,
+    "per_file": {
+      "src/agent_comms/instructions/selected-awareness-content.md": 0,
+      "src/agent_comms/instructions/selected-awareness.md": 0,
+      "src/agent_comms/instructions/selected-coding.md": 0,
+      "src/agent_comms/instructions/selected-no-tools.md": 0,
+      "src/agent_comms/instructions/selected-response-example.md": 0,
+      "src/agent_comms/instructions/selected-response.md": 0,
+      "src/agent_comms/instructions/selected-triage-output.md": 0,
+      "src/agent_comms/instructions/selected-triage.md": 0,
+      "src/agent_comms/instructions/selected-wake.md": 0,
+      "src/agent_comms/instructions/selected-work.md": 0,
+      "src/agent_comms/native_turn_context.py": 0,
+      "src/agent_comms/optional_awareness_projection.py": 27,
+      "src/agent_comms/private_send_admission.py": 9,
+      "src/agent_comms/selected_actions.py": 14,
+      "src/agent_comms/selected_participant.py": 2,
+      "src/agent_comms/selected_request.py": 1,
+      "src/agent_comms/selected_source_batch.py": 12,
+      "src/agent_comms/selected_triage.py": 7,
+      "src/agent_comms/selected_turn.py": 28,
+      "src/agent_comms/tracked_turn.py": 1,
+      "src/agent_comms/turn_progress.py": 5,
+      "src/agent_comms/wake_injection.py": 76
+    }
+  },
+  "owned_artifacts": {
+    "runtime-selected-context511": "One small exactGit47d Core-only installed environment, normal9dependencies, no overlays/nativebuild",
+    "selected-context511-existing-original-inspection.json": "Original text-free public historical context diff from ONE readonlyCLI call, retained as private evidence",
+    "inspect-installed-context511.py": "Owned installed inspector; no product tool/framework; preserved fixture history was finalpost-incarnation-replacement so originalpositive historicalquery receipts no longer applicable"
+  },
+  "normal_main_integration": {
+    "main": "f9135463a133dc213e1c72d227e695b4f8ca67f7",
+    "merge": "57f5543670608b0eb7c2497c335117f0d3ab8e62",
+    "method": "ordinary three-way git merge --no-edit origin/main; no overrides/reset/rebase/forcepush",
+    "production_changed_files": [],
+    "production_delta_zero": true,
+    "preserved_selected_callback": "observe_context awaits existing Coordination.run_worker(partial(record_context,event)); record_context uses require_active_turn + require_turn_lease",
+    "qualified_native_workflow": "existing merged509 configured509-qualified01.json; rawtimeout/history/currentcursor distinctions preserved",
+    "checks_repeated": false,
+    "provider_repeat": 0
+  }
+}

@@ -74,6 +74,10 @@ class Channel:
             return self.view.predicate.matches(tags)
         return self.builtin.matches(tags) if self.builtin else bool(self.tags & tags)
 
+    def can_set_archived(self, archived: bool) -> bool:
+        """Only nonbuiltin channels admit a changed archive preference."""
+        return self.builtin is None and self.archived != archived
+
     @property
     def builtin(self) -> BuiltinChannel | None:
         return BuiltinChannel.lookup(self.name)

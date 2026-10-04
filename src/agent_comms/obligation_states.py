@@ -27,10 +27,6 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
     @abstractmethod
     def successors(cls) -> tuple[type[ResponseState], ...]: ...
 
-    @classmethod
-    def publication(cls) -> str:
-        return cls.declared_name
-
     @property
     def receipt_message_id(self) -> str | None:
         return None
@@ -100,11 +96,6 @@ class PublishingResponse(ResponseState):
     @classmethod
     def successors(cls):
         return PublishedResponse, FailedResponse
-
-    @classmethod
-    def publication(cls):
-        return "uncertain"
-
 
 class DeferredResponse(ResponseState):
     retryable = True

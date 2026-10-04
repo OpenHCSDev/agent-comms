@@ -1,0 +1,446 @@
+{
+  "source_head": "92708dcb350918a0aa257193c8b27523fbe32074",
+  "parsed_modules": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 202,
+      "scope": "AgentActivity.finish_turn",
+      "call": "self.registry.canonical_name(lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 137,
+      "scope": "_selected_claim_boundary",
+      "call": "registry.aliases.get(owner_name, owner_name)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 371,
+      "scope": "write_selected_claimed_file",
+      "call": "registry.aliases.get(owner_name, owner_name)"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 261,
+      "scope": "StandbyGoalAction.before_publish",
+      "call": "snapshot.aliases.get(target.name, target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 310,
+      "scope": "StandbyGoalAction.before_publish",
+      "call": "snapshot.aliases.get(target.name, target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 318,
+      "scope": "Goals._goal_snapshot",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 175,
+      "scope": "Goals.recover_closed_goal_wait",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 226,
+      "scope": "Goals.release_waits_after_terminal_turn",
+      "call": "snapshot.aliases.get(\n                fence.identity.incarnation.name, fence.identity.incarnation.name\n            )"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 255,
+      "scope": "Goals.release_waits_after_terminal_turn",
+      "call": "snapshot.aliases.get(target.name, target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 148,
+      "scope": "GoalWaits.target_has_active_turn",
+      "call": "snapshot.aliases.get(target.name, target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 191,
+      "scope": "GoalWaits.closed_wait_group",
+      "call": "snapshot.aliases.get(target.name, target.name)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 234,
+      "scope": "GoalWaits.execution",
+      "call": "snapshot.aliases.get(target.name, target.name)"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 177,
+      "scope": "HistoricalMessage.project.creation",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 219,
+      "scope": "HistoryViews.last_sent_timestamps",
+      "call": "snapshot.aliases.get(sender, sender)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 304,
+      "scope": "HistoryViews.thread_presentation",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 346,
+      "scope": "HistoryViews.coordination_snapshot",
+      "call": "registry.aliases.get(actor, actor)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 124,
+      "scope": "MessageBus._delivery_scope",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 170,
+      "scope": "MessageBus._pending_projection",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 205,
+      "scope": "MessageBus._pending_projection.recipients",
+      "call": "snapshot.aliases.get(target, target)"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 134,
+      "scope": "GoalLaunchOwner.require_ready",
+      "call": "snapshot.aliases.get(self.thread.name, self.thread.name)"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 112,
+      "scope": "reserve_foreground_owner",
+      "call": "comms.registry.canonical_name(owner.name)"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 145,
+      "scope": "OwnedSendAdmission.__call__",
+      "call": "snapshot.aliases.get(self.thread.name, self.thread.name)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 180,
+      "scope": "DisplaySelection.capture",
+      "call": "snapshot.aliases.get(viewer, viewer)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 87,
+      "scope": "Publisher._validate_publish_request.canonical",
+      "call": "registry_snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 127,
+      "scope": "Publisher._prepare_message_unlocked.resolve_mention",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 346,
+      "scope": "Publisher.publish_initial_cohort",
+      "call": "snapshot.aliases.get(message.sender, message.sender)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 86,
+      "scope": "Publisher._validate_publish_request.canonical",
+      "call": "self._registry.canonical_name(name)"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 368,
+      "scope": "Publisher.publish_initial_cohort",
+      "call": "snapshot.aliases.get(target, target)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 107,
+      "scope": "QueuedInput.capture",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 158,
+      "scope": "QueuedInput.dispatch.require_handoff",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 322,
+      "scope": "DMDisplayScope.names_for",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 162,
+      "scope": "DMDisplayBasis.fetch_page",
+      "call": "snapshot.aliases.get(viewer, viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 163,
+      "scope": "DMDisplayBasis.fetch_page",
+      "call": "snapshot.aliases.get(peer, peer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 286,
+      "scope": "DMDisplayBasis.validate_identity",
+      "call": "snapshot.aliases.get(self.requested_peer, self.requested_peer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 334,
+      "scope": "DMDisplayScope.capture_human",
+      "call": "snapshot.aliases.get(viewer, viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 335,
+      "scope": "DMDisplayScope.capture_human",
+      "call": "snapshot.aliases.get(peer, peer)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 90,
+      "scope": "ReadLedger.capture",
+      "call": "snapshot.aliases.get(viewer, viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 129,
+      "scope": "ReadLedger.seen_sequences",
+      "call": "snapshot.aliases.get(viewer, viewer)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 66,
+      "scope": "ReadLedger.conversation",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 137,
+      "scope": "ReadLedger.seen_sequences",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 305,
+      "scope": "Registration.canonical_name",
+      "call": "document.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 309,
+      "scope": "Registration.aliases_for",
+      "call": "document.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 324,
+      "scope": "Registration.goal_history",
+      "call": "document.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 339,
+      "scope": "Registration.last_seen",
+      "call": "document.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 367,
+      "scope": "Registration.peers",
+      "call": "document.aliases.get(exclude, exclude)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 372,
+      "scope": "Registration.__contains__",
+      "call": "document.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 101,
+      "scope": "RegistryDocument.prepare_declaration",
+      "call": "self.aliases.get(thread.name, thread.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 180,
+      "scope": "RegistryDocument.rename",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 188,
+      "scope": "RegistryDocument.rename",
+      "call": "self.aliases.get(new_name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 233,
+      "scope": "RegistryDocument.unregister",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 243,
+      "scope": "RegistryDocument.archive",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 252,
+      "scope": "RegistryDocument.begin_delete",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 260,
+      "scope": "RegistryDocument.remove",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 278,
+      "scope": "RegistryDocument.heartbeat",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 314,
+      "scope": "RegistryDocument.release_turn",
+      "call": "self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 342,
+      "scope": "RegistryDocument._turn_effects",
+      "call": "self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 379,
+      "scope": "RegistrySnapshot.status",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 399,
+      "scope": "RegistrySnapshot.require_active",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 413,
+      "scope": "RegistrySnapshot.owner_identity",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 417,
+      "scope": "RegistrySnapshot.admission_identity",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 421,
+      "scope": "RegistrySnapshot.owner_binding",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/registry_provenance.py",
+      "line": 31,
+      "scope": "RegistryProvenance.require",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 492,
+      "scope": "ThreadRelationships.edit",
+      "call": "registry.aliases.get(peer, peer)"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 564,
+      "scope": "ThreadRelationships.snapshot.canonical",
+      "call": "registry.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 178,
+      "scope": "DeliveryScope.selection",
+      "call": "snapshot.aliases.get(target, target)"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 186,
+      "scope": "DeliveryScope.canonical",
+      "call": "self.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 76,
+      "scope": "RuntimeRequest.bind",
+      "call": "server.agent.sessions.require_owned_session(owner, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 46,
+      "scope": "ThreadIncarnation.current",
+      "call": "snapshot.aliases.get(self.name, self.name)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 59,
+      "scope": "ThreadIncarnation.matches_recorded_name",
+      "call": "snapshot.aliases.get(name, name)"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 43,
+      "scope": "ThreadIncarnation.resolved",
+      "call": "snapshot.aliases.get(self.name, self.name)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 289,
+      "scope": "ThreadManagement.rename_managed_thread",
+      "call": "self.registry.canonical_name(new_name)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 336,
+      "scope": "ThreadManagement._rename_thread_unlocked",
+      "call": "self.registry.canonical_name(new_name)"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 131,
+      "scope": "TurnGoalAccount.thread_name",
+      "call": "snapshot.aliases.get(self.owner.name, self.owner.name)"
+    }
+  ],
+  "limits": "AST resolves syntax and enclosing declarations; receiver semantics and callback dispatch reviewed from source, not dynamically certified."
+}

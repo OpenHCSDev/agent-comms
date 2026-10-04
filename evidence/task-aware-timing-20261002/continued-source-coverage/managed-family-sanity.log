@@ -1,0 +1,91 @@
+...F.............                                                        [100%]
+=================================== FAILURES ===================================
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fe68c521cd0>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'foreign'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+                NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+                TriageNativeExecution().record_sources(db, "a" * 32, (store.assignments.get("claim"),))
+        source = replace(source, source=replace(source.source,
+            reserved_revision=SessionRevision.observe(str(session)).require_available()))
+        if damage in {"context", "unsettled", "foreign"}:
+>           with pytest.raises(CompactionJournalError, match="coverage floor"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE CompactionJournalError
+
+tests/test_continued_private_session.py:211: Failed
+=========================== short test summary info ============================
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign]
+1 failed, 16 passed, 16 deselected in 1.53s

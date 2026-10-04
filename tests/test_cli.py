@@ -193,3 +193,31 @@ class TestStatusCommand:
         row = out["status"][0]
         assert row["thread"] == "a" and row["state"] == "working"
         assert row["detail"] == "bash: echo hi"
+
+
+class TestDeclaredTargetActions:
+    def test_catalog_edit_rename_review_delete_and_reopen(self, cli, tmp_path):
+        cli(tmp_path, 'register', '--name', 'tagged', '--worktree', str(tmp_path), '--tags', 'first')
+        code, catalog = cli(tmp_path, 'target-actions', '--target', 'tagged', '--project', str(tmp_path))
+        assert code == 0
+        edit = next(action for action in catalog['actions'] if action['command'] == 'thread-tags')
+        assert edit['parameters']['properties']['tags']['editor_default'] == 'first'
+        assert 'name' not in edit['parameters']['properties']
+        code, edited = cli(tmp_path, 'target-edit', '--target', 'tagged', '--operation', 'thread-tags',
+                           '--arguments', '{"tags":"first,second"}')
+        assert code == 0 and edited['tags'] == ['first', 'second']
+        code, renamed = cli(tmp_path, 'target-edit', '--target', '#second', '--operation', 'rename-tag',
+                            '--arguments', '{"new_name":"renamed"}')
+        assert code == 0 and renamed['name'] == 'renamed'
+        code, refused = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag')
+        assert code == 1 and 'Remove #renamed' in refused['error']
+        code, deleted = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag', '--confirmed')
+        assert code == 0 and deleted['tag'] == 'renamed' and deleted['removed_tag']
+        assert deleted['removed_threads'] == []
+        _, detail = cli(tmp_path, 'thread', '--name', 'tagged')
+        assert detail['tags'] == ['first']
+        _, builtins = cli(tmp_path, 'target-actions', '--target', '#all')
+        assert not {'rename-tag','delete-tag','delete-view'} & {action['command'] for action in builtins['actions']}
+        code, refused = cli(tmp_path, 'target-action', '--target', 'tagged', '--operation', 'thread-tags',
+                            '--arguments', '{"name":"other","tags":[]}')
+        assert code == 1 and 'overridden' in refused['error']

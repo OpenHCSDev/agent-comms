@@ -1,0 +1,20 @@
+{
+  "scope": "Installed compaction owner acquiring the original real SDK fork and reobserving its certified bytes; no prompt/native child/UI or latency comparison",
+  "source": "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl",
+  "size": 42116826,
+  "entries": 9587,
+  "decoded_at_seconds": 3.085077437979635,
+  "reverified_at_seconds": 3.1152010879595764,
+  "root": "/home/ts/.cache/agent-scratch/m568-native-evidence02/test_acquired_native_source_su0",
+  "protected_before": {
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl": "e864648e12beb2e7a376b447783235dc6149ed3d34b817e6bebd3b89ea440770",
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl.input-proof": "31339d72123405bd5015f48de43c10fec7fbdbe92ed61589cda18ae626055fcf"
+  },
+  "provider_inputs": 0,
+  "spawned_children": [],
+  "source_closed": true,
+  "protected_after": {
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl": "e864648e12beb2e7a376b447783235dc6149ed3d34b817e6bebd3b89ea440770",
+    "/home/ts/.cache/agent-scratch/m562-configured/forks/2026-10-03T04-15-49-564Z_01a0fff9-b33d-739a-a0e0-be33e00d7073.jsonl.input-proof": "31339d72123405bd5015f48de43c10fec7fbdbe92ed61589cda18ae626055fcf"
+  }
+}

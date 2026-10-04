@@ -17,25 +17,31 @@ import os
 import sqlite3
 import stat
 import tempfile
+from abc import ABC, abstractmethod
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Iterator, Set
-from typing import TYPE_CHECKING, BinaryIO, Literal
+from collections.abc import Iterator, Mapping
+from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource, file_revision
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog
     from .messages import Message
     from .coordination_tables.publications import PublicationIntents
+    from .turn_context import ContextManifest
+    from .retained_task_facts import ExactTaskFact
+
+OriginalSource = TypeVar("OriginalSource")
 
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
 _TAIL_BYTES = 4096
@@ -72,6 +78,13 @@ class PrefixWitness(PrefixSeal):
         if offset != self.offset or sequence < self.through_seq:
             raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
 
+    def require_read_window(self, selected: PrefixWitness) -> None:
+        """An original read cut must remain in this certified append-only source."""
+        if self.source_identity != selected.source_identity:
+            raise RelationViolationError("Addressed window changed its original source.")
+        if selected.offset > self.offset or selected.through_seq > self.through_seq:
+            raise RelationViolationError("Addressed window exceeds its committed source cut.")
+
 
 @dataclass(frozen=True)
 class CertifiedSourceRead:
@@ -88,15 +101,60 @@ class CertifiedSourceRead:
             raise RelationViolationError("Original source marker changed within its lock.")
 
     def require_current(self) -> None:
+        self.require_open_prefix()
+        self.witness.require_marker(self.marker)
+
+    def require_open_prefix(self) -> None:
+        """Validate the acquired committed bytes independently of reservations.
+
+        Acquisition already checked root and that the sealed sequence does not
+        exceed the marker. A marker may reserve a later sequence before append;
+        that reservation cannot change this original committed prefix.
+        """
         if self.stream.closed:
             raise RelationViolationError("Certified source read has left its lock lifetime.")
         self.marker.seal.check_final(self.witness, _path(self.path))
-        self.witness.require_marker(self.marker)
         if (
             file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
             or file_revision(self.path.stat()) != self.witness.revision
         ):
             raise RelationViolationError("Conversation source needs a current certificate.")
+
+    def committed_sequence(self) -> int:
+        """Global committed high-water; silent observations allocate no sequence."""
+        self.require_open_prefix()
+        return self.witness.through_seq
+
+    def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
+        """Lend bounded original bytes, not this lock/connection, to decoding.
+
+        The returned iterator owns only the original pointers, copied bytes and
+        root selected by this certificate. It is a read snapshot, never a
+        current publication/admission permit. Capture must finish in custody;
+        decoding can finish after that custody has closed.
+        """
+        self.require_current()
+        captured = tuple((row, row.read_bytes(self.stream)) for row in rows)
+        root_id = self.witness.root_id
+        self.require_current()
+        return (row.decode_bytes(raw, root_id) for row, raw in captured)
+
+    def references(self, references) -> Iterator[CommittedDelivery]:
+        """Capture exact seq/id originals through the existing sealed pointers."""
+        marks = ",".join("?" for _ in references)
+        self.require_current()
+        rows = DeliverySources.select(
+            self.connection, where=f"seq IN ({marks})",
+            parameters=tuple(ref.seq for ref in references),
+        )
+        by_sequence = {row.seq: row for row in rows}
+        ordered = []
+        for reference in references:
+            row = by_sequence.get(reference.seq)
+            if row is None or row.reference != reference:
+                raise RelationViolationError("Notification reference is not its original source")
+            ordered.append(row)
+        return self.capture_sources(tuple(ordered))
 
     def delivery(self, seq: int) -> CommittedDelivery:
         """Resolve an exact source sequence through this original opened proof."""
@@ -104,72 +162,161 @@ class CertifiedSourceRead:
         row = DeliverySources.one(self.connection, seq=seq)
         if row is None:
             raise RelationViolationError("No committed initial sideband for this wire sequence.")
-        original = row.delivery(self.stream, self.witness.root_id)
+        original, = self.capture_sources((row,))
         self.require_current()
         return original
 
-    def addressed_deliveries(
-        self, lookup: str, after: int, sealed: Set[int]
-    ) -> Iterator[CommittedDelivery]:
-        """Original addressed rows not already sealed by the coordinator owner."""
-        self.require_current()
-        rows = DeliverySources.iterate(self.connection.execute(
-            f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
-            f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
-            "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq", (lookup, after)))
-        for row in rows:
-            if row.seq not in sealed:
-                initial = row.delivery(self.stream, self.witness.root_id)
-                if not any(r.recipient_lookup == lookup for r in initial.audience.recipients):
-                    raise RelationViolationError("Certified address differs from original frozen row.")
-                yield initial
-        self.require_current()
-
-    def addressed_page(self, bus: WireLog, request: AddressedPage):
+    def addressed_page(
+        self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None = None,
+    ):
         """Read a bounded original addressed window through this one certificate.
 
-        The query carries no input/ACK authority. The complete page, latest
-        initial and original bytes share this connection and opened stream;
-        the same original seal/resource must still hold after publication.
+        The query carries no input/ACK authority. Capture resolves the page and
+        addressed high-water through one current seal. Its decoder lends only
+        the bounded original bytes; no connection or stream survives capture.
         """
         self.require_current()
         self.require_marker(bus._private_marker_unlocked())
-        db, stream, witness = self.connection, self.stream, self.witness
+        db, witness = self.connection, self.witness
+        window = witness if prefix is None else prefix
+        witness.require_read_window(window)
         try:
             rows = DeliverySources.read(db.execute(
                 f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
                 f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
-                "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
-                (request.lookup, request.after_seq, request.limit + 1),
+                "WHERE a.lookup=? AND i.seq>? AND i.seq<=? ORDER BY i.seq LIMIT ?",
+                (request.lookup, request.after_seq, window.through_seq, request.limit + 1),
             ))
             last = DeliverySources.read(db.execute(
                 f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"))
             latest = last[0].seq if last else 0
             if not 0 <= latest <= witness.through_seq:
                 raise RelationViolationError("Certified initial high-water is invalid.")
-            originals = []
-            for row in rows[:request.limit]:
-                original = row.delivery(stream, witness.root_id)
-                if not any(r.recipient_lookup == request.lookup for r in original.audience.recipients):
-                    raise RelationViolationError("Certified initial lookup differs from bus row.")
-                originals.append(original)
+            captured = self.capture_sources(tuple(rows[:request.limit]))
             self.require_current()
             self.require_marker(bus._private_marker_unlocked())
-            return replace(witness, latest_source_seq=latest), tuple(originals), len(rows) > request.limit
+
+            def decoded():
+                for original in captured:
+                    if not any(r.recipient_lookup == request.lookup for r in original.audience.recipients):
+                        raise RelationViolationError("Certified initial lookup differs from bus row.")
+                    yield original
+
+            return replace(witness, latest_source_seq=latest), decoded(), len(rows) > request.limit
         except RelationViolationError:
             raise
         except (sqlite3.Error, OSError, ValueError, TypeError) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
+
+    def conversation_sources(
+        self,
+        lookup: str,
+        predicate: str,
+        parameters: tuple,
+        *,
+        limit: int,
+        ascending: bool,
+    ):
+        """Read a bounded conversation from the existing certified source index.
+
+        Sender and recipients come from the original frozen audience, never today's
+        name binding. Capture holds the bus lock; decoding owns its bounded original bytes.
+        This read cannot install or repair
+        a checkpoint, grant delivery, or advance any native-input cursor.
+        """
+        self.require_current()
+        db = self.connection
+        rows = DeliverySources.read(
+            db.execute(
+                f"SELECT w.* FROM {DeliverySources.declared_name} w JOIN ("
+                f"SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w "
+                f"WHERE w.sender_lookup=? AND ({predicate}) "
+                f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?) UNION "
+                f"SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a "
+                f"JOIN {DeliverySources.declared_name} w ON w.seq=a.seq "
+                f"WHERE a.lookup=? AND ({predicate}) "
+                f"ORDER BY a.seq {'ASC' if ascending else 'DESC'} LIMIT ?)"
+                ") membership ON membership.seq=w.seq "
+                f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?",
+                (lookup, *parameters, limit, lookup, *parameters, limit, limit),
+            )
+        )
+        captured = self.capture_sources(tuple(rows))
+
+        def decoded():
+            for original in captured:
+                if original.audience.sender_lookup != lookup and not any(
+                    recipient.recipient_lookup == lookup for recipient in original.audience.recipients
+                ):
+                    raise RelationViolationError("Conversation index differs from frozen membership.")
+                yield original
+
+        return decoded()
+
+    def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
+        return self.marker.access.context_manifests(self, incarnation, snapshot)
+
+    def retained_task_facts(self, incarnation: ThreadIncarnation) -> Iterator[ExactTaskFact]:
+        """Capture this owner's originals; their declarations own applicability.
+
+        SQLite's negative LIMIT requests the complete sender/addressed relation,
+        rather than a display page. The existing pointer reader captures bytes
+        now; its decoder may run after publication custody closes. No unrelated
+        record is decoded and no fact is stored in the checkpoint.
+        """
+        from .bus_publication import stable_thread_lookup
+
+        lookup = stable_thread_lookup(incarnation.created_at)
+        originals = self.conversation_sources(
+            lookup, "1", (), limit=-1, ascending=True,
+        )
+        return (
+            fact
+            for original in originals
+            for message in original.compaction_messages_for(lookup)
+            for fact in message.retained_task_facts()
+        )
+
+    def indexed_context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
+        """Capture only original observations of this recorded incarnation.
+
+        The index stores byte ranges and original owner identity, never manifest
+        contents. Retained aliases select the same birth; a reused name cannot
+        import another incarnation's observations. Wire order owns diff order.
+        """
+        self.require_current()
+        storage = SqlStorage.for_type(ThreadIncarnation)
+        parameters = tuple(storage.to_sql(FieldCodec.encode(recorded))
+                           for recorded in incarnation.recorded_names(snapshot))
+        rows = tuple(ContextManifestSources.select(
+            self.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
+            parameters=parameters, order_by=("offset",),
+        ))
+        captured = self.capture_sources(rows)
+
+        def decoded():
+            for manifest in captured:
+                if manifest.thread.resolved(snapshot) != incarnation:
+                    raise RelationViolationError("Context source differs from recorded owner.")
+                yield manifest
+
+        return decoded()
+
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None
-        # No new key-to-source store: resolve current original pointers, newest
-        # first. The canonical prefix already proves publication-key uniqueness.
+        # The original intent already owns its Message-derived identity. Use
+        # that exact pointer relation; never decode unrelated history while
+        # the publication transaction holds its current source fence. Message
+        # IDs are not assumed unique: the original receipt still proves key,
+        # execution and complete publication content for every candidate.
         cursor = self.connection.execute(
-            f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC")
+            f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
+            (intent.expected_message_id,),
+        )
         for row in DeliverySources.iterate(cursor):
             original = row.delivery(self.stream, self.witness.root_id)
             receipt = original.receipt
@@ -192,26 +339,52 @@ class ResponseKeys(CheckpointTable, TypedTable):
     key: str = field(metadata={"sql": Column(primary_key=True)})
 
 
-@dataclass(frozen=True)
-class DeliverySources(CheckpointTable, TypedTable):
-    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
-    message_id: str
+@dataclass(frozen=True, kw_only=True)
+class WireSourcePointer(Generic[OriginalSource], ABC):
+    """Original byte geometry and capture shared by certified source members."""
+
     offset: int = field(metadata={"sql": Column(check="offset>=0")})
     length: int = field(metadata={"sql": Column(check="length>0")})
+
+    @abstractmethod
+    def decode_bytes(self, raw: bytes, root_id: str) -> OriginalSource: ...
+
+    def read_bytes(self, stream) -> bytes:
+        """Capture this original row while the certificate's stream is held."""
+        try:
+            stream.seek(self.offset)
+            raw = stream.read(self.length)
+        except OSError as error:
+            raise RelationViolationError("Certified source bytes are unavailable.") from error
+        if len(raw) != self.length or not raw.endswith(b"\n"):
+            raise RelationViolationError("Certified source row changed.")
+        return raw
+
+
+@dataclass(frozen=True)
+class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, TypedTable):
+    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
+    message_id: str
     sender_lookup: str
     indexes = (Index(("sender_lookup", "seq")),)
 
     def delivery(self, stream, root_id: str) -> CommittedDelivery:
         """A pointer has no message authority: resolve its original frozen row."""
+        return self.decode_bytes(self.read_bytes(stream), root_id)
+
+    def decode_bytes(self, raw: bytes, root_id: str) -> CommittedDelivery:
+        """One frozen seq/id/audience relation for locked and snapshot readers."""
         from .bus_publication import CommittedDelivery, unique_wire_object
 
-        stream.seek(self.offset)
-        raw = stream.read(self.length)
-        if len(raw) != self.length or not raw.endswith(b"\n"):
-            raise RelationViolationError("Certified initial row changed.")
-        original = CommittedDelivery.from_wire(
-            json.loads(raw, object_pairs_hook=unique_wire_object), root_id
-        )
+        try:
+            record = json.loads(raw, object_pairs_hook=unique_wire_object)
+            if not isinstance(record, Mapping):
+                raise ValueError("Certified initial JSON must be an object.")
+            original = CommittedDelivery.from_wire(record, root_id)
+        except RelationViolationError:
+            raise
+        except (ValueError, TypeError) as error:
+            raise RelationViolationError("Certified initial row is invalid.") from error
         if (
             original.message.reference != self.reference
             or original.audience.sender_lookup != self.sender_lookup
@@ -224,6 +397,22 @@ class DeliverySources(CheckpointTable, TypedTable):
         from .message_reference import MessageReference
 
         return MessageReference(self.seq, self.message_id)
+
+
+@dataclass(frozen=True)
+class ContextManifestSources(WireSourcePointer["ContextManifest"], CheckpointTable, TypedTable):
+    thread: ThreadIncarnation
+    indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
+
+    def decode_bytes(self, raw: bytes, root_id: str) -> ContextManifest:
+        """The original typed observation proves the pointer's recorded owner."""
+        from .bus_publication import unique_wire_object
+
+        record = WireRecord.from_wire(json.loads(raw, object_pairs_hook=unique_wire_object), root_id)
+        manifests = record.context_manifests()
+        if len(manifests) != 1 or manifests[0].thread != self.thread:
+            raise RelationViolationError("Certified context pointer differs from original observation.")
+        return manifests[0]
 
 
 @dataclass(frozen=True)
@@ -247,6 +436,26 @@ class PrefixCertificate(CheckpointTable, TypedTable):
     tail: str
     mtime_ns: int
     ctime_ns: int
+
+    @classmethod
+    def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:
+        """Decode the original certificate through its own declaration.
+
+        Derived index membership belongs to the mutable writer. An immutable
+        archive retains this same certificate and its original sealed sidecar.
+        """
+        actual = SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE name=?", (FieldCodec.encode(cls),),
+        ))
+        if {row.name: row.sql for row in actual} != cls.schema_objects():
+            raise RelationViolationError("Private bus prefix certificate schema is unavailable.")
+        try:
+            row = cls.one(db, singleton=1)
+            if row is None:
+                raise RelationViolationError("Private bus checkpoint certificate is missing.")
+            return row.witness()
+        except (TypeError, ValueError) as error:
+            raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
 
     def witness(self) -> PrefixWitness:
         return PrefixWitness(
@@ -328,13 +537,7 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     )
     if {row.name: row.sql for row in actual} != schema:
         raise RelationViolationError("Private bus checkpoint schema is unavailable.")
-    try:
-        row = PrefixCertificate.one(db, singleton=1)
-        if row is None:
-            raise RelationViolationError("Private bus checkpoint certificate is missing.")
-        return row.witness()
-    except (TypeError, ValueError) as error:
-        raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
+    return PrefixCertificate.read_witness(db)
 
 
 def _index_row(db: sqlite3.Connection, offset: int, raw: bytes, record: WireRecord) -> None:
@@ -446,9 +649,8 @@ def _recover_pending_unlocked(
     size = 0
 
     with db:
-        db.execute("DELETE FROM addressed")
-        db.execute(f"DELETE FROM {DeliverySources.declared_name}")
-        db.execute("DELETE FROM response_keys")
+        for owner in TypedTable.members_with(CheckpointTable):
+            db.execute(f'DELETE FROM "{owner.declared_name}"')
 
         def collect(offset, raw, record):
             nonlocal digest, prior_seen, prior_seq, last_seq, count, size
@@ -589,9 +791,9 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):
     path = _path(bus.path)
     with ExitStack() as resources:
         try:
-            db = resources.enter_context(closing(_connect(path)))
+            db = resources.enter_context(closing(marker.access.open_checkpoint(path)))
             stream = resources.enter_context(bus.path.open("rb"))
-            saved = _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
+            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path)
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
             raise RelationViolationError(
@@ -701,66 +903,6 @@ def append_private_bus_checkpoint_unlocked(
     except (sqlite3.Error, OSError) as error:
         raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
 
-
-def delivery_references_unlocked(source: CertifiedSourceRead, references):
-    """Resolve a bounded window's original seq/id pairs in one certified read."""
-    source.require_current()
-    db, stream, saved = source.connection, source.stream, source.witness
-    marks = ",".join("?" for _ in references)
-    rows = DeliverySources.select(
-        db, where=f"seq IN ({marks})", parameters=tuple(ref.seq for ref in references)
-    )
-    originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
-    deliveries = []
-    for reference in references:
-        original = next(
-            (item for item in originals if item.message.reference == reference), None
-        )
-        if original is None:
-            raise RelationViolationError("Notification reference is not its original source")
-        deliveries.append(original)
-    return tuple(deliveries)
-
-
-def conversation_sources_unlocked(
-    source: CertifiedSourceRead,
-    lookup: str,
-    predicate: str,
-    parameters: tuple,
-    *,
-    limit: int,
-    ascending: bool,
-):
-    """Read a bounded conversation from the existing certified source index.
-
-    Sender and recipients come from the original frozen audience, never today's
-    name binding. Caller holds the bus lock. This read cannot install or repair
-    a checkpoint, grant delivery, or advance any native-input cursor.
-    """
-    source.require_current()
-    db, stream, saved = source.connection, source.stream, source.witness
-    rows = DeliverySources.read(
-        db.execute(
-            f"SELECT w.* FROM {DeliverySources.declared_name} w JOIN ("
-            f"SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w "
-            f"WHERE w.sender_lookup=? AND ({predicate}) "
-            f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?) UNION "
-            f"SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a "
-            f"JOIN {DeliverySources.declared_name} w ON w.seq=a.seq "
-            f"WHERE a.lookup=? AND ({predicate}) "
-            f"ORDER BY a.seq {'ASC' if ascending else 'DESC'} LIMIT ?)"
-            ") membership ON membership.seq=w.seq "
-            f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?",
-            (lookup, *parameters, limit, lookup, *parameters, limit, limit),
-        )
-    )
-    originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
-    for original in originals:
-        if original.audience.sender_lookup != lookup and not any(
-            recipient.recipient_lookup == lookup for recipient in original.audience.recipients
-        ):
-            raise RelationViolationError("Conversation index differs from frozen membership.")
-    return originals
 
 
 def addressed_source_pointers_unlocked(
