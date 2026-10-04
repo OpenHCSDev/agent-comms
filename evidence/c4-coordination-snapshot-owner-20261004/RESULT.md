@@ -1,0 +1,17 @@
+# Source checkpoint
+
+Production 397d918f: two files, 68 removed / 57 added. HistoryViews class span 515 to 464; MessageNotification 114 to 128; CoordinationSnapshot 37 to 62. Original Package parsed all 316 production / 365 tests / 54 tools, zero omissions. InputDrain 571 remains Mendel-owned; WireLog 609 is the original explicit C4 exception. C4 as a whole is unfinished.
+
+Both actor and viewer now call CoordinationSnapshot.capture. It acquires original activity once, then constructs channels and threads through the existing roster owners. The original catalog declares every returned channel even when filtered membership is empty, so actor channel-unread projection iterates that same declaration cohort before capture. Human unread/display metrics still come from the original acquired display cut; native unread still reads only after leaving display/bus custody. No schema or dataclass fields changed. MessageNotification.references now owns original bounded reference chunking and delivery projection.
+
+Original source01: 10 passed, 5 failed, 10.29s. Raw log preserved. Two empty-bus fixtures never initialized the original protocol marker. Two snapshot equality oracles compared newly acquired ReadyDrainReadiness instances by object identity; that unchanged declaration has no value equality. These consumers now compare the original FieldCodec snapshot values, including all fields; no receipt/source assertion is removed. The saved-answer fixture emitted scalar assistant content despite AssistantMessage's original external array contract; it now emits an original text part. No production change was made for those failures.
+
+Original packaged no-increase CLI (NRA 9a98 filewheel imported read-only): positive deltas empty; HistoryViews GodClassExcess -15. No copied collector, new environment, installed write, provider, native input or public operation. Corrected five-case run and installed consumer qualification follow; this is not Ready.
+
+
+Correction: original source02 retained 3 passed / 2 failed, 6.06s. My attempted external FieldCodec equality consumer was wrong: the existing ReadyDrainReadiness declaration also lacked serialization support. The fix belongs to that existing stateless member. ReadyDrainReadiness now composes the same frozen dataclass value contract already used by its Unavailable sibling, adding no field/type/store. Both snapshot tests retain their original full equality assertions; the attempted codec rewrites were deleted. All readiness declarations/acquisitions/consumers were source-read; this changes no diagnostic, source custody or InputDrain behavior. Only the two concrete corrected cases rerun.
+
+
+Source03: corrected existing state owner and original full snapshot equality, 2 passed / 4.28s. Combined affected controls: all 15 passed across their final changed cases (10 source01, 3 source02, 2 source03); both original negative logs remain. No passed case was repeated after its qualification. The new ReadyDrainReadiness declaration also supports the original FieldCodec snapshot boundary; this is a stateless value contract, not a process/lease identity or resource cache.
+
+The installed Core/UI consumer path remains pending an explicit released existing-holder purpose. No package or public runtime has changed.
