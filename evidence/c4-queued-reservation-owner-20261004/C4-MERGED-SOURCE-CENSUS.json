@@ -1,0 +1,31 @@
+{
+  "revision": "5c1103077e5a982365a6d801b98bcbdb1b03c547",
+  "collector": "audit.findings.Package.load / GodClass.detect, original NRA publication checkout",
+  "collector_root": "/home/ts/wt/nra-skill-publish-20261002/skills/refactor-audit/scripts",
+  "production_root": "src/agent_comms",
+  "parsed_modules": 316,
+  "parse_omissions": [],
+  "classes": {
+    "InputDrain": 486,
+    "CommsAgent": 401,
+    "HistoryViews": 464,
+    "CursorPublication": 106,
+    "CursorDelivery": 20
+  },
+  "all_over_500": [
+    {
+      "class": "src/agent_comms/wire_log.py::WireLog",
+      "lines": 609,
+      "disposition": "explicit exception in original C4-god-classes.md, not a new exemption"
+    }
+  ],
+  "qualified_source_head": "5bd29311ae1a559a1457c83061020d0af5940602",
+  "installed_build_head": "c656a64c4887fae14227b1e0a04a2b263bdaeade",
+  "merged_qualified_source_diff": "src/stack/.pi/pyproject.toml zero",
+  "existing_owner_consumer_ast": [
+    "before.json",
+    "after.json"
+  ],
+  "static_limit": "AST references and source semantics do not prove arbitrary dynamic Python resolution or the pending public UI journey",
+  "new_runtime_tests_builds_scanner_copies": 0
+}
