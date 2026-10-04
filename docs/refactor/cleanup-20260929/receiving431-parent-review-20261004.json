@@ -101,7 +101,7 @@
     "corrected_source": "670f239883915730c164c720158bae85323149aa",
     "exact_debt_run": 37199086799,
     "exact_debt": "SUCCESS",
-    "installed_current_preview": "PENDING; actual334 floor archive and specific fresh grant required before Core-only replacement",
+    "installed_current_preview": "Specific Core-only grant issued after actual reader14 archive/readback/fresh clearance; bounded acceptance pending",
     "frozen431_mutations": false,
     "publication_called": false,
     "final_source": "69e6019be9c92b3ce37f11c75de2e9a37c284690",
@@ -111,6 +111,15 @@
       "excluded_old_fixtures": 3,
       "seconds": 18.75,
       "installed": false
-    }
+    },
+    "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein637-Core-current-preview-package-execution-grant.json"
+  },
+  "temporary_package_disposition": {
+    "scope": "Parent supersedes immediate431 style22 CODE freeze solely for granted sequential430/Text59 affected private App; original159/head/Ready/activation/old proof protected",
+    "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Heis430-Text59-package-execution-grant.json",
+    "owner": "Heisenberg / ToAd430 with original Kepler Text59 wheel",
+    "actual431_preimage_members": 1464,
+    "restore": "Whole exact431 actual floor after terminal; no public client signal, publisher, guard retry or new receiving acceptance",
+    "native59_wheel_sha256": "73d4ca971dd2891c2a2266a0c5c8629e3e0ff55e802456ae60d0fedfe72fdbaa"
   }
 }
