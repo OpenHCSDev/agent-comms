@@ -1,0 +1,664 @@
+{
+  "head": "692c57f5d215d99522b3d0bb7feaf826ae0821fd",
+  "method": "existing NRA refactor-audit Package.load; final tests root refresh after semantic source correction",
+  "parsed": 364,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 121,
+      "expression": "service.messaging.send_user_message"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 29,
+      "expression": "owner._comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 423,
+      "expression": "service.messaging.send_user_message"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 514,
+      "expression": "service.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 223,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 234,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1593,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 115,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 585,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 588,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_catalog_document.py",
+      "line": 84,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 38,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 58,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 59,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 23,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 135,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 196,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 208,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_retirement.py",
+      "line": 119,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_retirement.py",
+      "line": 117,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channel_retirement.py",
+      "line": 87,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 383,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 72,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 16,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 21,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 30,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 41,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 270,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 274,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 24,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 59,
+      "expression": "reopened.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 35,
+      "expression": "native.author_history"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 37,
+      "expression": "native.open_owner"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 222,
+      "expression": "native.author_history"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 230,
+      "expression": "native.open_owner"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 38,
+      "expression": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 58,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 199,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 231,
+      "expression": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 250,
+      "expression": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 45,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 438,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 448,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 460,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 469,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 152,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 185,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 188,
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 45,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 54,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 52,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 347,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 353,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 18,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 40,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 55,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 70,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 195,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 228,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 243,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 178,
+      "expression": "owner._comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 155,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 85,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 162,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 220,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 261,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 304,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 341,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 480,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 505,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 423,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 457,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 479,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 529,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 545,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 101,
+      "expression": "bridge.capture_source"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 97,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 110,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 94,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 51,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 63,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 84,
+      "expression": "selected.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 132,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 176,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 192,
+      "expression": "second.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 197,
+      "expression": "second.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 213,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 223,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 225,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 290,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 234,
+      "expression": "wire.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 515,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 536,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_reply_routing.py",
+      "line": 66,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 35,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 98,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 41,
+      "expression": "current.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 164,
+      "expression": "current.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 183,
+      "expression": "current.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 228,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 137,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 252,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 178,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 234,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 123,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 133,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 181,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 202,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 63,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 99,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 102,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 106,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 125,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 137,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 196,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 379,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 416,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 476,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 584,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 134,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 104,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 210,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 261,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 296,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 79,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 131,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 75,
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_view_unread.py",
+      "line": 30,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/test_viewer_snapshot_index.py",
+      "line": 105,
+      "expression": "comms.messaging.send_user_message"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 326,
+      "expression": "service.messaging.send_user_message"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 365,
+      "expression": "service.messaging.send_user_message"
+    }
+  ],
+  "limits": "lexical attributes; dynamic callback resolution is not proven; before/after global roots are in before.json and after.json"
+}
