@@ -42,6 +42,25 @@ that original owner rather than a copied verifier. Its next selected-provider
 functional check remains distinct from the unapproved30-pair/USD75 study.
 No configured input or provider call was submitted during this source review.
 
+Bohr has issued exclusive joined441442 purpose06d76b2d to original Heis,
+binding03110866/source-equal8a98, control7725402f and operands40e1fe10.
+Parent verified the immutable grant hash. Fresh243-process clearance and exact
+1470/69/390 floor/origins are recorded; the native086 keeper's19 existing
+public-owner environment references are preserved as shared read-only use.
+The grant permits one changed ToAd wheel build and exact source/ZIP proof,
+then one Core5f/ToAd stage and the joined App. Sch's matching conditional086
+custody is already delivered and becomes effective with this specific grant.
+This is authorization, not an actual App result; public334 is unchanged.
+
+Heis's next separate source lead is verified: ProjectedTranscriptSource.get
+applies CategoryProjection, but both prefetch branches yield raw fragments
+which TranscriptHistory.prepare_scroll passes to body preparation. The existing
+projection can retain the raw page interval while selecting its fragments;
+both speculative consumers must borrow it with the original current/closed
+fence after its await. Raw transport rounds remain bounded and empty matches
+do not authorize an unbounded get scan. This successor does not change the
+frozen031 control/purpose or establish CPU dominance from the old profile.
+
 Core661's execution-only purpose is also independently closed: lifecycle
 4ee018df/readback13ffdbe8, fresh255 processes with zero references/gaps,
 347 installed assets,94 keepers,69 metadata files/10 distributions and29 compact
