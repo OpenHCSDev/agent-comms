@@ -1,0 +1,518 @@
+{
+  "revision": "5425c7fe",
+  "modules": 734,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 322,
+      "name": "StartedInput",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 81,
+      "name": "require_started",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 106,
+      "name": "matches_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 303,
+      "name": "matches_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 331,
+      "name": "require_started",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 81,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 331,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 116,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 314,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 343,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 317,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 316,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 356,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 164,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 521,
+      "name": "require_started",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 139,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 140,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 252,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 275,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 112,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 370,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 448,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 449,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 35,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 366,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 47,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 69,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 70,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 604,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 632,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 609,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 610,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 71,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 106,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 161,
+      "name": "resume_fork",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1079,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 587,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 185,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1358,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 257,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 280,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 658,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 197,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 268,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 284,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 594,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 595,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 104,
+      "name": "resume_fork",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 518,
+      "name": "capture_input",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 647,
+      "name": "submitted_prompt",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 665,
+      "name": "source_delivery",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 729,
+      "name": "request_manifest",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1073,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 155,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 179,
+      "name": "read",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1086,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1096,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 659,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 935,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 544,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 76,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 126,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 132,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 58,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 110,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1136,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 134,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1159,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1185,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1188,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1198,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1200,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1205,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 138,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 170,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 172,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 175,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 178,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1195,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 167,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 142,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 110,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 184,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 103,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 360,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    }
+  ],
+  "scope": "Lexical source evidence using existing Package parser; not dynamic resolution or complete lease proof"
+}
