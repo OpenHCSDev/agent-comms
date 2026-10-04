@@ -1,0 +1,207 @@
+{
+  "base": "8c0f1a09cc8c5d6ff39d48f0984af79af49f2aaa",
+  "source_tree": "a697908a438901f6638aa3e0fff38a353f637a89",
+  "mechanism": "original audit.findings.Package/audit.repository.Repository",
+  "coverage": {
+    "before": {
+      "src/agent_comms": {
+        "parsed": 316,
+        "omitted": []
+      },
+      "tests": {
+        "parsed": 365,
+        "omitted": []
+      },
+      "tools": {
+        "parsed": 53,
+        "omitted": []
+      }
+    },
+    "after": {
+      "src/agent_comms": {
+        "parsed": 316,
+        "omitted": []
+      },
+      "tests": {
+        "parsed": 365,
+        "omitted": []
+      },
+      "tools": {
+        "parsed": 53,
+        "omitted": []
+      }
+    }
+  },
+  "source_interpreter_sites": {
+    "before": [
+      {
+        "path": "src/agent_comms/owner_restart.py",
+        "line": 250,
+        "expression": "request.source_interpreter"
+      },
+      {
+        "path": "src/agent_comms/restart_queue.py",
+        "line": 259,
+        "keyword_value": "record.source_interpreter"
+      },
+      {
+        "path": "src/agent_comms/restart_queue.py",
+        "line": 259,
+        "expression": "record.source_interpreter"
+      },
+      {
+        "path": "tests/test_restart_queue.py",
+        "line": 172,
+        "expression": "request.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 400,
+        "keyword_value": "str(args.source_interpreter)"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 350,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 350,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 368,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 400,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 377,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_retained_summary.py",
+        "line": 469,
+        "keyword_value": "str(cohort.source_interpreter)"
+      },
+      {
+        "path": "tools/cutover/publish_retained_summary.py",
+        "line": 447,
+        "expression": "cohort.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_retained_summary.py",
+        "line": 469,
+        "expression": "cohort.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_retained_summary.py",
+        "line": 215,
+        "expression": "self.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_retained_summary.py",
+        "line": 215,
+        "expression": "self.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/restart_original_thread_format.py",
+        "line": 32,
+        "keyword_value": "sys.executable"
+      }
+    ],
+    "after": [
+      {
+        "path": "src/agent_comms/owner_restart.py",
+        "line": 250,
+        "expression": "request.source_interpreter"
+      },
+      {
+        "path": "src/agent_comms/restart_queue.py",
+        "line": 259,
+        "keyword_value": "record.source_interpreter"
+      },
+      {
+        "path": "src/agent_comms/restart_queue.py",
+        "line": 259,
+        "expression": "record.source_interpreter"
+      },
+      {
+        "path": "tests/test_restart_queue.py",
+        "line": 172,
+        "expression": "request.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 400,
+        "keyword_value": "str(args.source_interpreter)"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 350,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 350,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 368,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 400,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/publish_openhcs_recovery.py",
+        "line": 377,
+        "expression": "args.source_interpreter"
+      },
+      {
+        "path": "tools/cutover/restart_original_thread_format.py",
+        "line": 32,
+        "keyword_value": "sys.executable"
+      }
+    ]
+  },
+  "cohort_fields": {
+    "before": [
+      "target",
+      "source_interpreter",
+      "current_prefix",
+      "original_route",
+      "native",
+      "activation",
+      "source_proof",
+      "actual_gates"
+    ],
+    "after": [
+      "target",
+      "current_prefix",
+      "original_route",
+      "native",
+      "activation",
+      "source_proof",
+      "actual_gates"
+    ]
+  },
+  "limits": "Named AST declarations/attributes/calls; not complete dynamic dispatch or a runtime/public qualification",
+  "retained_launch_owner": "RetainedOwnerLaunch.capture reads original birth-bound process argv/environment, validates actual registry incarnation and process before handoff; OwnerRestartRequest optional interpreter selection constraints are distinct and unchanged.",
+  "related_consumer_closure": "ReviewedRetainedSummaryCohort declaration, require_original, original publish preflight and OwnerLifecycle.restart_owners call; existing private reset/codec control constructor. No other typed cohort constructors or attribute consumers in complete source/test/tool roots.",
+  "prior_qualified_controls": {
+    "receipt": ".artifacts/parent-main-reconciliation-20261004/reset-controls02/receipt.json",
+    "sha256": "5a3e2491b8b9565c40611f3bc6a7b4aa6710f4dd6babdf6675c10d5c9bc249cc",
+    "checks": 7,
+    "scope": "Original installed dependency/file-custody controls, not main installed/public cutover",
+    "repeated": false
+  }
+}
