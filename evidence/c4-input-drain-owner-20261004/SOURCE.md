@@ -27,3 +27,50 @@ semantic reading before any additional migration. All accepted #633/#638/
 
 Source-only checkpoint: no package/provider/native/test execution. Parent
 owns HistoryViews/presentation; W1 #627 and #653 source scopes are separate.
+
+## Published production batch d68fa58f
+
+55 production lines deleted, 59 added across the five existing owners; no new
+class, store, worker, codec or schema. The original Package parses all 316
+production and 365 test modules with zero omissions. after.json includes
+class declarations, inheritance and consumer references; dynamic dispatch is
+still source evidence rather than an execution proof. No turn_input_keys
+production or test consumer remains.
+
+- InputDrain.input_keys derives the union of OriginalTurnInput.keys and every
+  retained AcceptedFollowingInput.keys. OwnedTurn no longer writes a second
+  membership set; acceptance/refusal/retirement no longer maintain it.
+- TurnProgress.done asks the durable InputDocument once about that union.
+  Its second pending-followup test asked the same document about a subset;
+  admission's pending-followup count remains because it enforces a different
+  original limit.
+- QueueProjection.capture owns queue size/UTF-8 admissibility; QueuedInput
+  supplies only its own original ID/text under the captured admission. Rejected
+  projections do not alter accepted inputs or their durable disposition.
+- AgentCommsUpdate supplies the empty ACP chunk for the three original input
+  publications. RuntimeServer still owns delivery/attachment and revisions
+  remain at the original loop owner. The external envelope is unchanged.
+- The socket notice fixture uses QueuedInput.capture and its original source
+  instead of assigning the removed key mirror. The existing queue contract
+  now checks clear/refusal source lifetime against unchanged durable bytes.
+
+Following sources intentionally outlive pending queue entries. InputStarted
+removes the pending entry; clear removes pending follow-ups; neither creates
+proof or erases the retained source used by native admission and terminal
+checks. Refusal retires its following source, turn retirement burns remaining
+live grants, and durable UNKNOWN stays a notice. If an original and follow-up
+share a key, refusing one cannot delete the other's original membership.
+
+The original GodClass still measures InputDrain at 549 lines, down from 571.
+This batch closes the competing key authority and projection/publication
+ownership; it does not claim the full C4 size/workflow is closed. Unique
+observer, native inbox and cancellation lifetimes remain in InputDrain. No
+methods were carved into a mixin to meet the threshold.
+
+Source diff whitespace check passed. No runtime test, package operation,
+native input, external provider or public mutation has run for this batch.
+Affected installed queue clear/refusal, retained Started source, UNKNOWN
+notice and joined retirement checks await a fresh named holder purpose.
+Parent owns HistoryViews/presentation and ReadyDrainReadiness's value
+contract; no activity.py write is claimed here. W1 #627 metadata records are
+untouched.

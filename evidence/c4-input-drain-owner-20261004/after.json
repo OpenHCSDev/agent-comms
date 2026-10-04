@@ -1,0 +1,3553 @@
+{
+  "revision": "d68fa58fb41346d280cc70346105de29c91a2042",
+  "base": "c159f39e0863448ca621cc567ee131b9c9ffc739",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sizes": {
+    "src/agent_comms/input_drain.py::InputDrain": 549
+  },
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 144,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 41,
+      "kind": "ClassDef",
+      "expression": "AgentCommsUpdate",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 315,
+      "kind": "ClassDef",
+      "expression": "QueueProjection",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 59,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 69,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 89,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 282,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 354,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 364,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 374,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 397,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 424,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 446,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 466,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 478,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 483,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 489,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 501,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 506,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 511,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 593,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 618,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 623,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 44,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 330,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 400,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 540,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 550,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 554,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 99,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 103,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 96,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 540,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 545,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 550,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 554,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 328,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 329,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 334,
+      "kind": "Attribute",
+      "expression": "item.queue_items"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 335,
+      "kind": "Attribute",
+      "expression": "item.queue_items"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "self.agent.inputs.original_sources"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 40,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 54,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 608,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 539,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 608,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 539,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 32,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 31,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 276,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 83,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 262,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 213,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 214,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 72,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 251,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 286,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 115,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 162,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 163,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 102,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 30,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 254,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 254,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 115,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 131,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 84,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 115,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 48,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 68,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 84,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 48,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 68,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 59,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 63,
+      "kind": "ClassDef",
+      "expression": "InputDocument",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 226,
+      "kind": "ClassDef",
+      "expression": "InputDispositions",
+      "bases": [
+        "LockedStore[InputDocument]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 39,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 74,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 95,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 226,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 234,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 253,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 324,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 232,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 231,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 255,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 282,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 304,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 340,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 366,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 38,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 255,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 282,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 304,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 340,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 366,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 58,
+      "kind": "ClassDef",
+      "expression": "InputDrain",
+      "bases": [
+        "FutureInputQueue"
+      ]
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 528,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 73,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 74,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 77,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 79,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 352,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 483,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 99,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 123,
+      "kind": "Attribute",
+      "expression": "self.queue_binding"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "QueueProjection.capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 148,
+      "kind": "Attribute",
+      "expression": "self.queue_binding"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 179,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 192,
+      "kind": "Attribute",
+      "expression": "self.input_keys"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 443,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 79,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 104,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 126,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 372,
+      "kind": "Attribute",
+      "expression": "self.pending_followups"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 424,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 458,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 544,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 551,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 555,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 601,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 73,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 74,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 76,
+      "kind": "Name",
+      "expression": "AcceptedFollowingInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 135,
+      "kind": "Attribute",
+      "expression": "(await self.queue_state(session_id)).acp_chunk"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 157,
+      "kind": "Attribute",
+      "expression": "InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 170,
+      "kind": "Attribute",
+      "expression": "InputDeliveryChangedUpdate(input_id).acp_chunk"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 381,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 398,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 399,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 423,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 485,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 498,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 507,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 513,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 517,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 582,
+      "kind": "Attribute",
+      "expression": "InitialInput.capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 593,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 381,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 449,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 582,
+      "kind": "Name",
+      "expression": "InitialInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 557,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 101,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 128,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 129,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 135,
+      "kind": "Attribute",
+      "expression": "self.queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 181,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 355,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 55,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 55,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 97,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 123,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 157,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 128,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 47,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 53,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 56,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 73,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 103,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 116,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "self.inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 89,
+      "kind": "Attribute",
+      "expression": "self.inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 98,
+      "kind": "Attribute",
+      "expression": "self.inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 296,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 306,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.original_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 300,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 67,
+      "kind": "ClassDef",
+      "expression": "QueuedInput",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 223,
+      "kind": "ClassDef",
+      "expression": "InitialInput",
+      "bases": [
+        "QueuedInput"
+      ]
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 223,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 240,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 90,
+      "kind": "Name",
+      "expression": "AcceptedFollowingInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 144,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 147,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 228,
+      "kind": "Name",
+      "expression": "InitialInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 246,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 249,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 216,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 219,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 91,
+      "kind": "Name",
+      "expression": "AcceptedFollowingInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 111,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 185,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 224,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 250,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 152,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 225,
+      "kind": "Attribute",
+      "expression": "inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 251,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 262,
+      "kind": "Attribute",
+      "expression": "refusal.queue_state"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 235,
+      "kind": "Attribute",
+      "expression": "refusal.queue_state"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 246,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 323,
+      "kind": "Attribute",
+      "expression": "fact.original_sources"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 241,
+      "kind": "Attribute",
+      "expression": "ctx.server.agent.inputs.awaiting_input_keys"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 249,
+      "kind": "Attribute",
+      "expression": "ctx.server.agent.inputs.awaiting_input_keys"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 127,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 143,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 234,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 126,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "line": 19,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 313,
+      "kind": "Attribute",
+      "expression": "self.effects.inputs.queue_state"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 208,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 538,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 550,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 550,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 568,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 568,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 230,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 230,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 514,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 514,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 26,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 82,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 25,
+      "kind": "ClassDef",
+      "expression": "TurnInputSource",
+      "bases": [
+        "ABC"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 105,
+      "kind": "ClassDef",
+      "expression": "OriginalTurnInput",
+      "bases": [
+        "TurnInputSource"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 219,
+      "kind": "ClassDef",
+      "expression": "AcceptedFollowingInput",
+      "bases": [
+        "FollowingTurnInput",
+        "DirectInput"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 105,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 160,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 168,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 186,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 190,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 204,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 134,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 47,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 49,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 132,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 147,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 150,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 207,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 212,
+      "kind": "Attribute",
+      "expression": "self.resume.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 156,
+      "kind": "Attribute",
+      "expression": "self.inputs.input_refused"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 204,
+      "kind": "Attribute",
+      "expression": "self.inputs.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "self.inputs.input_keys"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 141,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 530,
+      "kind": "Attribute",
+      "expression": "self.inputs.finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 520,
+      "kind": "Attribute",
+      "expression": "self.inputs.input_refused"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 518,
+      "kind": "Attribute",
+      "expression": "self.inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 525,
+      "kind": "Attribute",
+      "expression": "self.inputs.input_refused"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 192,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 192,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 182,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 182,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 201,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 214,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 204,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 214,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 204,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 70,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 20,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 24,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 25,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 42,
+      "kind": "Name",
+      "expression": "TurnInputSource"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 120,
+      "kind": "Attribute",
+      "expression": "InitialInput.capture"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 120,
+      "kind": "Name",
+      "expression": "InitialInput"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 194,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 194,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 193,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 175,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 193,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 175,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 660,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 545,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 545,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 89,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 89,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 67,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 67,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 30,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1930,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1938,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 92,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 92,
+      "kind": "Name",
+      "expression": "AgentCommsUpdate"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 178,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 149,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 215,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 149,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 215,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 131,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 131,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 238,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 238,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 135,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 147,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 51,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 87,
+      "kind": "Attribute",
+      "expression": "agent.inputs.restored_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 188,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 61,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 98,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 101,
+      "kind": "Attribute",
+      "expression": "agent.inputs.restored_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 117,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 141,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 152,
+      "kind": "Attribute",
+      "expression": "agent.inputs.input_keys"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 155,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 156,
+      "kind": "Attribute",
+      "expression": "agent.inputs.input_keys"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 158,
+      "kind": "Attribute",
+      "expression": "agent.inputs.input_refused"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 159,
+      "kind": "Attribute",
+      "expression": "agent.inputs.input_keys"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 189,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 198,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 206,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 74,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 174,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 201,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 87,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 37,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 138,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 22,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 22,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 54,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 150,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 177,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 197,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 230,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 252,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 289,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 317,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 338,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 354,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 76,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 84,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 103,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 160,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 166,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 186,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 344,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 54,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 150,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 177,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 197,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 230,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 252,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 289,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 317,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 338,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 354,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 76,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 84,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 103,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 160,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 166,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 186,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 344,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 76,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 112,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 76,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 112,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 49,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 49,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 32,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 78,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 32,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 78,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 48,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 48,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 118,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 177,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 184,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 210,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 258,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 118,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 177,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 184,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 210,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 258,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 75,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 93,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 40,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 40,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 153,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 165,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 190,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 190,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 174,
+      "kind": "Attribute",
+      "expression": "owner.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 185,
+      "kind": "Attribute",
+      "expression": "owner.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 17,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 17,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 12,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 35,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 46,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 99,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 12,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 35,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 46,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 99,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 78,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 78,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 28,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 153,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 223,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 232,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 247,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 260,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 292,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 322,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 363,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 375,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 384,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 402,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 469,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 286,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 28,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 153,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 223,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 232,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 260,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 292,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 322,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 363,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 375,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 384,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 402,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 469,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 336,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 73,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 73,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 69,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 19,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 138,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 19,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 138,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 123,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 123,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 188,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 192,
+      "kind": "Attribute",
+      "expression": "owner.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 188,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 215,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 215,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 306,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 306,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 87,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 87,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 277,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 277,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 441,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 467,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 494,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 551,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 441,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 467,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 494,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 536,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 551,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 536,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 812,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 813,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 27,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 39,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 39,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_prompt_queue.py",
+      "line": 56,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_prompt_queue.py",
+      "line": 71,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 79,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 189,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 77,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 189,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 166,
+      "kind": "Name",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_restart_queue_structure.py",
+      "line": 36,
+      "kind": "Attribute",
+      "expression": "refusal.queue_state"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 37,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 37,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 178,
+      "kind": "Attribute",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 108,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 108,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 263,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 263,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 310,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 310,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 187,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 458,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 187,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 458,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1053,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 677,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 475,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 157,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 159,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 160,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 243,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 62,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 62,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 434,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 434,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 316,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 330,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 435,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 554,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 59,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 346,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 450,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 484,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 530,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 316,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 330,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 426,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 435,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 554,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 59,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 346,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 450,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 484,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 530,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 426,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 420,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 420,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 480,
+      "kind": "Attribute",
+      "expression": "owner.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 25,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 148,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 180,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 148,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 180,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 421,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 487,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 421,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 487,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 21,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 133,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 232,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 21,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 133,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 232,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 154,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 164,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 101,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 102,
+      "kind": "Name",
+      "expression": "OriginalTurnInput"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 125,
+      "kind": "Attribute",
+      "expression": "owner.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 182,
+      "kind": "Attribute",
+      "expression": "owner.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "owner.inputs.input_keys"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 223,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 288,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 180,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 223,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 288,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 99,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 180,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 99,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 367,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 367,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 313,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 254,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 313,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 341,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 254,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 293,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 341,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 293,
+      "kind": "Name",
+      "expression": "InputDispositions"
+    }
+  ],
+  "resolution": "AST declarations and attribute references; dynamic callbacks remain ambiguous"
+}
