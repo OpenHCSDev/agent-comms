@@ -1,17 +1,11 @@
 [
   {
     "repo": "Core",
-    "head": "e9d7dc09988dfab965dfa12bfc66797057716dce",
+    "head": "22d97b6e5829fef8228ef5d7401cdffa9541a6f0",
     "collector": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
     "parsed": 311,
     "omissions": [],
     "sites": [
-      {
-        "path": "src/agent_comms/cli_commands.py",
-        "line": 142,
-        "count": 1,
-        "expression": "return type(self.value).declared_name"
-      },
       {
         "path": "src/agent_comms/coordinated_runtime_schema.py",
         "line": 56,
@@ -82,7 +76,7 @@
   },
   {
     "repo": "Toad",
-    "head": "a6778f320b22f3c526a376b36ee6623861291d63",
+    "head": "4112dcfa4f44ac3ca2394471849102459a88d911",
     "collector": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
     "parsed": 288,
     "omissions": [],

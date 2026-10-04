@@ -147,10 +147,11 @@ normal uv resolution, after joining F1's current1715113fb9f464a65a33fc3be2db29e0
 No environment was created or installed by resolution.
 
 after-flattened.json contains the original collector/Package source evidence:
-311 Core and 288 Toad modules parsed, zero omissions. Core55 to12, Toad14 to2.
-The only remaining feature site is F1's TargetField.editor_default in
-cli_commands.py142; Sch owns that declaration/editor family and received the
-exact site. It is not exempted. The other11 Core and2 Toad sites are the six
+311 Core and 288 Toad modules parsed, zero omissions. Core55 to11, Toad14 to2.
+F1's correction62dca2914fbfbcc500714953ce981dda818cfd63 is normally joined
+at22d97b6e5829fef8228ef5d7401cdffa9541a6f0: TargetField.editor_default and
+choices, TargetAction.catalog command and CliCommand.edited kind all use the
+existing codec. No feature hit remains. All11 Core and2 Toad sites are the six
 named mechanisms. The collector screens calls/returns, not arbitrary nested
 comprehensions or dynamic resolution; source semantics were read beyond its hits.
 
