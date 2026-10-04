@@ -1645,7 +1645,7 @@ cutover path stays in production. All original durable/UNKNOWN history retained.
 
 # Full goal checklist and evidence boundaries
 
-## Current integration checkpoint — 2026-10-04
+## Historical integration checkpoint — 2026-10-04 before public436 publication
 
 This section supersedes the historical default, owner and goal-status entries below.
 The persistent goal is active. Main-source merges, installed private acceptance
@@ -1667,7 +1667,7 @@ normally joins that main; src/stack/pyproject/uv are byte-identical to main.
 This documentation update performs no package write, App/SDK/provider run,
 public guard retry or publication. Full goal completion remains unproven.
 
-### Immediate owner work
+### Historical owner work at that checkpoint
 
 - Parent: keep the qualified public receiving operation concrete and frozen;
   review newly qualified source, then deliver and exercise the actual default
@@ -1808,7 +1808,19 @@ owners were not stopped for the account switch. The latest resource check has
 19.2GiB available RAM and20.1GiB home free; swap9.6GiB is a warning, so existing
 bounded builds/tests continue under the explicit proportional-resource rule.
 
-## Original named PRs
+## Original named PRs — historical dispositions revalidated
+
+Fresh source reconciliation checked GitHub states and merge ancestry against
+Core1726be59 and Toadaf692dc6: Core262/270/272 and ToAd50/110/120/121/123/124/
+142/156 are all merged ancestors. Core271 and ToAd53/116/122 remain closed
+sidecars/predecessors. ToAd120 explicitly includes the original08bc602 T2 batch
+(which is an ancestor); closed122's later full head is not itself an ancestor.
+Core272's original nominal/input/native-failure integration, current declared
+FailedSummary/SelectedSummaryFailed and disjoint input states, and the retained
+FieldCodec ownership guard remain present; closed271's test-only final head is
+not mislabelled a merged ancestor. Historical qualifiers below retain their
+original strengths. New whole default behavior belongs to the current public436
+verification; no old implementation or test matrix was restarted here.
 
 | Required scope | Verified current disposition | Remaining requirement |
 | --- | --- | --- |
