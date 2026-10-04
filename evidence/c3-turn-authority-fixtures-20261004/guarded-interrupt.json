@@ -1,0 +1,18 @@
+{
+  "reason": "retire owned private verification blocked EX-to-SH on same wire inode; preserve original inputs, no replay",
+  "identity": {
+    "pid": 155773,
+    "start_time": 58751098
+  },
+  "command": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed-controls.py -o addopts= -q --basetemp /home/ts/.cache/agent-scratch/mendel-c3-turn-authority633-installed03/private tests/test_turn_runner.py tests/test_acp.py::TestHandlers::test_replay_uses_owner_turn_timestamp_and_activity tests/test_acp.py::TestHandlers::test_compaction_refuses_to_interrupt_an_active_turn tests/test_acp.py::TestHandlers::test_live_model_change_waits_for_backend_confirmation tests/test_acp.py::TestAgentTurnForwarding tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn tests/test_acp_input_disposition.py tests/test_runtime_goal_retry_running.py tests/test_stack_retry_running.py -k not test_acp_has_no_superseded_component_accessors_or_dispatch and not test_disposition_fixtures_cannot_reintroduce_retired_delivery_engine ",
+  "pgid": 155763,
+  "wchan": "locks_lock_inode_wait",
+  "locks": [
+    "115: FLOCK  ADVISORY  WRITE 155773 08:24:3841569 0 EOF",
+    "115: -> FLOCK  ADVISORY  READ 155773 08:24:3841569 0 EOF",
+    "143: FLOCK  ADVISORY  WRITE 155773 08:24:3841589 0 EOF"
+  ],
+  "fd30": "pos:\t0\nflags:\t02102002\nmnt_id:\t37\nino:\t3841569\nlock:\t1: FLOCK  ADVISORY  WRITE 155773 08:24:3841569 0 EOF\n",
+  "signal": "SIGINT exact controller only",
+  "second_SIGINT": "asyncio Runner first SIGINT only requests cancellation; second interrupts blocking main-thread flock so original teardown can run"
+}

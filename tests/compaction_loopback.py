@@ -13,10 +13,14 @@ class LoopbackProvider:
         self.paths = []
         self.requests = []
         self.tool_call = None
+        self.thinking = ""
         self.response_gate = None
         self.response_timeout = response_timeout
 
     def response_chunks(self):
+        if self.thinking:
+            yield {"reasoning_content": self.thinking}, None
+            self.thinking = ""
         if self.tool_call is None:
             yield {"content": self.text}, None
             yield {}, "stop"

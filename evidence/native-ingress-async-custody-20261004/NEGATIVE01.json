@@ -1,0 +1,21 @@
+{
+  "source": "0330823191706ff093e44a36fa315ebd6a0aafee",
+  "result": "11 passed, 16 failed; not Ready",
+  "controller_absent": true,
+  "controller_group_empty": true,
+  "files": {
+    "installed01.log": "2f7f788555dbbacb632fb6f22de65580f4d4e305a427f9effe60d2ac6654a08e",
+    "installed01.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "terminal01.json": "208ca462c75e144d3bc1d25c13e3f4d171f6dfbfdcc7519cf25c99c8e58902bf",
+    "installed-invocation01.json": "99a8699eb1a21b4336abba0fa5114df2de44f94017d70a0e5184e9d893878d65",
+    "live-handle01.json": "2fa3e847a1c2e84c863f8d721a457ae87e78bcba9132806746548053dab8be85",
+    "installed-source-proof01.json": "234cb28391a1e43a135a87a038c22c022bbeef4aab156da7960bb8522738a80b",
+    "package-source-proof.json": "e2cede243f34c0eae2d79cd74abc0231941638eee63ca0e21f66eb2cf9995f6a",
+    "unchanged-dependencies.json": "b11fdbee706fd070a2ff244cd9631237c6dee02fc511609c977d78343ac14224"
+  },
+  "native_inputs": "nonzero controlled localhost",
+  "external_provider": false,
+  "public_input": false,
+  "replay": false,
+  "private_nk_original_limit": "Inherited auto-deleting sealed tmp_path removed this one original source after failure. Log retained; no retrospective custody claim. All basetemp saved originals retained."
+}

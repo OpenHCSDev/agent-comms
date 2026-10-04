@@ -1,0 +1,775 @@
+.F.FFFFF....FFF
+=================================== FAILURES ===================================
+_____ test_turn_failure_preserves_exact_exception_cause_and_releases_state _____
+OSError: native diagnostic source
+
+The above exception was the direct cause of the following exception:
+
+args = ('pi', ('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools', .....cratch/mendel-c3-turn-authority633-installed03/private/test_turn_failure_preserves_ex0/wire', 'PI_PARENT_ID': '', ...})
+kwargs = {'context_contributions': (InputContributionCoordinates(kind=<class 'agent_comms.turn_context.AutomaticTitleSegment'>,...eue': <Queue at 0x7f47d6a391d0 maxsize=0>, 'finish_event': <asyncio.locks.Event object at 0x7f47d59f3ed0 [unset]>, ...}
+
+    async def stream(*args, **kwargs):
+        # This boundary fails before a native write. Preparation and the lease
+        # have already been acquired by the real saved-session owner.
+        assert owner.turns.turn_state(session).busy
+        assert owner.turns.persistent_backends[session].available
+>       raise failure from source
+E       RuntimeError: selected operation failed
+
+tests/test_turn_runner.py:86: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f47d59842d0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f47d59879d0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f47d6a9d150>
+
+    async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
+        prepared_owner, monkeypatch
+    ):
+        owner, session, native = prepared_owner
+        original = native.session.read_bytes()
+        source = OSError("native diagnostic source")
+        failure = RuntimeError("selected operation failed")
+    
+        async def stream(*args, **kwargs):
+            # This boundary fails before a native write. Preparation and the lease
+            # have already been acquired by the real saved-session owner.
+            assert owner.turns.turn_state(session).busy
+            assert owner.turns.persistent_backends[session].available
+            raise failure from source
+            yield
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError) as caught:
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47d49217f0>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+__________ test_uncaught_failure_feedback_once_even_after_done[None] ___________
+
+args = ('pi', ('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools', .....cratch/mendel-c3-turn-authority633-installed03/private/test_uncaught_failure_feedback0/wire', 'PI_PARENT_ID': '', ...})
+kwargs = {'context_contributions': (InputContributionCoordinates(kind=<class 'agent_comms.turn_context.AutomaticTitleSegment'>,...eue': <Queue at 0x7f47d8662190 maxsize=0>, 'finish_event': <asyncio.locks.Event object at 0x7f47d7562750 [unset]>, ...}
+
+    async def stream(*args, **kwargs):
+        persistent = owner.turns.persistent_backends[session]
+        assert persistent.available and persistent.custody.child.proc.alive()
+        if prior is not None:
+            yield prior
+>       raise RuntimeError("execution failed")
+E       RuntimeError: execution failed
+
+tests/test_turn_runner.py:157: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f47d6a66fd0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f47d6a66520>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f47d9a31490>
+prior = None
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47d7331010>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_________ test_uncaught_failure_feedback_once_even_after_done[prior1] __________
+
+args = ('pi', ('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools', .....cratch/mendel-c3-turn-authority633-installed03/private/test_uncaught_failure_feedback1/wire', 'PI_PARENT_ID': '', ...})
+kwargs = {'context_contributions': (InputContributionCoordinates(kind=<class 'agent_comms.turn_context.AutomaticTitleSegment'>,...eue': <Queue at 0x7f47d6850290 maxsize=0>, 'finish_event': <asyncio.locks.Event object at 0x7f47d6a133b0 [unset]>, ...}
+
+    async def stream(*args, **kwargs):
+        persistent = owner.turns.persistent_backends[session]
+        assert persistent.available and persistent.custody.child.proc.alive()
+        if prior is not None:
+            yield prior
+>       raise RuntimeError("execution failed")
+E       RuntimeError: execution failed
+
+tests/test_turn_runner.py:157: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f47d75e1350>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f47d6a67100>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f47d8eea7b0>
+prior = Error(text='specific provider failure', reason_code=None, command=None, diagnostics=())
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47d7331a90>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_________ test_uncaught_failure_feedback_once_even_after_done[prior2] __________
+
+args = ('pi', ('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools', .....cratch/mendel-c3-turn-authority633-installed03/private/test_uncaught_failure_feedback2/wire', 'PI_PARENT_ID': '', ...})
+kwargs = {'context_contributions': (InputContributionCoordinates(kind=<class 'agent_comms.turn_context.AutomaticTitleSegment'>,...eue': <Queue at 0x7f47d63909e0 maxsize=0>, 'finish_event': <asyncio.locks.Event object at 0x7f47d6a11df0 [unset]>, ...}
+
+    async def stream(*args, **kwargs):
+        persistent = owner.turns.persistent_backends[session]
+        assert persistent.available and persistent.custody.child.proc.alive()
+        if prior is not None:
+            yield prior
+>       raise RuntimeError("execution failed")
+E       RuntimeError: execution failed
+
+tests/test_turn_runner.py:157: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f47d6853bf0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f47d6852f90>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f47d448e3d0>
+prior = Done(text='specific provider failure', ok=False, reason_code=None, diagnostic=None)
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47d4921a90>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+________ test_compaction_fault_reaches_acp_client_without_original_send ________
+OSError: 402: insufficient credits on this model
+
+The above exception was the direct cause of the following exception:
+
+args = (<agent_comms.registration.Registration object at 0x7f47d8c7ddf0>, 'project', '3a0e481bee554f28b8d2fad127b02e7a', Stat...=False), ('acp:66040bef7d224b2aaf3d89ec7659c3aa',), <agent_comms.backend.PersistentPiSession object at 0x7f47d8c7c9b0>)
+kwargs = {'input_text': 'Give this new thread a concise topic title before doing the task: call comms_rename_self with a meanin..., 'on_event': <bound method TurnProgress.consume of <agent_comms.turn_progress.TurnProgress object at 0x7f47d69f8d10>>}
+
+    async def compact(*args, **kwargs):
+        assert args[3].model.id == "fixture"
+        assert args[5].custody.child.proc.alive()
+        attempts.extend(args[4])
+>       raise failure from source
+E       agent_comms.selected_pi_summary_rpc.SelectedChildUnknown: 402: insufficient credits on this model
+
+tests/test_turn_runner.py:198: SelectedChildUnknown
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f47d41ad480>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f47d41acc00>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f47d68ea190>
+
+    async def test_compaction_fault_reaches_acp_client_without_original_send(
+        prepared_owner, monkeypatch
+    ):
+        from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
+    
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        before = native.session.read_bytes()
+        source = OSError("402: insufficient credits on this model")
+        failure = SelectedChildUnknown(str(source))
+        attempts = []
+    
+        async def compact(*args, **kwargs):
+            assert args[3].model.id == "fixture"
+            assert args[5].custody.child.proc.alive()
+            attempts.extend(args[4])
+            raise failure from source
+    
+        async def forbidden_stream(*args, **kwargs):
+            pytest.fail("original input must not reach native after uncertain compaction")
+            yield
+    
+        monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
+        monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
+        with pytest.raises(SelectedChildUnknown) as caught:
+>           await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
+
+tests/test_turn_runner.py:207: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47d7330590>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+____ test_actual_provider_failure_reports_started_input_once_without_retry _____
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47daa21a90>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+>               raise PromptFailureReceipt(failure, True).request_error()
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:502: RequestError
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f47d41ac490>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f47d69faf10>)
+
+    async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        native.provider.status = 503
+        async with asyncio.timeout(30):
+>           await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+
+tests/test_turn_runner.py:238: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47daa21a90>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_____________ TestAgentTurnForwarding.test_turn_sets_wire_activity _____________
+
+self = <test_acp.TestAgentTurnForwarding object at 0x7f47d95a1d10>
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f47d7b23770>
+
+    async def test_turn_sets_wire_activity(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        native.provider.tool_call = ("bash", {"command": "pwd"})
+        async with native.open_owner(native_options=("--tools", "bash")) as (agent, session):
+            await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
+            assert agent._comms.agents.activity_of(session).state is ActivityState.IDLE
+            rows = [json.loads(line) for line in (native.root / "activity.jsonl").read_text().splitlines()]
+>           assert any(row["thread"] == session and row["state"] == "working" for row in rows)
+E           assert False
+E            +  where False = any(<generator object TestAgentTurnForwarding.test_turn_sets_wire_activity.<locals>.<genexpr> at 0x7f47d77274c0>)
+
+tests/test_acp.py:1555: AssertionError
+_________________ test_acp_private_does_not_overlap_owner_turn _________________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f47d68e0830>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner() as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+            async with native.original_input(agent, session, "Current human input") as turn:
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+            native.provider.text = '{"decision":"FULL"}'
+>           assert await agent.inputs.drain_inbox(session) == 1
+E           assert 0 == 1
+
+tests/test_acp_private_nk_delivery.py:592: AssertionError
+_______ test_native_preflight_failure_is_visible_and_cannot_mark_started _______
+
+self = <agent_comms.native_session_prepare.NativeSessionPreparation object at 0x7f47d7cc5950>
+
+    async def refused_preflight(self):
+        # Inject refusal at the original prepared-session boundary after
+        # authentic SDK source/identity acquisition. No child, witness or
+        # capability response is fabricated by the caller.
+>       raise NativePiUnavailable("native preflight refused before prompt")
+E       agent_comms.native_pi.NativePiUnavailable: native preflight refused before prompt
+E       Original native child stderr:
+E       (empty)
+
+tests/test_acp_input_disposition.py:54: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f47d44761a0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f47d7a292b0>
+
+    async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner() as (owner, session):
+            updates = Updates()
+            owner.on_connect(updates)
+    
+            async def refused_preflight(self):
+                # Inject refusal at the original prepared-session boundary after
+                # authentic SDK source/identity acquisition. No child, witness or
+                # capability response is fabricated by the caller.
+                raise NativePiUnavailable("native preflight refused before prompt")
+    
+            monkeypatch.setattr(NativeSessionPreparation, "input_ready", refused_preflight)
+            with pytest.raises(NativePiUnavailable, match="preflight"):
+>               await owner.prompt(session, [TextContentBlock(type="text", text="test")])
+
+tests/test_acp_input_disposition.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f47daa227b0>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_turn_runner.py::test_turn_failure_preserves_exact_exception_cause_and_releases_state
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior1]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior2]
+FAILED tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send
+FAILED tests/test_turn_runner.py::test_actual_provider_failure_reports_started_input_once_without_retry
+FAILED tests/test_acp.py::TestAgentTurnForwarding::test_turn_sets_wire_activity
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn
+FAILED tests/test_acp_input_disposition.py::test_native_preflight_failure_is_visible_and_cannot_mark_started
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:166: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+9 failed, 6 passed, 2 deselected, 1 warning in 1105.80s (0:18:25)

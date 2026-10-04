@@ -1,0 +1,1669 @@
+{
+  "revision": "0330823191706ff093e44a36fa315ebd6a0aafee",
+  "parser": "original audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 89,
+      "node": "FunctionDef",
+      "source": "@classmethod\ndef from_error(cls, code: int | None, message: str, data: object=None, *, diagnostics: tuple[PiDiagnostic, ...]=()) -> ACPFailure:\n    return FieldCodec.decode(ErrorValue, data).original_root().failure(code,"
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "line": 133,
+      "node": "FunctionDef",
+      "source": "@classmethod\ndef from_error(cls, code, message, data):\n    return FieldCodec.decode(ErrorValue, data).original_root().failure_receipt(code, message)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 175,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 186,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 185,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 631,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 468,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 800,
+      "node": "FunctionDef",
+      "source": "def receive() -> None:\n    if not ready.done():\n        ready.set_result(os.read(fd, 64))"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 804,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1380,
+      "node": "FunctionDef",
+      "source": "def receive() -> None:\n    if ready.done():\n        return\n    chunk = os.read(ready_r, 4096)\n    data.extend(chunk)\n    if len(data) > 4096 or not chunk:\n        ready.set_exception(RuntimeError('Namespace readiness mis"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1390,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 74,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 139,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 373,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 235,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 238,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 245,
+      "node": "Attribute",
+      "source": "self.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "line": 26,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "line": 47,
+      "node": "Attribute",
+      "source": "self.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 331,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 338,
+      "node": "Attribute",
+      "source": "owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 298,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 26,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 31,
+      "node": "ClassDef",
+      "source": "class RegistryAdmissionCheck(RegistryIdentityCheck):\n    \"\"\"A send also requires the captured active turn to remain unchanged.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 39,
+      "node": "ClassDef",
+      "source": "class GoalRegistryAdmissionCheck(GoalRegistryIdentityCheck, RegistryAdmissionCheck):\n    \"\"\"Selected input/awareness also captures the goal; reply settlement does not.\"\"\""
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 39,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 111,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_admission_rules.py",
+      "line": 114,
+      "node": "Name",
+      "source": "RegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 35,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)\nclass RegistryOwner:\n    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck\n    thread: Thread\n    admission_generation: int\n\n    @property\n    def turn_l"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 101,
+      "node": "FunctionDef",
+      "source": "def _require_current(self, actual: Thread, admission: int | None, reason: str) -> None:\n    try:\n        self.check_type(expected=self.thread, actual=actual, expected_admission=self.admission_generation, admission=admiss"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 113,
+      "node": "FunctionDef",
+      "source": "def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:\n    try:\n        actual = snapshot.require_active(self.thread.name)\n    except RelationViolationError as error:\n        raise StaleFence(reason"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 120,
+      "node": "FunctionDef",
+      "source": "def require_registry(self, registry: Registration) -> None:\n    try:\n        actual, admission = registry.live_owner_with_admission(self.thread.name)\n    except (RelationViolationError, ValueError) as error:\n        rais"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 128,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 36,
+      "node": "Name",
+      "source": "GoalRegistryAdmissionCheck"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 46,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 92,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 98,
+      "node": "Attribute",
+      "source": "owner.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 118,
+      "node": "Attribute",
+      "source": "self._require_current"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 125,
+      "node": "Attribute",
+      "source": "self._require_current"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 136,
+      "node": "Attribute",
+      "source": "canonical.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "RegistryOwner(thread=expected, admission_generation=self.admission_generation).require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 60,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 205,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 514,
+      "node": "Attribute",
+      "source": "RegistryOwner(thread=owner, admission_generation=self.expected_admission_generation).require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 514,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 63,
+      "node": "AsyncFunctionDef",
+      "source": "async def attach_native_session(self, session_file):\n    \"\"\"Publish through the owner returned by this original begin operation.\"\"\"\n    self.registry_owner = await Coordination.run_worker(partial(self.runner.comms.regist"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 107,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 66,
+      "node": "Attribute",
+      "source": "self.runner.comms.registry.attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 47,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 113,
+      "node": "Attribute",
+      "source": "attestation.require_registry"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "attestation.require_registry"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 74,
+      "node": "FunctionDef",
+      "source": "def require_registry(self, registry: Registration, expected: Thread) -> None:\n    \"\"\"Recheck source custody without holding the registry during provider work.\"\"\"\n    with registry.guard_owner_compaction(expected, self):\n"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 65,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 54,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 168,
+      "node": "FunctionDef",
+      "source": "def prepare_native_source(package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int, retained_text: str='') -> NativePreparationResult:\n    \"\"\"Derive Pi's actual cut point without a model c"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 235,
+      "node": "Attribute",
+      "source": "channel.receive"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 41,
+      "node": "FunctionDef",
+      "source": "@staticmethod\ndef decode_record(raw: bytes, *, strict: bool=False, max_bytes: int | None=None) -> PiEvent:\n    if max_bytes is not None and len(raw) > max_bytes:\n        raise ValueError('Native RPC record exceeds transp"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 51,
+      "node": "AsyncFunctionDef",
+      "source": "async def receive(self, *, strict: bool=False, max_bytes: int | None=None) -> PiEvent | None:\n    raw = await self.readline(max_bytes=max_bytes)\n    if not raw:\n        return None\n    return self.decode_record(raw, stri"
+    },
+    {
+      "path": "src/agent_comms/pi_rpc.py",
+      "line": 57,
+      "node": "Attribute",
+      "source": "self.decode_record"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 75,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "self.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 249,
+      "node": "Attribute",
+      "source": "self.owner.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 69,
+      "node": "Attribute",
+      "source": "owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 48,
+      "node": "FunctionDef",
+      "source": "def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:\n    \"\"\"Publish an observed native source under its original executable lease.\n\n        Registry admission checks own the deter"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 48,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 48,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 56,
+      "node": "Attribute",
+      "source": "edit.document.prepare_native_source"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 58,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 222,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 228,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 239,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 260,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 290,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 305,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 402,
+      "node": "FunctionDef",
+      "source": "def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:\n    \"\"\"Publish only the source fact of an already admitted original owner.\"\"\"\n    snapshot = self.snapshot()\n    ori"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 402,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 405,
+      "node": "Attribute",
+      "source": "original.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 40,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 70,
+      "node": "Attribute",
+      "source": "self.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 163,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 164,
+      "node": "Attribute",
+      "source": "owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 147,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 186,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 186,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 201,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 202,
+      "node": "Attribute",
+      "source": "current.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 66,
+      "node": "Attribute",
+      "source": "self.comms.registry.attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 59,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 160,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 56,
+      "node": "Attribute",
+      "source": "self.participant.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 150,
+      "node": "Attribute",
+      "source": "participant.owner.require_snapshot"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 265,
+      "node": "Attribute",
+      "source": "participant.owner.require_registry"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 321,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 216,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 235,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 222,
+      "node": "Attribute",
+      "source": "self.turn.attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 435,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 163,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 36,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 198,
+      "node": "Name",
+      "source": "tmp_path"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 201,
+      "node": "Name",
+      "source": "tmp_path"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 57,
+      "node": "Attribute",
+      "source": "child.reader.receive"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 37,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 140,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 203,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 226,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 243,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1496,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1550,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 53,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 29,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 40,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 57,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 74,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 90,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 110,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 117,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 105,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 127,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 100,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 132,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 134,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 45,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 79,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 84,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 84,
+      "node": "Attribute",
+      "source": "PiRpcChannel.receive"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 167,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 210,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 63,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 87,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 133,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 579,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 58,
+      "node": "Attribute",
+      "source": "comms.registry.attach_native_session"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 31,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 20,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 43,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 63,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 90,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 127,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 175,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 20,
+      "node": "AsyncFunctionDef",
+      "source": "@pytest.fixture\nasync def native_backend(tmp_path, monkeypatch):\n    if not os.environ.get('PI_COMPACTION_TEST_PACKAGE'):\n        pytest.skip('Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle')\n    async wit"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 27,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 62,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 100,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 23,
+      "node": "Name",
+      "source": "tmp_path"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 26,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 36,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 60,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 121,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 18,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 37,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 91,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 41,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 36,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 199,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 76,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    \"\"\"The sealed runtime permits only owner-only disposable /var/tmp roots.\n\n    CI's standard pytest temp root is /tmp; on hosts without a safe /var/tmp\n    (including Windows and macOS "
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 48,
+      "node": "AsyncFunctionDef",
+      "source": "async def receive(after=0):\n    async with asyncio.timeout(2.5):\n        while True:\n            payload = json.loads(await reader.readline())\n            for update in decode_updates(payload['update'].get('_meta')):\n   "
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 61,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 82,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 96,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 76,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 85,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "line": 66,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_extension_ui_native.py",
+      "line": 17,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 46,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 212,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 273,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 35,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 34,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 221,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 32,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 34,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "rules.GoalRegistryAdmissionCheck"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 104,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 45,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 165,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 199,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 262,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 262,
+      "node": "Attribute",
+      "source": "PiRpcChannel.receive"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 350,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 462,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 540,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 614,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 244,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 250,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 267,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 270,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 304,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 319,
+      "node": "Attribute",
+      "source": "channel.receive"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 403,
+      "node": "Attribute",
+      "source": "channel.receive"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 46,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 35,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 124,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 151,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "line": 136,
+      "node": "Attribute",
+      "source": "channel.receive"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 50,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    if os.name != 'posix' or not Path('/var/tmp').is_dir() or Path('/var').is_symlink():\n        pytest.skip('sealed runtime requires a real, disposable /var/tmp root')\n    with tempfile.T"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 57,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 134,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 198,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 316,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 270,
+      "node": "Attribute",
+      "source": "child.reader.receive"
+    },
+    {
+      "path": "tests/test_native_snapshot_identity.py",
+      "line": 14,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 32,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    if os.name != 'posix' or not Path('/var/tmp').is_dir() or Path('/var').is_symlink():\n        pytest.skip('private sealed runtime needs a disposable /var/tmp')\n    with tempfile.Tempora"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 28,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    if os.name != 'posix' or not Path('/var/tmp').is_dir() or Path('/var').is_symlink():\n        pytest.skip('private sealed runtime needs a disposable /var/tmp')\n    with tempfile.Tempora"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 113,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 151,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 194,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 96,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 99,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 107,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 108,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 101,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_native_tool_declarations.py",
+      "line": 57,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 46,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    with tempfile.TemporaryDirectory(prefix='ac-nk-foreground-', dir='/var/tmp') as directory:\n        yield Path(directory)"
+    },
+    {
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 22,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 103,
+      "node": "Name",
+      "source": "RegistryOwner"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 106,
+      "node": "Attribute",
+      "source": "proof.require_snapshot"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 989,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1002,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 77,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 93,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 105,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 32,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 165,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 183,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 53,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 155,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 193,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 54,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 34,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    if os.name != 'posix' or not Path('/var/tmp').is_dir() or Path('/var').is_symlink():\n        pytest.skip('sealed runtime requires a disposable /var/tmp')\n    with tempfile.TemporaryDir"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 25,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 35,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 49,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 81,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 84,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 101,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 103,
+      "node": "Attribute",
+      "source": "ACPFailure.from_error"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 75,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 46,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 30,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 115,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 33,
+      "node": "FunctionDef",
+      "source": "@pytest.fixture\ndef tmp_path():\n    \"\"\"Runtime requires /var/tmp; retain original fixture proof under our WT.\"\"\"\n    runtime = Path(tempfile.mkdtemp(prefix='arendt-retained-tool-', dir='/var/tmp'))\n    artifacts = Path(o"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 211,
+      "node": "AsyncFunctionDef",
+      "source": "async def receive(reader, writer):\n    request = json.loads(await reader.readline())\n    calls.append((owner, request['action'], request['thread']))\n    if request['action'] == 'subscribe':\n        connections.append(wri"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 238,
+      "node": "Name",
+      "source": "receive"
+    },
+    {
+      "path": "tests/test_runtime_cold_attachment.py",
+      "line": 24,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 25,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 35,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 202,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 180,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 270,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 343,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "line": 232,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 27,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 91,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 196,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 53,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 893,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 95,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 45,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 376,
+      "node": "Attribute",
+      "source": "PiRpcChannel.decode_record"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 554,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 56,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 569,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 183,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 20,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 65,
+      "node": "Name",
+      "source": "prepare_native_source"
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "line": 80,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 21,
+      "node": "Name",
+      "source": "native_backend"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 95,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 167,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 218,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 251,
+      "node": "Attribute",
+      "source": "PromptFailureReceipt.from_error"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 143,
+      "node": "Name",
+      "source": "native_backend"
+    }
+  ],
+  "limits": "Attribute names identify candidates; dynamic resolution and receiver semantics read separately. ACP dependency RequestError read from installed source."
+}

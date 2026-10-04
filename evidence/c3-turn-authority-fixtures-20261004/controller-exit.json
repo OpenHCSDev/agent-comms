@@ -1,0 +1,7 @@
+{
+  "controller_absent": true,
+  "private_root_process_refs": [],
+  "original_inputs_preserved": true,
+  "terminal_returncode": 2,
+  "resolution": "interrupted owned verification, no ACP success or input resolution claim"
+}
