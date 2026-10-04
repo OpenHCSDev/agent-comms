@@ -1,4 +1,15 @@
-## Current: ordinary440 installed and display verified; full workflow remains — 2026-10-04
+## Current: corrected442 merged; ordinary440 live; receiving successor follows — 2026-10-04
+
+Parent merged exact442 b791d03f as cb9bd5c89e821f45b53d465d38d11894336fa406.
+Required run37239181602 independently names that final head and passed.
+All13 new result keeper hashes and all17 historical keeper hashes were matched;
+source/tests/tools/pins are byte-equal the executed4449 control checkpoint.
+The corrected same-App saved/wire29-check result remains10.636214859900065s.
+Sch owns444 normal actual-main receiving with corrected wheel ec36, after exact
+source/build-input relations and a fresh eligible-holder purpose. Old8acf is
+historical. Current public334/ordinary440 is unchanged; merge is not installation
+or a second App run. Heis's next443 projection work is a separate Draft/source
+branch and must not be used as the frozen442 qualification source.
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
 The original ToAd ChannelLifetimeJourney/review_channel_lifetime owns that
