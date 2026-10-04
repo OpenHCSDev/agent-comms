@@ -1,0 +1,30 @@
+{
+  "state": "whole exact actual436 floor restored after original successor timeout; no automatic retry",
+  "members": 1470,
+  "protected": 390,
+  "packages": 69,
+  "metadata_modes_corrections": [],
+  "extra_application_assets": [],
+  "normal_installer": true,
+  "activation_changed": false,
+  "native_keeper_changed": false,
+  "terminal_exit": -15,
+  "terminal_elapsed": 90.032595,
+  "native_runtime_input_rows": 0,
+  "annotation_request_rows": 0,
+  "bus_bytes": 0,
+  "positive_scope": "fresh private schema10 initialized and original local USER correction persisted; App path unqualified",
+  "grant": "style22-EinsteinW6-successor-Core627-Toad434-issued-grant.json",
+  "all_owned_handles_closed": true,
+  "borrowers": {
+    "processes": 244,
+    "refs": 0,
+    "gaps": 0
+  },
+  "package_import_read_execution_claim": "CLOSED; whole style22 returned",
+  "native_7a2e_read_execution_claim": "CLOSED; keeper unchanged",
+  "private_fixture": "/home/ts/wt/w6e02/test_authored_import_registere0",
+  "positive_rows": "ModelLabel Unclassified; original HumanLabel author=user Promised",
+  "remaining": "registered App historical read/search/export not qualified; captured test stage unavailable",
+  "output": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-installed02"
+}
