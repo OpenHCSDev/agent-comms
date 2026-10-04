@@ -490,6 +490,10 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertFalse(partial['budget']['evaluated'])
         self.assertTrue(partial['timing']['evaluated'])
         self.assertFalse(selected.input_request_measurements({})['evaluated'])
+        public = FieldCodec.encode(measured)
+        self.assertEqual(tuple(item['request_id'] for item in public['requests']),
+                         ('tool-step', 'final', 'partial'))
+        self.assertEqual(public['requests'][0]['budget']['observations'][1]['admittedOutputTokens'], 0)
         # An earlier request with matching session/input but another turn is
         # not silently granted the final request's original lease.
         changed = json.dumps({'turn': FieldCodec.encode(replace(lease, turn_id='other')),
