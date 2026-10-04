@@ -33,3 +33,10 @@ three-cut continuation reader. The unrelated src34/tools7 observe calls have
 different owners; lexical matching alone is not dynamic-resolution proof.
 RecordedNativeProbe.original_readers still owns ExitStack and each original path
 is acquired once. Single/pair/batch consumers delegate that same lifetime.
+
+Condition-application scoring also reopened child/parent inside the acquired read.
+RecordedNativeCheckpoint.fork_condition_acquired now shares the existing original
+fork/source validation with its standalone acquisition method. RecordedNativeProbe
+construction and applied_condition require both original readers; read passes them
+through and every direct fixture caller is migrated. The native constructor,
+source/condition digests, SDK capture and all missing evidence refusals are unchanged.
