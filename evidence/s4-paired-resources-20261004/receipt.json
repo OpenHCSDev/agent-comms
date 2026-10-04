@@ -1,0 +1,26 @@
+{
+  "implementation": "984e5fd3719330c570b511e9cbdb6dd39e6861d1",
+  "base": "8c2fb8d0fd1ff82644516b254ba102a1d7c1aa4d",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-paired-resources642",
+  "original_raw": {
+    "empty-pairs.json": "850fd246ba3b322b2c654a8ef4436db5e76306834235072527bb7080227ecd8f",
+    "cli.stdout.json": "cab363321262f62ded3b218c2c9e805347828cb8c34ef8686a64a1117813433c",
+    "cli.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "first-summary-fixture-refusal.log": "66139fa28cbd61a9c5cacc0c59148273e7e5f3035849fe52290414e8504a01a6",
+    "summary-fixture-corrected.log": "d10ffbd9f0faa72cd6837063279524e199b59fbc3d035051302a1e8dbc4b36ad",
+    "owner-before.json": "d24453147df1a3a8c03c0f83e54bb66ee0be9f8b6d0ee30cb8ef3cd67932b882",
+    "owner-after.json": "1d7fe98646aa56e73373eaaa7d8163113aac80c4a2ebbf4174555a01ce033a74"
+  },
+  "final_scope": "paired original resource arithmetic and existing empty-record comparison CLI",
+  "validation": {
+    "initial_batch": "8 passed, 6 subtests; 1 authored SummaryUsage construction refusal",
+    "corrected_only_test": "1 passed, 0.001s",
+    "CLI": "exit0/empty stderr, 2 missing trajectories, 5 resource scopes all unavailable",
+    "AST": "734 Python modules, zero parse omissions; lexical consumers, not dynamic proof"
+  },
+  "runtime_native_tools_delta": 0,
+  "provider_inputs": 0,
+  "native_processes": 0,
+  "original_record_reads": 0,
+  "installed_package_or_study": false
+}

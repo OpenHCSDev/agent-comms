@@ -21,3 +21,24 @@ remains unapproved.
 Read existing owners and AST consumers first; migrate both comparison entrypoints
 in one batch. Final validation checks changed arithmetic and the existing CLI
 with bounded authored usage records only, not model recall.
+
+## Scoped Ready
+
+The working family is published: existing ScoredScenario.resource_metrics owns
+all seven original usage projections. recorded_resources and both comparison
+entrypoints consume it. resource_difference owns absolute/relative arithmetic;
+paired_resource_batch consumes that same behavior after totaling complete
+trajectories. The seven inline per-arm projections are deleted in favor of the
+shared projection (8 lines removed). No new class, scanner or store.
+
+Final relevant sanity batch: eight tests and six subtests passed; one authored
+SummaryUsage constructor omitted required cache fields. That negative is kept.
+After correcting only the constructor, the affected test passed. The actual
+existing --recorded-pairs CLI completed with two absent-record pairs: all five
+resource groups retain two expected trajectories and unavailable totals/ratios;
+empty stderr, no original files or provider/native processes accessed.
+
+Evidence: evidence/s4-paired-resources-20261004/. Source AST covers734 Python
+modules without omissions. This is scorer/recorded-resource scope only. No
+installed/live runtime, billed cost, provider capacity, end-to-end timing or
+comparative acceptance is claimed. Automatic Debt must pass at the exact freeze.
