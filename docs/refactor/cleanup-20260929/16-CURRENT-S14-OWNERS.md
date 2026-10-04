@@ -58,6 +58,12 @@ code-handback.json; its final borrower receipt78ec09a6 has no refs/gaps.
 The holder and native086 purposes are handed back, with no successor run
 implied. Bohr is to independently close441 and advance the next W6 purpose
 after fresh actual-floor/origin/borrower clearance.
+Heis has published corrected control ec9bc8f9. Parent read its full diff:
+retired child, tentative fragment/page and both projected-view tasks are
+acquired before prune, cancellation or release, then those original tasks are
+joined. Production/dependencies equal9d/215d and wheel8c02 remains reusable.
+The correction is source-reviewed only; no successor installed acceptance or
+holder purpose follows from it.
 
 On the preceding public436 cohort, corrected tail04 completed with terminal0,
 18 native checks true and owned cleanup empty. Channel opening/return, hidden
@@ -128,6 +134,13 @@ only protocol/controller scope. The changed actual SDK observer completion and
 tool/system JSON projection remain unexecuted; the original659 timeout is not
 rewritten. Arendt owns that next changed boundary under separate original086
 read/execution authority, with no provider prompt or study permission implied.
+Parent also reviewed W6's prepared authored App against its original done
+criterion. The next journey checks imported historical reference read/search/
+export and separate local USER CLI correction with the worker disabled. It does
+not yet test displayed Obeys/Promised AnnotationNodes or the UI correction's
+ACP request and effective-label refresh. Those remain concrete full W6 gaps;
+no invented admitted turn or historical-to-current promotion supplies proof.
+This distinction does not hold the useful next authored App behind more work.
 Only open feature scopes are Core627/Toad434 W6 and Toad441 performance;
 native artifact649 and this tracking432 remain separate draft handoffs.
 
