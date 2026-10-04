@@ -166,6 +166,16 @@ class Registration:
             edit.commit()
             return result
 
+    def archive_originals(self, originals: Sequence[Thread]) -> None:
+        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+            edit.document.archive_originals(originals)
+            edit.commit()
+
+    def delete_originals(self, originals: Sequence[Thread]) -> None:
+        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+            edit.document.delete_originals(originals)
+            edit.commit()
+
     def remove(self, name: str) -> tuple[str, ...]:
         with (
             publication_identity_fence(self.store.path.parent, nonblocking=True),

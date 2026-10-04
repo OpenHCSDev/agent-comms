@@ -37,7 +37,7 @@ from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
     SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment,
 )
-from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
+from compaction_retention_fixture import Condition, Measurement, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
 from test_task_decisions import admit
@@ -60,6 +60,77 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def test_original_reader_group_borrows_parent_once_and_retires_on_consumer_error(self):
+        # Prevent sibling-source acquisition from replacing inheritance with
+        # path equality, reopening shared parents or leaking refused readers.
+        self.session.write_text(json.dumps({'type': 'session', 'id': self.identity.session_id}) + '\n')
+        self.session.chmod(0o600)
+        child = self.root / 'child.jsonl'
+        child.write_text(json.dumps({'type': 'session', 'id': 'child'}) + '\n')
+        child.chmod(0o600)
+        probe = RecordedNativeProbe(NativeSessionIdentity('child', str(child)),
+                                    'a' * 32, 'answer', self.checkpoint)
+        refusal = OSError('consumer failure, not acquisition failure')
+        with self.assertRaises(OSError) as failed:
+            with RecordedNativeProbe.original_readers((probe, probe), (self.checkpoint,)) as sources:
+                self.assertEqual(set(sources), {self.session, child})
+                readers = tuple(sources.values())
+                self.assertEqual(sources[probe.checkpoint_source].observe()[0].id, self.identity.session_id)
+                self.assertEqual(sources[child].observe()[0].id, 'child')
+                raise refusal
+        self.assertIs(failed.exception, refusal)
+        self.assertTrue(all(reader.source.stream.closed and not reader.entries for reader in readers))
+
+    def test_recorded_batch_refuses_reused_originals_not_just_changed_labels(self):
+        # Prevent duplicate journals/inputs from inflating the sample count.
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        run = RecordedNativeProbes({'r1': probe})
+        with self.assertRaisesRegex(ValueError, 'same original input'):
+            RecordedNativeProbes({'r1': probe, 'r2': probe})
+        with self.assertRaisesRegex(ValueError, 'reuse original'):
+            RecordedNativeProbes.require_distinct((run, run))
+        changed = RecordedNativeProbes({'r1': replace(probe, input_id='b' * 32)})
+        with self.assertRaisesRegex(ValueError, 'reuse original'):
+            RecordedNativeProbes.require_distinct((run, changed))
+        different = RecordedNativeProbes({'r1': replace(probe,
+            session=NativeSessionIdentity('different', str(self.root / 'different.jsonl')),
+            input_id='b' * 32)})
+        RecordedNativeProbes.require_distinct((run, different))
+        with self.assertRaisesRegex(ValueError, 'at least one pair'):
+            coding_scenario().compare_native_pairs(Condition.TASK_MEMORY, (), Condition.BOUNDED)
+        wire = FieldCodec.encode(((run, different),))
+        self.assertEqual(FieldCodec.decode(tuple[tuple[RecordedNativeProbes, RecordedNativeProbes], ...], wire),
+                         ((run, different),))
+
+    def test_paired_recall_uses_recall_questions_and_keeps_trajectory_denominators(self):
+        # Equal total scores can conceal recall loss behind prohibition/action
+        # answers. One cut is not an independent sample; assistance/absence must
+        # not silently remove a trajectory from the batch recall denominator.
+        questions = (Question('recall', 'Which source?', 'source', 'oracle'),
+                     Question('rule', 'Replay?', 'no', 'oracle', measurement=Measurement.PROHIBITION),
+                     Question('alternative', 'Other choice?', 'other', 'oracle', measurement=Measurement.ALTERNATIVE))
+        scenario = RecallScenario('mixed', (RecallRound('r1', ('Source: source; replay: no; alternative: other.',), questions),))
+        candidate = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({'r1': {
+            'recall': 'wrong', 'rule': 'no', 'alternative': 'other'}}))
+        control = scenario.score(Condition.BOUNDED, RecordedAnswers({'r1': {
+            'recall': 'source', 'rule': 'wrong', 'alternative': 'other'}}))
+        unassisted = {'r1': {'answer_support': {'unassisted_recall': True}}}
+        assisted = {'r1': {'answer_support': {'unassisted_recall': False}}}
+        alignment = {'r1': {'evaluated': True}}
+        lost = candidate.paired_quality(control, unassisted, unassisted, alignment)
+        equal = control.paired_quality(control, unassisted, unassisted, alignment)
+        self.assertEqual(lost['unassisted_recall']['correct_difference'], 0)
+        self.assertEqual(lost['unassisted_recall']['recall_rate_difference']['value'], -1)
+        pairs = ({'paired_quality': lost}, {'paired_quality': equal})
+        batch = ScoredScenario.paired_batch(pairs)['unassisted_recall']
+        self.assertEqual(batch['trajectories'], 2)
+        self.assertEqual(batch['mean_recall_rate_difference']['value'], -0.5)
+        mixed = control.paired_quality(control, unassisted, assisted, alignment)
+        unavailable = ScoredScenario.paired_batch((pairs[0], {'paired_quality': mixed}))['unassisted_recall']
+        self.assertEqual(unavailable['recall_trajectories'], 1)
+        self.assertFalse(unavailable['mean_recall_rate_difference']['evaluated'])
+        self.assertIsNone(unavailable['mean_recall_rate_difference']['value'])
 
     def test_admitted_budget_requires_original_request_and_turn_correlation(self):
         # Prevent same-input/time guesses and historical capacity fabrication.

@@ -275,6 +275,24 @@ class RegistryDocument(RegistryPresence):
         self.statuses[name] = ArchivedThreadStatus()
         self.admissions.advance(name)
 
+    def require_originals(self, originals: Sequence[Thread]) -> None:
+        for original in originals:
+            if not original.incarnation.current(self):
+                raise RelationViolationError("Tagged thread incarnation changed before removal.")
+
+    def archive_originals(self, originals: Sequence[Thread]) -> None:
+        self.require_originals(originals)
+        for original in originals:
+            self.status(original.name).require_stopped()
+            self.archive(original.name)
+
+    def delete_originals(self, originals: Sequence[Thread]) -> None:
+        self.require_originals(originals)
+        for original in originals:
+            self.begin_delete(original.name)
+        for original in originals:
+            self.remove(original.name)
+
     def begin_delete(self, name: str) -> None:
         name = self.canonical_name(name)
         if name not in self.threads:

@@ -328,6 +328,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ''
 
     def with_confirmation(self, confirmed: bool) -> Self:
+        if self.confirmation() and not confirmed:
+            raise ValueError(self.confirmation())
         return self
 
     def edited(self, arguments: dict[str, object]) -> Self:
@@ -346,8 +348,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             raise ValueError('This action is no longer available for the target')
         bound, = bindings
         edited = bound.edited(arguments)
-        if edited.confirmation() and not confirmed:
-            raise ValueError(edited.confirmation())
         return edited.with_confirmation(confirmed).apply(comms)
 
     @classmethod
@@ -1183,6 +1183,7 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
         return self.disposition.confirmation(self.name)
 
     def with_confirmation(self, confirmed: bool) -> Self:
+        super().with_confirmation(confirmed)
         return replace(self, confirmed=confirmed)
 
     def apply(self, ctx: Comms) -> TagChangeResult:
@@ -1197,7 +1198,7 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
 
     @classmethod
     def channel_bindings(cls, comms, channel):
-        return (cls(name=channel.name),) if channel.builtin is None and not channel.archived else ()
+        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
         return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
@@ -1214,7 +1215,7 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
 
     @classmethod
     def channel_bindings(cls, comms, channel):
-        return (cls(name=channel.name),) if channel.builtin is None and channel.archived else ()
+        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
 
 
 @dataclass(frozen=True, kw_only=True)

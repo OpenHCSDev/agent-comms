@@ -11,7 +11,6 @@ from enum import Enum
 from pathlib import Path
 
 from .active_route import guard_original_root_write
-from .catalog_store import ChannelCatalog
 from .channel_targets import Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
@@ -75,7 +74,7 @@ class DeleteThreadsTagDisposition(TagDisposition):
     label = "Delete tagged threads and remove tag"
 
     def confirmation(self, tag: str) -> str:
-        return f"Delete ALL stopped threads tagged #{tag} and close all their views? Active owners are refused; retained history and uncertain inputs are preserved."
+        return f"Delete ALL inactive threads tagged #{tag} and close all their views? Active owners are refused; retained history and uncertain inputs are preserved."
 
     def apply(self, channels, tag, cohort):
         channels.threads._delete_unlocked(cohort)

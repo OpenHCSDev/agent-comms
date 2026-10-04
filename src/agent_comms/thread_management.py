@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     pass
 from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
-from .compaction_publication_lease import publication_identity_fence
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
@@ -502,31 +501,14 @@ class ThreadManagement:
         with _store_lock(self._wire_lock_path):
             self._archive_unlocked((self.registry.require(name),))
 
-    def _require_originals(self, originals: Sequence[Thread], document) -> None:
-        for original in originals:
-            if not original.incarnation.current(document):
-                raise RelationViolationError("Tagged thread incarnation changed before removal.")
-
     def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
-        """The wire caller supplies one cohort; admission and identity stay registry-owned."""
-        with publication_identity_fence(self.root, nonblocking=True), self.registry.store.editing() as edit:
-            self._require_originals(originals, edit.document)
-            for original in originals:
-                edit.document.status(original.name).require_stopped()
-                edit.document.archive(original.name)
-            edit.commit()
+        self.registry.archive_originals(originals)
         for original in originals:
             self.agents.runtime_info.remove(original.name)
 
     def _delete_unlocked(self, originals: Sequence[Thread]) -> None:
         """Remove stopped declarations, preserving histories and uncertain inputs."""
-        with publication_identity_fence(self.root, nonblocking=True), self.registry.store.editing() as edit:
-            self._require_originals(originals, edit.document)
-            for original in originals:
-                edit.document.begin_delete(original.name)
-            for original in originals:
-                edit.document.remove(original.name)
-            edit.commit()
+        self.registry.delete_originals(originals)
         with self.catalog.editing() as document:
             for original in originals:
                 document.remove_thread(original.name)
