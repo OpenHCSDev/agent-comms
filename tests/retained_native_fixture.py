@@ -803,32 +803,52 @@ class RecordedNativeProbe:
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
 
-    def observed_request(self, manifest) -> tuple[RequestProgress, ...]:
-        """Acquire the selected request's original diagnostic values once.
+    def observed_requests(self, manifest) -> dict[str, tuple[RequestProgress, ...]]:
+        """Acquire this fenced input's original diagnostic values once.
 
-        The manifest already owns the exact native generation/digest relation.
-        No same-input, time or present-day catalog join can replace this link.
-        Keep every correlated stage in original file order. Budget and timing
-        consumers borrow these values, never decode or correlate again.
+        The manifest owns the selected request's generation/digest and anchors
+        the original turn. Other requests retain their own diagnostic identity;
+        they never inherit that SDK binding. Budget and timing borrow the same
+        original values, with requests/stages in original first-seen order.
         """
         if manifest is None or manifest.request_id is None or self.request_observations is None:
-            return ()
-        observed = []
+            return {}
+        observed = {}
         for record in RecordedNativeCheckpoint.read_json_lines(self.request_observations):
             # Existing diagnostic publications also include parent acquisition
             # records. Only their native member is a RequestProgress boundary.
             if "native" not in record:
                 continue
             progress = RequestProgress.from_wire(record["native"])
-            if progress.request_id != manifest.request_id:
+            if progress.request_id != manifest.request_id and (
+                    progress.session_id != self.session.session_id or progress.input_id != self.input_id):
                 continue
             lease = FieldCodec.decode(TurnLeaseFence, record["turn"])
             if not manifest.turn.same_recording(RecordedContextTurn(TurnId(lease.turn_id), lease.identity)):
                 raise ValueError("Original request observation belongs to another recorded turn")
             if progress.session_id != self.session.session_id or progress.input_id != self.input_id:
                 raise ValueError("Original request observation belongs to another native session/input")
-            observed.append(progress)
-        return tuple(observed)
+            observed.setdefault(progress.request_id, []).append(progress)
+        return {identity: tuple(points) for identity, points in observed.items()}
+
+    @classmethod
+    def input_request_measurements(cls, requests):
+        """Export retained requests without manufacturing an input-wide clock.
+
+        Diagnostic capture is optional. Known observations do not establish
+        every request/retry, nor SDK/body/terminal binding for earlier requests.
+        The selected manifest remains the separate stronger source relation.
+        """
+        return {'evaluated': bool(requests), 'complete_input_evaluated': False,
+                'observed_requests': len(requests),
+                'requests': tuple({'request_id': identity,
+                    'budget': cls.request_budget(points), 'timing': cls.request_timing(points)}
+                    for identity, points in requests.items()),
+                'scope': 'Original native request diagnostics with this recorded turn/session/input; '
+                         'not complete capture, per-request SDK/HTTP equivalence, provider capacity, '
+                         'whole-turn/S1 timing or study acceptance',
+                'reason': 'Retained original input request observations' if requests else
+                          'Original fenced input request observations unavailable'}
 
     @staticmethod
     def request_budget(observed: tuple[RequestProgress, ...]):
@@ -853,7 +873,7 @@ class RecordedNativeProbe:
         """
         return {"evaluated": bool(observed), "observations": observed,
                 "whole_turn_evaluated": False,
-                "scope": "Original selected-request native progress, transport and callback measurements; "
+                "scope": "Original single-request native progress, transport and callback measurements; "
                          "not whole-turn/S1 timing, billed resource use or provider-capacity attribution",
                 "reason": "Original correlated request measurements" if observed else
                           "Original correlated request/manifest observations unavailable"}
@@ -956,7 +976,8 @@ class RecordedNativeProbe:
                     "referenced_in_sdk_sources": identity in included}
         coverage["full_context_capacity"] = {"evaluated": False,
             "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}
-        observed_request = self.observed_request(manifest)
+        observed_requests = self.observed_requests(manifest)
+        observed_request = observed_requests.get(manifest.request_id, ()) if manifest is not None else ()
         budget = self.request_budget(observed_request)
         records = self.condition_records()
         return {
@@ -972,6 +993,7 @@ class RecordedNativeProbe:
             "serialized_sdk_source": serialized,
             "request_budget": budget,
             "native_request_timing": self.request_timing(observed_request),
+            "input_request_measurements": self.input_request_measurements(observed_requests),
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
             "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest,records),
