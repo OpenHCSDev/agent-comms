@@ -71,9 +71,13 @@ class InputDocument:
     def lookup(self, key: str | None) -> InputAttempt:
         return self.rows.get(key, MissingInput())
 
-    def record(self, row: ReservedInput) -> InputDocument:
+    def record(self, *originals: ReservedInput) -> InputDocument:
         """An existing original cannot be replaced by another reservation."""
-        return self if row.key in self.rows else replace(self, rows={**self.rows, row.key: row})
+        additions = {}
+        for row in originals:
+            if row.key not in self.rows:
+                additions.setdefault(row.key, row)
+        return replace(self, rows={**self.rows, **additions}) if additions else self
 
     def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:
         """Capture ordered originals from their sole durable declaration owner."""
@@ -241,14 +245,23 @@ class InputDispositions(LockedStore[InputDocument]):
         """Enlist supplied reservation custody before publishing acceptance."""
         row = ReservedInput(key, seq, owner, admission, target, text,
                             origin=origin)
+        document = self.record_originals(row, custody=custody)
+        return document.rows[key] is row
+
+    def record_originals(
+        self, *originals: ReservedInput, custody: ExitStack | None = None,
+    ) -> InputDocument:
+        """Publish one original cohort; return its exact captured document."""
         def reserve(original: InputDocument) -> InputDocument:
-            changed = original.record(row)
+            changed = original.record(*originals)
             if changed is not original and custody is not None:
-                custody.callback(self.settle_unbound, (row.key,))
+                custody.callback(
+                    self.settle_unbound,
+                    tuple(key for key in changed.rows if key not in original.rows),
+                )
             return changed
 
-        document = self.update(reserve)
-        return document.rows[key] is row
+        return self.update(reserve)
 
     def reserve_turn(
         self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
@@ -258,14 +271,9 @@ class InputDispositions(LockedStore[InputDocument]):
 
         row = ReservedInput(f"turn:{turn.value}", None, owner, admission, owner, text)
 
-        def reserve(document: InputDocument) -> InputDocument:
-            changed = document.record(row)
-            if changed is document:
-                raise RelationViolationError("Original turn input was already reserved")
-            custody.callback(self.settle_unbound, (row.key,))
-            return changed
-
-        document = self.update(reserve)
+        document = self.record_originals(row, custody=custody)
+        if document.rows[row.key] is not row:
+            raise RelationViolationError("Original turn input was already reserved")
         return SingleInputBatch(document.originals((row.key,)))
 
     def _transition(self, key: str, change) -> bool:
