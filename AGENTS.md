@@ -56,9 +56,9 @@ Use ordinary language: what changed, what still fails, what happens next.
   sheets and intermediate verification output in batches after checking actual
   active borrowers. Do not keep every recording, require every past reader's
   acknowledgement, or copy whole logs into status reports. Preserve user sessions,
-  auth, wire data, UNKNOWN inputs and scientific originals. Inactive Codex session
-  logs may be reversibly truncated and gzip archived through the existing
-  `~/.codex/scripts/codex_truncate_sessions.py`; active sessions stay untouched.
+  auth, wire data, UNKNOWN inputs and scientific originals. Codex rollout/session
+  cleanup belongs to Tristan's separate agent. Do not truncate, archive, move or
+  remove those files in this workflow.
   Build file wheels from the existing owned checkout and reuse unchanged wheels
   and dependencies instead of creating another VCS source clone for each stage.
 
