@@ -7,6 +7,7 @@ from .active_route import CommsRoute
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
+from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .goal_management import Goals
 from .history_views import HistoryViews
@@ -34,7 +35,6 @@ class Comms:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
-        self.channels = ChannelManagement(self.root, self.registry, self.bus)
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
@@ -42,8 +42,10 @@ class Comms:
         self.goals = Goals(self.root, self.registry, self.bus)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
         self.threads = ThreadManagement(
-            self.root, self.registry, self.bus, self.channels, self.agents, self.owners, self.ledger
+            self.root, self.registry, self.bus,
+            ChannelCatalog(self.root / ChannelCatalog.filename), self.agents, self.owners, self.ledger
         )
+        self.channels = ChannelManagement(self.root, self.registry, self.bus, self.threads)
         self.views = HistoryViews(
             self.root,
             self.registry,
