@@ -13,16 +13,16 @@ from dataclasses import dataclass
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from .bus_publication import CommittedDelivery
-from .threads import Thread
-from .turn_context import (
+from ..bus_publication import CommittedDelivery
+from ..threads import Thread
+from ..turn_context import (
     InstructionFile,
     InstructionSegment,
     OwnerProvenance,
     NextContextTurn,
     WireProvenance,
 )
-from .wake_policy import WakePolicy
+from ..wake_policy import WakePolicy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,7 +64,7 @@ class SelectedWakeSegment(InstructionSegment):
                 if obligation.exact_target == assignment.lifecycle.exact_target
             )
             if len(matching) > 1:
-                from .coordination_errors import IdentityConflict
+                from ..coordination_errors import IdentityConflict
 
                 raise IdentityConflict("Selected source has ambiguous response obligations")
             expectation, obligation_line = assignment.lifecycle.wake_frame(
@@ -89,21 +89,7 @@ class SelectedWakeSegment(InstructionSegment):
             separators=(",", ":"),
         )
         work_context = json.dumps(
-            {
-                "name": owner.name,
-                "title": owner.title,
-                "tags": sorted(owner.tags),
-                "original_assignment": owner.task,
-                "current_goal": (
-                    None
-                    if owner.goal is None
-                    else {
-                        "text": owner.goal.text,
-                        "status": owner.goal.state.declared_name,
-                        "progress": owner.goal.progress,
-                    }
-                ),
-            },
+            owner.wake_context(),
             ensure_ascii=True,
             separators=(",", ":"),
         )

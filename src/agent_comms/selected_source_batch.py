@@ -12,7 +12,8 @@ from .field_codec import FieldCodec
 from .messages import Message, MessageType
 from .native_pi import NativePiUnavailable
 from .wake import derive_exact_reply_target
-from .turn_context import InstructionFile, ReplyRouteSegment, WireProvenance
+from .turn_context import InstructionFile, WireProvenance
+from .context_segments.response import SelectedResponseSegment
 
 if TYPE_CHECKING:
     from .assignment_store import AssignmentStore
@@ -124,18 +125,3 @@ class SelectedSourceBatch:
             return tuple(by_target[target] for target in self.targets)
         except (TypeError, ValueError) as error:
             raise NativePiUnavailable("Native batch answer does not match its original reply routes") from error
-
-
-@dataclass(frozen=True, kw_only=True)
-class SelectedResponseSegment(ReplyRouteSegment):
-    """Selected response proposals use the existing route owner and grammar."""
-
-    sender: str
-    example: InstructionFile
-
-    def values(self):
-        examples = tuple(
-            Message(self.sender, target, self.example.content, MessageType.INFO, timestamp=0)
-            for target in self.targets
-        )
-        return dict(examples=json.dumps(FieldCodec.encode(examples)))
