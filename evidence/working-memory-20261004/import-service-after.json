@@ -1,0 +1,2618 @@
+{
+  "source": "f81111f0aad87d7bdb9649c1e5aa6ac4249164eb",
+  "modules": 324,
+  "omissions": [],
+  "scope": "Full Core root parsed; lexical owner/constructor/member sites, not dynamic dispatch proof",
+  "sites": [
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 154,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 518,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 528,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 532,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "line": 81,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "line": 119,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 232,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/channel_input_batch.py",
+      "line": 39,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 134,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 140,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 148,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 107,
+      "node": "Name",
+      "source": "ThreadManagement"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 47,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 283,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 68,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 1068,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 477,
+      "node": "Attribute",
+      "source": "receipt.to_wire"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 642,
+      "node": "Attribute",
+      "source": "ctx.bus.log.retained_context(self.thread, ctx.registry).export(self.output, overwrite=self.overwrite).to_wire"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 803,
+      "node": "Attribute",
+      "source": "export_receipt.to_wire"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 852,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 671,
+      "node": "Attribute",
+      "source": "m.to_wire"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 1084,
+      "node": "Attribute",
+      "source": "ImportedSessionMetadata.sources_for_owner"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 1084,
+      "node": "Name",
+      "source": "ImportedSessionMetadata"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 726,
+      "node": "Attribute",
+      "source": "m.to_wire"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 734,
+      "node": "Attribute",
+      "source": "m.to_wire"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 741,
+      "node": "Attribute",
+      "source": "m.to_wire"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 180,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 288,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 135,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/comms.py",
+      "line": 44,
+      "node": "Name",
+      "source": "ThreadManagement"
+    },
+    {
+      "file": "src/agent_comms/compaction_boundary.py",
+      "line": 40,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/compaction_boundary.py",
+      "line": 92,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/compaction_private_inputs.py",
+      "line": 60,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/compaction_records.py",
+      "line": 59,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 51,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 54,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 57,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 61,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 80,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 83,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 94,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 114,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 118,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 133,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 136,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 139,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 153,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 167,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 170,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 181,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 224,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/context_segments/wake.py",
+      "line": 33,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 44,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 67,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/diagnostics.py",
+      "line": 29,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/fresh_private_session.py",
+      "line": 310,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/fresh_private_session.py",
+      "line": 361,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/goal_actions.py",
+      "line": 81,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 195,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 98,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 127,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 132,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 94,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_mentions.py",
+      "line": 36,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 148,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 390,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 273,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 119,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 150,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 131,
+      "node": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 141,
+      "node": "FunctionDef",
+      "source": "@classmethod"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 163,
+      "node": "FunctionDef",
+      "source": "def pi_session(self, project: Path) -> str:"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 576,
+      "node": "FunctionDef",
+      "source": "def to_wire(self) -> dict[str, object]:"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 66,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 285,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 313,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 318,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 361,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 523,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 128,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 138,
+      "node": "Attribute",
+      "source": "current.imported_sources"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 161,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 288,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 574,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 144,
+      "node": "Attribute",
+      "source": "cls.sources_for_owner"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 560,
+      "node": "Attribute",
+      "source": "scan.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 284,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 190,
+      "node": "Name",
+      "source": "ImportedSessionMetadata"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 192,
+      "node": "Attribute",
+      "source": "self.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/input_attempt.py",
+      "line": 119,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_attempt.py",
+      "line": 264,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 38,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 58,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 117,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 138,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 152,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 238,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 445,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 456,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/input_origin.py",
+      "line": 133,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/message_bus.py",
+      "line": 295,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 130,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 146,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 137,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_admission_rules.py",
+      "line": 24,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_admission_rules.py",
+      "line": 25,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 46,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 570,
+      "node": "ClassDef",
+      "source": "class CustomEntry(NativeEntry):"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 579,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 33,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 58,
+      "node": "FunctionDef",
+      "source": "def imported_sources(self):"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 427,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 438,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 458,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 529,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 555,
+      "node": "FunctionDef",
+      "source": "def wire_discriminator(self):"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 570,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 579,
+      "node": "Name",
+      "source": "CustomEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 583,
+      "node": "FunctionDef",
+      "source": "def imported_sources(self):"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 586,
+      "node": "FunctionDef",
+      "source": "def wire_discriminator(self):"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 593,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 605,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 85,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 89,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 449,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 581,
+      "node": "Name",
+      "source": "ImportedSessionMetadata"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 110,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 460,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 584,
+      "node": "Attribute",
+      "source": "self.data.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 575,
+      "node": "Name",
+      "source": "ImportedMetadataEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 589,
+      "node": "Name",
+      "source": "CustomEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 211,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 279,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 374,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 375,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 38,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 123,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 131,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 169,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 56,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 67,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 103,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 342,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 854,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 287,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 323,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 334,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 125,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 51,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 92,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 81,
+      "node": "ClassDef",
+      "source": "class NativeTranscript:"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 85,
+      "node": "FunctionDef",
+      "source": "def import_metadata(self):"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 45,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 72,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 51,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 95,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 127,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 146,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 100,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 212,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/nk_foreground.py",
+      "line": 104,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 137,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 176,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 199,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 298,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 327,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 37,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 38,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 124,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 198,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owned_send_admission.py",
+      "line": 50,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owned_send_admission.py",
+      "line": 117,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owned_send_admission.py",
+      "line": 70,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 80,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 153,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 174,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 208,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 218,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 236,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 271,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 316,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 336,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 364,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_gate.py",
+      "line": 65,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_gate.py",
+      "line": 74,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_provider.py",
+      "line": 43,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 96,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 171,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 44,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 84,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_cutover.py",
+      "line": 33,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_cutover.py",
+      "line": 104,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_launch.py",
+      "line": 147,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 54,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 82,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 173,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 192,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 310,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 89,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 270,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 275,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 304,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 373,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 391,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 406,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 415,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 70,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 39,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 47,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 194,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 221,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/pi_events.py",
+      "line": 39,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 62,
+      "node": "ClassDef",
+      "source": "class PiPayload:"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 96,
+      "node": "FunctionDef",
+      "source": "def to_wire(self):"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 104,
+      "node": "FunctionDef",
+      "source": "def wire_discriminator(self):"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 110,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 119,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 143,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 247,
+      "node": "FunctionDef",
+      "source": "def to_wire(self):"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 251,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 298,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 322,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 350,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 388,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 622,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 701,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 777,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 837,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 849,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 895,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 992,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 1040,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 1069,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 48,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 101,
+      "node": "Attribute",
+      "source": "self.wire_discriminator"
+    },
+    {
+      "file": "src/agent_comms/pi_payloads.py",
+      "line": 149,
+      "node": "Attribute",
+      "source": "self.to_wire"
+    },
+    {
+      "file": "src/agent_comms/pi_summary_payloads.py",
+      "line": 17,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_summary_payloads.py",
+      "line": 35,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_summary_payloads.py",
+      "line": 53,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/pi_summary_payloads.py",
+      "line": 131,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 456,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 149,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 466,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 475,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 129,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 44,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 104,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 136,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 143,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 182,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 206,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 238,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 247,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 60,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 70,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 75,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 81,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 345,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 39,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 60,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 70,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 75,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 81,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 211,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 223,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 230,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 231,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 246,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 251,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 268,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 299,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 353,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 362,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 167,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 172,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 233,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 253,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 285,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 128,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration.py",
+      "line": 127,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 26,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 46,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 82,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 138,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 173,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 52,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registration_change.py",
+      "line": 85,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 38,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 53,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 67,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 127,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 134,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 179,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 238,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 335,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 336,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 415,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 462,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 278,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 283,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 289,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 423,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 244,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 273,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 246,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 55,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 58,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 90,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 235,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 317,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 321,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/relationships.py",
+      "line": 331,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/request_progress.py",
+      "line": 8,
+      "node": "Name",
+      "source": "PiPayload"
+    },
+    {
+      "file": "src/agent_comms/response_policy.py",
+      "line": 40,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/response_policy.py",
+      "line": 57,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 51,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 328,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 347,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 351,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 367,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_actions.py",
+      "line": 131,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_actions.py",
+      "line": 43,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 84,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_write_authority.py",
+      "line": 22,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_write_authority.py",
+      "line": 34,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_write_authority.py",
+      "line": 38,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_write_plan.py",
+      "line": 252,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/selected_write_plan.py",
+      "line": 268,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/session_effects.py",
+      "line": 26,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 142,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 154,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 120,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 167,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 218,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 30,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 35,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 42,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 45,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 56,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 60,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 66,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 69,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 77,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 81,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 84,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 98,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 101,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 106,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 109,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 117,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 121,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 231,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 42,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 46,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 52,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 56,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 68,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 80,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 93,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 99,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 106,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_execution.py",
+      "line": 114,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 88,
+      "node": "ClassDef",
+      "source": "class ThreadManagement:"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 212,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 436,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 448,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 459,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 480,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 520,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 526,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 579,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 130,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 169,
+      "node": "Attribute",
+      "source": "snapshot.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 480,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 548,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 50,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 215,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 505,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 510,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 151,
+      "node": "Attribute",
+      "source": "snapshot.pi_session"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 44,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 195,
+      "node": "FunctionDef",
+      "source": "def imported_sources(self):"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 412,
+      "node": "FunctionDef",
+      "source": "def to_wire(self) -> dict[str, object]:"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 417,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 138,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 297,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 302,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 320,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 325,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 429,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 158,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 202,
+      "node": "Attribute",
+      "source": "NativeTranscript(Path(self.session_file)).import_metadata().imported_sources"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 263,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 302,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 325,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 104,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 202,
+      "node": "Attribute",
+      "source": "NativeTranscript(Path(self.session_file)).import_metadata"
+    },
+    {
+      "file": "src/agent_comms/threads.py",
+      "line": 202,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 355,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 361,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 362,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 356,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 459,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 508,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 509,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 528,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 529,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 552,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 418,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 223,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 129,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 346,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 367,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 458,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 315,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 73,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 729,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 776,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 812,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 839,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 850,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 934,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 956,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_goal_account.py",
+      "line": 91,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 32,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 38,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 52,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 58,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 87,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 94,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_input_source.py",
+      "line": 132,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 174,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 177,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 197,
+      "node": "Name",
+      "source": "Thread"
+    },
+    {
+      "file": "src/agent_comms/view_unread.py",
+      "line": 196,
+      "node": "Name",
+      "source": "NativeEntry"
+    }
+  ]
+}
