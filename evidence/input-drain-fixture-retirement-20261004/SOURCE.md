@@ -58,3 +58,15 @@ Matching native610 accepted2ea manifest is read-only; Sch608 future build/fence
 sharing remains disjoint. Current thin540 contains qualified609100682 and needs
 one normal current-main610 wheel for its changed producer union/pin, after Bohr
 fresh archive/grant. No new environment/provider or original data mutation.
+
+## Installed source-membership correction
+
+The first installed batch passed 15 controls and rejected one obsolete fixture
+expectation: ordinary incoming agent text was asserted to change retained task
+facts. Message.retained_task_facts delegates membership to the original task
+declaration; an ordinary peer observation is not a UserSourceTaskFact. The
+corrected control first proves that observation leaves the source unchanged,
+then uses Messaging.send_user_message to publish an actual original human
+correction and requires the captured source to change. No production membership
+rule is changed. installed01.log retains the original failure and its successful
+fixture teardown; only this changed control needs the final focused check.

@@ -194,7 +194,11 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
         assert await capture(owner) != source
     elif change == "bus":
         comms.threads.claim_thread("peer", tags=frozenset(), worktree=str(comms.root))
-        comms.messaging.send("peer", current.name, "correction")
+        comms.messaging.send("peer", current.name, "ordinary peer observation")
+        assert await capture(owner) == source
+        comms.messaging.send_user_message(
+            current.name, "Original user correction", worktree=str(comms.root)
+        )
         assert await capture(owner) != source
     elif change == "owner":
         foreign = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(30)"))
