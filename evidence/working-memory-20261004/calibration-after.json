@@ -1,0 +1,111 @@
+{
+  "revision": "c2a7c684443fc26a9179bccbd7547b73b74c0c28",
+  "modules": 319,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 582,
+      "node": "ClassDef",
+      "name": "AnnotationsCalibrationCliCommand"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 594,
+      "node": "Attribute",
+      "name": "calibration"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 29,
+      "node": "FunctionDef",
+      "name": "calibration"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 29,
+      "node": "Name",
+      "name": "CalibrationReport"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 42,
+      "node": "Name",
+      "name": "CalibrationReport"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 41,
+      "node": "Attribute",
+      "name": "evaluate_original"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 138,
+      "node": "ClassDef",
+      "name": "CalibrationCase"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 156,
+      "node": "ClassDef",
+      "name": "ProbabilityFrequency"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 169,
+      "node": "ClassDef",
+      "name": "CalibrationReport"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 115,
+      "node": "FunctionDef",
+      "name": "evaluate_original"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 133,
+      "node": "FunctionDef",
+      "name": "evaluate_original"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 115,
+      "node": "Name",
+      "name": "CalibrationCase"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 133,
+      "node": "Name",
+      "name": "CalibrationCase"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 172,
+      "node": "Name",
+      "name": "CalibrationCase"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 185,
+      "node": "Name",
+      "name": "ProbabilityFrequency"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 134,
+      "node": "Name",
+      "name": "CalibrationCase"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 192,
+      "node": "Name",
+      "name": "ProbabilityFrequency"
+    }
+  ],
+  "storage": "No new table or corpus. Original label/request declarations now include the actual classifier member in their derived address.",
+  "limits": "Lexical source evidence, source-only controlled response/codec/SQLite/CLI sanity; not installed/native/empirical calibration."
+}

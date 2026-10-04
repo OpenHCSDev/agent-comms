@@ -87,3 +87,13 @@ No calibration data, confidence threshold or external authorization is invented.
 The source operator is implemented; empirical corpus collection, calibrated
 visibility, W6 and W8 remain unfinished. W1 native matching and Codex capture
 remain unfinished too. No installed or Jev/provider claim follows this batch.
+
+The final bounded source check used original FieldCodec/Jev adapter decode,
+real private Coordinator/SQLite typed tables, and declared CLI parser. An
+unreviewed model answer is refused as evaluation; the human correction supplies
+the actual outcome and exact probability frequency. The report round-trips
+through FieldCodec. Initial local fixture used UserInputSegment, which correctly
+withholds disclosure; that negative is retained and the fixture corrected to
+explicitly unattributed local system text, with no native/token attestation.
+No product guard was changed. This is source sanity, not empirical calibration,
+installed runtime/worker or human-authority acceptance. Zero external requests.
