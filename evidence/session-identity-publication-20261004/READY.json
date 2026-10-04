@@ -1,0 +1,77 @@
+{
+  "pr": 619,
+  "qualified_production": "3759e2038df431595ec5388273415ca643619d8d",
+  "tested_head": "8be44b86b77b003831b9c1ce5a43a35f8a67d5bd",
+  "final_evidence_changes_production": false,
+  "production_scope": {
+    "file": "src/agent_comms/session_lifecycle.py",
+    "added": 1,
+    "deleted": 8
+  },
+  "installed": {
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "installed_package": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+    "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/session-identity619-wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "wheel_sha256": "bc560d93f4b43359e10728a1336a59bbd50002375072e5b884bb22414481f8d5",
+    "installed_members_equal": 342,
+    "distributions": {
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "metaclass-registry": "0.2.1",
+      "annotated-types": "0.8.0",
+      "typing_extensions": "4.15.0",
+      "pydantic": "2.13.5",
+      "packaging": "26.2",
+      "agent-comms": "0.1.0",
+      "nominal-refactor-audit": "0.1.0",
+      "agent-client-protocol": "0.12.1"
+    },
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/session-identity619-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "test_runner": {
+      "library": "/usr/lib/python3.14/site-packages",
+      "pytest": "/usr/lib/python3.14/site-packages/pytest/__init__.py",
+      "asyncio": "/usr/lib/python3.14/site-packages/pytest_asyncio/__init__.py"
+    }
+  },
+  "acceptance": {
+    "test": "tests/test_project.py::test_saved_native_identity_changes_publish_one_complete_update",
+    "exit_code": 0,
+    "passed": 1,
+    "seconds": 5.09,
+    "tool_session": 60022,
+    "native_prompt_count": 0,
+    "provider_request_count": 0,
+    "public_writes": 0,
+    "source_bytes_unchanged": true,
+    "child_exit_and_empty_groups": "asserted by the actual installed test after joined owner teardown",
+    "scope": "saved SDK owner, canonical rename/project, subscribed runtime metadata, failure/idempotence and cleanup",
+    "not_claimed": [
+      "physical UI",
+      "paid-provider response",
+      "historical latency improvement"
+    ]
+  },
+  "leases": {
+    "holder": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+    "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel619-package-execution-grant.json",
+    "package_execution_handback": "complete after terminal gate; no future claim",
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+    "read_execution_handback": "complete; immutable bytes untouched"
+  },
+  "evidence_sha256": {
+    "SOURCE.md": "ba32a03a0b828c0bd06bc6d8585ddf6d998f7113f9bda2e38e5546d9709f9110",
+    "before.json": "93d69ca089b9a7558cd42aed9de666ceabd49733317af8a6b0b36b574a233733",
+    "after.json": "22ec9e40d2244482b1dd47e1e8f1ceb6602347c5ea0eb9309a03a555ce925768",
+    "build.log": "3a17ddb09cd564f3adb757d5ed857bc7021e412fefb09cb718ff8292decf12ba",
+    "wheel-proof.json": "9f4730325892dfa222eee9b2dfaf23ccea63bd91613e2df8ae55ec4725acf40e",
+    "installed-controls.py": "7fb5a9b8004417076c1001ded4a8d86d89951dc1f6fadc9282ee2f51866401bf",
+    "install.log": "17fb0b77f1074bc8186971c860b35f667f383154b7a61cced5e197fdcddcc979",
+    "pipcheck.log": "7547270bbb1696aa29d1c0d0821614feb7278acdb9190c44b64cd56e2d267b63",
+    "installed-source-proof.json": "bf3eea857a6a7ffc593b8f66fd5aa0af72413a5372df3433d436012b4bc83caf",
+    "installed01.log": "c6427b7cd0a22b9f2cea340dbce80b37a4084b2feb49e4e8079e0f4126df3cc9"
+  }
+}

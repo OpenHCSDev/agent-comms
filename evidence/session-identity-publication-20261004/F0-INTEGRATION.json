@@ -1,0 +1,19 @@
+{
+  "predecessor": "54c896f1a814090d86834bd46d057d49012b171d",
+  "qualified_head": "172f230776751b2715c93ffc6fd19ed7f9ded51d",
+  "qualified_member_sha256": {
+    "src/agent_comms/session_lifecycle.py": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65",
+    "tests/test_project.py": "076c0188ad5f696dabc122a16ee096f0f1f6d548658684b3906c69f1d55640ce",
+    "evidence/session-identity-publication-20261004/installed-controls.py": "7fb5a9b8004417076c1001ded4a8d86d89951dc1f6fadc9282ee2f51866401bf"
+  },
+  "source_integration": "normal merge, original qualified members unchanged",
+  "instruction_asset": {
+    "path": ".pi/APPEND_SYSTEM.md",
+    "qualified_sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6",
+    "integrated_sha256": "11a2acaa63c51d1f16f6ed24b6a968292a8fa3df1d3eb6c4df04befb6310ae73",
+    "disposition": "F0 required-ratchet and affected-live instruction asset delta; original wheel/installed receipt retained unchanged"
+  },
+  "rebuilds": 0,
+  "sdk_or_provider_reruns": 0,
+  "hosted_debt_ratchet": "new pushed head triggers original automatic PR job; result to be read after source continuation"
+}
