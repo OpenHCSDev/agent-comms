@@ -318,7 +318,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
         evidence = {'cut': {'model_steps': tuple({'usage': {'value': usage}}
                                              for usage in (assistant, zero))}}
-        observed = ScoredScenario.recorded_resources(cuts, evidence)
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        observed = scored.recorded_resources(cuts, evidence)
         combined = observed['combined']
         self.assertEqual(combined['records'], 3)
         self.assertEqual(combined['reported_total_tokens']['value'], 38)
@@ -333,14 +335,51 @@ class RecordedMeasurementTests(unittest.TestCase):
         # Detect a perfect zero inferred from absent summary/usage/fields.
         cuts = {'cut': {'summary_usage': {'evaluated': False}}}
         evidence = {'cut': {'model_steps': ({'usage': {'value': None}},)}}
-        unavailable = ScoredScenario.recorded_resources(cuts, evidence)['combined']
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        unavailable = scored.recorded_resources(cuts, evidence)['combined']
         self.assertEqual(unavailable['records'], 2)
         self.assertEqual(unavailable['usage_records'], 0)
         self.assertFalse(unavailable['normalized_cost']['evaluated'])
         self.assertIsNone(unavailable['normalized_cost']['value'])
-        empty = ScoredScenario.recorded_resources({}, {})['combined']
+        empty = scored.recorded_resources({}, {})['combined']
         self.assertEqual(empty['records'], 0)
         self.assertFalse(empty['reported_total_tokens']['evaluated'])
+
+    def test_resource_totals_keep_missing_frozen_rounds_and_observed_subtotals(self):
+        # Missing cuts/probes cannot turn a partial trajectory into a complete
+        # cheap total. Actual reported zero is preserved independently.
+        scenario = coding_scenario()
+        scored = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        identities = tuple(round_.identity for round_ in scenario.rounds)
+        summary = SummaryUsage(input=0, output=0, cache_read=0, cache_write=0,
+            total_tokens=0, reasoning=0, cost=SummaryCost(0, 0, 0, 0, 0))
+        assistant = PiUsage(input=0, output=0, cache_read=0, cache_write=0,
+            total_tokens=0, reasoning=0, cost=PiCost(total=0))
+        cuts = {identities[0]: {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        evidence = {identities[0]: {'model_steps': ({'usage': {'value': assistant}},)}}
+        partial = scored.recorded_resources(cuts, evidence)
+        for group in partial['summaries'], partial['assistants'], partial['combined']:
+            self.assertEqual(group['expected_rounds'], identities)
+            self.assertEqual(group['observed_rounds'], identities[:1])
+            self.assertEqual(group['missing_rounds'], identities[1:])
+            for name in ('input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens',
+                         'reported_total_tokens', 'reasoning_tokens', 'normalized_cost'):
+                self.assertFalse(group[name]['evaluated'])
+                self.assertIsNone(group[name]['value'])
+                self.assertIsNone(group[name]['expected_records'])
+                self.assertEqual(group[name]['observed_value'], 0)
+        cuts.update({identity: cuts[identities[0]] for identity in identities[1:]})
+        cut_complete = scored.recorded_resources(cuts, evidence)
+        self.assertTrue(cut_complete['summaries']['normalized_cost']['evaluated'])
+        self.assertFalse(cut_complete['combined']['normalized_cost']['evaluated'])
+        evidence.update({identity: {'model_steps': ()} for identity in identities[1:]})
+        self.assertEqual(scored.recorded_resources(cuts, evidence)['assistants']['missing_rounds'], identities[1:])
+        evidence.update({identity: evidence[identities[0]] for identity in identities[1:]})
+        complete = scored.recorded_resources(cuts, evidence)
+        self.assertTrue(complete['combined']['normalized_cost']['evaluated'])
+        self.assertEqual(complete['combined']['normalized_cost']['value'], 0)
+        self.assertEqual(complete['combined']['normalized_cost']['expected_records'], 6)
 
     def test_original_tool_pair_does_not_award_proposal_or_constraint_credit(self):
         # Prevent invented action success from an answer, an unrelated SDK
