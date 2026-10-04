@@ -35,8 +35,7 @@ from agent_comms.acp_extension import (
     RequestFailedUpdate,
     TranscriptChangedUpdate,
     TranscriptSnapshotUpdate,
-    TurnSettledUpdate,
-    TurnStartedUpdate,
+    TurnChangedUpdate,
     decode_updates,
     encode_request,
 )
@@ -52,7 +51,9 @@ from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
+from test_backend_native_lifecycle import native_backend
 
 
 def facts(metadata, kind):
@@ -198,65 +199,76 @@ class TestHandlers:
         assert backend.compaction_summary(summary) == summary
         assert "\x1b" not in backend.compaction_summary("\x1b[2J\nSafe")
 
-    async def test_replay_uses_owner_turn_timestamp_and_activity(self, tmp_path):
-        agent = self._agent(tmp_path)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        turn_id = "compaction-existing"
-        agent._comms.agents.begin_turn("proj", turn_id, "Compacting context")
-        agent._comms.agents.set_activity("proj", ActivityState.WORKING, "Compacting context")
-        active = agent._comms.registry.require("proj").active_turn
-        updates: list = []
+    async def test_replay_uses_owner_turn_timestamp_and_activity(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner() as (agent, session):
+            async with native.original_input(agent, session, "Compacting context") as turn:
+                started_at = agent.turns.turn_state(session).started_at
+                await agent.turns.transition_turn(
+                    session, turn.turn_lease, CompactionPhase(detail="Compacting context")
+                )
+                state = agent.turns.turn_state(session)
+                updates = []
 
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kwargs):
-                updates.append(update)
+                class Client:
+                    async def session_update(self, session_id=None, update=None, **kwargs):
+                        updates.append(update)
 
-        await agent.turns.replay_turn_state("proj", client=FakeClient())
-        assert active is not None
-        assert facts(updates[0].field_meta, TurnStartedUpdate) == (
-            TurnStartedUpdate(turn_id, active.started_at, "working", "Compacting context"),
-        )
-        agent._comms.agents.finish_turn(agent._comms.registry.require("proj").turn_lease)
+                await agent.turns.replay_turn_state(session, client=Client())
+                assert facts(updates[0].field_meta, TurnChangedUpdate) == (TurnChangedUpdate(state),)
+                assert state.started_at == started_at and state.managed_id == turn.turn_id
+                assert state.busy and state.activity == "Compacting context"
+            assert not agent.turns.turn_state(session).busy
+        assert native.provider.posts == 0
 
-    async def test_compaction_refuses_to_interrupt_an_active_turn(self, tmp_path):
-        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        agent.turns.active_turns["proj"] = "running"
-        result = await compact_context(agent.turns, "proj")
-        assert isinstance(result, RefusedCompactionResult)
-        assert "current response" in result.error
+    async def test_compaction_refuses_to_interrupt_an_active_turn(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner() as (agent, session):
+            async with native.original_input(agent, session, "Current response") as turn:
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                result = await compact_context(agent.turns, session)
+                assert isinstance(result, RefusedCompactionResult)
+                assert "current response" in result.error
+                assert agent.turns.owns_turn(session, turn.turn_id)
+            assert not agent.turns.turn_state(session).busy
+        assert native.session.read_bytes() == saved and native.provider.posts == 0
 
-    async def test_live_model_change_waits_for_backend_confirmation(self, tmp_path, monkeypatch):
+    async def test_live_model_change_waits_for_backend_confirmation(self, native_backend, monkeypatch):
         from acp import RequestError
 
-        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
-        agent = canonical_agent(wire(tmp_path), agent_args=["--provider", "test", "--model", "one"])
-        await agent.new_session("/wt/proj")
-        agent.turns.active_turns["proj"] = "turn"
-        inbox = agent.inputs.backend_inboxes["proj"] = asyncio.Queue()
-        try:
-            for accepted in (False, True):
-                request = asyncio.create_task(agent.set_config_option("model", "proj", "test/two"))
-                command = await asyncio.wait_for(inbox.get(), timeout=1)
-                assert command["type"] == "set_model"
-                assert command["provider"] == "test" and command["modelId"] == "two"
-                assert agent._comms.registry.require("proj").model == "test/one"
-                result = ae.ModelChanged(command["id"], accepted, "model unavailable")
-                agent.sessions.config.setting_requests.resolve(result)
-                if accepted:
-                    await request
-                else:
-                    with pytest.raises(RequestError):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture,response-local/second")
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner() as (agent, session):
+            async with native.original_input(agent, session, "Current response") as turn:
+                inbox = agent.inputs.backend_inboxes[session]
+                for accepted in (False, True):
+                    request = asyncio.create_task(agent.set_config_option("model", session, "response-local/second"))
+                    command = await asyncio.wait_for(inbox.get(), timeout=1)
+                    assert command["type"] == "set_model"
+                    assert command["provider"] == "response-local" and command["modelId"] == "second"
+                    assert agent._comms.registry.require(session).model == "response-local/fixture"
+                    agent.sessions.config.setting_requests.resolve(
+                        ae.ModelChanged(command["id"], accepted, "model unavailable")
+                    )
+                    if accepted:
                         await request
-            assert agent._comms.registry.require("proj").model == "test/two"
-            request = asyncio.create_task(agent.set_config_option("thinking_level", "proj", "high"))
-            command = await asyncio.wait_for(inbox.get(), timeout=1)
-            assert command["type"] == "set_thinking_level" and command["level"] == "high"
-            agent.sessions.config.setting_requests.resolve(ae.ThinkingChanged(command["id"], True))
-            await request
-            assert agent._comms.registry.require("proj").thinking_level is HighThinkingLevel
-        finally:
-            await agent.shutdown()
+                    else:
+                        with pytest.raises(RequestError):
+                            await request
+                assert agent._comms.registry.require(session).model == "response-local/second"
+                request = asyncio.create_task(agent.set_config_option("thinking_level", session, "high"))
+                command = await asyncio.wait_for(inbox.get(), timeout=1)
+                assert command["type"] == "set_thinking_level" and command["level"] == "high"
+                agent.sessions.config.setting_requests.resolve(ae.ThinkingChanged(command["id"], True))
+                await request
+                assert agent._comms.registry.require(session).thinking_level is HighThinkingLevel
+                assert agent.turns.owns_turn(session, turn.turn_id)
+            assert not agent.inputs.backend_inboxes and not agent.turns.turn_state(session).busy
+        assert native.provider.posts == 0
 
     async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -1477,146 +1489,82 @@ class TestFullHistory:
         assert bodies == [("a", "#all", "one"), ("a", "b", "dm"), ("b", "#x", "tagged")]
 
 
-@pytest.mark.usefixtures("native_rpc_fixture")
 class TestAgentTurnForwarding:
-    """!agent turns stream rpc events into ACP updates + wire activity."""
+    """ACP publication on an SDK-authored source, actual native tools and leases."""
 
-    def _rpc_stub(self, tmp_path: Path) -> str:
-        rpc_lines = "\n".join(
-            [
-                '{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"Inspecting files"}}',
-                '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"running"}}',
-                '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"pwd"}}',
-                '{"type":"tool_execution_update","toolCallId":"t1","toolName":"bash","partialResult":{"content":[{"type":"text","text":"working"}]}}',
-                '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash","result":{"content":[{"type":"text","text":"/wt"}]},"isError":false}',
-                '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":" finished"}}',
-                '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
-                '{"type":"agent_settled"}',
-            ]
-        )
-        stub = tmp_path / "pi-stub"
-        stub.write_text(
-            f"#!{sys.executable}\nimport json, sys\n"
-            + f"capability = {CAPABILITY!r}\n"
-            + "state = json.loads(sys.stdin.readline())  # get_state\n"
-            + "print(json.dumps({'type':'response','command':'get_state','id':state['id'],\n"
-            + "      'success':True,\n"
-            + "      'data':{'nativeInputProofCapability':capability}}), flush=True)\n"
-            + "prompt = json.loads(sys.stdin.readline())\n"
-            + 'print(json.dumps({"type": "response", "command": "prompt", "id": prompt["id"], "success": True}), flush=True)\n'
-            + 'print(json.dumps({"type": "message_start", "message": {"role": "user", "content": prompt["message"], "inputId": prompt["inputId"]}}), flush=True)\n'
-            + f"for event in {rpc_lines.splitlines()!r}: print(event, flush=True)\n"
-            + "sys.stdin.readline()  # postturn get_state\n"
-            + "sys.stdin.readline()  # get_session_stats\n"
-            + "print(json.dumps({'type': 'response', 'command': 'get_session_stats', 'success': True, 'data': {'contextUsage': {}}}), flush=True)\n"
-        )
-        stub.chmod(493)
-        return str(stub)
+    async def test_turn_forwards_tool_calls_and_thinking(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        models = json.loads((native.config / "models.json").read_text())
+        models["providers"]["response-local"]["models"][0]["reasoning"] = True
+        (native.config / "models.json").write_text(json.dumps(models))
+        native.provider.thinking = "Inspecting files"
+        native.provider.tool_call = ("bash", {"command": "pwd"})
+        native.provider.text = "running finished"
+        sent = []
 
-    async def test_turn_forwards_tool_calls_and_thinking(self, wired, tmp_path):
-        import sys as _sys
-
-        if _sys.platform == "win32":
-            pytest.skip("shell-script stub; POSIX only")
-        agent = canonical_agent(
-            wired,
-            agent_bin=self._rpc_stub(tmp_path),
-            agent_args=[],
-            reply_window=0.2,
-            no_reply_window=0.1,
-            reply_quiet=0.05,
-        )
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
+        class Client:
+            async def session_update(self, *, session_id, update):
                 sent.append(update)
 
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(
-            session_id="proj", prompt=[{"type": "text", "text": "!agent do a thing"}]
-        )
-        assert any((facts(update.field_meta, InputDeliveryChangedUpdate) for update in sent))
-        assert any((facts(update.field_meta, InputStartedUpdate) for update in sent))
-        delivery_updates = [
-            update for update in sent if facts(update.field_meta, InputDeliveryChangedUpdate)
-        ]
-        assert len(delivery_updates) >= 2
-        for update in delivery_updates:
-            assert type(update).__name__ == "AgentMessageChunk"
-            assert update.content.text == ""
-        goal_updates = [
-            update
-            for update in sent
-            if isinstance(update, SessionInfoUpdate) and facts(update.field_meta, GoalChangedUpdate)
-        ]
-        assert len(goal_updates) == 1
-        assert facts(goal_updates[0].field_meta, GoalChangedUpdate) == (
-            GoalChangedUpdate(None, None),
-        )
-        assert "title" not in goal_updates[0].model_fields_set
-        metadata = tuple((f for update in sent for f in decode_updates(update.field_meta)))
-        started = [f for f in metadata if isinstance(f, TurnStartedUpdate)]
-        settled = [f for f in metadata if isinstance(f, TurnSettledUpdate)]
-        assert len(started) == len(settled) == 1
-        assert started[0].turn_id == settled[0].turn_id
-        assert any((isinstance(f, TranscriptChangedUpdate) for f in metadata))
-        thoughts = [
-            update.content.text for update in sent if type(update).__name__ == "AgentThoughtChunk"
-        ]
-        assert thoughts == ["Inspecting files"]
-        texts = [
-            update.content.text
-            for update in sent
-            if type(update).__name__ == "AgentMessageChunk" and update.content.text
-        ]
-        assert "".join(texts) == "running finished"
-        tools = [
-            update
-            for update in sent
-            if type(update).__name__ in {"ToolCallStart", "ToolCallProgress"}
-        ]
-        assert [type(update).__name__ for update in tools] == [
-            "ToolCallStart",
-            "ToolCallProgress",
-            "ToolCallProgress",
-        ]
-        tool_call, progress, completed = tools
-        assert tool_call.tool_call_id == "t1"
-        assert tool_call.title == "Run pwd"
-        assert tool_call.kind == "execute"
-        assert tool_call.raw_input == {"command": "pwd"}
-        assert progress.status == "in_progress"
-        assert progress.content[0].content.text == "working"
-        assert completed.status == "completed"
-        assert completed.content[0].content.text == "/wt"
-        assert not agent.turns.active_turns
+        async with native.open_owner(native_options=("--tools", "bash"), client=Client()) as (agent, session):
+            await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
+            metadata = tuple(fact for update in sent for fact in decode_updates(update.field_meta))
+            assert any(isinstance(fact, InputDeliveryChangedUpdate) for fact in metadata)
+            assert any(isinstance(fact, InputStartedUpdate) for fact in metadata)
+            delivery_updates = [update for update in sent
+                                if facts(update.field_meta, InputDeliveryChangedUpdate)]
+            assert len(delivery_updates) >= 2
+            assert all(type(update).__name__ == "AgentMessageChunk" and update.content.text == ""
+                       for update in delivery_updates)
+            goal_updates = [update for update in sent
+                            if isinstance(update, SessionInfoUpdate)
+                            and facts(update.field_meta, GoalChangedUpdate)]
+            assert len(goal_updates) == 1
+            assert facts(goal_updates[0].field_meta, GoalChangedUpdate) == (GoalChangedUpdate(None, None),)
+            assert "title" not in goal_updates[0].model_fields_set
+            states = [fact.state for fact in metadata if isinstance(fact, TurnChangedUpdate)]
+            busy = [state for state in states if state.busy]
+            assert busy and len({state.managed_id for state in busy}) == 1
+            assert states[-1] == agent.turns.turn_state(session)
+            assert not states[-1].busy and states[-1].finished_turn_id == busy[0].managed_id
+            assert any(isinstance(fact, TranscriptChangedUpdate) for fact in metadata)
+            assert [update.content.text for update in sent
+                    if type(update).__name__ == "AgentThoughtChunk"] == ["Inspecting files"]
+            texts = [update.content.text for update in sent
+                     if type(update).__name__ == "AgentMessageChunk" and update.content.text]
+            assert "running finished" in "".join(texts)
+            tools = [update for update in sent
+                     if type(update).__name__ in {"ToolCallStart", "ToolCallProgress"}]
+            assert type(tools[0]).__name__ == "ToolCallStart"
+            assert tools[0].kind == "execute" and tools[0].raw_input == {"command": "pwd"}
+            assert any(update.status == "in_progress" for update in tools[1:])
+            assert tools[-1].status == "completed"
+            assert str(native.project) in tools[-1].content[0].content.text
+            assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
+        assert native.provider.posts == 2 and len(native.saved_inputs()) == 2
 
-    async def test_turn_sets_wire_activity(self, wired, tmp_path):
-        import sys as _sys
+    async def test_turn_sets_wire_activity(self, native_backend):
+        from agent_comms.turn_phase import ToolRunningPhase
 
-        if _sys.platform == "win32":
-            pytest.skip("shell-script stub; POSIX only")
-        agent = canonical_agent(
-            wired,
-            agent_bin=self._rpc_stub(tmp_path),
-            agent_args=[],
-            reply_window=0.2,
-            no_reply_window=0.1,
-            reply_quiet=0.05,
-        )
-        agent.sessions.client = None
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(
-            session_id="proj", prompt=[{"type": "text", "text": "!agent do a thing"}]
-        )
-        assert wired.agents.activity_of("proj").state.value == "idle"
-        rows = [
-            json.loads(line) for line in (wired.root / "activity.jsonl").read_text().splitlines()
-        ]
-        states = [row["state"] for row in rows if row["thread"] == "proj"]
-        assert states == ["thinking", "working", "thinking", "idle"]
+        native = native_backend
+        await native.author_history()
+        native.provider.tool_call = ("bash", {"command": "pwd"})
+        updates = []
+
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        async with native.open_owner(native_options=("--tools", "bash"), client=Client()) as (agent, session):
+            await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
+            assert agent._comms.agents.activity_of(session).state is ActivityState.IDLE
+            states = [fact.state for update in updates for fact in decode_updates(update.field_meta)
+                      if isinstance(fact, TurnChangedUpdate)]
+            assert any(isinstance(state.phase, ToolRunningPhase) and state.busy for state in states)
+            assert states[-1] == agent._comms.registry.require(session).turn_state
+            assert not states[-1].busy
+        assert native.provider.posts == 2
 
 
 class TestActivityLayer:
