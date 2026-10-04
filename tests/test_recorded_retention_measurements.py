@@ -62,6 +62,52 @@ class RecordedMeasurementTests(unittest.TestCase):
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
 
+    def test_construction_rounds_preserve_prefix_and_public_probe_boundary(self):
+        # Prevent cumulative source from being resent at each cut, edited
+        # prefix from being silently reconstructed, and oracle answer leakage.
+        scenarios = (coding_scenario(), *(RecallScenario.read(Path(__file__).parent /
+            'fixtures/retention' / f'{name}.json') for name in ('research', 'goal')))
+        for scenario in scenarios:
+            with self.subTest(scenario=scenario.identity):
+                history = ()
+                for round_, operands in zip(scenario.rounds, scenario.construction_rounds()):
+                    history += operands['history_additions']
+                    self.assertEqual(history, round_.history)
+                    self.assertEqual(operands['round'], round_.identity)
+                    self.assertEqual(operands['probe_text'], round_.probe_text())
+                    self.assertEqual(json.loads(operands['probe_text'].split('\n', 1)[1]),
+                        {'round': round_.identity, 'questions': [q.public() for q in round_.questions]})
+                with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
+                    scenario.rounds[-1].history_after(('edited prior source',))
+                shortened = replace(scenario.rounds[-1], history=scenario.rounds[0].history)
+                with self.assertRaises(ValueError):
+                    shortened.history_after(scenario.rounds[-2].history)
+
+    def test_construction_plan_uses_original_oracle_and_separate_sampling_seed(self):
+        # The prospective plan is derived from the exact frozen oracle once;
+        # arm ordering must not accidentally depend on inference parameters.
+        scenario = coding_scenario()
+        original = self.artifact('construction-oracle.json', scenario)
+        design = PairedRecallDesign(original, Condition.TASK_MEMORY, Condition.BOUNDED,
+            'openai-codex/gpt-6.1-sol', 10, 0.95, -0.02, 10000, 20261004)
+        with patch.object(RecordedNativeCheckpoint, 'read_record',
+                          wraps=RecordedNativeCheckpoint.read_record) as acquired:
+            plan = design.construction_plan(17)
+            self.assertEqual(acquired.call_count, 1)
+        self.assertEqual(plan['rounds'], scenario.construction_rounds())
+        self.assertIs(plan['comparison_design'], design)
+        self.assertEqual(tuple(item['sample'] for item in plan['trajectories']), tuple(range(1, 11)))
+        for item in plan['trajectories']:
+            self.assertEqual(set(item['condition_order']), {design.candidate, design.baseline})
+        self.assertEqual(plan, design.construction_plan(17))
+        self.assertEqual(plan['trajectories'],
+            replace(design, bootstrap_seed=73).construction_plan(17)['trajectories'])
+        self.assertNotEqual(plan['trajectories'], design.construction_plan(18)['trajectories'])
+        self.assertEqual(FieldCodec.encode(plan)['comparison_design']['oracle'], FieldCodec.encode(original))
+        Path(original.path).write_text('{}')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            design.construction_plan(17)
+
     def test_group_reader_shared_once_and_closed_after_second_arm_refuses(self):
         # Resource plumbing only: detect duplicated acquisition and a leaked
         # reader when the later arm refuses. This does not simulate native proof.
