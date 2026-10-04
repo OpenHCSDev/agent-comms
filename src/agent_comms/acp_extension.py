@@ -33,6 +33,7 @@ from .working_memory_labels import ModelLabel
 
 if TYPE_CHECKING:
     import asyncio
+    from acp.schema import AgentMessageChunk
     from typing import Any
     from .input_drain import InputDrain
     from .queued_input import QueuedInput
@@ -44,6 +45,16 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
     def for_session(self, session_id: str) -> AgentCommsUpdate:
         return self
+
+    def acp_chunk(self) -> AgentMessageChunk:
+        """Carry this declared observation in its original empty ACP envelope."""
+        from acp.schema import AgentMessageChunk, TextContentBlock
+
+        return AgentMessageChunk(
+            session_update="agent_message_chunk",
+            content=TextContentBlock(type="text", text=""),
+            field_meta=encode_updates(self),
+        )
 
 
 @dataclass(frozen=True)
@@ -319,6 +330,25 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
 
     @abstractmethod
     def feedback(self, supported: bool) -> str: ...
+
+    @classmethod
+    def capture(
+        cls, scope: QueueScope | None, queued: tuple[QueuedInput, ...],
+        restored: tuple[QueuedInput, ...],
+    ) -> QueueProjection:
+        """Project live inputs without repairing or withdrawing their authority."""
+        if scope is None:
+            return UnavailableQueueProjection()
+        items = tuple(row for item in queued for row in item.queue_items(scope))
+        previous = tuple(row for item in restored for row in item.queue_items(scope))
+        rows = items + previous
+        try:
+            sizes = [len(row.text.encode("utf-8")) for row in rows]
+        except (AttributeError, UnicodeError):
+            return UnavailableQueueProjection()
+        if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
+            return UnavailableQueueProjection()
+        return AvailableQueueProjection(items, previous)
 
     def validate_scope(self, scope: QueueScope | None) -> None:
         """Pending/unavailable wire observations may have no scope."""

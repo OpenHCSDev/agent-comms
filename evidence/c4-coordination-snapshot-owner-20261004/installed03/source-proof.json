@@ -1,0 +1,393 @@
+{
+  "state": "Parent654 Core-only granted source-equal stage; App not yet run",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "45cc4ce5cea5957a57cb88822b3f84eb70d01186",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms",
+      "files": 344,
+      "python_files": 316,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/core-wheel/agent_comms-0.1.0-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "05f937558be6f3ac3979cc989c2539314e03a717b096f013b17e5b87d9f87045"
+    },
+    {
+      "module": "toad",
+      "head": "e18251851b13d7397c8863bdabaa1945abb96604",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad",
+      "files": 319,
+      "python_files": 288,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/context637-tool430-native59-receiving-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "94f12a0219f1c981fcd75b836d343aa96c338be9377e5de355d1b79b4f3f9503"
+    },
+    {
+      "module": "textual",
+      "head": "180cbd9471bd6674647590108ca2fe5a627eb24f",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual",
+      "files": 266,
+      "python_files": 249,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "75af4c7c9a20b596ef9a847d81199f054152b0ec1cb0d3fc8c4c0bb114597997"
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_diff_view",
+      "files": 3,
+      "python_files": 2,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual-diff-view.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+          "requested_revision": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+        }
+      },
+      "inventory_sha256": "c1ab2e4c7a7595de81eeb8fef14f9fa9e45b603f84e810dc7c08fa9145793679"
+    },
+    {
+      "module": "refactor_audit",
+      "head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/refactor_audit",
+      "files": 10,
+      "python_files": 10,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "6ccd1c3e34188c55e911e6cecb5ed6bbba7a1048920580d475e1e23300dd5e9d"
+    }
+  ],
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "native_tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "package_count": 69,
+  "packages": [
+    [
+      "Jinja2",
+      "3.1.6"
+    ],
+    [
+      "MarkupSafe",
+      "3.0.3"
+    ],
+    [
+      "Pygments",
+      "2.21.0"
+    ],
+    [
+      "agent-client-protocol",
+      "0.12.1"
+    ],
+    [
+      "agent-comms",
+      "0.1.0"
+    ],
+    [
+      "aiohappyeyeballs",
+      "2.7.1"
+    ],
+    [
+      "aiohttp",
+      "3.14.3"
+    ],
+    [
+      "aiohttp-jinja2",
+      "1.6"
+    ],
+    [
+      "aiosignal",
+      "1.4.0"
+    ],
+    [
+      "aiosqlite",
+      "0.22.1"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "anyio",
+      "4.14.2"
+    ],
+    [
+      "attrs",
+      "26.1.0"
+    ],
+    [
+      "bashlex",
+      "0.18"
+    ],
+    [
+      "batrachian-toad",
+      "0.6.20"
+    ],
+    [
+      "certifi",
+      "2026.7.22"
+    ],
+    [
+      "click",
+      "8.4.0"
+    ],
+    [
+      "format-currency",
+      "0.0.10"
+    ],
+    [
+      "frozenlist",
+      "1.8.0"
+    ],
+    [
+      "h11",
+      "0.16.0"
+    ],
+    [
+      "httpcore",
+      "1.0.9"
+    ],
+    [
+      "httpx",
+      "0.28.1"
+    ],
+    [
+      "idna",
+      "3.20"
+    ],
+    [
+      "jeepney",
+      "0.9.0"
+    ],
+    [
+      "linkify-it-py",
+      "2.2.0"
+    ],
+    [
+      "loguru",
+      "0.6.0"
+    ],
+    [
+      "markdown-it-py",
+      "4.2.0"
+    ],
+    [
+      "mdit-py-plugins",
+      "0.6.1"
+    ],
+    [
+      "mdurl",
+      "0.1.2"
+    ],
+    [
+      "metaclass-registry",
+      "0.2.1"
+    ],
+    [
+      "multidict",
+      "6.9.1"
+    ],
+    [
+      "nominal-refactor-audit",
+      "0.1.0"
+    ],
+    [
+      "notify_py",
+      "0.3.43"
+    ],
+    [
+      "packaging",
+      "26.2"
+    ],
+    [
+      "pathspec",
+      "1.1.1"
+    ],
+    [
+      "platformdirs",
+      "4.9.6"
+    ],
+    [
+      "propcache",
+      "0.5.4"
+    ],
+    [
+      "psutil",
+      "7.2.2"
+    ],
+    [
+      "pydantic",
+      "2.13.5"
+    ],
+    [
+      "pydantic_core",
+      "2.46.5"
+    ],
+    [
+      "pyperclip",
+      "1.11.0"
+    ],
+    [
+      "rich",
+      "15.0.0"
+    ],
+    [
+      "setproctitle",
+      "1.3.7"
+    ],
+    [
+      "textual",
+      "8.2.8"
+    ],
+    [
+      "textual-diff-view",
+      "0.1.5"
+    ],
+    [
+      "textual-serve",
+      "1.1.3"
+    ],
+    [
+      "textual-speedups",
+      "0.2.1"
+    ],
+    [
+      "tree-sitter",
+      "0.26.0"
+    ],
+    [
+      "tree-sitter-bash",
+      "0.25.1"
+    ],
+    [
+      "tree-sitter-css",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-go",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-html",
+      "0.23.2"
+    ],
+    [
+      "tree-sitter-java",
+      "0.23.5"
+    ],
+    [
+      "tree-sitter-javascript",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-json",
+      "0.24.8"
+    ],
+    [
+      "tree-sitter-markdown",
+      "0.5.1"
+    ],
+    [
+      "tree-sitter-python",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-regex",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-rust",
+      "0.24.2"
+    ],
+    [
+      "tree-sitter-sql",
+      "0.3.11"
+    ],
+    [
+      "tree-sitter-toml",
+      "0.7.0"
+    ],
+    [
+      "tree-sitter-xml",
+      "0.7.0"
+    ],
+    [
+      "tree-sitter-yaml",
+      "0.7.2"
+    ],
+    [
+      "typeguard",
+      "4.5.2"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ],
+    [
+      "typing_extensions",
+      "4.15.0"
+    ],
+    [
+      "watchdog",
+      "6.0.0"
+    ],
+    [
+      "xdg-base-dirs",
+      "6.0.3"
+    ],
+    [
+      "yarl",
+      "1.25.1"
+    ]
+  ],
+  "requirements_sha256": "9a477b8f2dbcb489e42bfcbc6897d650fc60e2046f9e9065c56a19f1b1fa9831",
+  "protected_old_prefix_files": 390,
+  "protected_old_prefix_files_unchanged": true,
+  "public_install_changed": false,
+  "new_native_build": false,
+  "source_overlay": false,
+  "dependency_bypass": false,
+  "journey_owners": [
+    "Parent C4-654"
+  ],
+  "journey_assessment": "Installed source/native/cohort verified; one affected App pending",
+  "archive_artifacts": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/merged-core633-1a520528-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "58a11a611069326b50b97e20f1080ce786b916e90be307495a4e4306157492f6"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/context637-tool430-native59-receiving-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "5002977faca18b0f807999dced9e05f76144c039fd0cab719848bf4d544a7742"
+    },
+    {
+      "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+      "sha256": "73d4ca971dd2891c2a2266a0c5c8629e3e0ff55e802456ae60d0fedfe72fdbaa"
+    },
+    {
+      "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+      "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886"
+    },
+    {
+      "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/core-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "952e35a927313120990d1ce6b9b77604ffa833ef34dd8411042a55ac67704b27"
+    }
+  ]
+}

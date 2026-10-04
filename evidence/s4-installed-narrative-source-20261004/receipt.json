@@ -1,0 +1,45 @@
+{
+  "implementation": "5da9cb03ecfd74326777b8db5a0459aca9ec4ba3",
+  "base": "c159f39e0863448ca621cc567ee131b9c9ffc739",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-narrative-source",
+  "raw_sha256": {
+    "owner-before.json": "7854d7492f8f4ab854873cafcdd4c683d40b49e2c9788ef6914e6909dd9c03ae",
+    "owner-after-final.json": "e1e0fd9d2314c8f008439f1a1e18c0ec91b6f7889507e0610807ab40e56deb88",
+    "focused.log": "f5e415c66e428debe4ad8129fd971307b37136794ebabe65ab805b0456aecb52",
+    "focused-final.log": "8021006f59c71c79a901904dfd3c7e432d9cde71ddd6b31857525267b44eb75b",
+    "cli01-negative.stdout.json": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cli01-negative.stderr.txt": "80505ea6cb46342145891f4252b1e8fcc0b5b70ac9232a7a97a6e637a4d0d182",
+    "cli.stdout.json": "28c1607b629fba110790cf04b482633b7d6f2616a60aacf8b9b05bfd15c1fdb8",
+    "cli.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cli-selection.json": "f7ab25491abb22bb20e931e9de2668e576783e1ed39a22c527005d661daebdde"
+  },
+  "raw_only": [
+    "cli.stdout.json"
+  ],
+  "private_source_sha256": {
+    "tests/retained_native_fixture.py": "51536fafb575b3fdc31a8aafde22dcec1acfb0b29542828f45f3986208d8af8f",
+    "tests/retained_native_conditions.mjs": "5385dd1e25ea6e4ddf33f27db07da540a2073597d632f5b8d10cc0cc3f1c83bf",
+    "tests/compaction_retention_fixture.py": "1b597c085139b0e4105a45ed127603750fd9a3a6ffea4c7ba93fafbf90ae23fd",
+    "tests/test_recorded_retention_measurements.py": "d3ccdb66812b86c764e5f2b8d2f47c44041e23be0b2fff1d12883d806d886cb8",
+    "tests/three_cut_retention_configured_journey.py": "bb4e32ca51899f287ab387648a48e73b1202f1d8ec6c0f6328f7712333a84f1e"
+  },
+  "qualification": {
+    "focused": "5 passed, 36 deselected in 0.41s; authored Node observer plus original reader/scorer refusal controls",
+    "CLI": "Two absent recorded trajectories: all three rounds unavailable for both arms; study false; corrected distinct declared conditions; stderr empty",
+    "negative": "First CLI omitted distinct baseline-condition and refused; original raw preserved",
+    "AST": "735 Python modules, 61 lexical sites, no parse omissions; JS producer read directly"
+  },
+  "operations": {
+    "original_session_reads": 0,
+    "SDK_calls": 0,
+    "provider_calls": 0,
+    "native_processes": 0,
+    "packages_envs_loans": 0
+  },
+  "limits": [
+    "Authored private observation/reader/scorer plumbing, not a configured installed SDK model turn",
+    "Narrative reference and substring presence are not narrative-only whole-prefix construction or exact replacement coverage",
+    "No HTTP, provider capacity, actual intervention, recall, billing, independence or full S4 acceptance",
+    "30-pair/USD75 study remains unapproved"
+  ]
+}

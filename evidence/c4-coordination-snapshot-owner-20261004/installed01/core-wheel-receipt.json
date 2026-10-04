@@ -1,0 +1,15 @@
+{
+  "build_head": "45cc4ce5cea5957a57cb88822b3f84eb70d01186",
+  "wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/core-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "952e35a927313120990d1ce6b9b77604ffa833ef34dd8411042a55ac67704b27",
+  "bytes": 880886,
+  "tracked_assets": 344,
+  "forced_assets": 3,
+  "all_Git_wheel_assets_equal": true,
+  "inventory": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/core-wheel-inventory.json",
+  "inventory_sha256": "05f937558be6f3ac3979cc989c2539314e03a717b096f013b17e5b87d9f87045",
+  "backend": "original installed hatchling1.30.1",
+  "environment_created": false,
+  "native_build": false,
+  "installed_writes": false
+}

@@ -184,11 +184,9 @@ class TurnProgress(events.AgentEventConsumer):
     async def done(self, event: events.Done) -> events.Done:
         document = await Coordination.run_worker(self.inputs.dispositions.read)
         unknown_attempts = not document.all_started(
-            self.inputs.turn_input_keys.get(self.session_id, set())
+            self.inputs.input_keys(self.session_id)
         )
-        if event.ok is True and (
-            self.inputs.pending_followups(self.session_id, document) or unknown_attempts
-        ):
+        if event.ok is True and unknown_attempts:
             # A final assistant stop can prove the original turn,
             # not an ACKed follow-up lacking its own user start.
             event = replace(

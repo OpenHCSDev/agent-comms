@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/c4_coordination_installed_ui.py", line 97, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/c4_coordination_installed_ui.py", line 53, in main
+    assert FieldCodec.decode(type(actor), FieldCodec.encode(actor)) == actor
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 315, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 525, in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 315, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 536, in _decode
+    raise ValueError(f"Expected {target}, received {type(data).__name__}")
+ValueError: Expected collections.abc.Mapping[str, int], received dict

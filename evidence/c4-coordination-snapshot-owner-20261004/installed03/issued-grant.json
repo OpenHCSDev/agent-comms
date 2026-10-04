@@ -1,0 +1,66 @@
+{
+  "time": 1791137626.1564035,
+  "state": "ISSUED immutable; lifecycleONLYBohr",
+  "owner": "soleParentC4-654 remaining03",
+  "thread": "01a0d295-dfad-71f3-89f7-8a78d8917a73",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "purpose": "ONE remaining original registered sidebar App with paired PrivateNkLaunch selection/apply_environment and selected content readiness; no repeated15source controls",
+  "source_checkpoint": "2db6b96d76ea056351e6aee2c15d2d239b65f4be",
+  "production_dependencies_equal": "45cc4ce5cea5957a57cb88822b3f84eb70d01186",
+  "source_fixture_review": "PrivateNkLaunch.from_environment RootID+AC_NATIVE_COPIED_PACKAGE, apply_environment, mode700 private root, wait_content_ready; no guard/product/deadline patch",
+  "wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/core-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "952e35a927313120990d1ce6b9b77604ffa833ef34dd8411042a55ac67704b27",
+  "wheel_assets_verified": 347,
+  "wheel_receipt": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/core-wheel-receipt.json",
+  "output": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c4-coordination-snapshot-owner-20261004/installed03",
+  "preimage": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-actual436-before-Heis432-preimage.json",
+  "archive": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/retired-env-metadata/style22-actual436-before-Heis432.tar.gz",
+  "archive_sha256": "e6f27830a69a5e60902ecf8d25dccd46b43efefef75335e2679ef78c461aba5a",
+  "members": 1470,
+  "packages": 69,
+  "protected": 390,
+  "protected_manifest": "preimage protected_original159_433114_436115_Readys; allPREFIXactivation/oldproof/operators/Readys byteexact",
+  "actual436_floor": {
+    "agent_comms": "1a520528dfa8d5e5e1ebb13913fed3ccb3514376",
+    "toad": "e18251851b13d7397c8863bdabaa1945abb96604",
+    "textual": "180cbd9471bd6674647590108ca2fe5a627eb24f",
+    "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+    "refactor_audit": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10"
+  },
+  "restore_wheels": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/merged-core633-1a520528-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "58a11a611069326b50b97e20f1080ce786b916e90be307495a4e4306157492f6"
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/context637-tool430-native59-receiving-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "5002977faca18b0f807999dced9e05f76144c039fd0cab719848bf4d544a7742"
+    },
+    {
+      "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+      "sha256": "73d4ca971dd2891c2a2266a0c5c8629e3e0ff55e802456ae60d0fedfe72fdbaa"
+    },
+    {
+      "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+      "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886"
+    }
+  ],
+  "readback": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-ParentC4-654-successor02-final-handback-readback.json",
+  "borrowers": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-ParentC4-654-remaining03-borrowers-at-grant.json",
+  "allUID": 237,
+  "refs": 0,
+  "gaps": 0,
+  "references": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-ParentC4-654-remaining03-reference-check.json",
+  "new_archive_bytes": 0,
+  "prior02_issued": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-ParentC4-654-successor-Core-App-issued-grant.json",
+  "prior02_issued_sha256": "16f5f6055bc1820b9a4a84a310df9568846752b0bee7c0d7061e618c73239140",
+  "constraints": [
+    "No rebuild/resolve/newenv/clone/nativecopy/nativebuild/movie/provider/nativeinput/publicoperation; only sameCore952e normalfilewheel install",
+    "UnchangedToad5002/Text73d/NRA8d/08669; all private/auth/wire/history/session/UNKNOWN preserved",
+    "CandidateDTO/sourceproof OWNinstalled03 only; noPREFIXactivation publisher or original165/159/114/115 rewrites",
+    "Original01/02failures/grants/rawlogs/handbacks immutable; this is newspecificpurpose not retroactivePASS",
+    "Whole actual4361470bytes/modes/links+69versions/origins+390protected restore and actualownedprocess/socketcleanup/freshprivilegedhandback after terminal",
+    "W6next after actual wholehandback, no W6currentloan or concurrentimports",
+    "Issuedbytesimmutable; sharedlifecycleONLYBohr; noautomaticnextpurpose"
+  ]
+}

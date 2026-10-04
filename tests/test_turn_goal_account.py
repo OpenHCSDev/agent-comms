@@ -123,7 +123,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         assert comms.registry.require(name).active_turn is None
         assert session.session_id not in owner.inputs.backend_inboxes
         assert session.session_id not in owner.inputs.original_sources
-        assert session.session_id not in owner.inputs.turn_input_keys
+        assert not owner.inputs.input_keys(session.session_id)
         assert tuple(owner.inputs.pending_turns.get(session.session_id, ())) == pending_before
         if failure == "receipt_capture":
             originals = tuple(owner.inputs.dispositions.read().rows.values())

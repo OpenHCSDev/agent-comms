@@ -1,0 +1,85 @@
+{
+  "time": 1791136505.180117,
+  "result": "PASS",
+  "cases": 8,
+  "pytest_seconds": 9.36,
+  "controller": {
+    "controller": {
+      "pid": 2387692,
+      "start_time": 61205947
+    },
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "installed_core": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "pytest": "/usr/lib/python3.14/site-packages/pytest/__init__.py",
+    "started": 1791136420.900896,
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent"
+  },
+  "cleanup": [
+    {
+      "identity": {
+        "pid": 2387692,
+        "start_time": 61205947
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 2387889,
+        "start_time": 61206336
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 2387946,
+        "start_time": 61206731
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ],
+  "fixture_receipts": [
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-c4-input-drain655-installed02/fixtures/saved-native-owner0/wire",
+      "localhost_posts": 1,
+      "native_input_proofs": 1,
+      "children": [
+        {
+          "pid": 2387889,
+          "start_time": 61206336
+        }
+      ],
+      "children_retired": true
+    },
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-c4-input-drain655-installed02/fixtures/saved-native-owner1/wire",
+      "localhost_posts": 2,
+      "native_input_proofs": 3,
+      "children": [
+        {
+          "pid": 2387946,
+          "start_time": 61206731
+        }
+      ],
+      "children_retired": true
+    }
+  ],
+  "owned_run_sockets": [],
+  "installed_assets_unchanged": 347,
+  "keepers_unchanged": 92,
+  "production": "c265eedd4ac159a5bad87023d2ba83dc37b7041e",
+  "wheel_sha256": "4cc945ef50015570953ff934252976d08e62d416f22acfda56403a0acffceab6",
+  "native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "native_tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "scope": "Actual saved SDK/OwnedTurn and runtime socket; queue clear/refusal retains source and durable bytes; native ACK is not STARTED; UNKNOWN preserved until actual native start; original teardown joined",
+  "external_provider_calls": 0,
+  "public_inputs": 0,
+  "uncertain_replays": 0,
+  "native_inputs": "Actual controlled localhost native inputs occurred: raw fixture receipts report one and three input proof files, one and two HTTP posts respectively; these are not zero-input checks",
+  "negative": "installed01 stopped at import pytest before fixture collection; raw log preserved",
+  "holder_handback": "All owned execution finished; no future package/build/import claim. Return sole655 THIN540 to Bohr lifecycle; original input/source/auth/UNKNOWN preserved. No restore or next loan inferred.",
+  "artifact_handback": "Explicit immutable086 READ/execution HAND BACK; no artifact write/build/copy; all recorded children absent and groups empty",
+  "proof_limits": "No external-provider/public/live UI/performance/full C4 closure claim"
+}
