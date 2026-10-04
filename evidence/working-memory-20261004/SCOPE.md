@@ -153,3 +153,24 @@ original manifest but cannot label any sentence as that file's instruction.
 New ranges retain exact original file/source coordinates. The affected source
 batch remains3PASS/0.52s, with this concrete historical case added; zero external
 requests or provider/native input. Receipt:historical-attribution-final.json.
+
+## Matching native assembly driver
+
+The three published native producer files at fcbd30a1 are frozen for Sch's
+single matching assembly. The existing tests/native_turn_context_contract.mjs
+now has a distinct --system-source-spans mode. It uses the original SDK loader,
+session and TurnContext.capture for six authored cases; no input is appended
+and fetch is forbidden. The original builder runs in the existing joined child
+process against the same acquired options and declared PI_PACKAGE_DIR. Prompt
+bytes are compared directly, without normalizing text or pretending whole
+manifest/provenance parity.
+
+The checks cover contiguous UTF8 ranges/digests, BOM-stripped file wording with
+original raw-file hashes, custom/default prompts, unchanged/changed overrides,
+project instructions, skill metadata (not skill body), emitted values and
+observation requestId. This source-only inspection does not claim a committed
+provider request. Original --comparison-package behavior remains separate.
+Invocation: node tests/native_turn_context_contract.mjs MATCHED_PACKAGE
+PRIVATE_ROOT --system-source-spans --comparison-package ORIGINAL_PACKAGE.
+Syntax and whitespace checks passed; matching SDK execution remains pending
+Sch's assembly. No new artifact, package, provider call or installed holder.
