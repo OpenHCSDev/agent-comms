@@ -132,10 +132,17 @@ Arendt660 exactf06b004d has Debt37232065321 SUCCESS. Parent reviewed the shared
 observer's connection/request settlement, original Node completion notification,
 ExitStack/ParentedProcess custody and all caller migrations. All five source
 and four raw keeper hashes match its receipt. Seven authored controls qualify
-only protocol/controller scope. The changed actual SDK observer completion and
-tool/system JSON projection remain unexecuted; the original659 timeout is not
-rewritten. Arendt owns that next changed boundary under separate original086
-read/execution authority, with no provider prompt or study permission implied.
+only protocol/controller scope. The changed actual SDK boundary subsequently
+passed in1.778238s with SDK and inspector exit0, release through Node's original
+completion event and both owned processes absent. The original reader verified
+all five segments/12214 UTF8 bytes, including8543 system and2778 tool bytes,
+and the complete converter/request-ID relation. Parent matched all31 source/raw
+keeper hashes; final private files equalf06b. Final7d69476b Debt37233540665
+passed and parent exact-head guarded merged660 asad7e582f. The original659
+timeout/refusals remain unchanged, and immutable086 read/execution was returned.
+No provider prompt, transport/capacity or paid-study acceptance follows from
+this SDK checkpoint. Arendt continues the full configured S4 workflow at its
+original owners; parent normally joined actual main preserving661's tool.
 Parent also reviewed W6's prepared authored App against its original done
 criterion. The next journey checks imported historical reference read/search/
 export and separate local USER CLI correction with the worker disabled. It does
