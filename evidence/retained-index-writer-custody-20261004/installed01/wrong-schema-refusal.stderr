@@ -1,0 +1,48 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/retained_index_writer.py", line 50, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/retained_index_writer.py", line 23, in main
+    with log.locked() as custody:
+         ~~~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py", line 61, in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+         ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     contention=contention) as lock:
+                     ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/store_files.py", line 122, in _store_lock
+    with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:
+         ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/store_files.py", line 98, in _held_store_source
+    with WireLog(store_path).verify_before_read_unlocked() as source:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py", line 583, in verify_before_read_unlocked
+    with opened_claim_source_unlocked(self, private_marker) as source:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py", line 837, in opened_claim_source_unlocked
+    source = resources.enter_context(
+        opened_private_checkpoint_unlocked(bus, private_marker)
+    )
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 530, in enter_context
+    result = _enter(cm)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py", line 796, in opened_private_checkpoint_unlocked
+    saved = marker.access.verify_checkpoint(bus, marker, db, stream, path)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_metadata.py", line 79, in verify_checkpoint
+    return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py", line 701, in _verify_open_checkpoint_unlocked
+    saved = _saved(db)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py", line 539, in _saved
+    raise RelationViolationError("Private bus checkpoint schema is unavailable.")
+agent_comms.errors.RelationViolationError: Private bus checkpoint schema is unavailable.

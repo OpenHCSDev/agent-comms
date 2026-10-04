@@ -1,0 +1,187 @@
+{
+  "scope": "Only NEW authored661 disposable fixture roots/indexes; no native/provider/input/UNKNOWN ever created. Raw refusals, exact wire/registry/marker originals and terminal receipt retained in compact keepers.",
+  "retired": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire",
+      "removed_files": 15,
+      "allocated_bytes": 483328,
+      "inventory": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.bus.jsonl.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.bus_meta.json.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.catalog.json.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.compaction-publication-handoff.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.native_prompt_bindings.sqlite3.snapshot-lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.registry-owner-guard",
+          "bytes": 188,
+          "sha256": "e716209c5458019e0dee750e3ed03116b9006115bd1eb7b398f7e5a1c4395319"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.registry.json.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/.wire.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/bus.jsonl",
+          "bytes": 1398,
+          "sha256": "fc863965695bfe7dd6d1c1454a0caa5e025c98ee60230f2e9d1c729510a5815f"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/bus_meta.json",
+          "bytes": 819,
+          "sha256": "1708f8cd87b596b9497f6c6fa586929cd5fa76226454c4257692b385e7bd5f66"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/catalog.json",
+          "bytes": 297,
+          "sha256": "78ee2e8912d423198c10adceb0a9c10f1281da6a281458bf65c77f29c4d161db"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/coordination.sqlite3",
+          "bytes": 397312,
+          "sha256": "f2c68ce123e4f77fedb635e8092d08643d2041de73180c1105c68e1fcc22f235"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/native_prompt_bindings.sqlite3",
+          "bytes": 12288,
+          "sha256": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/private_bus_checkpoint.sqlite3",
+          "bytes": 49152,
+          "sha256": "0042ec421ff9519d0699fcedacfc8a82e1326a5dd084c250c6bac5770be7b233"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire/registry.json",
+          "bytes": 2699,
+          "sha256": "7a2fdb88a068f26ac0af7b57bb63c25b935ebfcd3f6c51471602831faaf32059"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire",
+      "removed_files": 15,
+      "allocated_bytes": 475136,
+      "inventory": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.bus.jsonl.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.bus_meta.json.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.catalog.json.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.compaction-publication-handoff.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.native_prompt_bindings.sqlite3.snapshot-lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.registry-owner-guard",
+          "bytes": 188,
+          "sha256": "83aa8b42d97b5aec2583410a5d344a3e417240f3bfd16fa79a4c6beda503dd29"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.registry.json.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/.wire.lock",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/bus.jsonl",
+          "bytes": 1399,
+          "sha256": "81c331af292f33787f5d031cc9b99fcb94e1d4fe1312da58afc7312cb6004018"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/bus_meta.json",
+          "bytes": 207,
+          "sha256": "80acda6fb2c59c6c10eaa7f1c5a1377f82206ce52cd141b7b8f0aa93bcaa2150"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/catalog.json",
+          "bytes": 296,
+          "sha256": "89b18dc2f0d720f7af50cff279b998ad244601daaf0fde49a3e728ce92f1a3db"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/coordination.sqlite3",
+          "bytes": 397312,
+          "sha256": "10c57c11a446448bacc9d36d2256cda98ebaef6f813a9a8b1a395b331f4223d5"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/native_prompt_bindings.sqlite3",
+          "bytes": 12288,
+          "sha256": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/private_bus_checkpoint.sqlite3",
+          "bytes": 45056,
+          "sha256": "4f7904c2feb743b86043f6f51e53839095713cf1037ca014cb9a97161b8d9865"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/missing-seal-wire/registry.json",
+          "bytes": 2699,
+          "sha256": "68bbfdb1052bc9c282661e50ecf4d932f4882809c5d5bccc1852146fc28bb1bd"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/derived-index-preimage",
+      "removed_files": 2,
+      "allocated_bytes": 49152,
+      "inventory": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/derived-index-preimage/bus_meta.json",
+          "bytes": 819,
+          "sha256": "83229bee8e4547c7d9ff8b3ce53607d4e1a689bb5a9c6aff550c7a7803da0b6c"
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/derived-index-preimage/private_bus_checkpoint.sqlite3",
+          "bytes": 45056,
+          "sha256": "4bd18d511e8fbe3b88f6a43fdf31918ca9c95913182bd837d51c60b5ad767d2f"
+        }
+      ]
+    }
+  ],
+  "claimed_net_df_gain": null
+}

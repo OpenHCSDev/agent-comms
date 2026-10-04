@@ -28,12 +28,23 @@ acceptance. Historical556 receipt demonstrates earlier553→556 inherited-FD
 rebuild followed by retained owner startup, before this constructor change;
 it is retained historical evidence, not qualification of this new source.
 
-Installed acceptance remains pending a fresh, exact THIN540 purpose. Current
-retained656 product is enough for tool-only boundary controls; no Core wheel,
-package install, environment, native artifact/copy/build, provider/public input,
-source overlay or original UNKNOWN replay is requested. The control must use
-original canonical private seed/marker/lock/index machinery, retain original
-wire/settings/auth/UNKNOWN bytes, attest inherited-FD rebuild and refusal at
-actual schema/marker boundaries, and join original children. Any unavailable
-old-schema installed donor limits cross-version claims; no hand-authored old
-schema, fake controller or mock response is substituted.
+Actual installed acceptance completed in 8.917681585997343s under the original
+Bohr661 execution-only grant2e9939ef. The unchanged656 THIN540 package loaded
+from its original installed path; all347 assets/94 original nonCore keepers and
+69 metadata files across10 distributions stayed exact. Historical92 keeper
+subset is not relabeled as94. No wheel/install/dependency/native/provider work.
+
+Two fresh canonical seeds through the existing seed tool supplied independent
+missing-seal and wrong-schema derived negatives. Actual writer same-schema,
+root, seal and wrong-schema refusals changed no further file bytes. The original
+installer refused unrelated descriptors and wrong roots, then rebuilt the real
+current index under the original inherited writer FD. Frozen sender/audience,
+wire/registry/settings and marker identity/admission stayed unchanged. Controller
+and all9 Python children exited; no groups/sockets remain. Receipt/raw negative
+traces and source proof are retained in installed01 and WHOLE-HANDBACK.json.
+
+This is the current-private custody boundary, not a new cross-version writer
+restart. Three exact historical old-schema interpreters are absent. The earlier
+556 positive remains historical; no old DDL/codec/environment/controller/mock
+is manufactured. Original saved/private/public stores and UNKNOWN inputs were
+not read or modified. The consumed public operators were never executed.

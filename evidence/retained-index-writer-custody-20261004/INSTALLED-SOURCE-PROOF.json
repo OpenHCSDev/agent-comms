@@ -1,0 +1,49 @@
+{
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel661-retained-index-tools-execution-only-issued-grant.json",
+  "grant_sha256": "2e9939ef44fc40fdf814ba8f762cc9821f80c5dda1a8d4076a1de21bf42ffc79",
+  "floor_readback": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel661-current-floor-source-readback.json",
+  "unchanged_installed656_wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+  "installed_git_zip_assets_equal": 347,
+  "original_noncore_members_equal": 94,
+  "historical_owner_keeper_subset": 92,
+  "metadata_files_equal": 69,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "tools": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/retained_index_writer.py",
+      "sha256": "7b5ea337d2bc7e30933914c9f819a0015f283b076f8db699d1a6a35095c542d4"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/seed_retained_index_fixture.py",
+      "sha256": "29c2811f32d269c62f9d2752829cd9cac6a362ff22f08595180e43ea5d219513"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/checkpoint_schema.py",
+      "sha256": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/install_retained_index.py",
+      "sha256": "3060f64db3d180452452b5ec12c5cd2730f8f8052ab5676c8807f49c42b3982d"
+    }
+  ],
+  "terminal_receipt": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/receipt.json",
+  "terminal_receipt_sha256": "916384748d8cc620ae768ee86ba0095a86afb74f997ec7f803ed495bc80e439e",
+  "code_package_build_install_native_provider_public_replay_writes": 0,
+  "scope": "tool-only original private current-schema custody, not a new cross-version restart"
+}
