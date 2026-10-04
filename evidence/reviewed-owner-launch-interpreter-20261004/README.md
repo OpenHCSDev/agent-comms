@@ -10,6 +10,12 @@ This closes the duplicated observation (IDEN-5/BOUND-1) through the existing own
 
 ## Confirmation and limits
 
-The original seven private reset/file-custody/typed-codec controls are retained by hash and not repeated. Their actual installed dependency scope is historical, not a new public cutover. One proportionate current declared-codec/original-owner observation confirmation is pending. The frozen436 operators,115 operands, old DTO and publication attempt stay unchanged and continue to use their reviewed original tool. No package installation/build/environment/native copy, owner restart, provider/input/UNKNOWN replay or public effect is authorized by this tool change.
+The original seven private reset/file-custody/typed-codec controls are retained by hash and not repeated. Their actual installed dependency scope is historical, not a new public cutover. The current declared-codec/original-owner confirmation passed: strict typed roundtrip, refusal of the removed field, unchanged target/source/native/original-default checks, and read-only acquisition of all19 actual original owner launches. All115 frozen436 artifact hashes and Ready8796 remain unchanged. No old public guard was retried. The frozen436 operators,115 operands, old DTO and publication attempt stay unchanged and continue to use their reviewed original tool. No package installation/build/environment/native copy, owner restart, provider/input/UNKNOWN replay or public effect is authorized by this tool change.
 
 This is a future reviewed-tool format change. There is no compatibility reader for the deleted field. It does not rewrite an already frozen review plan or substitute another operator into436.
+
+## Authored control correction
+
+The first control failed before owner acquisition: it placed ReviewedArtifact instances from a separately loaded frozen tool into the new tool class, so nominal dataclass equality correctly differed. The corrected control decodes those nested artifacts through the original FieldCodec into the new tool declarations. Product code did not change; no owner, SDK input, stream or public operation was repeated. The original negative and both small control sources are retained.
+
+Final confirmation is qualification.json. Broader CI failures remain visible/deferred; exact final Debt is required before merge. Frozen436 remains the original reviewed operation and is not regenerated from this changed format.

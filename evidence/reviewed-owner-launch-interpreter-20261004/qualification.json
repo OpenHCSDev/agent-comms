@@ -1,0 +1,20 @@
+{
+  "state": "Declared codec and original owner read PASS",
+  "checks": [
+    "changed reviewed-cohort typed roundtrip",
+    "deleted field refused by original strict FieldCodec",
+    "unchanged typed target/source/native/original-default admission",
+    "actual original retained owner interpreter acquisition"
+  ],
+  "owner_count": 19,
+  "frozen_artifacts_unchanged": 115,
+  "ready_sha256": "8796ce30c748b25adfa2b02f09f551d9921225df753544d18047e87d9a558c42",
+  "frozen436_old_plan_remains_original": true,
+  "unknown_field_refusal": "Unknown fields for ReviewedRetainedSummaryCohort: ['source_interpreter']",
+  "public_actions": 0,
+  "owner_restarts": 0,
+  "providers": 0,
+  "inputs": 0,
+  "package_writes": 0,
+  "scope": "Tool-boundary/actual original-owner read; no new public cutover or UI claim"
+}
