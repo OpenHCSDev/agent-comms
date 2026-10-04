@@ -8,7 +8,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, fields, replace
 from itertools import chain
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
@@ -19,6 +19,7 @@ from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, Nat
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 from agent_comms.native_compaction_request import NativeIntent
+from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_commands import AgentCommsSummarizeCompaction, PiCommand
 
 from agent_comms.backend import PersistentPiSession
@@ -422,6 +423,40 @@ class RecordedNativeCheckpoint:
 
 
 @dataclass(frozen=True)
+class RecordedConditionInstallation:
+    """One original private SDK hook observation, not enrollment or a grant.
+
+    This is a new observation: installed source entering the configured transform.
+    NativeWitness owns session/revision meaning; it is not redeclared here.
+    """
+
+    strict_fields = True
+    stage: Literal['installed-transform-applied']
+    input_id: Annotated[str, NativeInputIdText]
+    condition: str
+    source_witness: NativeWitness
+    construction_context_sha256: str
+    source_prefix_count: int
+    source_prefix_sha256: str
+    source_message_count: int
+    message_count: int
+    agent_messages_sha256: str
+
+    def require_original(self, probe, evidence, branch, context):
+        if self.input_id != probe.input_id:
+            raise ValueError('Installed SDK source belongs to another input')
+        probe.session.require_same_session(self.source_witness)
+        if not self.source_witness.covers(evidence,self.source_witness.revision):
+            raise ValueError('Installed SDK source revision is not covered by original input history')
+        prefix=tuple(entry for entry in branch[:next(index for index,entry in enumerate(branch)
+                     if entry.id==context.session_entry_id)])
+        if self.source_witness.leaf_id not in evidence.entry_index(prefix):
+            raise ValueError('Installed SDK source is not an ancestor of the original input')
+        if not 0 <= self.source_prefix_count <= self.source_message_count:
+            raise ValueError('Installed SDK source counts differ from its observed transform')
+
+
+@dataclass(frozen=True)
 class RecordedNativeProbe:
     """One original probe and answer; tool-assisted answers are labelled separately."""
 
@@ -472,7 +507,12 @@ class RecordedNativeProbe:
             request_observations=original(observed) if observed.is_file() else None,
             condition_observation=original(condition_observation) if condition_observation is not None else None)
 
-    def applied_condition(self,evidence,parent,texts,serialized,manifest):
+    def condition_records(self):
+        """Acquire this original observation resource once for both questions."""
+        return (RecordedNativeCheckpoint.read_json_lines(self.condition_observation)
+                if self.condition_observation is not None else ())
+
+    def applied_condition(self,evidence,parent,texts,serialized,manifest,records):
         """Join this input's SDK hook to the corroborated narrative and actual bytes."""
         if self.condition_observation is None:
             return {'evaluated':False,'reason':'Original condition application not captured'}
@@ -481,11 +521,10 @@ class RecordedNativeProbe:
         source=self.checkpoint.fork_condition_acquired(self.fork_journal,evidence,parent)
         if not source['evaluated']:
             return source
-        records=self.checkpoint.read_json_lines(self.condition_observation)
         applications=tuple(row for row in records if row.get('stage')=='bounded-transform-applied'
                            and row['input_id']==self.input_id)
         if not applications:
-            raise ValueError('Original input has no recorded SDK condition application')
+            return {'evaluated':False,'reason':'Original bounded-source hook observation unavailable'}
         for applied in applications:
             if (applied['session']!=source['session'] or
                     applied['checkpoint_session']!=source['checkpoint_session'] or
@@ -497,11 +536,35 @@ class RecordedNativeProbe:
             raise ValueError('Captured SDK request does not contain the original bounded narrative')
         if not any(row.get('stage')=='bounded-transform-restored' and row['input_id']==self.input_id for row in records):
             raise ValueError('Original SDK condition hook has not retired')
-        return {'evaluated':True,'narrative_source':source['source'],
-            'checkpoint_session':source['checkpoint_session'],'session':source['session'],
-            'native_entry_id':source['native_entry_id'],
-            'message_binding':self.condition_message_binding(records,applications,serialized,manifest),
-            'scope':'Original transform and narrative present in this recorded SDK input; not final HTTP bytes or comparative recall'}
+        binding=self.condition_message_binding(records,applications,serialized,manifest)
+        return {'evaluated':binding['evaluated'], 'observation':self.condition_observation,
+            'transform':{'evaluated':True,'narrative_source':source['source'],
+                'checkpoint_session':source['checkpoint_session'],'session':source['session'],
+                'native_entry_id':source['native_entry_id'],
+                'scope':'Original SDK transform, narrative presence and retired hook; not complete request binding'},
+            'message_binding':binding,
+            'scope':'Original bounded transform joined to this sealed SDK request; not final HTTP bytes, '
+                    'complete-history capacity, declared comparison arm or comparative recall'}
+
+    def installed_condition(self,evidence,branch,context,serialized,manifest,records):
+        """Join an observed installed source to the same original SDK request."""
+        originals=tuple(FieldCodec.decode(RecordedConditionInstallation,row) for row in records
+            if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
+        if not originals:
+            return {'evaluated':False,'reason':'Original installed-source hook observation unavailable'}
+        if not serialized['evaluated'] or manifest is None:
+            return {'evaluated':False,'reason':'Original matching SDK request bytes unavailable'}
+        for original in originals:
+            original.require_original(self,evidence,branch,context)
+        if not any(row.get('stage')=='installed-transform-restored'
+                   and row['input_id']==self.input_id for row in records):
+            raise ValueError('Original installed-source hook has not retired')
+        applications=tuple(FieldCodec.encode(original) for original in originals)
+        binding=self.condition_message_binding(records,applications,serialized,manifest)
+        return {'evaluated':binding['evaluated'],'observation':self.condition_observation,
+            'installations':originals,'message_binding':binding,
+            'scope':'Original installed source entered configured transform and converter/request; '
+                    'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof'}
 
     def condition_message_binding(self,records,applications,serialized,manifest):
         """Bind one actual converter result to the sealed SDK request bytes.
@@ -790,7 +853,7 @@ class RecordedNativeProbe:
         with self.original_readers((self,)) as sources:
             return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
 
-    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer):
+    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer, context):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -835,15 +898,16 @@ class RecordedNativeProbe:
                         "original_message_entries": messages,
                         "included_message_entries": tuple(identity for identity in messages if identity in included),
                         "unreferenced_message_entries": tuple(identity for identity in messages if identity not in included),
-                        "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages),
-                        "full_context_capacity": {"evaluated": False,
-                            "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}}
+                        "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages)}
             if self.checkpoint is not None:
                 identity = checkpoint["native_entry_id"]
                 coverage["managed_checkpoint"] = {"entry_id": identity,
                     "referenced_in_sdk_sources": identity in included}
+        coverage["full_context_capacity"] = {"evaluated": False,
+            "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}
         observed_request = self.observed_request(manifest)
         budget = self.request_budget(observed_request)
+        records = self.condition_records()
         return {
             "fork": fork,
             "journal_settings": {
@@ -859,7 +923,8 @@ class RecordedNativeProbe:
             "native_request_timing": self.request_timing(observed_request),
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
-            "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest),
+            "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest,records),
+            "condition_installation": self.installed_condition(evidence,branch,context,serialized,manifest,records),
         }
 
     @staticmethod
@@ -979,7 +1044,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer),
+            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer, context),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),

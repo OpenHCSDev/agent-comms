@@ -28,6 +28,7 @@ from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiCost, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.request_progress import RequestProgress
 from agent_comms.private_path import FileRevision
+from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.text_digest import TextDigest
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.turn_lease import TurnLeaseFence
@@ -40,7 +41,7 @@ from agent_comms.turn_context import (
     SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment,
 )
 from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
-from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
+from retained_native_fixture import RecordedConditionInstallation, RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
 from test_task_decisions import admit
 
@@ -799,6 +800,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         owner = Thread('fixture', frozenset(), str(self.root))
         turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
         probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        context = NativeContextRecord(probe.input_id, self.identity.session_id, 'probe', 1, 'b' * 64)
         def manifest(path, entries):
             segment = SegmentManifest(TranscriptSegment, (JournalProvenance(path, entries),),
                                       'b' * 64, 20, 5)
@@ -807,19 +809,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             measured = probe.construction(evidence, evidence, branch,
-                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
+                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1], context)['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
             partial = probe.construction(evidence, evidence, branch,
-                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
+                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1], context)['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1])
-            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
+                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1], context)
+            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1], context)['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
@@ -910,6 +912,14 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(result['missing'], 21)
         self.assertEqual(result['original_checkpoint_count'], 0)
         self.assertFalse(result['three_original_cuts_observed'])
+        self.assertFalse(result['condition_construction']['evaluated'])
+        for name in ('bounded_sdk_application', 'installed_sdk_source', 'source_delivery', 'full_history_capacity'):
+            self.assertEqual(result['condition_construction'][name]['unavailable_rounds'], ['r1', 'r2', 'r3'])
+        paired = scenario.compare_native(Condition.TASK_MEMORY, RecordedNativeProbes({}),
+                                        Condition.BOUNDED, RecordedNativeProbes({}))
+        self.assertFalse(paired['condition_construction']['evaluated'])
+        self.assertIs(paired['condition_construction']['candidate'], paired['candidate']['condition_construction'])
+        self.assertIs(paired['condition_construction']['baseline'], paired['baseline']['condition_construction'])
         self.assertTrue(all(not item['evaluated'] for item in result['canonical_availability'].values()))
         repeated = RecordedNativeProbes(
             {'r1': RecordedNativeProbe(self.identity, 'a' * 32, 'answer', self.checkpoint)},
@@ -968,6 +978,163 @@ class RecordedMeasurementTests(unittest.TestCase):
         Path(probe.sdk_context.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
+
+    def test_submitted_condition_keeps_partial_transform_without_claiming_request_binding(self):
+        # Detect a completed transform being promoted to a submitted SDK
+        # request when its converter is absent. Only the upstream fork-source
+        # acquisition is a plumbing stub here; real file/SHA/frame checks run.
+        owner = Thread('fixture-owner', frozenset(), str(self.root))
+        manifest = ContextManifest(owner.incarnation,
+            RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1)),
+            (), 'counter', request_id='original-request')
+        source = {'evaluated': True, 'summary': 'Original λ narrative',
+            'source': FieldCodec.encode(self.artifact('narrative.json', 'Original λ narrative')),
+            'session': FieldCodec.encode(self.identity),
+            'checkpoint_session': FieldCodec.encode(self.identity), 'native_entry_id': 'commit'}
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer', self.checkpoint,
+                                    fork_journal=self.checkpoint.journal)
+        applied = {'stage': 'bounded-transform-applied', 'input_id': probe.input_id,
+            'session': source['session'], 'checkpoint_session': source['checkpoint_session'],
+            'native_entry_id': source['native_entry_id'], 'narrative_source': source['source'],
+            'agent_messages_sha256': 'c' * 64}
+        retired = {'stage': 'bounded-transform-restored', 'input_id': probe.input_id}
+        conversion = {'stage': 'bounded-conversion-observed', 'request_id': manifest.request_id,
+            'session_id': self.identity.session_id, 'input_id': probe.input_id,
+            'agent_messages_sha256': applied['agent_messages_sha256'],
+            'provider_messages_sha256': 'd' * 64}
+        serialized = {'evaluated': True, 'provider_messages_sha256': conversion['provider_messages_sha256']}
+        texts = (json.dumps(source['summary'], ensure_ascii=False),)
+
+        def captured(name, rows):
+            path = self.root / name
+            path.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+            return replace(probe, condition_observation=FileProvenance(str(path),
+                hashlib.sha256(path.read_bytes()).hexdigest()))
+
+        with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired', return_value=source):
+            partial_probe=captured('partial.jsonl', (applied, retired))
+            partial = partial_probe.applied_condition(
+                object(), object(), texts, serialized, manifest,partial_probe.condition_records())
+            self.assertFalse(partial['evaluated'])
+            self.assertTrue(partial['transform']['evaluated'])
+            self.assertFalse(partial['message_binding']['evaluated'])
+            selected = captured('complete.jsonl', (applied, conversion, retired))
+            complete = selected.applied_condition(object(), object(), texts, serialized, manifest,selected.condition_records())
+            self.assertTrue(complete['evaluated'])
+            self.assertEqual(complete['transform']['narrative_source'], source['source'])
+            self.assertEqual(complete['message_binding']['request_id'], manifest.request_id)
+            self.assertIs(complete['observation'], selected.condition_observation)
+            with self.assertRaisesRegex(ValueError, 'has not retired'):
+                unretired=captured('unretired.jsonl', (applied, conversion))
+                unretired.applied_condition(
+                    object(), object(), texts, serialized, manifest,unretired.condition_records())
+            Path(selected.condition_observation.path).write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'artifact changed'):
+                selected.applied_condition(object(), object(), texts, serialized, manifest,selected.condition_records())
+
+    def test_installed_source_uses_original_witness_ancestry_and_request(self):
+        # Installation must precede this input on the same source, and bind its
+        # real converter result. A transform may reduce messages legitimately;
+        # its output count must not be confused with the installed prefix count.
+        prefix = ({'type': 'session', 'id': self.identity.session_id},
+                  {'type': 'message', 'id': 'source',
+                   'message': {'role': 'user', 'content': 'Original installed source'}})
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in prefix))
+        self.session.chmod(0o600)
+        witness = NativeWitness(self.identity.session_id, str(self.session),
+                                'source', 'source', FileRevision.from_stat(self.session.stat()))
+        later = ({'type': 'message', 'id': 'input', 'parentId': 'source',
+                  'message': {'role': 'user', 'content': 'Distinct input'}},
+                 {'type': 'message', 'id': 'answer', 'parentId': 'input',
+                  'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}})
+        with self.session.open('a') as stream:
+            stream.write(''.join(json.dumps(row) + '\n' for row in later))
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        context = NativeContextRecord(probe.input_id, self.identity.session_id, 'input', 1, 'b' * 64)
+        owner = Thread('fixture-owner', frozenset(), str(self.root))
+        manifest = ContextManifest(owner.incarnation,
+            RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1)),
+            (), 'counter', request_id='original-request')
+        installed = RecordedConditionInstallation('installed-transform-applied', probe.input_id,
+            'recent-only', witness, 'b' * 64, 2, 'c' * 64, 3, 1, 'd' * 64)
+        row = FieldCodec.encode(installed)
+        self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, row), installed)
+        conversion = {'stage': 'bounded-conversion-observed', 'request_id': manifest.request_id,
+            'session_id': self.identity.session_id, 'input_id': probe.input_id,
+            'agent_messages_sha256': installed.agent_messages_sha256,
+            'provider_messages_sha256': 'e' * 64}
+        restored = {'stage': 'installed-transform-restored', 'input_id': probe.input_id}
+        serialized = {'evaluated': True, 'provider_messages_sha256': 'e' * 64}
+        with NativeEntry.open_evidence(self.session) as evidence:
+            _, entries = evidence.observe()
+            branch = evidence.branch('answer', entries)
+            partial = probe.installed_condition(evidence, branch, context, serialized,
+                                                manifest, (row, restored))
+            self.assertFalse(partial['evaluated'])
+            complete = probe.installed_condition(evidence, branch, context, serialized,
+                                                 manifest, (row, conversion, restored))
+            self.assertTrue(complete['evaluated'])
+            self.assertEqual(complete['installations'], (installed,))
+            with self.assertRaisesRegex(ValueError, 'has not retired'):
+                probe.installed_condition(evidence, branch, context, serialized,
+                                          manifest, (row, conversion))
+            for changed in (replace(witness, leaf_id='answer'),
+                            replace(witness, session_id='other'),
+                            replace(witness, revision=replace(witness.revision,
+                                identity=replace(witness.revision.identity, inode=witness.revision.identity.inode + 1)))):
+                with self.subTest(witness=changed):
+                    with self.assertRaises(ValueError):
+                        probe.installed_condition(evidence, branch, context, serialized, manifest,
+                            (FieldCodec.encode(replace(installed, source_witness=changed)), conversion, restored))
+            with self.assertRaisesRegex(ValueError, 'another session/input'):
+                probe.installed_condition(evidence, branch, context, serialized, manifest,
+                    (row, dict(conversion, input_id='f' * 32), restored))
+            self.assertFalse(probe.installed_condition(evidence, branch, context, serialized,
+                                                       manifest, ())['evaluated'])
+
+    def test_condition_groups_preserve_frozen_rounds_and_do_not_promote_labels(self):
+        # Keep independent source, transform and complete-history questions;
+        # no preview/label or missing round may become a matched intervention.
+        scenario = coding_scenario()
+        scored = scenario.score(Condition.BOUNDED, RecordedAnswers({}))
+        identities = tuple(item.identity for item in scenario.rounds)
+        unavailable = {identity: {'evaluated': False} for identity in identities}
+        original = {'construction': {'condition_application': {'evaluated': True},
+            'condition_installation': {'evaluated': False},
+            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+        partial = scored.condition_construction({identities[0]: original}, unavailable)
+        self.assertFalse(partial['evaluated'])
+        self.assertEqual(partial['bounded_sdk_application']['available_rounds'], identities[:1])
+        self.assertEqual(partial['bounded_sdk_application']['unavailable_rounds'], identities[1:])
+        self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
+        self.assertEqual(partial['source_delivery']['available_rounds'], ())
+        self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
+        evidence = {identity: original for identity in identities}
+        delivered = {identity: {'evaluated': True} for identity in identities}
+        observed = scored.condition_construction(evidence, delivered)
+        self.assertTrue(observed['bounded_sdk_application']['evaluated'])
+        self.assertTrue(observed['source_delivery']['evaluated'])
+        self.assertFalse(observed['installed_sdk_source']['evaluated'])
+        self.assertFalse(observed['full_history_capacity']['evaluated'])
+        self.assertFalse(observed['evaluated'])
+        for condition in Condition:
+            labelled = replace(scored, condition=condition).condition_construction(evidence, delivered)
+            self.assertEqual(labelled['declared_condition'], condition)
+            self.assertFalse(labelled['evaluated'])
+        partial_application = {'construction': {'condition_application': {
+            'evaluated': False, 'transform': {'evaluated': True}},
+            'condition_installation': {'evaluated': False},
+            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+        self.assertEqual(scored.condition_construction(
+            {**evidence, identities[0]: partial_application}, delivered)
+            ['bounded_sdk_application']['unavailable_rounds'], identities[:1])
+        # Even an authored available capacity observation cannot authenticate
+        # a supplied experimental label or its intended source selection.
+        original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
+        self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
+        original['construction']['condition_installation'] = {'evaluated': True}
+        self.assertTrue(scored.condition_construction(evidence, delivered)['installed_sdk_source']['evaluated'])
+        self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])
 
     def test_condition_binding_uses_complete_original_messages_and_request(self):
         # A narrative in system/tools or one matching message cannot establish

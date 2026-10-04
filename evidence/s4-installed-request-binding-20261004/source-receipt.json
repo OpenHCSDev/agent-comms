@@ -1,0 +1,17 @@
+{
+  "implementation": "d83fb383199c2692c2fe8087d103b358370d60fb",
+  "focused": "33 measurement tests passed in 0.904s; original source/ancestry/session/refusal/count distinctions and grouped missing evidence",
+  "syntax": "3 changed mjs files accepted by Node parser",
+  "python_modules": 365,
+  "javascript_modules": 11,
+  "parse_omissions": [],
+  "static_limit": "Lexical declarations/calls; inspector dynamic embedding is separately exercised, not inferred from AST",
+  "scope": "Private fixture/scorer only; no src/stack/tools/W1/native change",
+  "files": {
+    ".artifacts/s4-installed-request-binding635/focused-final.log": "9ea7481e028bbe3efb788c6b64fa6cafed07f80e6db29f50e0ad856e02f7b804",
+    "evidence/s4-installed-request-binding-20261004/python-before.json": "c5231c0714a9e7c9981d14614a6d9f4aa80f17501980a8742cc648900a9ab8be",
+    "evidence/s4-installed-request-binding-20261004/python-after.json": "e0af1f4eec9ba24707f2a16710ce3acbfb6d23ddff910e1af0db6a33b2874da8",
+    "evidence/s4-installed-request-binding-20261004/native-before.json": "9a127fefe44f8d2d2cc6fa58c40e794672efa30cb2ff3d56083a74adeb733d2d",
+    "evidence/s4-installed-request-binding-20261004/native-after.json": "c203ad091b2149f2039744b58aefa3de42b16646398f0597a62fd0f2043e0317"
+  }
+}

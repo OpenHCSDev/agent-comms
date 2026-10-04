@@ -1,0 +1,101 @@
+{
+  "child_exit": 0,
+  "observer_exit": -15,
+  "seconds": 1.8437743060057983,
+  "processes_joined": true,
+  "compiled_sha256_before": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+  "compiled_sha256_after": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+  "implementation": "d83fb383199c2692c2fe8087d103b358370d60fb",
+  "scope": "Authored original SDK installed-source/transform/converter/onContextReady binding",
+  "provider_calls": 0,
+  "submitted_prompts": 0,
+  "native_claim_minted": false,
+  "journal_bytes_unchanged": true,
+  "canonical_messages_restored": true,
+  "hook_restored": true,
+  "source_reads": "Authored SDK source only; no original retained donor read/replay",
+  "conditions": [
+    {
+      "condition": "full-context",
+      "binding": {
+        "evaluated": true,
+        "request_id": "dbf7e582-1056-4513-a90e-9ac2ebf5b889",
+        "agent_messages_sha256": "9d92e1c71889e1575b000b828096b7275cc7532e589202e8ebdc5bedd4461b6f",
+        "provider_messages_sha256": "81b2c84847df1431ccbd276f64c3145c110a735f33e4c6f775ccc20ec5bbcc87",
+        "scope": "Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall"
+      },
+      "source_revision_covered": true,
+      "source_prefix_count": 4,
+      "source_message_count": 5,
+      "message_count": 5,
+      "sdk_segments": 5,
+      "sdk_utf8_bytes": 12036
+    },
+    {
+      "condition": "recent-only",
+      "binding": {
+        "evaluated": true,
+        "request_id": "5eb14a45-4760-4aaa-a4b0-9d7c31050e16",
+        "agent_messages_sha256": "bace333875c7e3dbcdd1d65ef73f8eff29a3445fcb79ea2610978947109bb614",
+        "provider_messages_sha256": "fb597a72fb39118ade767c6833670aad640a3525c5a66cb5d2bef5f00422e2cf",
+        "scope": "Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall"
+      },
+      "source_revision_covered": true,
+      "source_prefix_count": 2,
+      "source_message_count": 3,
+      "message_count": 3,
+      "sdk_segments": 5,
+      "sdk_utf8_bytes": 11637
+    },
+    {
+      "condition": "task-memory",
+      "binding": {
+        "evaluated": true,
+        "request_id": "a24a773c-e1cb-416a-b255-51ee5878acdb",
+        "agent_messages_sha256": "bed1ec01b63a0249c142587af2c0a7df6f9df48e79be990ecc7160c829fdc8b3",
+        "provider_messages_sha256": "db99f4bd5561c3c503471d26da5e4f32ab77effeee9f211fef5c971ab2a3fa5b",
+        "scope": "Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall"
+      },
+      "source_revision_covered": true,
+      "source_prefix_count": 3,
+      "source_message_count": 4,
+      "message_count": 4,
+      "sdk_segments": 6,
+      "sdk_utf8_bytes": 11853
+    },
+    {
+      "condition": "bounded",
+      "binding": {
+        "evaluated": true,
+        "request_id": "07d6cb8f-97be-4a31-aaaf-ba3c77e2d6c7",
+        "agent_messages_sha256": "a6c48858025abdcd67a7f74267580caa6c0383dfc67e5f39bb1f3e63752deebf",
+        "provider_messages_sha256": "067b0f61fef598b0c8316dd1967cd9c0e30446a606bc971aa6b37c8b6577f259",
+        "scope": "Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall"
+      },
+      "source_revision_covered": true,
+      "source_prefix_count": 3,
+      "source_message_count": 4,
+      "message_count": 4,
+      "sdk_segments": 5,
+      "sdk_utf8_bytes": 11863
+    }
+  ],
+  "limits": "No enrolled input/pre-input ancestry on a model turn, configured matched-arm runner, HTTP bytes, provider capacity, model recall or study acceptance",
+  "postprocessor_correction": "Existing sdk_request owns typed provenance selection; initial AttributeError retained, same completed output read, no SDK/stream/provider repeat",
+  "files": {
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/sdk.stdout.json": "e3833e972cd379be8e7f94311b331099c0502d76bd044fee02f412b44f82738e",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/sdk.stderr.txt": "985cbd1ae177b7b2fb231033c3215bde73ba1a942d2426d84fc4421a36a989b0",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/observer.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/observation.jsonl": "4180b6f2bb172b927fe83977154c46065d2baa48e17e64aa6bd45ac6213e01ad",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/sdk/application-observation.jsonl": "ecbd8c4aaff14f48e5779487b122d57bf48e3ad378d79c9367ba42bede3e2a7d",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/postprocessor-first-refusal.json": "bbb88bae23a33771c2dd246c444a25da4157b3c3cf6608d3fc6a40f34ef01dd3",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/context-2ccb97b21f457bc6ebab35857c26a6b9e0a3ca73821df51d1f4decc8907c9a80.json": "77d3b03868c211af401af0aa3008133f27b5d24a592fb140837e63678784fcac",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/context-3948258a758d4b2efd20513ec439f1f35f20f93c081c2d4beb55c4d644de454d.json": "d465932778d2994537ff751af301da279567baf5a453f3a5a9e88ccbed7967d6",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/context-52db6b79025573f42a5e82ea9aed8f5ec24108a3d919ea9b8bb7b2427103e85e.json": "8f0a343ba6ce412222bc2cefe6b8e2693fcfae1c4550c583fffd2b37d8863304",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/context-bd26a4e27313757f148e77f57bc6cd0256f1cf657bf06a6e11e2078b48324310.json": "24bbb9c87f5ce731f330967325dd4546d57ccba6102cb31ae71a6690d5d3a7c0",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/segments-2ccb97b21f457bc6ebab35857c26a6b9e0a3ca73821df51d1f4decc8907c9a80.json": "51a7133f84be7f6e8dd763d53ecf7c098d19b54d986cb7476a1dab41a2718bbe",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/segments-3948258a758d4b2efd20513ec439f1f35f20f93c081c2d4beb55c4d644de454d.json": "fd42eef956bdd19b326b9c3403567f63708bfe0988583df0e986389f67480a5f",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/segments-52db6b79025573f42a5e82ea9aed8f5ec24108a3d919ea9b8bb7b2427103e85e.json": "a679ec8ea46e94fd97b3f36f99d820db0da7cff62da8b9e917bdf11bab16e1f4",
+    ".artifacts/s4-installed-request-binding635/sdk-installed01/contexts/segments-bd26a4e27313757f148e77f57bc6cd0256f1cf657bf06a6e11e2078b48324310.json": "f6d58c480bb58458a8956e71169d823c886446673e0a05f3921bb4e125b63dc0"
+  }
+}

@@ -15,11 +15,8 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 from __future__ import annotations
 
 import asyncio
-import getpass
 import json
-import os
 import secrets
-import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, AsyncExitStack, aclosing, asynccontextmanager, contextmanager, nullcontext
@@ -173,24 +170,20 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
         TurnSession.active.pop(task, None)
 
 
-@contextmanager
-def _maintenance_send_boundary(
+@asynccontextmanager
+async def _maintenance_send_boundary(
     root: Path,
     delegate: Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None,
     public_id: str | None,
     native_id: str,
     text: str,
-) -> Iterator[bool | None]:
-    """Hold the wire lock through the final native stdin.write.
+) -> AsyncIterator[bool | None]:
+    """Acquire shared ingress without blocking the loop needed to release it.
 
-    The managed ACP callback already holds that lock itself. Other backend
-    callers get this outer guard; a custom callback must not reacquire it.
+    The original delegate checks and stdin.write consume this same custody
+    synchronously. Release it before pipe drain, native ACK or any other await.
     """
-    if delegate is not None and getattr(delegate, "_maintenance_wire_locked", False):
-        with delegate(public_id, native_id, text) as allowed:
-            yield allowed
-        return
-    with MaintenanceBarrier(root / "registry.json").admit_ingress():
+    async with MaintenanceBarrier(root / "registry.json").admit_ingress_async():
         with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
             yield allowed
 
@@ -660,17 +653,13 @@ class TurnSession:
         assert self.native.proc.stdin is not None
         try:
             self.boundary_context = _maintenance_send_boundary(
-                Path(
-                    self.launch.env.get("AGENT_COMMS_ROOT")
-                    or os.environ.get("AGENT_COMMS_ROOT")
-                    or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
-                ),
+                self.startup.root,
                 self.send_boundary,
                 None,
                 self.original_input_id,
                 self.task,
             )
-            with self.boundary_context as self.authorized:
+            async with self.boundary_context as self.authorized:
                 if self.authorized:
                     self.grant_prompt()
                     self.native.proc.stdin.write(self.prompt_payload)
