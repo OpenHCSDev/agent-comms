@@ -59,23 +59,6 @@ export async function boundedMessages(session, packagePath, source) {
     return {messages,originalSummary,witness};
 }
 
-async function boundedConstruction(session, packagePath, source) {
-    const {messages,witness}=await boundedMessages(session,packagePath,source);
-    const {SessionContext}=await import(pathToFileURL(join(packagePath,'dist/core/session-context.js')));
-    const {TurnContext}=await import(pathToFileURL(join(packagePath,'dist/core/turn-context.js')));
-    const manager=session.sessionManager;
-    const entries=Array.from(manager.buildContextEntries());
-    const view=await TurnContext.capture(session,
-        await SessionContext.prefixContext(session,messages),undefined,entries);
-    const observed=await observe(session,packagePath,view);
-    manager.entryStore.assertCurrent();
-    if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(witness.firstKeptEntryId)))
-        throw new Error('Native selection changed during bounded preview');
-    return {messages,observed:{evaluated:true,...observed,narrative_source:source.source,
-        checkpoint_session:source.checkpoint_session,native_entry_id:source.native_entry_id,
-        scope:'SDK bounded preview from the supplied narrative source and native kept cut; not installed/submitted input'}};
-}
-
 export async function transformBoundedNativeCondition(session,packagePath,source,messages) {
     // Agent's original transform has already run. Preserve its entire raw
     // result and the fresh input; replace exactly the corroborated SDK message.
@@ -121,28 +104,68 @@ export function armBoundedNativeCondition(session,packagePath,source,transform,o
     return restore;
 }
 
-export async function applyBoundedNativeCondition(session, packagePath, source) {
-    // The selected native context owns readiness. CompactionContext refuses;
-    // no replacement context, cached permission or direct agent-state write.
+export async function applyNativeCondition(session, packagePath, construction) {
+    // This original SessionContext grants installation. A measured preview
+    // cannot manufacture readiness or stand in for final input admission.
     session.storedContext.requireReady();
-    const {messages,observed}=await boundedConstruction(session,packagePath,source);
+    if (!construction.evaluated)
+        throw new Error('Original evaluated SDK construction required');
+    const manager=session.sessionManager;
+    if (!isDeepStrictEqual(construction.source_witness,
+            manager.captureCompactionWitness(construction.source_witness.firstKeptEntryId)))
+        throw new Error('Native selection changed since condition construction');
+    const {SessionContext}=await import(pathToFileURL(join(packagePath,'dist/core/session-context.js')));
+    const {ContextBudget}=await import(pathToFileURL(join(packagePath,
+        'node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js')));
+    const context=await SessionContext.prefixContext(session,construction.agent_messages);
+    if (createHash('sha256').update(JSON.stringify(context)).digest('hex')!==construction.context_sha256)
+        throw new Error('SDK construction changed before installation');
+    // Settings/model can change while a preview is borrowed. Re-admit with the
+    // original budget owner now; never reuse a captured allowance or truncate.
+    new ContextBudget(session.model,context).allowance(undefined);
+    if (!isDeepStrictEqual(construction.source_witness,
+            manager.captureCompactionWitness(construction.source_witness.firstKeptEntryId)))
+        throw new Error('Native selection changed during condition installation');
     session.storedContext.requireReady();
-    session.storedContext.install(session.agent,messages);
-    return {...observed,scope:'Bounded raw SDK context installed through the selected SessionContext; not input admission/submission or provider proof'};
+    session.storedContext.install(session.agent,construction.agent_messages);
+    return {...construction,scope:'Original AgentMessages installed through selected SessionContext; not input admission/submission, final request capacity or provider proof'};
 }
 
 export async function constructNativeConditions(session, packagePath, boundedSource) {
-    const {TurnContext} = await import(pathToFileURL(join(packagePath,'dist/core/turn-context.js')));
+    const {TurnContext}=await import(pathToFileURL(join(packagePath,'dist/core/turn-context.js')));
+    const {SessionContext}=await import(pathToFileURL(join(packagePath,'dist/core/session-context.js')));
+    const manager=session.sessionManager,store=manager.entryStore;
+    const witness=manager.captureCompactionWitness(manager.getLeafId());
+    // These SDK metadata owners supply the actual selection. SDK entryMessages
+    // supplies raw AgentMessages once; the same acquisition feeds preview and
+    // installation. No provider-message-to-AgentMessage reconstruction.
+    const full=Array.from(store.uncompactedMetadata(manager.getLeafId()),meta=>store.get(meta.id));
+    const recent=Array.from(store.keptMetadata(manager.getLeafId()),meta=>store.get(meta.id));
+    const task=Array.from(session.storedContext.messages(session.agent));
+    async function construction(messages,entries,details={}) {
+        const context=await SessionContext.prefixContext(session,messages);
+        const view=await TurnContext.capture(session,context,undefined,entries);
+        return {evaluated:true,...await observe(session,packagePath,view),...details,
+            agent_messages:messages,source_witness:witness,
+            scope:'Original acquired SDK construction; not installed/submitted input or final request capacity'};
+    }
     async function bounded() {
         if (!boundedSource)
-            return {evaluated:false, reason:'Original uncombined narrative-only summary required'};
+            return {evaluated:false,reason:'Original uncombined narrative-only summary required'};
         if (!boundedSource.evaluated) return boundedSource;
-        return (await boundedConstruction(session,packagePath,boundedSource)).observed;
+        const {messages}=await boundedMessages(session,packagePath,boundedSource);
+        return construction(messages,Array.from(manager.buildContextEntries()),{
+            narrative_source:boundedSource.source,
+            checkpoint_session:boundedSource.checkpoint_session,
+            native_entry_id:boundedSource.native_entry_id});
     }
-    return {
-        'full-context':await observe(session,packagePath,await TurnContext.fullSource(session)),
-        'recent-only':await observe(session,packagePath,await TurnContext.recentSource(session)),
-        'task-memory':await observe(session,packagePath,await TurnContext.next(session)),
+    const conditions={
+        'full-context':await construction(Array.from(SessionContext.entryMessages(full.values())),full),
+        'recent-only':await construction(Array.from(SessionContext.entryMessages(recent.values())),recent),
+        'task-memory':await construction(task,Array.from(manager.buildContextEntries())),
         bounded:await bounded(),
     };
+    if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(witness.firstKeptEntryId)))
+        throw new Error('Native selection changed during condition construction');
+    return conditions;
 }
