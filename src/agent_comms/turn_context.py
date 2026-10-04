@@ -321,6 +321,11 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
                      for source in self.source_ranges()
                      for sentence in source.sentences(text))
 
+    def disclosure_for(self, span: ContextSpan):
+        from .working_memory_disclosure import WithheldDisclosure
+
+        return WithheldDisclosure()
+
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
 
@@ -382,6 +387,9 @@ class ContributionCoordinates:
                 yield ContributionCoordinates.capture(
                     self.kind, self.provenance, byte_offset, sentence)
             byte_offset += len(sentence.encode("utf-8"))
+
+    def contains(self, other: ContributionCoordinates) -> bool:
+        return self.offset <= other.offset and other.offset + other.length <= self.offset + self.length
 
 
 @dataclass(frozen=True)
@@ -486,6 +494,11 @@ class SystemLayerSegment(MeasuredNativeSegment):
     def assembly_ranges(self) -> tuple[ContributionCoordinates, ...]:
         return self.source_spans
 
+    def disclosure_for(self, span: ContextSpan):
+        from .working_memory_disclosure import PublicInstructionDisclosure
+
+        return PublicInstructionDisclosure()
+
     def source_membership(self):
         yield from super().source_membership()
         for span in self.source_spans:
@@ -544,6 +557,14 @@ class NativeMessages:
             offset += len(text.encode("utf-8")) + 1
         return tuple(ranges)
 
+    def disclosure_for(self, span: ContextSpan):
+        from .pi_payloads import PiMessage
+
+        for source, message in zip(self.source_ranges(), self.messages, strict=True):
+            if source.contains(span.coordinates):
+                return PiMessage.from_wire(message).annotation_disclosure()
+        raise ValueError("Annotation names no original native message")
+
     def render_into(self, prompt_parts, provider):
         provider.setdefault("messages", []).extend(self.messages)
 
@@ -555,7 +576,10 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionSummarySegment(NativeMessages, MeasuredNativeSegment):
-    pass
+    def disclosure_for(self, span: ContextSpan):
+        from .working_memory_disclosure import PublicInstructionDisclosure
+
+        return PublicInstructionDisclosure()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -596,6 +620,11 @@ class InstructionSegment(ContextSegment):
 
     def text(self) -> str:
         return self.instruction.render(self.values())
+
+    def disclosure_for(self, span: ContextSpan):
+        from .working_memory_disclosure import PublicInstructionDisclosure
+
+        return PublicInstructionDisclosure()
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -104,12 +104,12 @@ def extend_system_sources(core):
             : baseAppend;
         this.appendSystemPromptSourcePaths = appendSources
             .filter((source) => existsSync(source))
-            .map((source) => resolvePath(source));''', '''        // A transformation cannot inherit path attribution by ordinal. Exact
-        // whole values may retain their original loader observation.
-        this.appendSystemPrompt=this.appendSystemPromptOverride
-            ? this.appendSystemPromptOverride(baseAppend.map(layer=>layer.value)).map(value=>
-                baseAppend.find(layer=>layer.value===value) ?? SystemLayerSegment.unattributed(value))
-            : baseAppend;''')
+            .map((source) => resolvePath(source));''', '''        // Only the unchanged complete ordered value retains source attribution.
+        const originalAppend=baseAppend.map(layer=>layer.value);
+        const revisedAppend=this.appendSystemPromptOverride
+            ? this.appendSystemPromptOverride(originalAppend) : originalAppend;
+        this.appendSystemPrompt=JSON.stringify(revisedAppend)===JSON.stringify(baseAppend.map(layer=>layer.value))
+            ? baseAppend : revisedAppend.map(value=>SystemLayerSegment.unattributed(value));''')
 
     builder=core/'system-prompt.js'
     builder.write_text('import { readFileSync } from "node:fs";\n'

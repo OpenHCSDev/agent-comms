@@ -926,6 +926,11 @@ class ContextCliCommand(CliCommand):
             "native_manifest": FieldCodec.encode(native_context.segments),
             "manifest": FieldCodec.encode(context.manifest(counts.counts, counter=counts.counter)),
             "native_provider_context": native_context.render().provider,
+            "native_source_spans": [
+                {"segment": position, "sha256": segment.measured_manifest().sha256,
+                 "spans": FieldCodec.encode(segment.source_ranges())}
+                for position, segment in enumerate(native.segments)
+            ],
             "segments": [
                 dict(
                     kind=segment.declared_name,

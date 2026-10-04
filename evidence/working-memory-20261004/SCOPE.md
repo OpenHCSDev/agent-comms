@@ -19,3 +19,9 @@ ContextSegment owns addressed sentence splitting; NativeMessages splits by origi
 This is implementation in a draft, not native/installed acceptance. Codex developer-source capture and the durable annotation/disclosure/runtime/UI/calibration/sentinel families remain in progress. No external classifier call, native build, environment creation or package mutation has occurred.
 
 Before evidence: NRA Package parsed311 Python modules with zero omissions; immutable086 native assembly roots parsed with Node's existing Acorn parser,5 modules/58 lexical sites/zero omissions. Native AST collection followed the first source edits; the unchanged source seams were read before editing. Lexical references do not prove dynamic resolution.
+
+## Durable annotation checkpoint
+
+The existing coordinator now owns addressed model answers, inherited human corrections and original disclosure request dispositions through its declared typed tables. Questions and classifier pins are part of each address. The stored request contains only the addressed text, one permitted neighbor and question-required owner rules; it owns the exact external payload before any future transmission. Original segment/message behavior decides disclosure, including withholding tools and credential-shaped text. The native loader preserves append attribution only for an unchanged complete ordered assembly, never matching a replacement against some similarly worded file.
+
+These source changes are not an activated worker or permission to send text. Schema9→10 adds annotation tables; stopped carry remains Mendel's owner. Human publication authorization, runtime lifecycle, calibration and UI consumers remain to be wired before final validation. No tests, provider calls or installed changes have been used to design this checkpoint.

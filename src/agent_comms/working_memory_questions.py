@@ -109,6 +109,10 @@ class SpanQuestion(DeclaredFamily, affix="Question"):
             raise ValueError("Answer is outside the declared question family")
         return answer
 
+    @classmethod
+    def disclosed_owner_rules(cls, rules: tuple[str, ...]) -> tuple[str, ...]:
+        return ()
+
 
 class KindQuestion(SpanQuestion):
     answer_family = SpanKind
@@ -128,6 +132,13 @@ class RuleScopeQuestion(SpanQuestion):
 class RelationToOwnerRulesQuestion(SpanQuestion):
     answer_family = OwnerRelationAnswer
     instructions = "Compare the literal rule to the supplied typed owner rules. Do not invent rules."
+
+    @classmethod
+    def disclosed_owner_rules(cls, rules: tuple[str, ...]) -> tuple[str, ...]:
+        from .working_memory_disclosure import PublicInstructionDisclosure
+
+        policy = PublicInstructionDisclosure()
+        return tuple(policy.require_text(rule) for rule in rules)
 
 
 class FulfilledQuestion(SpanQuestion):
