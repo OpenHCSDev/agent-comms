@@ -74,3 +74,26 @@ notice and joined retirement checks await a fresh named holder purpose.
 Parent owns HistoryViews/presentation and ReadyDrainReadiness's value
 contract; no activity.py write is claimed here. W1 #627 metadata records are
 untouched.
+
+## Original owner-inbox retirement c265eedd
+
+All five actual command producers are recorded in after.json: InputDrain's
+clear/prompt/promote, SteerPromptRequest's control, and ConfigOptions'
+SettingCommand.to_rpc. They all supply dictionaries. Selected/ordinary owner
+inbox declarations and the selected consumer now share that actual contract.
+The unused raw-string-to-ScheduledTurn retirement decision is deleted rather
+than treating an untracked command as permission to launch another turn.
+Routed ScheduledTurn work remains at its original producer; the independent
+direct backend API still supports strings. Clearing pending command resources
+and retiring live receipts have the same joined lifetime as before.
+
+Final production determining head c265eedd: 64 production lines deleted,
+66 added across six existing modules. Original Package remains 316 production
+and 365 tests, zero omissions. InputDrain is now 547 lines. This remains a
+source ownership checkpoint, not full C4 or installed readiness.
+
+Exact evidence head da759b77 passed the automatic required Debt ratchet
+(run 37220548943); that is the previous source scope. The next source head's
+required job and changed installed acceptance are reported independently.
+Fresh 540 purpose requested from Bohr; separate immutable086 read/execution
+requested from its original Sch owner. No prior loan is reused implicitly.

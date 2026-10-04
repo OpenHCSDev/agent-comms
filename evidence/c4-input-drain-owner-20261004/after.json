@@ -1,5 +1,5 @@
 {
-  "revision": "d68fa58fb41346d280cc70346105de29c91a2042",
+  "revision": "c265eedd4ac159a5bad87023d2ba83dc37b7041e",
   "base": "c159f39e0863448ca621cc567ee131b9c9ffc739",
   "roots": [
     {
@@ -14,7 +14,7 @@
     }
   ],
   "sizes": {
-    "src/agent_comms/input_drain.py::InputDrain": 549
+    "src/agent_comms/input_drain.py::InputDrain": 547
   },
   "sites": [
     {
@@ -22,6 +22,18 @@
       "line": 144,
       "kind": "Name",
       "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 378,
+      "kind": "Attribute",
+      "expression": "self.inputs.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 255,
+      "kind": "Attribute",
+      "expression": "self.turns.active_backend_inbox"
     },
     {
       "path": "src/agent_comms/acp_extension.py",
@@ -402,6 +414,12 @@
       "expression": "InputDispositions"
     },
     {
+      "path": "src/agent_comms/config_options.py",
+      "line": 291,
+      "kind": "Attribute",
+      "expression": "self.effects.turns.active_backend_inbox"
+    },
+    {
       "path": "src/agent_comms/continued_private_session.py",
       "line": 30,
       "kind": "Name",
@@ -638,6 +656,12 @@
     },
     {
       "path": "src/agent_comms/input_drain.py",
+      "line": 72,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
       "line": 73,
       "kind": "Attribute",
       "expression": "self.queued_inputs"
@@ -671,6 +695,12 @@
       "line": 352,
       "kind": "Name",
       "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 367,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
     },
     {
       "path": "src/agent_comms/input_drain.py",
@@ -722,6 +752,18 @@
     },
     {
       "path": "src/agent_comms/input_drain.py",
+      "line": 292,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 422,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
       "line": 443,
       "kind": "Attribute",
       "expression": "self.original_sources"
@@ -731,6 +773,12 @@
       "line": 79,
       "kind": "Name",
       "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 96,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
     },
     {
       "path": "src/agent_comms/input_drain.py",
@@ -758,31 +806,49 @@
     },
     {
       "path": "src/agent_comms/input_drain.py",
+      "line": 457,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
       "line": 458,
       "kind": "Attribute",
       "expression": "self.queued_inputs"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 544,
+      "line": 537,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 538,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 542,
       "kind": "Attribute",
       "expression": "self.original_sources"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 551,
+      "line": 549,
       "kind": "Attribute",
       "expression": "self.following_sources"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 555,
+      "line": 553,
       "kind": "Attribute",
       "expression": "self.queued_inputs"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 601,
+      "line": 599,
       "kind": "Attribute",
       "expression": "self.queued_inputs"
     },
@@ -827,6 +893,12 @@
       "line": 381,
       "kind": "Attribute",
       "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 393,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
     },
     {
       "path": "src/agent_comms/input_drain.py",
@@ -878,15 +950,21 @@
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 582,
+      "line": 580,
       "kind": "Attribute",
       "expression": "InitialInput.capture"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 593,
+      "line": 591,
       "kind": "Attribute",
       "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 250,
+      "kind": "Attribute",
+      "expression": "self.backend_inboxes"
     },
     {
       "path": "src/agent_comms/input_drain.py",
@@ -902,13 +980,13 @@
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 582,
+      "line": 580,
       "kind": "Name",
       "expression": "InitialInput"
     },
     {
       "path": "src/agent_comms/input_drain.py",
-      "line": 557,
+      "line": 555,
       "kind": "Attribute",
       "expression": "self.restored_inputs"
     },
@@ -1037,6 +1115,12 @@
       "line": 98,
       "kind": "Attribute",
       "expression": "self.inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 292,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.bind_native_turn"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
@@ -1239,6 +1323,12 @@
       "line": 249,
       "kind": "Attribute",
       "expression": "ctx.server.agent.inputs.awaiting_input_keys"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 125,
+      "kind": "Attribute",
+      "expression": "check.inputs.backend_inboxes"
     },
     {
       "path": "src/agent_comms/selected_source.py",
@@ -1492,6 +1582,18 @@
     },
     {
       "path": "src/agent_comms/turn_runner.py",
+      "line": 509,
+      "kind": "Attribute",
+      "expression": "self.inputs.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 489,
+      "kind": "Attribute",
+      "expression": "self.inputs.backend_inboxes"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
       "line": 530,
       "kind": "Attribute",
       "expression": "self.inputs.finish_turn_inputs"
@@ -1636,6 +1738,12 @@
     },
     {
       "path": "tests/native_backend_fixture.py",
+      "line": 112,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
       "line": 120,
       "kind": "Attribute",
       "expression": "InitialInput.capture"
@@ -1732,6 +1840,12 @@
     },
     {
       "path": "tests/test_acp.py",
+      "line": 1929,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp.py",
       "line": 1930,
       "kind": "Attribute",
       "expression": "agent.inputs.queued_inputs"
@@ -1741,6 +1855,24 @@
       "line": 1938,
       "kind": "Attribute",
       "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 247,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 270,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1544,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
     },
     {
       "path": "tests/test_acp_extension.py",
@@ -1810,6 +1942,18 @@
     },
     {
       "path": "tests/test_acp_input_disposition.py",
+      "line": 155,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 198,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
       "line": 135,
       "kind": "Name",
       "expression": "InputDispositions"
@@ -1819,6 +1963,12 @@
       "line": 147,
       "kind": "Name",
       "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 616,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
     },
     {
       "path": "tests/test_acp_queue_contract.py",
@@ -1831,6 +1981,24 @@
       "line": 87,
       "kind": "Attribute",
       "expression": "agent.inputs.restored_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 107,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 132,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 167,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
     },
     {
       "path": "tests/test_acp_queue_contract.py",
@@ -1984,6 +2152,12 @@
     },
     {
       "path": "tests/test_channel_input_batch.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
       "line": 76,
       "kind": "Attribute",
       "expression": "agent.inputs.original_sources"
@@ -2290,6 +2464,12 @@
     },
     {
       "path": "tests/test_current_input_origin.py",
+      "line": 65,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
       "line": 118,
       "kind": "Attribute",
       "expression": "QueuedInput.capture"
@@ -2317,6 +2497,12 @@
       "line": 258,
       "kind": "Attribute",
       "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 79,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
     },
     {
       "path": "tests/test_current_input_origin.py",
@@ -3045,6 +3231,30 @@
       "expression": "InputDispositions"
     },
     {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 130,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 243,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 171,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 308,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
       "path": "tests/test_s1_event_behavior.py",
       "line": 310,
       "kind": "Name",
@@ -3091,6 +3301,24 @@
       "line": 677,
       "kind": "Attribute",
       "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 106,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 173,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 423,
+      "kind": "Attribute",
+      "expression": "agent.inputs.backend_inboxes"
     },
     {
       "path": "tests/test_selected_owner_followup.py",
@@ -3303,6 +3531,18 @@
       "expression": "InputDispositions"
     },
     {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 60,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 90,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
       "path": "tests/test_stack_send_now.py",
       "line": 480,
       "kind": "Attribute",
@@ -3424,6 +3664,12 @@
     },
     {
       "path": "tests/test_turn_goal_account.py",
+      "line": 124,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
       "line": 125,
       "kind": "Attribute",
       "expression": "owner.inputs.original_sources"
@@ -3436,9 +3682,51 @@
     },
     {
       "path": "tests/test_turn_goal_account.py",
+      "line": 183,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
       "line": 126,
       "kind": "Attribute",
       "expression": "owner.inputs.input_keys"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 98,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 239,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 277,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 63,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 118,
+      "kind": "Attribute",
+      "expression": "owner.inputs.backend_inboxes"
     },
     {
       "path": "tests/three_cut_retention_configured_journey.py",
@@ -3549,5 +3837,32 @@
       "expression": "InputDispositions"
     }
   ],
-  "resolution": "AST declarations and attribute references; dynamic callbacks remain ambiguous"
+  "owner_inbox_producers": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 558,
+      "expression": "inbox.put_nowait({'type': 'interrupt_steering', '_input_ids': [input_id]})"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 296,
+      "expression": "inbox.put_nowait(replace(command, id=request_id).to_rpc())"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 400,
+      "expression": "inbox.put_nowait({'type': 'prompt', 'message': item.prompt, 'contextContributions': FieldCodec.encode(rendered.contributions), 'streamingBehavior': 'steer', '_input_id': item.input_id, **({'images': [image.to_rpc() for image in images]} if images else {})})"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 98,
+      "expression": "inbox.put_nowait({'type': 'clear_queue'})"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 462,
+      "expression": "inbox.put_nowait({'type': 'interrupt_steering', '_input_ids': list(queued)})"
+    }
+  ],
+  "resolution": "Original Package AST declarations and attribute references; dynamic callbacks remain ambiguous. Owner inbox producer aliases read semantically through ConfigOptions, PromptRequest, InputDrain and TurnRunner."
 }
