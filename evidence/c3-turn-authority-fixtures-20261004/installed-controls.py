@@ -13,7 +13,7 @@ import agent_comms
 
 repository = Path(__file__).resolve().parents[2]
 installed = Path(agent_comms.__file__).resolve().parent
-wheel = repository / ".artifacts/f4-core421-receiver-wheels-20261004/agent_comms-0.1.0-py3-none-any.whl"
+wheel = repository / ".artifacts/native-ingress638-wheels-20261004/agent_comms-0.1.0-py3-none-any.whl"
 assert installed == Path(sys.prefix) / "lib/python3.14/site-packages/agent_comms"
 with zipfile.ZipFile(wheel) as archive:
     members = [name for name in archive.namelist() if name.startswith("agent_comms/")]
