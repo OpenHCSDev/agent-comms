@@ -88,7 +88,8 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         self.children.append(child)
         return session_id
 
-    def native_arguments(self, options=("--no-tools",)):
+    @staticmethod
+    def native_arguments(options=("--no-tools",)):
         """One external native argument declaration for saved/ACP consumers."""
         return ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
                 "--offline", "--no-extensions", "--no-skills", "--no-context-files",
