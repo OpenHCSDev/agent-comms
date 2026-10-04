@@ -35,8 +35,7 @@ from agent_comms.acp_extension import (
     RequestFailedUpdate,
     TranscriptChangedUpdate,
     TranscriptSnapshotUpdate,
-    TurnSettledUpdate,
-    TurnStartedUpdate,
+    TurnChangedUpdate,
     decode_updates,
     encode_request,
 )
@@ -52,6 +51,7 @@ from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend
 
@@ -199,25 +199,28 @@ class TestHandlers:
         assert backend.compaction_summary(summary) == summary
         assert "\x1b" not in backend.compaction_summary("\x1b[2J\nSafe")
 
-    async def test_replay_uses_owner_turn_timestamp_and_activity(self, tmp_path):
-        agent = self._agent(tmp_path)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        turn_id = "compaction-existing"
-        agent._comms.agents.begin_turn("proj", turn_id, "Compacting context")
-        agent._comms.agents.set_activity("proj", ActivityState.WORKING, "Compacting context")
-        active = agent._comms.registry.require("proj").active_turn
-        updates: list = []
+    async def test_replay_uses_owner_turn_timestamp_and_activity(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner() as (agent, session):
+            async with native.original_input(agent, session, "Compacting context") as turn:
+                started_at = agent.turns.turn_state(session).started_at
+                await agent.turns.transition_turn(
+                    session, turn.turn_lease, CompactionPhase(detail="Compacting context")
+                )
+                state = agent.turns.turn_state(session)
+                updates = []
 
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kwargs):
-                updates.append(update)
+                class Client:
+                    async def session_update(self, session_id=None, update=None, **kwargs):
+                        updates.append(update)
 
-        await agent.turns.replay_turn_state("proj", client=FakeClient())
-        assert active is not None
-        assert facts(updates[0].field_meta, TurnStartedUpdate) == (
-            TurnStartedUpdate(turn_id, active.started_at, "working", "Compacting context"),
-        )
-        agent._comms.agents.finish_turn(agent._comms.registry.require("proj").turn_lease)
+                await agent.turns.replay_turn_state(session, client=Client())
+                assert facts(updates[0].field_meta, TurnChangedUpdate) == (TurnChangedUpdate(state),)
+                assert state.started_at == started_at and state.managed_id == turn.turn_id
+                assert state.busy and state.activity == "Compacting context"
+            assert not agent.turns.turn_state(session).busy
+        assert native.provider.posts == 0
 
     async def test_compaction_refuses_to_interrupt_an_active_turn(self, native_backend):
         native = native_backend
@@ -1520,10 +1523,11 @@ class TestAgentTurnForwarding:
             assert len(goal_updates) == 1
             assert facts(goal_updates[0].field_meta, GoalChangedUpdate) == (GoalChangedUpdate(None, None),)
             assert "title" not in goal_updates[0].model_fields_set
-            started = [fact for fact in metadata if isinstance(fact, TurnStartedUpdate)]
-            settled = [fact for fact in metadata if isinstance(fact, TurnSettledUpdate)]
-            assert len(started) == len(settled) == 1
-            assert started[0].turn_id == settled[0].turn_id
+            states = [fact.state for fact in metadata if isinstance(fact, TurnChangedUpdate)]
+            busy = [state for state in states if state.busy]
+            assert busy and len({state.managed_id for state in busy}) == 1
+            assert states[-1] == agent.turns.turn_state(session)
+            assert not states[-1].busy and states[-1].finished_turn_id == busy[0].managed_id
             assert any(isinstance(fact, TranscriptChangedUpdate) for fact in metadata)
             assert [update.content.text for update in sent
                     if type(update).__name__ == "AgentThoughtChunk"] == ["Inspecting files"]
