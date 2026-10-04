@@ -1,4 +1,4 @@
-## Current: ordinary440 published; Undo/channel tail passed; full workflow remains — 2026-10-04
+## Current: ordinary440 installed and display verified; full workflow remains — 2026-10-04
 
 Toad440 final1e80524b merged4cc4d531 after exact Debt37230082759 passed.
 Parent verified all122 frozen artifacts and37 original gate hashes, then ran
@@ -8,6 +8,19 @@ incarnations/settings and acquired new live process identities. All five
 defaults now point to334, with the same original e206 root/id and native086.
 The receipt phase remains public-ui-pending; identity readback is not UI proof.
 The original436 consumed operation and historical activation/proofs stay intact.
+
+The subsequent original public440 ordinary journey completed terminal0 in
+62.444762s. All18 native saved-history/Undo/channel/hidden-shown admission/return
+checks passed. Parent matched original receipt58db45f8, verified the review,
+and personally viewed original channel-return/native-return PNGs AFTER terminal:
+saved native body, channel IRC rows, sidebar/status and editor were painted.
+Runtime stayed unchanged; original3728859/birth61955571 stayed alive before/after;
+ownedUI3802513 is absent and originalcleanup is empty. The publication receipt
+is not rewritten to credit this later check. Raw result and images are under
+public440-ordinary-display-20261004-01/capture; parent review is retained in
+.artifacts/parent-review-653439-20261004/public440-ordinary-review.json.
+This closes ordinary440 display/use, not new input/reply/queue/status changes,
+physical smoothness/CPU gain or the uninstalled441/W6 scopes.
 
 Actual public334 now contains Core6565c110307/Toad439af692/Text59180/NRA9a,
 normal69. Its original owned candidate DTO and source proof govern this stage;
