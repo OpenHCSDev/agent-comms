@@ -52,8 +52,9 @@ omissions. Python consumers are the observer context manager and configured
 driver; JavaScript consumers are the original plural SDK contract and inspector
 embedding. The inspector's dynamic frame binding was read directly, not inferred
 from lexical AST. No ContextSegment, W1, runtime/native or installed source edits.
-Changed-path validation remains pending at this source checkpoint; original635
-results are preserved and not reused as qualification of the new prompt hook.
+Original635 results are preserved and not reused as qualification of the new
+prompt hook. The changed-path results below supersede this checkpoint's earlier
+pending validation state.
 
 The first authored RPC control completed its original native answer and restored
 the hooks. Its driver joined Node before disconnecting the inspector; that raw
@@ -63,3 +64,29 @@ prompt. The real callback publishes `TurnContext.observation`, while the old
 inspector breakpoint watched only its delegating `manifest` consumer. The
 breakpoint now watches the shared `observation` producer for both paths. This is
 private capture plumbing, not a native/runtime change. No provider was called.
+
+## Ready scope
+
+The distinct authored original SDK/RPC publication completed in 1.507s with one
+controlled stream, one input/context/manifest/terminal and no provider calls.
+RecordedNativeProbe verifies installation ancestry and the complete original
+transform/converter bytes against that sealed manifest. The original preflight
+refusal restored preparation/prompt/transform with no input commit or terminal;
+the original cancelled input retains its aborted assistant and restored hooks.
+All children are absent. No original input was sent again.
+
+The raw first join timeout, cancellation's missing capture assertion and first
+postprocessor refusal stay preserved. The postprocessor now stores the original
+serializable probe instead of an ephemeral resource's Path; it reads the same
+completed source. These are not native failures or authorizations to replay.
+
+This is Ready for private fixture/observer plumbing, not configured matched-arm,
+enrolled ACP lease, HTTP, provider capacity, recall, speed or full S4 acceptance.
+Runtime/native/tools source is unchanged. No package, environment, study or
+original-donor copy was created. The immutable086 read lease is returned after
+joined cleanup. Final AST parsed 365 Python files and 14 declared JavaScript
+roots with no omissions. The original same observation producer serves both
+manifest and onContextReady callers; no added emitter or compatibility anchor.
+
+Evidence: `evidence/s4-configured-condition-application-20261004/`.
+The separate 30-pair/USD75 study remains unapproved and unstarted.

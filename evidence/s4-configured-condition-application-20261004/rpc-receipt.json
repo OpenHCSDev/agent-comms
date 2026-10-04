@@ -1,0 +1,139 @@
+{
+  "implementation": "48f1c6427ff4a772b9193a5999c64c883f26aace",
+  "scope": "Changed private condition preparation/install through original SDK/RPC prompt and sealed observation; original source reader binding",
+  "runtime_native_source_delta": 0,
+  "provider_calls": 0,
+  "configured_provider_qualified": false,
+  "enrolled_ACP_lease_qualified": false,
+  "study_qualified": false,
+  "original_donor_reads": 0,
+  "input_replays": 0,
+  "publication": {
+    "scope": "Authored original SDK/RPC/preparation/install/prompt resource and inspector path",
+    "provider_calls": 0,
+    "configured_provider_qualified": false,
+    "study_qualified": false,
+    "original_donor_reads": 0,
+    "compiled_sha256_before": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+    "compiled_sha256_after": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+    "implementation": "48f1c6427ff4a772b9193a5999c64c883f26aace",
+    "results": [
+      {
+        "mode": "publication",
+        "elapsed_s": 1.5069397210609168,
+        "native_exit": 0,
+        "observer_exit": -15,
+        "hook_restored": true,
+        "controlled_streams": 1,
+        "provider_calls": 0,
+        "preflight_success": true,
+        "events": {
+          "input_committed": 1,
+          "context_committed": 1,
+          "turn_context_observed": 1,
+          "agent_end": 1,
+          "agent_settled": 1
+        },
+        "source_hashes": {
+          "observation.jsonl": "a9db95e712a035f55cd6ccc8980f366d7d629857e0b2ea297b7e094c3c181a67",
+          "sdk/prompt-exit.json": "b095c924d38a9b7b7c28b712b14846e2238a6735912163425f1d573bd0ced69b",
+          "contexts/context-10398e21c1b7351123739634aaade11826d78fafa4bcaf73b6e5987815b382ed.json": "25e48af5037d304cc10e830ee2b01a5133118da2216329bb1f3e179993c20c13",
+          "contexts/segments-10398e21c1b7351123739634aaade11826d78fafa4bcaf73b6e5987815b382ed.json": "5938c6f36d301a5922733d2b8faec109f0d9abd978ef6eea8940976ebccb0145"
+        }
+      }
+    ]
+  },
+  "request_binding": {
+    "evaluated": true,
+    "observation": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-condition-application/rpc-publication/observation.jsonl",
+      "sha256": "a9db95e712a035f55cd6ccc8980f366d7d629857e0b2ea297b7e094c3c181a67"
+    },
+    "installations": [
+      {
+        "stage": "installed-transform-applied",
+        "input_id": "cccccccccccccccccccccccccccccccc",
+        "condition": "bounded",
+        "source_witness": {
+          "sessionId": "01a106ae-e247-70d4-ae30-69609f66a2ca",
+          "sessionFile": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-condition-application/rpc-publication/sdk/sessions/2026-10-04T11-31-26-920Z_01a106ae-e247-70d4-ae30-69609f66a2ca.jsonl",
+          "leafId": "41fb2e0b",
+          "firstKeptEntryId": "41fb2e0b",
+          "revision": "2084:17961119:1722:1791113486938098421:1791113486938098421"
+        },
+        "construction_context_sha256": "bbf0a2ce45cfa95f6a5afe8680ae05fa1c79c21c7ddbeda32b769114496c5294",
+        "source_prefix_count": 3,
+        "source_prefix_sha256": "dc6e73c60b5d291123793eb574f3f20a46b5f4d95c3945f997556e43c7af2969",
+        "source_message_count": 4,
+        "message_count": 4,
+        "agent_messages_sha256": "89dbeb50a73cfdd52e69ebae614eae0421c0a5d3736a528e2b1a85ead347520d"
+      }
+    ],
+    "message_binding": {
+      "evaluated": true,
+      "request_id": "cb89a241-c1f2-4b1f-9e06-49e849199e05",
+      "agent_messages_sha256": "89dbeb50a73cfdd52e69ebae614eae0421c0a5d3736a528e2b1a85ead347520d",
+      "provider_messages_sha256": "3714132b22f2363bb326e217c3982061c137de399173ed3409ff657d20a3ec3b",
+      "scope": "Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall"
+    },
+    "scope": "Original installed source entered configured transform and converter/request; constructor tag is observed metadata, not matched-arm, HTTP or capacity proof"
+  },
+  "refusal": {
+    "mode": "preflight-refusal",
+    "elapsed_s": 3.06916023301892,
+    "native_exit": 0,
+    "observer_exit": -15,
+    "hook_restored": true,
+    "controlled_streams": 0,
+    "provider_calls": 0,
+    "preflight_success": false,
+    "events": {
+      "input_committed": 0,
+      "context_committed": 0,
+      "turn_context_observed": 0,
+      "agent_end": 0,
+      "agent_settled": 0
+    },
+    "source_hashes": {
+      "observation.jsonl": "0f9c307961e40a6922229e7efff9d57eaa8e18ef2c1651f6343bd55ee9b2e3d5",
+      "sdk/prompt-exit.json": "c52cb43290c76b438b81193dfe0335d5bd7ae96281201d9e9663c0e6e673565f"
+    }
+  },
+  "cancel": {
+    "hook_restored": true,
+    "controlled_streams": 1,
+    "provider_calls": 0,
+    "original_aborted_terminal": true,
+    "source_publication_preserved": true,
+    "full_SDK_capture_qualified": false,
+    "scope": "Original prompt cancellation and resource retirement; earlier manifest-only capture breakpoint negative preserved"
+  },
+  "first_terminal": {
+    "native_answer_completed": true,
+    "hook_restored": true,
+    "driver_join_timeout_preserved": true,
+    "scope": "Completed native answer/resource scope; inspector join refusal, no resend"
+  },
+  "negative_receipts": {
+    "first_join": "rpc-terminal/driver-join-refusal.json",
+    "cancel_full_capture": "raw controller assertion preserved; shared original observation producer fixed afterward",
+    "postprocessor": "publication-first-postprocessor-refusal.json; same completed source read, no replay"
+  },
+  "owned_children_remaining": [],
+  "limits": "Not configured matched-arm/provider submission, enrollment, HTTP bytes, capacity, recall, speed or full S4/study acceptance",
+  "private_original_files": {
+    "rpc-receipt.json": "10a8fb9401f84e1e8757059d3cae9b47c8043b1f505c786bbc7614f1570ca035",
+    "publication-binding.json": "dcdaba2c909c6bc9171ff3ec37b9ffd49e420930c27c380e7653625ae6668b6f",
+    "publication-first-postprocessor-refusal.json": "082ff895ca9b7d0ab0ceb6bbca8b299f98bdfe24cd5101dfe4e649c9c420abbe",
+    "rpc-terminal/driver-join-refusal.json": "874d392235b017e68c75e47879dcc33cba8ea078bbd4099bf37bce41252414d8",
+    "rpc-terminal/sdk/prompt-exit.json": "1204fabede7f89efb8a88ef244a49d0d2fa66ec632d728cb5adf6c706cd51be0",
+    "rpc-preflight-refusal/result.json": "dd2bc9b58089b4590c1bde060c1e44a79430ab8c9aeb85551c9677c18588dc8e",
+    "rpc-cancel/sdk/prompt-exit.json": "0f45845410e3e9d5996c2d251658ca411696ba238f2c34445468e3a7c2bd5bdf",
+    "rpc-cancel/native.stdout.json": "5d91c1cbbf34935a370aca869b741fe754e3d3686ad1550a354794172c0a851b",
+    "rpc-cancel/observation.jsonl": "3aa6761322b6cac0732f8fcc4412e507aaa2b4de47dbb2dc563d5521d13f4e2e",
+    "qualify-rpc.py": "3daf21f5ef5e9cdce387095d47f81dad3b066797d2e6131340f7c9ffc2c04620",
+    "rpc-publication/contexts/context-10398e21c1b7351123739634aaade11826d78fafa4bcaf73b6e5987815b382ed.json": "25e48af5037d304cc10e830ee2b01a5133118da2216329bb1f3e179993c20c13",
+    "rpc-publication/contexts/segments-10398e21c1b7351123739634aaade11826d78fafa4bcaf73b6e5987815b382ed.json": "5938c6f36d301a5922733d2b8faec109f0d9abd978ef6eea8940976ebccb0145"
+  }
+}

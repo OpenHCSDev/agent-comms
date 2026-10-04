@@ -1,0 +1,297 @@
+{
+  "parsed": 14,
+  "omitted": [],
+  "sites": [
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 177,
+      "call": "manifest"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 184,
+      "call": "manifest"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 216,
+      "call": "manifest"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 234,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 258,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 269,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 272,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 274,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 280,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 290,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 292,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 295,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 304,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 311,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 342,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 356,
+      "call": "observation"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 357,
+      "call": "observation"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 440,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 445,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 447,
+      "call": "armInstalledNativeCondition"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 467,
+      "call": "manifest"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 492,
+      "call": "install"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 522,
+      "call": "observation"
+    },
+    {
+      "path": "tests/native_turn_context_contract.mjs",
+      "line": 522,
+      "call": "manifest"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 7,
+      "declaration": "previewNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 73,
+      "declaration": "armNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 111,
+      "call": "armNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 119,
+      "declaration": "armInstalledNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 128,
+      "call": "armNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 148,
+      "declaration": "applyNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 171,
+      "call": "install"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 175,
+      "declaration": "constructNativeConditions"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 186,
+      "call": "previewNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 227,
+      "declaration": "armConfiguredNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 242,
+      "declaration": "prompt"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 258,
+      "declaration": "beforeInput"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 263,
+      "call": "constructNativeConditions"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 264,
+      "call": "applyNativeCondition"
+    },
+    {
+      "path": "tests/retained_native_conditions.mjs",
+      "line": 265,
+      "call": "armInstalledNativeCondition"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 170,
+      "call": "observation"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 993,
+      "call": "prompt"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1085,
+      "declaration": "prompt"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1086,
+      "call": "beforeInput"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "line": 1518,
+      "call": "prompt"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 19,
+      "call": "install"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 50,
+      "declaration": "install"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 54,
+      "declaration": "beforeInput"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 60,
+      "declaration": "install"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 67,
+      "declaration": "install"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js",
+      "line": 68,
+      "declaration": "beforeInput"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 93,
+      "call": "manifest"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 123,
+      "declaration": "manifest"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 260,
+      "call": "manifest"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 268,
+      "call": "manifest"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 295,
+      "declaration": "manifest"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 296,
+      "call": "observation"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/turn-context.js",
+      "line": 299,
+      "declaration": "observation"
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "line": 717,
+      "call": "prompt"
+    }
+  ],
+  "dynamic_resolution": "Inspector frame embedding read directly; lexical AST does not prove dynamic lookup"
+}
