@@ -551,7 +551,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         round_ = replace(coding_scenario().rounds[0], identity='cut')
         scored = RecallScenario('paired-resources', (round_,)).score(
             Condition.TASK_MEMORY, RecordedAnswers({}))
-        summary = SummaryUsage(input=20, output=8, total_tokens=28,
+        summary = SummaryUsage(input=20, output=8, cache_read=0, cache_write=0, total_tokens=28,
             cost=SummaryCost(0, 0, 0, 0, 0))
         cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
         candidate = scored.recorded_resources(cuts, {'cut': {'model_steps': (
