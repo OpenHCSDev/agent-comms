@@ -1,0 +1,9 @@
+{
+  "exit": 0,
+  "base": "c159f39e0863448ca621cc567ee131b9c9ffc739",
+  "head": "fe915b8ed7c11b88ceceef32a2d82225787669d6",
+  "positive": {},
+  "negative": {
+    "GodClassExcess:src/agent_comms/history_views.py::HistoryViews": -15
+  }
+}
