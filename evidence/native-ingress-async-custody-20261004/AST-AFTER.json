@@ -1,5 +1,5 @@
 {
-  "revision": "acf8a253b7ce317bd073e27e6012df625fbe9698",
+  "revision": "9b682cdbb4f099094891c54ce33a885ae49fe60a",
   "parser": "original audit.findings.Package.load",
   "roots": [
     {
@@ -136,91 +136,91 @@
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 177,
-      "node": "FunctionDef",
-      "source": "@contextmanager"
+      "line": 174,
+      "node": "AsyncFunctionDef",
+      "source": "@asynccontextmanager"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 55,
+      "line": 52,
       "node": "alias",
       "source": "NativeStartupAdmission"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 321,
+      "line": 314,
       "node": "Attribute",
       "source": "self.send_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 321,
+      "line": 314,
       "node": "Name",
       "source": "send_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 322,
+      "line": 315,
       "node": "Attribute",
       "source": "self.interrupt_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 322,
+      "line": 315,
       "node": "Name",
       "source": "interrupt_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 193,
+      "line": 186,
       "node": "Attribute",
-      "source": "MaintenanceBarrier(root / 'registry.json').admit_ingress"
+      "source": "MaintenanceBarrier(root / 'registry.json').admit_ingress_async"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 306,
+      "line": 299,
       "node": "Name",
       "source": "NativeStartupAdmission"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 662,
+      "line": 655,
       "node": "Name",
       "source": "_maintenance_send_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 668,
+      "line": 657,
       "node": "Attribute",
       "source": "self.send_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 329,
+      "line": 322,
       "node": "Name",
       "source": "NativeStartupAdmission"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 261,
+      "line": 254,
       "node": "keyword",
       "source": "send_boundary=send_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 263,
+      "line": 256,
       "node": "keyword",
       "source": "interrupt_boundary=interrupt_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 261,
+      "line": 254,
       "node": "Name",
       "source": "send_boundary"
     },
     {
       "path": "src/agent_comms/backend.py",
-      "line": 263,
+      "line": 256,
       "node": "Name",
       "source": "interrupt_boundary"
     },
@@ -478,37 +478,37 @@
     },
     {
       "path": "src/agent_comms/native_startup.py",
-      "line": 124,
+      "line": 128,
       "node": "ClassDef",
       "source": "class SelectedNativeStartupAdmission(NativeStartupAdmission):"
     },
     {
       "path": "src/agent_comms/native_startup.py",
-      "line": 124,
+      "line": 70,
+      "node": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 128,
       "node": "Name",
       "source": "NativeStartupAdmission"
     },
     {
       "path": "src/agent_comms/native_startup.py",
-      "line": 73,
+      "line": 77,
       "node": "Name",
       "source": "NativeStartupAdmission"
     },
     {
       "path": "src/agent_comms/native_startup.py",
-      "line": 62,
+      "line": 90,
       "node": "Attribute",
       "source": "self.directory"
     },
     {
       "path": "src/agent_comms/native_startup.py",
-      "line": 86,
-      "node": "Attribute",
-      "source": "self.directory"
-    },
-    {
-      "path": "src/agent_comms/native_startup.py",
-      "line": 91,
+      "line": 95,
       "node": "Attribute",
       "source": "self.directory"
     },
@@ -535,18 +535,6 @@
       "line": 45,
       "node": "ClassDef",
       "source": "@dataclass(frozen=True, kw_only=True)"
-    },
-    {
-      "path": "src/agent_comms/owned_send_admission.py",
-      "line": 55,
-      "node": "Name",
-      "source": "_maintenance_wire_locked"
-    },
-    {
-      "path": "src/agent_comms/owned_send_admission.py",
-      "line": 143,
-      "node": "Attribute",
-      "source": "self.comms.owners.maintenance.admit_ingress"
     },
     {
       "path": "src/agent_comms/owned_turn.py",
@@ -1264,33 +1252,39 @@
     },
     {
       "path": "src/agent_comms/turn_inputs.py",
-      "line": 124,
+      "line": 93,
       "node": "alias",
       "source": "_maintenance_send_boundary"
     },
     {
       "path": "src/agent_comms/turn_inputs.py",
-      "line": 100,
-      "node": "Attribute",
-      "source": "session.interrupt_boundary"
+      "line": 123,
+      "node": "alias",
+      "source": "_maintenance_send_boundary"
     },
     {
       "path": "src/agent_comms/turn_inputs.py",
-      "line": 133,
+      "line": 95,
       "node": "Name",
       "source": "_maintenance_send_boundary"
     },
     {
       "path": "src/agent_comms/turn_inputs.py",
-      "line": 139,
+      "line": 97,
       "node": "Attribute",
-      "source": "session.send_boundary"
+      "source": "session.interrupt_boundary"
     },
     {
       "path": "src/agent_comms/turn_inputs.py",
-      "line": 99,
+      "line": 132,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 134,
       "node": "Attribute",
-      "source": "session.interrupt_boundary"
+      "source": "session.send_boundary"
     },
     {
       "path": "tests/attached_history_installed_pilot.py",
@@ -1612,9 +1606,21 @@
     },
     {
       "path": "tests/test_maintenance_barrier.py",
-      "line": 13,
+      "line": 14,
       "node": "alias",
       "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 130,
+      "node": "Attribute",
+      "source": "gate.admit_ingress"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 137,
+      "node": "Attribute",
+      "source": "gate.admit_ingress"
     },
     {
       "path": "tests/test_maintenance_barrier.py",
@@ -1624,19 +1630,13 @@
     },
     {
       "path": "tests/test_maintenance_barrier.py",
-      "line": 129,
-      "node": "Attribute",
-      "source": "gate.admit_ingress"
+      "line": 313,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
     },
     {
       "path": "tests/test_maintenance_barrier.py",
-      "line": 136,
-      "node": "Attribute",
-      "source": "gate.admit_ingress"
-    },
-    {
-      "path": "tests/test_maintenance_barrier.py",
-      "line": 321,
+      "line": 344,
       "node": "Name",
       "source": "_maintenance_send_boundary"
     },
