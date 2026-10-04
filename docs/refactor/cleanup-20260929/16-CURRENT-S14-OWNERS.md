@@ -30,6 +30,20 @@ correction; no waiver or syntactic negation swap is accepted. Original22-check
 App receipt stays preserved. Corrected production needs exact source closure
 and proportionate affected verification before final merge/receiving equality.
 
+Parent reviewed the coherent four-file checkpoint correction: TranscriptState
+combines its source-admission capability with the original resource fact, and
+the facade delegates. MountedMessageHistory retains reader/loading availability;
+TranscriptHistory retains filter availability. Both copied state-admission gates
+are deleted. Live uses its own checkpoint method. No counterexample was found
+in this source review; the changed source is not an installed pass. Parent
+has authorized one original bounded joined App after coherent published operands,
+new Bohr purpose and Sch086 renewal. Four changed packaged files require one
+normal new ToAd wheel with full source/ZIP proof; old8acf remains historical.
+Reuse the exact current1470/69/390 floor/archive and restore through the normal
+no-cache installer, then join owned cleanup and independent whole handback.
+No extra parent/docs/check/quiet-window approval or unrelated movie/provider
+repeat is required, and public334 remains protected.
+
 NRA restoration attribution correction: direct original ZIP read verifies wheel
 8d489731 contains measures.py SHA8f6127cb, exactly matching the original e6f
 floor. The reported fb6e bytes were stale installed extraction, not that raw
@@ -2060,3 +2074,19 @@ Actual merged441442 source and full wheel metadata equality must be confirmed
 before stage. A fresh Bohr eligible-holder purpose follows W6 actual whole
 closure; no public334 loan, rebuilt wheel, global extension or unqualifiedW6
 product is inferred. Original440 operator remains consumed once.
+
+### Authentic W6 annotation GUI preparation
+
+Parent reviewed the separate authentic-annotation-gui-purpose proposal and
+original NativeBackendFixture saved-owner/runtime binding. One future fresh
+authored input through the original ACProuter/OwnedTurn is authorized in principle,
+with controlled localhost response only. Actual execution requires its own
+native-input-permitting Bohr purpose and matching Sch7a custody. It must use
+SDK commit/ContextObserved/TurnProgress/leased WireLog to acquire the real request
+and public spans; neither preview capture nor a manufactured sealed manifest
+can substitute. Exact span membership then supplies the original annotation
+row, GUI declared answer, authenticated USER correction and effective HumanLabel
+Explorer refresh. Einstein owns integration and coordinates the original shared
+fixture directly with Mendel. This source preparation need not wait for another
+historical App pass. No current run, actual Codex read, external classifier,
+calibration/study authorization or default-OFF disclosure change follows.
