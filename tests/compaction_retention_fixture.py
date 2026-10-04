@@ -610,11 +610,17 @@ class ScoredScenario(ScoreView):
                         for identity, original in evidence.items()}
         installations = {identity: original['construction']['condition_installation']
                          for identity, original in evidence.items()}
+        entry_selections = {identity: installation['entry_selection']
+                            for identity, installation in installations.items()}
+        admissions = {identity: original['construction']['request_budget']
+                      for identity, original in evidence.items()}
         capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
                     for identity, original in evidence.items()}
         return {'evaluated': False, 'declared_condition': self.condition,
                 'bounded_sdk_application': group(applications),
                 'installed_sdk_source': group(installations),
+                'sdk_entry_selection': group(entry_selections),
+                'native_request_admission': group(admissions),
                 'source_delivery': group(source_delivery),
                 'full_history_capacity': group(capacity),
                 'reason': 'Original condition selection and complete-history eligibility are not supplied by a label or SDK preview',

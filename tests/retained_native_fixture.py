@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections import Counter
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from itertools import chain
 from pathlib import Path
 from typing import Annotated, Literal
@@ -441,6 +441,10 @@ class RecordedConditionInstallation:
     source_message_count: int
     message_count: int
     agent_messages_sha256: str
+    # Optional original private observation. Older records and constructors
+    # which borrow live SDK messages do not prove a journal entry selection.
+    entry_selection: JournalProvenance | None = field(default=None,
+        metadata={"wire_omit_default": True})
 
     def require_original(self, probe, evidence, branch, context):
         if self.input_id != probe.input_id:
@@ -454,6 +458,27 @@ class RecordedConditionInstallation:
             raise ValueError('Installed SDK source is not an ancestor of the original input')
         if not 0 <= self.source_prefix_count <= self.source_message_count:
             raise ValueError('Installed SDK source counts differ from its observed transform')
+        return evidence.branch(self.source_witness.leaf_id, prefix)
+
+    def source_selection(self, identity, ancestry):
+        """Describe the observed SDK entry selection, never provider capacity."""
+        if self.entry_selection is None:
+            return {'evaluated': False,
+                'reason': 'Original SDK journal entry selection was not captured'}
+        selected = self.entry_selection.journal_entries(identity)
+        available = tuple(entry.require_entry_id() for entry in ancestry)
+        selected_set = set(selected)
+        if len(selected_set) != len(selected) or tuple(
+                entry for entry in available if entry in selected_set) != selected:
+            raise ValueError('SDK selected entries are not an ordered subset of the original construction ancestry')
+        messages = tuple(entry.require_entry_id() for entry in ancestry if entry.is_message)
+        return {'evaluated': True, 'source': self.entry_selection,
+            'original_message_entries': messages,
+            'selected_message_entries': tuple(entry for entry in messages if entry in selected_set),
+            'unselected_message_entries': tuple(entry for entry in messages if entry not in selected_set),
+            'all_original_message_entries_selected': all(entry in selected_set for entry in messages),
+            'scope': 'Original SDK entry-based construction before conversion; not complete transformed content, '
+                     'provider token capacity, HTTP bytes or a registered intervention'}
 
 
 @dataclass(frozen=True)
@@ -550,19 +575,27 @@ class RecordedNativeProbe:
         """Join an observed installed source to the same original SDK request."""
         originals=tuple(FieldCodec.decode(RecordedConditionInstallation,row) for row in records
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
+        unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
         if not originals:
-            return {'evaluated':False,'reason':'Original installed-source hook observation unavailable'}
-        if not serialized['evaluated'] or manifest is None:
-            return {'evaluated':False,'reason':'Original matching SDK request bytes unavailable'}
-        for original in originals:
-            original.require_original(self,evidence,branch,context)
+            return {'evaluated':False,'entry_selection':unavailable,
+                'reason':'Original installed-source hook observation unavailable'}
+        selections = tuple(original.source_selection(self.session,
+            original.require_original(self,evidence,branch,context)) for original in originals)
         if not any(row.get('stage')=='installed-transform-restored'
                    and row['input_id']==self.input_id for row in records):
             raise ValueError('Original installed-source hook has not retired')
+        selection = {'evaluated':all(value['evaluated'] for value in selections),
+            'observations':selections,
+            'scope':'SDK selected source before this original input; source selection is distinct '
+                    'from transform/request admission and provider capacity'}
+        if not serialized['evaluated'] or manifest is None:
+            return {'evaluated':False,'entry_selection':selection,
+                'reason':'Original matching SDK request bytes unavailable'}
         applications=tuple(FieldCodec.encode(original) for original in originals)
         binding=self.condition_message_binding(records,applications,serialized,manifest)
         return {'evaluated':binding['evaluated'],'observation':self.condition_observation,
             'installations':originals,'message_binding':binding,
+            'entry_selection':selection,
             'scope':'Original installed source entered configured transform and converter/request; '
                     'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof'}
 
