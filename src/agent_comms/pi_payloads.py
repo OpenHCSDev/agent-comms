@@ -96,10 +96,14 @@ class PiPayload:
     def to_wire(self):
         data = FieldCodec.encode(self)
         if isinstance(self, DeclaredFamily):
-            name = data.pop("kind")
+            data.pop("kind")
             if self.wire_tag is not None:
-                data[self.wire_tag] = name
+                data[self.wire_tag] = self.wire_discriminator()
         return data
+
+    def wire_discriminator(self):
+        """Refined internal members borrow their original external declaration."""
+        return FieldCodec.encode(type(self))
 
 
 @dataclass(frozen=True)

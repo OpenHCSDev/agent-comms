@@ -552,10 +552,10 @@ class ManagedCompactionEntry(CompactionEntry, NativeSummaryPayload):
     first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
     details: ManagedSummaryFiles | ManagedSummaryMetadata
 
-    def to_wire(self):
-        value = super().to_wire()
-        value["type"] = CompactionEntry.declared_name
-        return value
+    def wire_discriminator(self):
+        from .field_codec import FieldCodec
+
+        return FieldCodec.encode(CompactionEntry)
 
     def covered_prefix(self, evidence, branch, db):
         from .compaction_records import CompactionOperation
@@ -583,10 +583,10 @@ class ImportedMetadataEntry(CustomEntry):
     def imported_sources(self):
         return self.data.historical_instructions
 
-    def to_wire(self):
-        value = super().to_wire()
-        value["type"] = "custom"
-        return value
+    def wire_discriminator(self):
+        from .field_codec import FieldCodec
+
+        return FieldCodec.encode(CustomEntry)
 
 
 @dataclass(frozen=True, kw_only=True)
