@@ -30,6 +30,10 @@ correction; no waiver or syntactic negation swap is accepted. Original22-check
 App receipt stays preserved. Corrected production needs exact source closure
 and proportionate affected verification before final merge/receiving equality.
 
+Corrected442 published35e72d0f; exact required Debt37237228607 passed.
+Parent independently reread its four production changes. This is source/check
+acceptance, not changed installed acceptance.
+
 Parent reviewed the coherent four-file checkpoint correction: TranscriptState
 combines its source-admission capability with the original resource fact, and
 the facade delegates. MountedMessageHistory retains reader/loading availability;
@@ -2090,3 +2094,11 @@ Explorer refresh. Einstein owns integration and coordinates the original shared
 fixture directly with Mendel. This source preparation need not wait for another
 historical App pass. No current run, actual Codex read, external classifier,
 calibration/study authorization or default-OFF disclosure change follows.
+
+Authentic fixture source seam: NativeBackendFixture.native_arguments deliberately
+disables AGENTS/CLAUDE discovery through --no-context-files. An authored file
+must enter through the original explicit prompt/resource-loader acquisition,
+with its actual W1 provenance, rather than assuming a file on disk was included.
+The fixture's original isolation flags and declared source custody remain intact.
+This is a source contract finding, not an observed native defect or an input
+submission; the matching preview proof still cannot replace a leased request.
