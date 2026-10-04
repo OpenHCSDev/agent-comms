@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from unittest.mock import patch
 
@@ -18,7 +18,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.queued_input import InitialInput
-from agent_comms.store_files import _store_lock
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
@@ -115,17 +114,14 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
     @asynccontextmanager
     async def original_input(self, agent, session_id, text):
         """Reserve and acquire through the same input/turn owners as ACP dispatch."""
-        def capture(custody):
-            with _store_lock(agent._comms._wire_lock_path):
-                return InitialInput.capture(
-                    agent.inputs, agent.sessions.require(session_id), text=text, prompt=text,
-                    echo=True, images=(), controller=None, custody=custody,
-                )
-
         async with AsyncExitStack() as resources:
-            reservation = ExitStack()
-            resources.push_async_callback(Coordination.run_worker, reservation.close)
-            item, _owner = await Coordination.run_worker(partial(capture, reservation))
+            async with InitialInput.reserve(
+                agent.inputs, session_id, agent.sessions.require(session_id),
+                text=text, prompt=text, echo=True, images=(), controller=None,
+            ) as (item, _owner, _row, custody):
+                resources.push_async_callback(Coordination.run_worker, custody.pop_all().close)
+            # Native acquisition begins after original wire custody ends, while
+            # the transferred reservation rollback still belongs to this turn.
             turn = OwnedTurn(
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,

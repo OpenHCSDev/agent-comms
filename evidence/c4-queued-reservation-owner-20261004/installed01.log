@@ -1,0 +1,67 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_input_documents.py::test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback PASSED
+tests/test_captured_input_dispatch.py::test_initial_capture_rejects_owner_readmission_during_acceptance_notice FAILED
+tests/test_captured_input_dispatch.py::test_postdispatch_failure_is_not_reclassified_as_admission_refusal PASSED
+tests/test_captured_input_dispatch.py::test_initial_transfer_cancellation_retires_original_before_dispatch PASSED
+tests/test_current_input_origin.py::test_foreign_or_changed_origin_refused_before_any_reservation PASSED
+tests/test_input_drain.py::test_live_future_queue_and_foreign_ingress_do_not_change_summary_source PASSED{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-c4-queued-reservation656-installed01/fixtures/saved-native-owner0/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 2951126, "start_time": 61535716}], "children_retired": true}
+
+tests/test_acp_input_disposition.py::test_native_steer_keeps_original_input_and_turn_custody PASSED{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-c4-queued-reservation656-installed01/fixtures/saved-native-owner1/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 2952896, "start_time": 61536100}], "children_retired": true}
+
+
+=================================== FAILURES ===================================
+___ test_initial_capture_rejects_owner_readmission_during_acceptance_notice ____
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/mendel-c4-queued-reservation656-installed01/fixtures/test_initial_capture_rejects_o0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fba496d9ba0>
+
+    async def test_initial_capture_rejects_owner_readmission_during_acceptance_notice(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _, _ = _owner(tmp_path)
+        admitted = []
+        dispatched = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                notices = decode_updates(kwargs["update"].field_meta)
+                for notice in notices:
+                    if isinstance(notice, InputDeliveryChangedUpdate):
+                        admitted.append(notice.input_id)
+                        owner = comms.registry.require("beta")
+                        comms.registry.register(owner, new_owner=True)
+    
+        async def forbidden(*args, **kwargs):
+            dispatched.append(args)
+            raise AssertionError("Changed captured owner must not reach the native dispatcher")
+    
+        agent.on_connect(Client())
+        monkeypatch.setattr(agent.turns, "run_agent_turn", forbidden)
+        try:
+            with pytest.raises(InputHandoffRefused, match="context changed"):
+                await InitialInput.run(agent.inputs, "beta", "beta", "Fresh captured input")
+            assert len(admitted) == 1 and not dispatched
+            row = agent.inputs.dispositions.read().lookup("acp:" + admitted[0])
+>           assert row.accepts_reservation and not row.has_native_binding
+E           AssertionError: assert (False)
+E            +  where False = NotSentInput(key='acp:304504fb38b849dc88105f10c825adca', sequence=None, owner='beta', admission=1, target='beta', source_text='Fresh captured input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}).accepts_reservation
+
+tests/test_captured_input_dispatch.py:43: AssertionError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio.plugin
+    self.import_plugin(arg, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/installed01.xml -
+=========================== short test summary info ============================
+FAILED tests/test_captured_input_dispatch.py::test_initial_capture_rejects_owner_readmission_during_acceptance_notice - AssertionError: assert (False)
+ +  where False = NotSentInput(key='acp:304504fb38b849dc88105f10c825adca', sequence=None, owner='beta', admission=1, target='beta', source_text='Fresh captured input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}).accepts_reservation
+=================== 1 failed, 6 passed, 1 warning in 14.19s ====================

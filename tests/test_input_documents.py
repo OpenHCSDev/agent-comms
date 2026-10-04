@@ -79,7 +79,7 @@ def test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback(tmp_
     scheduled = store.read()
     assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
     saved = store.path.read_bytes()
-    with ExitStack() as custody, pytest.raises(RelationViolationError, match="already reserved"):
+    with ExitStack() as custody, pytest.raises(RelationViolationError, match="reservation already exists"):
         store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", custody=custody)
     assert store.path.read_bytes() == saved
 
