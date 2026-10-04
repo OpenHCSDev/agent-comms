@@ -60,6 +60,18 @@ Bohr issued7a3787a4 permits build/install, while its separate lifecycle holds
 execution pending final operand binding. Separate Sch086 renewal must bind the
 same final scope. Public334 remains protected; no parent prefix access occurred.
 
+Heis subsequently published final5b16e842/source-control4449e3fc. Parent verified
+both reviewed control hashes, manifest766643d4, normal new ToAd wheel ec36aaa4
+and own installed-source proof181bd963. Source/pyproject/uv remain byte-equal
+corrected35e. The manifest binds one history-page driver invocation that calls
+the wire helper inside the same App. Parent explicitly authorized Bohr to bind
+these exact final operands and release execution in the existing mutable
+lifecycle; issued7a3787 bytes were independently verified unchanged. Sch's
+separate matching086 authority remains required before launch. This records
+verified authorization, not an App result or confirmed lifecycle release.
+All1470/69/390 restoration, joined cleanup and independent handback obligations
+remain; public334 and prior raw results are untouched.
+
 Parent reviewed the coherent four-file checkpoint correction: TranscriptState
 combines its source-admission capability with the original resource fact, and
 the facade delegates. MountedMessageHistory retains reader/loading availability;
