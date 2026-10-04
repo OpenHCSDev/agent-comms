@@ -42,5 +42,11 @@
     "pipcheck-restored.log": "6c087e22f1ff2aa2e68fc3f2b37beb08c31005e6639f016f0be2d60b220b4e25",
     "code-handback.json": "56d2a27d572ca4526475b2f3d120d4f8bbdc89fda32e8f7d8c3dae11d4d0752b"
   },
-  "automatic_Debt": "final exact publication head pending"
+  "automatic_Debt": "Mandatory automatic check must match final reviewed PR head; retain original result in PR body/own hosted receipt after freeze",
+  "final_AST": {
+    "production": 316,
+    "tests": 366,
+    "tools": 54,
+    "parse_omissions": 0
+  }
 }
