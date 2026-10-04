@@ -157,13 +157,13 @@ async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay
 from pathlib import Path
 sys.path.insert(0,sys.argv[4])
 from delivery_owner_fixture import canonical_agent
+from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
 async def main():
     owner = canonical_agent(Comms(Path(sys.argv[1])), auto_wake=False,
                             agent_args=['--provider','response-local','--model','fixture','--thinking','off'])
-    session = (await owner.new_session(sys.argv[2])).session_id
-    original = owner._comms.registry.require(session)
-    owner._comms.threads.attach_session(original,sys.argv[3])
+    session = await NativeBackendFixture.attach_saved_owner(
+        owner, project=Path(sys.argv[2]), session=Path(sys.argv[3]))
     async def die(*args, **kwargs):
         os._exit(17)
     owner.inputs.emit_input_disposition = die

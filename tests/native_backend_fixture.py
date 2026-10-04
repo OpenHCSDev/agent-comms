@@ -56,12 +56,34 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         assert result.outcome.successful, result.stderr.decode()
         return FieldCodec.decode(NativeWitness, json.loads(result.stdout))
 
+    @staticmethod
+    async def attach_saved_owner(agent, *, project, session):
+        """Restore this saved declaration before acquiring its live process."""
+        def acquire():
+            comms = agent._comms
+            arguments = agent.sessions.agent_args
+            original = comms.threads.claim_thread(
+                agent.sessions.thread_name_for(str(project)), tags=frozenset({"acp"}),
+                worktree=str(project), start_at_latest=True,
+                model=arguments.model, thinking_level=arguments.thinking,
+                auto_title_pending=True,
+            )
+            # This original stopped-restoration producer commits membership;
+            # a reader or an active fixture must never invent participant rows.
+            comms.threads.restore_stopped(comms.registry.snapshot(), (original.name,))
+            owned = comms.owners.acquire_thread(original.name, owner_pid=os.getpid())
+            return comms.threads.attach_session(owned, str(session))
+
+        thread = await Coordination.run_worker(acquire)
+        await agent.sessions.bind_owned(thread, thread.name)
+        agent.inputs.ensure_live_drain(thread.name)
+        return thread.name
+
     async def bind_saved_owner(self, agent, *, project, session):
-        """Bind an SDK source through the original session and native owners."""
-        session_id = (await agent.new_session(cwd=str(project))).session_id
-        original = agent._comms.registry.require(session_id)
-        attached = agent._comms.threads.attach_session(original, str(session))
-        await agent.turns.prepare_selected_session(session_id, attached)
+        """Acquire the restored SDK source's original attested native child."""
+        session_id = await self.attach_saved_owner(agent, project=project, session=session)
+        original = await Coordination.run_worker(partial(agent._comms.registry.require, session_id))
+        await agent.turns.prepare_selected_session(session_id, original)
         child = agent.turns.persistent_backends[session_id].custody.child.proc
         self.children.append(child)
         return session_id
