@@ -1,0 +1,274 @@
+{
+  "revision": "e29090bf740d72ba8622c0f788b0edd288842fda",
+  "parser": "existing Node Acorn 8.18.0",
+  "parsed": 47,
+  "omissions": [],
+  "owner": [
+    {
+      "name": "InputByteRange",
+      "methods": [
+        "constructor",
+        "requireCoordinate",
+        "capture",
+        "bytes",
+        "matches",
+        "requireDigest"
+      ]
+    },
+    {
+      "name": "InputImages",
+      "methods": [
+        "constructor",
+        "capture",
+        "preserved",
+        "content"
+      ]
+    },
+    {
+      "name": "InputContribution",
+      "methods": [
+        "constructor",
+        "capture",
+        "preserved",
+        "observe"
+      ]
+    },
+    {
+      "name": "NativeInputClaim",
+      "methods": [
+        "constructor",
+        "capture",
+        "observe"
+      ]
+    },
+    {
+      "name": "ContextSegment",
+      "methods": [
+        "constructor",
+        "originalSources",
+        "projection",
+        "manifest",
+        "full",
+        "publicationValues",
+        "matches",
+        "recordedValues"
+      ]
+    },
+    {
+      "name": "SystemLayerSegment",
+      "base": "ContextSegment",
+      "methods": [
+        "tokens",
+        "payload",
+        "render"
+      ]
+    },
+    {
+      "name": "NativeMessages",
+      "base": "ContextSegment",
+      "methods": [
+        "constructor",
+        "capture",
+        "fromObservations",
+        "tokens",
+        "payload",
+        "render",
+        "publicationValues",
+        "recordedValues"
+      ]
+    },
+    {
+      "name": "TranscriptSegment",
+      "base": "NativeMessages",
+      "methods": []
+    },
+    {
+      "name": "CompactionSummarySegment",
+      "base": "NativeMessages",
+      "methods": []
+    },
+    {
+      "name": "InjectionMessageSegment",
+      "base": "NativeMessages",
+      "methods": []
+    },
+    {
+      "name": "TransformedInputSegment",
+      "base": "NativeMessages",
+      "methods": []
+    },
+    {
+      "name": "ToolCatalogSegment",
+      "base": "ContextSegment",
+      "methods": [
+        "tokens",
+        "payload",
+        "render"
+      ]
+    },
+    {
+      "name": "TurnContext",
+      "methods": [
+        "constructor",
+        "capture",
+        "next",
+        "project",
+        "fullSource",
+        "recordedSegment",
+        "recentSource",
+        "render",
+        "manifest",
+        "observation",
+        "full"
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "file": "stack/native-request-input.mjs",
+      "line": 8,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 27,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 56,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 59,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 62,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 79,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 123,
+      "member": "projection"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 124,
+      "member": "projection"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 148,
+      "member": "fromObservations"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 157,
+      "member": "projection"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 158,
+      "member": "originalSources"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 231,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 236,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 248,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 261,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 267,
+      "member": "recordedValues"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 296,
+      "member": "observation"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 301,
+      "member": "projection"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 302,
+      "member": "publicationValues"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 49,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 67,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 82,
+      "member": "observation"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 85,
+      "member": "observation"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 130,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 139,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 191,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 290,
+      "member": "observation"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 291,
+      "member": "observation"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 68,
+      "member": "capture"
+    }
+  ],
+  "limits": "Lexical references only; SDK conversion/constructor dispatch and Python-generated patch consumers read semantically. Python consumers unchanged; see python-consumers.json."
+}

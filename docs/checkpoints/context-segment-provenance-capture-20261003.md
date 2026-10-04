@@ -21,3 +21,9 @@ Validation comes after the complete source change: one batched affected sanity c
 Public `.d.ts`, requestId handling, manifest ordering/digests, Python SegmentManifest/Provenance/NativeContextManifestData, and native patch producer/RPC consumers retain their existing format. Acorn parsed all47 stack/test JS modules, no omissions; NRA audit parsed689 Python source/stack/test modules, no omissions. Dynamic SDK conversion and constructors are semantic limits of lexical AST, read directly. Evidence: `evidence/context-segment-capture-20261003/`.
 
 Remaining: final affected batched controls and matching native artifact/42MB SDK qualification. This source checkpoint is not Ready and does not attribute historical provider or pre-admission delays.
+
+## Final validation preparation
+
+Published driver `tests/native_turn_context_contract.mjs` extends the existing SDK fixture, not the application lifecycle. On the same acquired original values, it compares the prior immutable d5 artifact with the matching candidate: full manifest/value/input attribution/render equality; only each artifact's authenticated system-file path differs. Repeated SDK messages, mixed transformed values and whole-cut provenance exercise ordered source deduplication. The representative saved-source branch comes through SDK SessionManager.forkFrom and TurnContext.fullSource; original/fork hashes must remain unchanged. Instrumentation counts only original journal-descriptor JSON encodings and records capture milliseconds at this owned boundary. No provider, ACP prompt or historical-delay attribution. The existing recorded root/child/mixed controls remain in the same end batch.
+
+Both edited JS files pass Node syntax validation. The matching artifact is with Sch608; no actual SDK qualification yet. Source runtime/wire/DTO format and `.d.ts` unchanged. No540 loan, package/environment/native-copy writes or public actions.
