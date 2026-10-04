@@ -136,7 +136,7 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
             request = cls.from_payload({**arguments, cls.family_discriminator: cls.declared_name})
         except (TypeError, ValueError) as error:
             raise ValueError(f"Invalid {cls.declared_name} arguments: {error}") from error
-        return request.apply(comms)
+        return FieldCodec.encode(request.apply(comms))
 
 
 def _executing_thread() -> str:
