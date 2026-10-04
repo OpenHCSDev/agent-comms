@@ -29,8 +29,8 @@
     "publication_receipt_absent": true,
     "preimages_absent": true
   },
-  "public_operation": "NOT EXECUTED; current user client retained; quiet-window reply pending",
-  "next_private_purpose": "NONE; sole432 affected App qualified, whole actual436 restoration independently verified, issued grant unchanged and separate lifecycle closed by Bohr; no successor loan inferred",
+  "public_operation": "EXECUTED ONCE; terminal0; original 19 owners relaunched and target route/default links verified",
+  "next_private_purpose": "NONE; style22 target is now published public runtime, prior private floor must not be restored or replaced without new reviewed disposition",
   "claim_limits": [
     "Original affected SDK/App/physical qualifiers retain their scopes",
     "No public delivery or whole-performance claim",
@@ -58,5 +58,22 @@
     "lifecycle_observed_sha256": "2df8439c9e05c170a415417311d45e239636aebb99d582718280a16216198229",
     "issued_grant_sha256": "7d059665eb28af99c0c61a1b552600f00590111b6663083ae6a9d2c8e1d34ecb",
     "frozen436_restaged": false
+  },
+  "published_readback": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-ingress638640633-context417-receiving-20261004/new-publication436/publication-identity-closure.json",
+    "receipt_sha256": "82731615599680ed96283817a4d5b0d77ddbf5ae77ae137dbbbc7bbbe063d546",
+    "owners": 19,
+    "same_incarnations": true,
+    "new_process_identities_alive": true,
+    "settings_equal_except_process": true,
+    "target_prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+    "duration_seconds": 43.75165557861328,
+    "physical_verification": "Pending named Heis ordinary default UI acceptance; no whole UI/performance claim"
+  },
+  "launch_correction": {
+    "original_client_gone": true,
+    "first_attempt": "Import failed before publication receipt/preimages; isolated Python excluded frozen module directory",
+    "corrected_attempt": "Original interpreter -I with explicit original operator-freeze module path and runpy; no frozen script change",
+    "logs": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/receiving436-publication-20261004"
   }
 }
