@@ -1,0 +1,13 @@
+{
+  "head": "5123b406790b978a2463af18b3f4cc66a711cf1a",
+  "main": "5c1103077e5a982365a6d801b98bcbdb1b03c547",
+  "qualified_private_head": "dd209af5f49e41e6169fb3506607631933970526",
+  "private_delta_after_join": {
+    "tests/compaction_retention_fixture.py": 0,
+    "tests/native_turn_context_contract.mjs": 0,
+    "tests/retained_native_conditions.mjs": 0,
+    "tests/retained_native_fixture.py": 0,
+    "tests/test_recorded_retention_measurements.py": 0,
+    "tests/three_cut_retention_configured_journey.py": 0
+  }
+}
