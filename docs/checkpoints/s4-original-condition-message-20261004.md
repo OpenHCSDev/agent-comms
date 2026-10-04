@@ -53,9 +53,10 @@ Python AST parsed 729 modules and Acorn 49 modules including original SDK Agent
 and agent-loop, with zero parse omissions. Dynamic callback behavior was read
 semantically; lexical references are not an execution proof.
 
-This checkpoint qualifies private SDK/reader plumbing. The new inspector
-conversion observation has not been exercised on a new configured model turn;
-no such turn was launched. The old602 observation cannot qualify it retrospectively.
+This checkpoint qualifies private SDK/reader plumbing. The changed inspector
+frame now executes in the original SDK agent loop, as described below. No new
+configured model turn was launched. The old602 observation cannot qualify the
+new binding retrospectively.
 Original three-cut recall, HTTP bytes, full-history eligibility, comparative
 interventions/margins and optional timing-default disposition remain separate.
 No new study, provider/model input, package, native artifact or environment.
@@ -64,3 +65,37 @@ Evidence: `evidence/s4-original-condition-message-20261004/qualification.json`
 and `original602.json`. Raw SDK control output is retained under
 `/home/ts/.cache/agent-scratch/s4-condition612-source01`. Immutable2ea READ loan
 is handed back after terminal0; no active process remains.
+
+## Changed inspector path qualified
+
+Normal main integration includes merged611. Published driver `1c9f464d` extends
+the existing SDK harness with `--condition-agent-loop`. It calls the original
+agent loop with an empty prompts array, the existing SDK transform/converter,
+an authored input context and one controlled `AssistantMessageEventStream`.
+Its original onContextReady callback captures TurnContext and publishes the
+original request ID. It creates no enrolled input or native admission proof.
+The existing inspector observes the real conversion frame and manifest object;
+RecordedNativeProbe consumes the resulting original SDK segment bytes.
+
+The one run completed in 1.551 seconds: native SDK child exit0, inspector joined,
+zero provider calls/submitted prompts, original journal unchanged and transform
+hook restored. Original request/session/input IDs agree. The complete applied
+AgentMessages hash equals the inspector's converter-input hash; the complete
+converter-output hash equals the authenticated SDK message-segment sequence.
+Five segments supplied 6,678 original bytes. Existing Acorn parsed the extended
+harness and its original loop/manifest/hook calls with no omission.
+
+The initial read-only postprocessor used generic FieldCodec.decode for external
+Pi data and refused its missing family tag. That negative receipt is preserved.
+Reading the same completed output through the existing
+RecordedNativeProbe.read_sdk_context boundary qualified the binding; there was
+no loop, stream or provider repeat. The authored source descriptor is measurement
+plumbing, not an enrolled input/lease claim. This does not qualify real provider
+transport, HTTP bytes, comparative recall, capacity or a paid intervention study.
+
+Sanitized receipt:
+`evidence/s4-original-condition-message-20261004/inspector-qualification.json`.
+Original outputs and the first refusal remain at
+`/home/ts/.cache/agent-scratch/s4-condition612-inspector01`.
+Immutable2ea compiled bytes remain unchanged. READ hold handed back after both
+owned processes joined; no540 use, package/environment/native/public writes.
