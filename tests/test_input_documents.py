@@ -214,8 +214,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     for name in ("native_id", "turn_id", "sent_text"):
         assert name not in {item.name for item in fields(reserved)}
         assert not hasattr(reserved, name)
-    assert store.settle_unbound(("acp:input",))
-    unsent = store.read().lookup("acp:input")
+    unsent = store.settle_unbound(("acp:input",)).lookup("acp:input")
     assert isinstance(unsent, NotSentInput) and unsent.unresolved
     assert not unsent.accepts_reservation
     assert not store.bind("acp:input", admission=4, turn_id="new", native_id="b" * 32, text="keep")
@@ -236,7 +235,7 @@ def test_compaction_input_custody_survives_attention_and_admission_changes(tmp_p
     # A reserved predecessor cannot disappear through a later admission.
     with pytest.raises(RelationViolationError):
         store.read().require_compaction_ready(owner, ("acp:current",))
-    assert store.settle_unbound(("acp:old",))
+    assert isinstance(store.settle_unbound(("acp:old",)).lookup("acp:old"), NotSentInput)
     before = store.path.read_bytes()
     store.read().require_compaction_ready(owner, ("acp:current",))
     assert store.path.read_bytes() == before
@@ -249,11 +248,44 @@ def test_compaction_input_custody_survives_attention_and_admission_changes(tmp_p
     for pending in ((), ("acp:current",), ("acp:future",)):
         with pytest.raises(RelationViolationError):
             store.read().require_compaction_ready(owner, pending)
-    assert not store.settle_unbound(("acp:current",))
+    assert isinstance(store.settle_unbound(("acp:current",)).lookup("acp:current"),
+                      BoundUnknownInput)
     assert store.path.read_bytes() == before
     assert store.started("acp:current", turn_id="actual-turn", native_id="a" * 32,
                          text="acp:current")
     store.read().require_compaction_ready(owner, ())
+
+
+def test_batch_retirement_returns_published_cut_without_changing_native_evidence(tmp_path):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    keys = ("acp:reserved", "acp:bound", "acp:started", "acp:unsent", "acp:unrelated")
+    for key in keys:
+        assert store.record(key, seq=None, owner="owner", admission=1,
+                            target="owner", text=key)
+    for key in ("acp:bound", "acp:started"):
+        assert store.bind(key, admission=1, turn_id="original-turn",
+                          native_id="a" * 32, text=key)
+    assert store.started("acp:started", turn_id="original-turn", native_id="a" * 32,
+                         text="acp:started")
+    store.settle_unbound(("acp:unsent",))
+    original = store.read()
+    selected = (*keys[:-1], "acp:missing")
+    published = store.settle_unbound(selected)
+    assert published == InputDispositions(store.path).read()
+    assert isinstance(published.lookup("acp:reserved"), NotSentInput)
+    assert published.lookup("acp:reserved").context_provenance() == (
+        original.lookup("acp:reserved").context_provenance()
+    )
+    assert published.lookup("acp:reserved").source_text == "acp:reserved"
+    assert {key: published.lookup(key) for key in keys[1:]} == {
+        key: original.lookup(key) for key in keys[1:]
+    }
+    assert isinstance(published.lookup("acp:missing"), MissingInput)
+    assert "acp:missing" not in published.rows
+    saved = store.path.read_bytes(), store.path.stat().st_ino
+    assert store.settle_unbound(selected) == published
+    assert store.settle_unbound(()) == published
+    assert (store.path.read_bytes(), store.path.stat().st_ino) == saved
 
 
 @pytest.mark.parametrize(
@@ -310,7 +342,7 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
     record = json.loads(store.path.read_text())["rows"]["acp:x"]
     assert record["kind"] == "reserved"
     assert not {"status", "native_id", "turn_id", "sent_text"}.intersection(record)
-    assert store.settle_unbound(("acp:x",))
+    assert isinstance(store.settle_unbound(("acp:x",)).lookup("acp:x"), NotSentInput)
     record = json.loads(store.path.read_text())["rows"]["acp:x"]
     assert record["kind"] == "not_sent"
     assert not {"native_id", "turn_id", "sent_text"}.intersection(record)

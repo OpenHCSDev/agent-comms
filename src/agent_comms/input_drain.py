@@ -552,11 +552,10 @@ class InputDrain(FutureInputQueue):
         if continuation := terminal.project_continuation(current_project):
             self.pending_turns.setdefault(session_id, []).append(continuation)
 
-    def finish_original_inputs(self, session_id: str) -> None:
+    def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
         """The joined retirement owns the original input and its wire cut."""
         with _store_lock(self.comms._wire_lock_path):
-            original = self.original_sources.pop(session_id, None)
-            self.dispositions.settle_unbound(original.keys if original else ())
+            return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]
@@ -569,7 +568,9 @@ class InputDrain(FutureInputQueue):
             if isinstance(pending, str):
                 self.pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
         try:
-            await Coordination.run_worker(partial(self.finish_original_inputs, session_id))
+            original = self.original_sources.pop(session_id, None)
+            if original is not None:
+                await Coordination.run_worker(partial(self.finish_original_inputs, original.keys))
         finally:
             # Cancellation joins the original input write before retiring loop
             # capabilities. No callback delivery is required to burn a grant or

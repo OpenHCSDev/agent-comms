@@ -76,8 +76,8 @@ def test_known_not_sent_notice_does_not_redecide_native_source_custody(continued
     key = "acp:confirmed-unsent"
     assert inputs.record(key, seq=None, owner="owner", admission=1,
                          target="owner", text="Never delivered; keep this notice")
-    assert inputs.settle_unbound((key,))
-    original = inputs.read().lookup(key)
+    original = inputs.settle_unbound((key,)).lookup(key)
+    assert original.public_status == "not_sent"
     before = session.read_bytes(), inputs.path.read_bytes()
     operation = journal.summaries.reserve(str(session), source)
     assert journal.summaries.get(operation).request == source

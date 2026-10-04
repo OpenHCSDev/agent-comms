@@ -484,8 +484,8 @@ class OwnedTurn:
     def settle_unbound(self):
         """Close the actual input batch and observe its result under one wire cut."""
         with _store_lock(self.runner.comms._wire_lock_path):
-            self.runner.inputs.dispositions.settle_unbound(self.original_keys)
-            return self.runner.inputs.dispositions.read().shared_state(self.original_keys)
+            document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
+            return document.shared_state(self.original_keys)
 
     async def run_native(self) -> None:
         try:
