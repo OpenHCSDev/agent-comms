@@ -34,6 +34,37 @@ The pattern is the same throughout: workspace state kept as optional fields and 
 
 `None` checks and foreign probes in the eight files fall below their levels before #129.
 
+## Current source check, 2026-10-04
+
+The original threshold is not established. Parent used the existing refactor-audit
+Repository/Census implementation at actual pre-129 parent436514d8 and merged
+live419 source7c75c449. All218 baseline and288 current production modules parsed
+under Python3.14 with zero omissions. Seven of the eight named files did not
+exist before129; absence is explicitly recorded, not reported as a parsed zero
+or evidence that their later implementations meet the threshold. The one
+pre-existing viewport_body member has17 None checks/19 foreign probes now,
+compared with4/11 before129. Those are syntax leads, not proof that each site
+duplicates an authority or needs deletion.
+
+Current session_presentation has21 None checks/4 foreign probes and the terminal
+execution member has5/0. Source review confirms that TerminalOutcome and the
+original child completion own exit meaning, while ACP absence remains its
+external contract. NativeSessionSurface still retains its admitted owner/view
+pair and OperationalSessionPresentation retains the mounted widget/editor
+snapshot. Activate, retire, dispose and close interpret these lifetimes. Logical
+WorkspaceSource selection and admitted native custody are distinct facts; a
+closure must preserve that distinction rather than replace one with the other.
+Heisenberg owns this complete existing surface and its warm-return/resource
+consumers alongside the unfinished performance work. The useful420 sidebar
+batch and native51 qualification are not held for this broader closure.
+
+The compact determining source record is parent
+`.artifacts/closure-source-check-20261004/TC1-current-source.json`. It records the
+exact revisions and original measures; it is not behavioral or live acceptance.
+Original installed A/B/A, editor/undo and shell detach qualifications remain at
+their respective scopes. The original whole TC1 threshold and full continuous
+workspace journey remain unproven.
+
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
