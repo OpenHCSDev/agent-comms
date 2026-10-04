@@ -17,7 +17,6 @@ args = parser.parse_args()
 sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import MessageNotification
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
@@ -50,7 +49,7 @@ async def main():
     human = comms.views.viewer_snapshot(str(root))
     assert {view.thread.name for view in actor.threads} == {owner, 'stopped'}
     assert actor.channel_unread['#team'] == human.channel_unread['#team'] == 1
-    assert FieldCodec.decode(type(actor), FieldCodec.encode(actor)) == actor
+    assert comms.views.coordination_snapshot('stopped') == actor
     original = comms.views.message_notifications((message,))
     assert original[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
@@ -60,15 +59,14 @@ async def main():
                                       expected_scope=page.display_scope)
     assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'] == 0
     assert comms.views.coordination_snapshot('stopped').channel_unread['#team'] == 1
-    checks = ['full original snapshot value roundtrip', 'original bounded reference notification windows',
+    checks = ['full original snapshot value equality', 'original bounded reference notification windows',
               'human display acknowledgement leaves actor delivery pending']
     app = InstalledApp(project_dir=str(root))
     async with app.run_test(size=(120, 45)) as pilot:
         sidebar = await wait_channel_roster(app, pilot, '#team')
         group = next(group for group in sidebar.query(ChannelGroup) if group.row.target_name == '#team')
-        if not group.expanded:
-            group.toggle_members()
         await sidebar.observation.sync()
+        await group.reveal_members()
         await pilot.pause()
         assert set(group._members) == {owner, 'stopped'}
         checks.append('real mounted sidebar consumes default captured cohort')
@@ -77,6 +75,7 @@ async def main():
             app.settings.sidebar.show_stopped = show_stopped
             app.settings.sidebar.show_archived = show_archived
             await sidebar.observation.sync()
+            await group.reveal_members()
             await pilot.pause()
             assert set(group._members) == expected
             snapshot = comms.views.viewer_snapshot(str(root), show_stopped=show_stopped,
